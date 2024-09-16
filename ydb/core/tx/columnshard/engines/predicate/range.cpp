@@ -6,11 +6,11 @@ namespace NKikimr::NOlap {
 std::set<ui32> TPKRangeFilter::GetColumnIds(const TIndexInfo& indexInfo) const {
     std::set<ui32> result;
     for (auto&& i : PredicateFrom.GetColumnNames()) {
-        result.emplace(indexInfo.GetColumnId(i));
+        result.emplace(indexInfo.GetColumnIdVerified(i));
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
     }
     for (auto&& i : PredicateTo.GetColumnNames()) {
-        result.emplace(indexInfo.GetColumnId(i));
+        result.emplace(indexInfo.GetColumnIdVerified(i));
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
     }
     return result;
@@ -40,25 +40,7 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& d
 }
 
 bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
-    if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        const auto& portionEnd = info.IndexKeyEnd();
-        const int commonSize = std::min(from->Size(), portionEnd.Size());
-        if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
-            return false;
-        }
-    }
-
-    if (const auto& to = PredicateTo.GetReplaceKey()) {
-        const auto& portionStart = info.IndexKeyStart();
-        const int commonSize = std::min(to->Size(), portionStart.Size());
-        if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {
-            return false;
-        }
-    }
-//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", info.IndexKeyStart().DebugString())("end", info.IndexKeyEnd().DebugString())(
-//        "from", PredicateFrom.DebugString())("to", PredicateTo.DebugString());
-
-    return true;
+    return IsPortionInPartialUsage(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::DontUsage;
 }
 
 TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
@@ -113,12 +95,28 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
     return EUsageClass::PartialUsage;
 }
 
-std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {
+TConclusion<TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {
     if (!from.CrossRanges(to)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot_build_predicate_range")("error", "predicates from/to not intersected");
-        return {};
+        return TConclusionStatus::Fail("predicates from/to not intersected");
     }
     return TPKRangeFilter(std::move(from), std::move(to));
+}
+
+bool TPKRangeFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
+    std::partial_ordering equalityWithFrom = std::partial_ordering::greater;
+    if (const auto& from = PredicateFrom.GetReplaceKey()) {
+        equalityWithFrom = point.ComparePartNotNull(*from, from->Size());
+    }
+    std::partial_ordering equalityWithTo = std::partial_ordering::less;
+    if (const auto& to = PredicateTo.GetReplaceKey()) {
+        equalityWithTo = point.ComparePartNotNull(*to, to->Size());
+    }
+    const bool startInternal = (equalityWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
+                               (equalityWithFrom == std::partial_ordering::greater);
+    const bool endInternal = (equalityWithTo == std::partial_ordering::equivalent && PredicateTo.IsInclude()) ||
+                             (equalityWithTo == std::partial_ordering::less);
+    return startInternal && endInternal;
 }
 
 }

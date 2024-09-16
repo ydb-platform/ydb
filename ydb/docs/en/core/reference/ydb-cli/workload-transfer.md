@@ -43,7 +43,7 @@ During the operation of the program, two types of work streams are simulated:
 * Input stream: messages are written to the topic in the non-transaction mode. The user can control the writing speed, the message size, the number of producers.
 * Processing flow: messages are read from the topic and written to the table using the {{ ydb-short-name }} transaction.
 
-The following actions are performed in the processing flow within a single transaction: 
+The following actions are performed in the processing flow within a single transaction:
 * messages from the topic are being read until the `--commit-period` period has expired;
 * one `UPSERT` command and a `COMMIT` command are executed on the table to commit the transaction after the period expires.
 
@@ -123,9 +123,11 @@ Window  Write speed     Write time      Inflight        Read speed      Topic ti
 After the test is completed, you can delete the test environment.
 
 Command syntax:
+
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table clean [options...]
 ```
+
 * `global options` — [global parameters](commands/global-options.md).
 * `options` - parameters of the subcommand.
 
@@ -136,6 +138,7 @@ View the command description:
 ```
 
 Parameters of the subcommand:
+
 Parameter Name | Parameter Description | Default value
 ---|---|---
 `--topic` | Topic name | `transfer-topic`

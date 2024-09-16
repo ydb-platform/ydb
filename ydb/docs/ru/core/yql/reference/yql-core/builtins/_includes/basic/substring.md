@@ -2,7 +2,8 @@
 
 Возвращает подстроку.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 Substring(String[, Uint32? [, Uint32?]])->String
 Substring(String?[, Uint32? [, Uint32?]])->String?
@@ -20,13 +21,16 @@ Substring(String?[, Uint32? [, Uint32?]])->String?
 Индексация с нуля. Если указанные позиция и длина выходят за пределы строки, возвращает пустую строку.
 Если входная строка является опциональной, то таким же является и результат.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT SUBSTRING("abcdefg", 3, 1); -- d
 ```
+
 ``` yql
 SELECT SUBSTRING("abcdefg", 3); -- defg
 ```
+
 ``` yql
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```

@@ -4,7 +4,7 @@
 
 `OFFSET`: specifies the offset from the beginning (in rows). By default, it's zero.
 
-**Examples**
+## Examples
 
 ```yql
 SELECT key FROM my_table

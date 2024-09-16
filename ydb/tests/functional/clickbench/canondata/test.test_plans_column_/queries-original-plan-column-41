@@ -89,8 +89,17 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "TableRangeScan",
+                                                                                "Node Type": "Filter-TableRangeScan",
                                                                                 "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "IsRefresh == 0 And DontCountHits == 0 And URLHash == 2868770270353813622"
+                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
@@ -315,7 +324,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

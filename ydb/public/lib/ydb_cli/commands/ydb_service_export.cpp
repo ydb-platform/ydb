@@ -132,7 +132,7 @@ void TCommandExportToYt::Config(TConfig& config) {
         .NoArgument().StoreTrue(&UseTypeV3);
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
@@ -281,7 +281,7 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 

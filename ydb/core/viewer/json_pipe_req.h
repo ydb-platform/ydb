@@ -1,28 +1,26 @@
 #pragma once
-
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/cms/console/console.h>
+#include "viewer.h"
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/sys_view/common/events.h>
-#include "viewer.h"
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NKikimr;
 using namespace NSchemeCache;
 using NNodeWhiteboard::TNodeId;
+using NNodeWhiteboard::TTabletId;
 
 class TViewerPipeClient : public TActorBootstrapped<TViewerPipeClient> {
     using TBase = TActorBootstrapped<TViewerPipeClient>;
@@ -39,8 +37,11 @@ protected:
     bool Followers = true;
     bool Metrics = true;
     bool WithRetry = true;
+    TString Database;
+    TString SharedDatabase;
+    bool Direct = false;
     ui32 Requests = 0;
-    static constexpr ui32 MaxRequestsInFlight = 50;
+    ui32 MaxRequestsInFlight = 200;
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
@@ -50,13 +51,14 @@ protected:
         ui32 Requests = 0;
     };
 
-    std::unordered_map<NNodeWhiteboard::TTabletId, TPipeInfo> PipeInfo;
+    std::unordered_map<TTabletId, TPipeInfo> PipeInfo;
 
     struct TDelayedRequest {
         std::unique_ptr<IEventHandle> Event;
     };
 
     std::deque<TDelayedRequest> DelayedRequests;
+    std::vector<TNodeId> SubscriptionNodeIds;
 
     template<typename T>
     struct TRequestResponse {
@@ -74,6 +76,13 @@ protected:
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
         void Set(std::unique_ptr<T>&& response) {
+            constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TViewerPipeClient::IsSuccess(r);};
+            if constexpr (hasErrorCheck) {
+                if (!TViewerPipeClient::IsSuccess(response)) {
+                    Error(TViewerPipeClient::GetError(response));
+                    return;
+                }
+            }
             if (!IsDone()) {
                 Span.EndOk();
             }
@@ -85,15 +94,12 @@ protected:
         }
 
         bool Error(const TString& error) {
-            bool result = false;
             if (!IsDone()) {
                 Span.EndError(error);
-                result = true;
-            }
-            if (!IsOk()) {
                 Response = error;
+                return true;
             }
-            return result;
+            return false;
         }
 
         bool IsOk() const {
@@ -147,28 +153,36 @@ protected:
         TString GetError() const {
             return std::get<TString>(Response);
         }
+
+        void Event(const TString& name) {
+            if (Span) {
+                Span.Event(name);
+            }
+        }
     };
+
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResponse;
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResourceNavigateResponse;
+    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
 
     NTabletPipe::TClientConfig GetPipeClientConfig();
 
     ~TViewerPipeClient();
-
     TViewerPipeClient();
-
+    TViewerPipeClient(NWilson::TTraceId traceId);
     TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev);
-
-    TActorId ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId);
-
+    TActorId ConnectTabletPipe(TTabletId tabletId);
     void SendEvent(std::unique_ptr<IEventHandle> event);
-
     void SendRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});
-
     void SendRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0, NWilson::TTraceId traceId = {});
 
     template<typename TResponse>
     TRequestResponse<TResponse> MakeRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         SendRequest(recipient, ev, flags, cookie, response.Span.GetTraceId());
+        if (flags & IEventHandle::FlagSubscribeOnSession) {
+            SubscriptionNodeIds.push_back(recipient.NodeId());
+        }
         return response;
     }
 
@@ -179,110 +193,120 @@ protected:
         return response;
     }
 
+    template<typename TRequest>
+    TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TRequest>::Type> MakeWhiteboardRequest(TNodeId nodeId, TRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession) {
+        TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
+        TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TRequest>::Type> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        if (response.Span) {
+            response.Span.Attribute("target_node_id", nodeId);
+        }
+        SendRequest(whiteboardServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+        return response;
+    }
+
+    TRequestResponse<TEvViewer::TEvViewerResponse> MakeViewerRequest(TNodeId nodeId, TEvViewer::TEvViewerRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     void SendDelayedRequests();
+    void RequestHiveDomainStats(TTabletId hiveId);
+    void RequestHiveNodeStats(TTabletId hiveId, TPathId pathId);
+    void RequestHiveStorageStats(TTabletId hiveId);
 
-    void RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId);
-
-    void RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, TPathId pathId);
-
-    void RequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId);
-
-    NNodeWhiteboard::TTabletId GetConsoleId() {
+    TTabletId GetConsoleId() {
         return MakeConsoleID();
     }
 
-    TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId);
-
-    void RequestConsoleListTenants();
-
-    TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
-
-    void RequestConsoleGetTenantStatus(const TString& path);
-
-    NNodeWhiteboard::TTabletId GetBSControllerId() {
+    TTabletId GetBSControllerId() {
         return MakeBSControllerID();
     }
 
+    static TPathId GetPathId(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
+    static TString GetPath(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
+
+    static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    static TString GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+
+    static bool IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
+    static TString GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
+
+    static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
+    static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
+
+    TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
+    TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
+    TRequestResponse<TEvHive::TEvResponseHiveNodeStats> MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request);
+    void RequestConsoleListTenants();
+    TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
+    TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse> MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie = 0);
+    TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsResponse> MakeRequestConsoleGetAllConfigs();
+    void RequestConsoleGetTenantStatus(const TString& path);
+    TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> MakeRequestConsoleGetTenantStatus(const TString& path);
     void RequestBSControllerConfig();
-
     void RequestBSControllerConfigWithStoragePools();
-
     TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> MakeRequestBSControllerConfigWithStoragePools();
-
     void RequestBSControllerInfo();
-
     void RequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request);
-
     TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsResult> MakeRequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request, ui64 cookie = 0);
-
     void RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false);
-
     void RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false);
-
     TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId);
-
     TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId);
-
     TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse> RequestBSControllerGroups();
-
     TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> RequestBSControllerPools();
-
     TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVSlots();
-
     TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDisks();
-
+    TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> RequestBSControllerStorageStats();
     void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false);
-
     void RequestSchemeCacheNavigate(const TString& path);
-
     void RequestSchemeCacheNavigate(const TPathId& pathId);
-
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
-
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
-
+    TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path);
-
     void RequestStateStorageEndpointsLookup(const TString& path);
-
     void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path);
-
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
-
+    std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
-
     void InitConfig(const TRequestSettings& settings);
-
     void ClosePipes();
-
-    ui32 FailPipeConnect(NNodeWhiteboard::TTabletId tabletId);
+    ui32 FailPipeConnect(TTabletId tabletId);
 
     bool IsLastRequest() const {
         return Requests == 1;
     }
 
-    TRequestState GetRequest() const;
+    bool WaitingForResponse() const {
+        return Requests != 0;
+    }
 
+    bool NoMoreRequests(ui32 requestsDone = 0) const {
+        return Requests == requestsDone;
+    }
+
+    TRequestState GetRequest() const;
     void ReplyAndPassAway(TString data, const TString& error = {});
 
     TString GetHTTPOK(TString contentType = {}, TString response = {}, TInstant lastModified = {});
-
     TString GetHTTPOKJSON(TString response = {}, TInstant lastModified = {});
-
+    TString GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified = {});
     TString GetHTTPGATEWAYTIMEOUT(TString contentType = {}, TString response = {});
-
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
-
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
-
+    TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(ui32 requests = 1);
-
+    void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
-
+    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
+    STATEFN(StateResolveDatabase);
+    STATEFN(StateResolveResource);
+    void RedirectToDatabase(const TString& database);
+    bool NeedToRedirect();
+    void HandleTimeout();
     void PassAway() override;
 };
 
-}
 }

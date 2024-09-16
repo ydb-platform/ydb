@@ -9,6 +9,6 @@
 
 {% include [decimal_args](../../../_includes/decimal_args.md) %}
 
-**Примеры**
+### Примеры
 
 {% include [cast_examples](../../../_includes/cast_examples.md) %}

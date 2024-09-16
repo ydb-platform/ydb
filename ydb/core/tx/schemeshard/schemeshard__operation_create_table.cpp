@@ -559,7 +559,17 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, LocalSequences);
+        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+            nullptr,
+            schema,
+            *typeRegistry,
+            limits,
+            *domainInfo,
+            context.SS->EnableTablePgTypes,
+            context.SS->EnableTableDatetime64,
+            errStr,
+            LocalSequences);
+
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -641,7 +651,11 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
         if (tableInfo->IsAsyncReplica()) {
-            newTable->SetAsyncReplica();
+            newTable->SetAsyncReplica(true);
+        }
+
+        if (tableInfo->IsRestoreTable()) {
+            newTable->SetRestoreTable();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;

@@ -1,6 +1,7 @@
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/secured_block.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
@@ -130,6 +131,11 @@ void TNodeWarden::StopInvalidGroupProxy() {
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
 }
 
+void TNodeWarden::StartRequestReportingThrottler() {
+    STLOG(PRI_DEBUG, BS_NODE, NW27, "StartRequestReportingThrottler");
+    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
+}
+
 void TNodeWarden::PassAway() {
     STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
@@ -180,6 +186,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
+        icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
+        icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 "VDiskControls.BurstThresholdNsHDD");
@@ -193,6 +201,12 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
+
+        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
+        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
+        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
+        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
     }
 
     // start replication broker
@@ -256,6 +270,8 @@ void TNodeWarden::Bootstrap() {
     StartDistributedConfigKeeper();
 
     HandleGroupPendingQueueTick();
+
+    StartRequestReportingThrottler();
 }
 
 void TNodeWarden::HandleReadCache() {

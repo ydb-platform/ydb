@@ -146,7 +146,7 @@ The simplest way to launch your first {{ ydb-short-name }} query is via the buil
 
 {{ ydb-short-name }} is designed to be a multi-tenant system, with potentially thousands of users working with the same cluster simultaneously. Hence, most logical entities inside a {{ ydb-short-name }} cluster reside in a flexible hierarchical structure more akin to Unix's virtual filesystem rather than a fixed-depth schema you might be familiar with from other database management systems. As you can see, the first level of hierarchy consists of databases running inside a single {{ ydb-short-name }} process that might belong to different tenants. `/Root` is for system purposes, while `/Root/test` or `/local` (depending on the chosen installation method) is a playground created during installation in the previous step. Click on either `/Root/test` or `/local`, enter your first query, and hit the "Run" button:
 
-```sql
+```yql
 SELECT "Hello, world!"u;
 ```
 
@@ -166,7 +166,7 @@ The second simplest way to run a SQL query with {{ ydb-short-name }} is the [com
 
 The main purpose of database management systems is to store data for later retrieval. As an SQL-based system, {{ ydb-short-name }}'s primary abstraction for data storage is a table. To create our first one, run the following query:
 
-```sql
+```yql
 CREATE TABLE example
 (
     key UInt64,
@@ -180,13 +180,13 @@ As you can see, it is a simple key-value table. Let's walk through the query ste
 * Each SQL statement kind like `CREATE TABLE` has more detailed explanation in [YQL reference](yql/reference/index.md).
 * `example` is the table name identifier, while `key` and `value` are column name identifiers. It is recommended to use simple names for identifiers like these, but if you need one that contains non-trivial symbols, wrap the name in backticks.
 * `UInt64` and `String` are data type names. `String` represents a binary string, and `UInt64` is a 64-bit unsigned integer. Thus, our example table stores string values identified by unsigned integer keys. More details [about data types](yql/reference/types/index.md).
-* `PRIMARY KEY` is one of the fundamental concepts of SQL that has a significant impact on both application logic and performance. Following the SQL standard, the primary key also implies an unique constraint, meaning the table cannot have multiple rows with equal primary keys. In this example table, it's quite straightforward which column should be chosen as the primary key, which we specify as `(key)` in round brackets after the respective keyword. In real-world scenarios, tables often have dozens of columns, and primary keys can be compound (consisting of multiple columns in a specified order), making choosing the right primary key more of an art. If you are interested in this topic, there's a [guide on choosing the primary key for maximizing performance](dev/primary-key/row-oriented.md). YDB tables are required to have a primary key.
+* `PRIMARY KEY` is one of the fundamental concepts of SQL that has a significant impact on both application logic and performance. Following the SQL standard, the primary key also implies an unique constraint, meaning the table cannot have multiple rows with equal primary keys. In this example table, it's quite straightforward which column should be chosen as the primary key, which we specify as `(key)` in round brackets after the respective keyword. In real-world scenarios, tables often have dozens of columns, and primary keys can be compound (consisting of multiple columns in a specified order), making choosing the right primary key more of an art. If you are interested in this topic, there's a [guide on choosing the primary key for maximizing performance](dev/primary-key/row-oriented.md). {{ ydb-short-name }} tables are required to have a primary key.
 
 ## Add sample data
 
 Now let's fill our table with some data. The simplest way is to just use literals:
 
-```sql
+```yql
 INSERT INTO example (key, value)
 VALUES (123, "hello"),
        (321, "world");
@@ -200,7 +200,7 @@ Step-by-step walkthrough:
 
 To double-check that the rows were indeed added to the table, there's a common query that should return `2` in this case:
 
-```sql
+```yql
 SELECT COUNT(*) FROM example;
 ```
 
@@ -212,7 +212,7 @@ A few notable details in this one:
 
 Another common way to fill a table with data is by combining `INSERT INTO` (or `UPSERT INTO`) and `SELECT`. In this case, values to be stored are calculated inside the database instead of being provided by the client as literals. We'll use a slightly more realistic query to demonstrate this:
 
-```sql
+```yql
 $subquery = SELECT ListFromRange(1000, 10000) AS keys;
 
 UPSERT INTO example
@@ -229,8 +229,10 @@ There's quite a lot going on in this query; let's dig into it:
 * `ListFromRange` is a function that produces a list of consecutive integers, starting from the value provided in the first argument and ending with the value provided in the second argument. There's also a third optional argument that can allow skipping integers with a specified step, but we omit it in our example, which defaults to returning all integers in the given range. `List` is one of the most common [container data types](yql/reference/types/containers.md).
 * `AS` is a keyword used to give a name to the value we're returning from `SELECT`; in this example, `keys`.
 * `FROM ... FLATTEN LIST BY ... AS ...` has a few notable things happening:
+
   * Another `SELECT` used in the `FROM` clause is called a subquery. That's why we chose this name for our `$subquery` named expression, but we could have chosen something more meaningful to explain what it is. Subqueries normally aren't materialized; they just pass the output of one `SELECT` to the input of another on the fly. They can be used as a means to produce arbitrarily complex execution graphs, especially if used in conjunction with other YQL features.
   * `FLATTEN LIST BY` clause modifies input passed via `FROM` in the following way: for each row in the input data, it takes a column of list data type and produces multiple rows according to the number of elements in that list. Normally, that list column is replaced by the column with the current single element, but the `AS` keyword in this context allows access to both the whole list (under the original name) and the current element (under the name specified after `AS`), or just to make it more clear what is what, like in this example.
+
 * `RandomUuid` is a function that returns a pseudorandom [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4). Unlike most other functions, it doesn't actually use what is passed as an argument (the `key` column); instead, it indicates that we need to call the function on each row. See the [reference](yql/reference/builtins/basic.md#random) for more examples of how this works.
 * `CAST(... AS ...)` is a common function for converting values to a specified data type. In this context, the type specification is expected after `AS` (in this case, `String`), not an arbitrary name.
 * `UPSERT INTO` will blindly write the values to the specified tables, as we discussed previously. Note that it didn't require `(key, value)` column names specification when used in conjunction with `SELECT`, as now columns can just be matched by names returned from `SELECT`.

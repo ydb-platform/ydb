@@ -219,6 +219,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
     }
 
+    Y_UNIT_TEST(DisabledAlterCompression) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false).SetEnableOlapCompression(false);
+        TKikimrRunner kikimr(settings);
+        TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");
+        helper.CreateTestOlapTable();
+        helper.FillPKOnly(0, 1);
+        helper.ExecuteSchemeQuery(
+            "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=pk_int, "
+            "`SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);", NYdb::EStatus::PRECONDITION_FAILED);
+    }
+
     Y_UNIT_TEST(StatsSysViewBytesColumnActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
@@ -453,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Activity = true
+                    PathId == UInt64("3") AND Activity == 1
                 GROUP BY TabletId, PathId, Kind
                 ORDER BY TabletId, Kind
             )");

@@ -318,7 +318,7 @@ TExprBase ReplicatePrecompute(TDqStageBase stage, TExprContext& ctx, const TPare
 
 NYql::IGraphTransformer::TStatus ReplicatePrecomputeRule(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
     TParentsMap parents;
-    GatherParents(*input, parents, true);
+    GatherParents(*input, parents);
     auto stages = CollectNodes<TDqStageBase>(input);
     for (auto& stage : stages) {
         auto applied = ReplicatePrecompute(stage, ctx, parents);

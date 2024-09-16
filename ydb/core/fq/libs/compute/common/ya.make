@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     pinger.cpp
-    plan2svg.cpp
     run_actor_params.cpp
     utils.cpp
 )
@@ -20,6 +19,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/s3/actors_factory
+    ydb/public/lib/ydb_cli/common
 )
 
 YQL_LAST_ABI_VERSION()

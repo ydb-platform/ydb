@@ -89,12 +89,19 @@ private:
     NEvWrite::TWriteMeta WriteMeta;
     YDB_READONLY(ui64, SchemaVersion, 0);
     YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY(ui64, Rows, 0);
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
-    YDB_READONLY_DEF(TVector<TWriteId>, WriteIds);
+    YDB_READONLY_DEF(TVector<TInsertWriteId>, InsertWriteIds);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+    std::shared_ptr<arrow::RecordBatch> RecordBatch;
 
 public:
+    const std::shared_ptr<arrow::RecordBatch>& GetRecordBatch() const {
+        AFL_VERIFY(RecordBatch);
+        return RecordBatch;
+    }
+
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
     }
@@ -103,19 +110,23 @@ public:
         return WriteMeta;
     }
 
-    void AddWriteId(const TWriteId& id) {
-        WriteIds.emplace_back(id);
+    void AddInsertWriteId(const TInsertWriteId id) {
+        InsertWriteIds.emplace_back(id);
     }
 
-    TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs)
+    TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs, const std::shared_ptr<arrow::RecordBatch>& batch)
         : WriteMeta(writeData.GetWriteMeta())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction())
         , SchemaSubset(writeData.GetSchemaSubsetVerified())
+        , RecordBatch(batch)
     {
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
+        }
+        for (const auto& batch : SplittedBlobs) {
+            Rows += batch->GetRowsCount();
         }
     }
 

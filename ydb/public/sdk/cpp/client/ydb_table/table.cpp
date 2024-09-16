@@ -469,6 +469,10 @@ public:
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns));
     }
 
+    void AddSecondaryIndex(const TIndexDescription& indexDescription) {
+        Indexes_.emplace_back(indexDescription);
+    }
+
     void AddVectorIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, vectorIndexSettings));
     }
@@ -747,6 +751,10 @@ void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType t
 
 void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
     Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns);
+}
+
+void TTableDescription::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    Impl_->AddSecondaryIndex(indexDescription);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -1170,6 +1178,11 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumns(const TVector<TString>& prima
 
 TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const TString& primaryKeyColumn) {
     TableDescription_.SetPrimaryKeyColumns(TVector<TString>{primaryKeyColumn});
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    TableDescription_.AddSecondaryIndex(indexDescription);
     return *this;
 }
 
@@ -2364,7 +2377,7 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
         default:
             return EVectorType::Unknown;
         }
-    }; 
+    };
 
 
     auto metricFromProto = [&](const auto& proto) -> TVectorIndexSettings::TMetric {
@@ -2376,7 +2389,7 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
         default:
             return {};
         }
-    };   
+    };
 
     return {
         .Metric = metricFromProto(proto),
@@ -2424,8 +2437,8 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
-    
-    
+
+
     if (const auto* distance = std::get_if<EDistance>(&Metric)) {
         settings.set_distance(convertDistance(*distance));
     } else if (const auto* similarity = std::get_if<ESimilarity>(&Metric)) {

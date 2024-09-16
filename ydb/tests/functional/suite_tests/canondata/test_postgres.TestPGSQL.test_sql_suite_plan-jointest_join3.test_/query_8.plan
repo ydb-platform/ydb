@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "x = _equijoin_column_0",
+                                                "Condition": "ss1.x = ss2._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 7
@@ -62,7 +62,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -74,7 +74,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "q2 = id",
+                                                                                "Condition": "int8_tbl.q2 = innertab.id",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 1
@@ -126,14 +126,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "ConstantExpr",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [],
-                                                                "Iterator": "[{x: 1}]",
-                                                                "Name": "Iterator"
-                                                            }
-                                                        ],
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 6
                                                     }
                                                 ]
@@ -152,7 +145,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

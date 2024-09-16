@@ -2,6 +2,10 @@ PROGRAM()
 
 LICENSE(GPL-3.0-or-later)
 
+VERSION(1.4.17)
+
+ORIGINAL_SOURCE(https://github.com/tar-mirror/gnu-m4/archive/refs/tags/v1.4.17.tar.gz)
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 NO_RUNTIME()

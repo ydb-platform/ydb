@@ -6,7 +6,7 @@
 namespace NYT::NTableClient {
 namespace {
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 // The goal is to provide a sanity check for stability of FarmHash and FarmFingerprint functions
 // for TUnversionedRow and TUnversionedValue.
@@ -21,7 +21,7 @@ TEST_P(TFarmHashTest, TFarmHashUnversionedValueTest)
     const auto& params = GetParam();
 
     std::array<TUnversionedValue, 2> values{std::get<0>(params), std::get<1>(params)};
-    auto valueRange = MakeRange(values);
+    auto valueRange = TRange(values);
 
     auto expected1 = std::get<2>(params);
     auto expected2 = std::get<3>(params);
@@ -93,7 +93,7 @@ INSTANTIATE_TEST_SUITE_P(
             13952380479379003069ULL,
             9998489714118868374ULL)));
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NTableClient

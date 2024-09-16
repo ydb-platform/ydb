@@ -1,8 +1,11 @@
 #pragma once
 #include "common/owner.h"
+#include "initialization.h"
+#include "tx_progress.h"
+
+#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NColumnShard {
@@ -13,55 +16,31 @@ enum class EWriteFailReason {
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
-    Overload /* "overload" */
+    Overload /* "overload" */,
+    OverlimitReadRawMemory /* "overlimit_read_raw_memory" */,
+    OverlimitReadBlobMemory /* "overlimit_read_blob_memory" */
 };
 
-class TCSInitialization: public TCommonCountersOwner {
+class TWriteCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-
-    const NMonitoring::THistogramPtr HistogramTabletInitializationMs;
-    const NMonitoring::THistogramPtr HistogramTxInitDurationMs;
-    const NMonitoring::THistogramPtr HistogramTxUpdateSchemaDurationMs;
-    const NMonitoring::THistogramPtr HistogramTxInitSchemaDurationMs;
-    const NMonitoring::THistogramPtr HistogramActivateExecutorFromActivationDurationMs;
-    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromActivationDurationMs;
-    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromCreateDurationMs;
+    NMonitoring::TDynamicCounters::TCounterPtr VolumeWriteData;
+    NMonitoring::THistogramPtr HistogramBytesWriteDataCount;
+    NMonitoring::THistogramPtr HistogramBytesWriteDataBytes;
 
 public:
-    
-    void OnTxInitFinished(const TDuration d) const {
-        HistogramTxInitDurationMs->Collect(d.MilliSeconds());
+    TWriteCounters(TCommonCountersOwner& owner)
+        : TBase(owner, "activity", "writing")
+    {
+        VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
+        HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
     }
 
-    void OnTxUpdateSchemaFinished(const TDuration d) const {
-        HistogramTxUpdateSchemaDurationMs->Collect(d.MilliSeconds());
-    }
-
-    void OnTxInitSchemaFinished(const TDuration d) const {
-        HistogramTxInitSchemaDurationMs->Collect(d.MilliSeconds());
-    }
-
-    void OnActivateExecutor(const TDuration fromCreate) const {
-        HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
-    }
-    void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) const {
-        HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
-        HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
-    }
-
-    TCSInitialization(TCommonCountersOwner& owner)
-        : TBase(owner, "stage", "initialization")
-        , HistogramTabletInitializationMs(TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxUpdateSchemaDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramActivateExecutorFromActivationDurationMs(
-              TBase::GetHistogram("ActivateExecutorFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramSwitchToWorkFromActivationDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramSwitchToWorkFromCreateDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
+    void OnIncomingData(const ui64 dataSize) const {
+        VolumeWriteData->Add(dataSize);
+        HistogramBytesWriteDataCount->Collect((i64)dataSize, 1);
+        HistogramBytesWriteDataBytes->Collect((i64)dataSize, dataSize);
     }
 };
 
@@ -118,7 +97,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
 
 public:
+    const std::shared_ptr<TWriteCounters> WritingCounters;
     const TCSInitialization Initialization;
+    TTxProgressCounters TxProgress;
 
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
@@ -133,7 +114,6 @@ public:
 
     void OnWritePutBlobsSuccess(const TDuration d) const {
         HistogramSuccessWritePutBlobsDurationMs->Collect(d.MilliSeconds());
-        WritePutBlobsCount->Sub(1);
     }
 
     void OnWriteMiddle1PutBlobsSuccess(const TDuration d) const {
@@ -162,11 +142,6 @@ public:
 
     void OnWritePutBlobsFail(const TDuration d) const {
         HistogramFailedWritePutBlobsDurationMs->Collect(d.MilliSeconds());
-        WritePutBlobsCount->Sub(1);
-    }
-
-    void OnWritePutBlobsStart() const {
-        WritePutBlobsCount->Add(1);
     }
 
     void OnWriteTxComplete(const TDuration d) const {
@@ -183,27 +158,27 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnOverloadInsertTable(const ui64 size) const {
+    void OnWriteOverloadInsertTable(const ui64 size) const {
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
     }
 
-    void OnOverloadMetadata(const ui64 size) const {
+    void OnWriteOverloadMetadata(const ui64 size) const {
         OverloadMetadataBytes->Add(size);
         OverloadMetadataCount->Add(1);
     }
 
-    void OnOverloadShardTx(const ui64 size) const {
+    void OnWriteOverloadShardTx(const ui64 size) const {
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
     }
 
-    void OnOverloadShardWrites(const ui64 size) const {
+    void OnWriteOverloadShardWrites(const ui64 size) const {
         OverloadShardWritesBytes->Add(size);
         OverloadShardWritesCount->Add(1);
     }
 
-    void OnOverloadShardWritesSize(const ui64 size) const {
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
     }

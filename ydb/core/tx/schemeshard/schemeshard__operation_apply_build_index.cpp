@@ -28,7 +28,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
-ISubOperation::TPtr DropIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId) {
+ISubOperation::TPtr DropIndexImplTable(TOperationContext& /*context*/, const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId) {
     TPath implTable = index.Child(name);
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
@@ -65,7 +65,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         *finalize.MutableLockGuard() = tx.GetLockGuard();
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
-        op->SetSnapshotTxId(config.GetSnaphotTxId()); // TODO: fix spelling error in flat_scheme_op.proto first
+        op->SetSnapshotTxId(config.GetSnapshotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
@@ -118,7 +118,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         *finalize.MutableLockGuard() = tx.GetLockGuard();
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
-        op->SetSnapshotTxId(config.GetSnaphotTxId());
+        op->SetSnapshotTxId(config.GetSnapshotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
 
         if (!indexName.empty()) {

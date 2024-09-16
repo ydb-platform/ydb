@@ -34,6 +34,12 @@ namespace NSQLTranslation {
             return result;
         }
 
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
+            return result;
+        }
+
         if (parsedSettings.PgParser) {
             return NSQLTranslationPG::PGToYql(query, parsedSettings, stmtParseInfo);
         }
@@ -90,7 +96,7 @@ namespace NSQLTranslation {
 
                 return NSQLTranslationV0::SqlAST(query, queryName, issues, maxErrors, settings.Arena);
             case 1:
-                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena);
+                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, settings.Arena);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
@@ -125,7 +131,7 @@ namespace NSQLTranslation {
 
                 return NSQLTranslationV0::MakeLexer();
             case 1:
-                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
@@ -182,6 +188,12 @@ namespace NSQLTranslation {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "Externally declared named expressions not supported in V0 syntax"));
             return {};
+        }
+
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
+            return result;
         }
 
         if (parsedSettings.PgParser) {

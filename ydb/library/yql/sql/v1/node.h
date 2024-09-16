@@ -2,7 +2,7 @@
 
 #include <google/protobuf/message.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include <ydb/library/yql/parser/proto_ast/common.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -36,6 +36,7 @@ namespace NSQLTranslationV1 {
         Aggregated,
         AggregationKey,
         OverWindow,
+        OverWindowDistinct,
         Failed,
         End,
     };
@@ -150,6 +151,7 @@ namespace NSQLTranslationV1 {
         bool IsAggregated() const;
         bool IsAggregationKey() const;
         bool IsOverWindow() const;
+        bool IsOverWindowDistinct() const;
         bool HasState(ENodeState state) const {
             PrecacheState();
             return State.Test(state);
@@ -564,7 +566,7 @@ namespace NSQLTranslationV1 {
         bool DoInit(TContext& ctx, ISource* src) override;
     public:
         TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
-    };    
+    };
 
     class TWinNTile final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -576,7 +578,7 @@ namespace NSQLTranslationV1 {
 
     private:
         TSourcePtr FakeSource;
-    };    
+    };
 
     class TWinLeadLag final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -882,6 +884,7 @@ namespace NSQLTranslationV1 {
         Normal,
         Distinct,
         OverWindow,
+        OverWindowDistinct,
     };
 
     class TTupleNode: public TAstListNode {
@@ -1121,6 +1124,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> AutoPartitioningByLoad;
         TNodePtr MinPartitions;
         TNodePtr MaxPartitions;
+        TNodePtr PartitionCount;
         TNodePtr UniformPartitions;
         TVector<TVector<TNodePtr>> PartitionAtKeys;
         TMaybe<TIdentifier> KeyBloomFilter;
@@ -1243,6 +1247,12 @@ namespace NSQLTranslationV1 {
         bool Temporary = false;
     };
 
+    struct TTableRef;
+    struct TAnalyzeParams {
+        std::shared_ptr<TTableRef> Table;
+        TVector<TString> Columns;
+    };
+
     struct TAlterTableParameters {
         TVector<TColumnSchema> AddColumns;
         TVector<TString> DropColumns;
@@ -1296,17 +1306,31 @@ namespace NSQLTranslationV1 {
     };
     struct TTopicSettings {
         NYql::TResetableSetting<TNodePtr, void> MinPartitions;
-        NYql::TResetableSetting<TNodePtr, void> PartitionsLimit;
+        NYql::TResetableSetting<TNodePtr, void> MaxPartitions;
         NYql::TResetableSetting<TNodePtr, void> RetentionPeriod;
         NYql::TResetableSetting<TNodePtr, void> RetentionStorage;
         NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
         NYql::TResetableSetting<TNodePtr, void> PartitionWriteSpeed;
         NYql::TResetableSetting<TNodePtr, void> PartitionWriteBurstSpeed;
         NYql::TResetableSetting<TNodePtr, void> MeteringMode;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStabilizationWindow;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
 
         bool IsSet() const {
-            return MinPartitions || PartitionsLimit || RetentionPeriod || RetentionStorage
-                   || SupportedCodecs || PartitionWriteSpeed|| PartitionWriteBurstSpeed || MeteringMode
+            return MinPartitions ||
+                   MaxPartitions ||
+                   RetentionPeriod ||
+                   RetentionStorage ||
+                   SupportedCodecs ||
+                   PartitionWriteSpeed ||
+                   PartitionWriteBurstSpeed ||
+                   MeteringMode ||
+                   AutoPartitioningStabilizationWindow ||
+                   AutoPartitioningUpUtilizationPercent ||
+                   AutoPartitioningDownUtilizationPercent ||
+                   AutoPartitioningStrategy
             ;
         }
     };
@@ -1314,6 +1338,7 @@ namespace NSQLTranslationV1 {
     struct TCreateTopicParameters {
         TVector<TTopicConsumerDescription> Consumers;
         TTopicSettings TopicSettings;
+        bool ExistingOk;
     };
 
     struct TAlterTopicParameters {
@@ -1321,6 +1346,11 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TTopicConsumerDescription> AlterConsumers;
         TVector<TIdentifier> DropConsumers;
         TTopicSettings TopicSettings;
+        bool MissingOk;
+    };
+
+    struct TDropTopicParameters {
+        bool MissingOk;
     };
 
     TString IdContent(TContext& ctx, const TString& str);
@@ -1455,7 +1485,8 @@ namespace NSQLTranslationV1 {
                               TScopedStatePtr scoped);
     TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params,
                               TScopedStatePtr scoped);
-    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, TScopedStatePtr scoped);
+    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
+                            TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

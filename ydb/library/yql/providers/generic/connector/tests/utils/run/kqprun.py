@@ -13,7 +13,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.log import make_log
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 
-from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner, DefaultTimeout
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
@@ -22,14 +22,16 @@ LOGGER = make_logger(__name__)
 class SchemeRenderer:
     template_: Final = '''
 
-{% macro create_data_source(kind, data_source, host, port, login, password, protocol, database, schema) -%}
+{% macro create_data_source(kind, data_source, host, port, login, password, protocol, database, schema, service_name) -%}
 
 CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{password}}");
 
 CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     SOURCE_TYPE="{{kind}}",
     LOCATION="{{host}}:{{port}}",
+    {% if database %}
     DATABASE_NAME="{{database}}",
+    {% endif %}
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
@@ -41,12 +43,18 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     {% if kind == POSTGRESQL and schema %}
         ,SCHEMA="{{schema}}"
     {% endif %}
+
+    {% if kind == ORACLE and service_name %}
+        ,SERVICE_NAME="{{service_name}}"
+    {% endif %}
 );
 
 {%- endmacro -%}
 
 {% set CLICKHOUSE = 'ClickHouse' %}
+{% set MS_SQL_SERVER = 'MsSQLServer' %}
 {% set MYSQL = 'MySQL' %}
+{% set ORACLE = 'Oracle' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
 {% set YDB = 'Ydb' %}
 
@@ -72,6 +80,21 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
     cluster.database,
+    NONE,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ms_sql_server_clusters %}
+{{ create_data_source(
+    MS_SQL_SERVER,
+    settings.ms_sql_server.cluster_name,
+    settings.ms_sql_server.host_internal,
+    settings.ms_sql_server.port_internal,
+    settings.ms_sql_server.username,
+    settings.ms_sql_server.password,
+    NONE,
+    cluster.database,
     NONE)
 }}
 {% endfor %}
@@ -86,7 +109,23 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.mysql.password,
     NONE,
     cluster.database,
+    NONE,
     NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.oracle_clusters %}
+{{ create_data_source(
+    ORACLE,
+    settings.oracle.cluster_name,
+    settings.oracle.host_internal,
+    settings.oracle.port_internal,
+    settings.oracle.username,
+    settings.oracle.password,
+    NONE,
+    NONE,
+    NONE,
+    cluster.service_name)
 }}
 {% endfor %}
 
@@ -100,7 +139,8 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.postgresql.password,
     NATIVE,
     cluster.database,
-    cluster.schema)
+    cluster.schema,
+    NONE)
 }}
 {% endfor %}
 
@@ -114,6 +154,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.ydb.password,
     NONE,
     cluster.database,
+    NONE,
     NONE)
 }}
 {% endfor %}
@@ -138,6 +179,10 @@ class AppConfigRenderer:
 FeatureFlags {
   EnableExternalDataSources: true
   EnableScriptExecutionOperations: true
+}
+
+TableServiceConfig {
+    CompileTimeoutMs: 600000
 }
 
 QueryServiceConfig {
@@ -218,7 +263,7 @@ class KqpRunner(Runner):
         returncode = 0
 
         try:
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=60)
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=DefaultTimeout)
         except subprocess.CalledProcessError as e:
             LOGGER.error(
                 'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',

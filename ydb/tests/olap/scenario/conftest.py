@@ -19,7 +19,8 @@ class BaseTestSet:
 
     @classmethod
     def setup_class(cls):
-        ScenarioTestHelper(None).remove_path(cls.get_suite_name())
+        if not external_param_is_true('reuse-tables'):
+            ScenarioTestHelper(None).remove_path(cls.get_suite_name())
 
     @classmethod
     def teardown_class(cls):

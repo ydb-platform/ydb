@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
@@ -168,7 +168,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return proto;
     }
 
-
     Y_UNIT_TEST(SimpleBackup) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -274,13 +273,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             "/Root",
             "IncrBackupImpl",
             SimpleTable()
+                .AllowSystemColumnNames(true)
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__incrBackupImpl_deleted", "Bool", false, false}}));
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
 
         ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __incrBackupImpl_deleted) VALUES
+            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_deleted) VALUES
             (1, 10, NULL),
             (2, NULL, true),
             (3, 30, NULL),

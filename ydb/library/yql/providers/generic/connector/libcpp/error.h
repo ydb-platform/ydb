@@ -44,4 +44,4 @@ namespace NYql::NConnector {
     inline bool GrpcStatusNeedsRetry(const NYdbGrpc::TGrpcStatus& status) noexcept {
         return status.GRpcStatusCode == grpc::UNAVAILABLE;
     }
-}
+} // namespace NYql::NConnector

@@ -156,6 +156,8 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
         TControlWrapper DefaultHugeGarbagePerMille;
+        TControlWrapper MaxCommonLogChunksHDD;
+        TControlWrapper MaxCommonLogChunksSSD;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -163,6 +165,12 @@ namespace NKikimr::NStorage {
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         class TPDiskMetadataInteractionActor;
+
+        TControlWrapper SlowDiskThreshold;
+        TControlWrapper PredictedDelayMultiplier;
+        TControlWrapper LongRequestThresholdMs;
+        TControlWrapper LongRequestReportingDelayMs;
+        TControlWrapper MaxNumOfSlowDisks;
 
     public:
         struct TGroupRecord;
@@ -182,11 +190,18 @@ namespace NKikimr::NStorage {
             , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
             , DefaultHugeGarbagePerMille(300, 1, 1000)
+            , MaxCommonLogChunksHDD(200, 1, 1'000'000)
+            , MaxCommonLogChunksSSD(200, 1, 1'000'000)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},
                 TCostMetricsParameters{32},
             })
+            , SlowDiskThreshold(2'000, 1, 1'000'000)
+            , PredictedDelayMultiplier(1'000, 1, 1000)
+            , LongRequestThresholdMs(50'000, 1, 1'000'000)
+            , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
+            , MaxNumOfSlowDisks(2, 1, 2)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
@@ -236,6 +251,7 @@ namespace NKikimr::NStorage {
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
         void StartStaticProxies();
+        void StartRequestReportingThrottler();
 
         /**
          * Removes drives with bad serial numbers and reports them to monitoring.

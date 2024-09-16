@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -175,6 +174,8 @@ struct TKqpWorkloadServiceEvents {
         EvCleanupRequest,
         EvCleanupResponse,
         EvUpdatePoolInfo,
+        EvUpdateDatabaseInfo,
+        EvSubscribeOnPoolChanges,
     };
 };
 

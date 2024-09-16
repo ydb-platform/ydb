@@ -32,6 +32,7 @@ struct TMakeConfigParams {
     TVector<TPartitionParams> AllPartitions;
     ui32 PartitionsCount = 1;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
+    bool HugeConfig = false;
 };
 
 NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params);

@@ -156,7 +156,7 @@ namespace NYql {
             const THolder<IDqIntegration> DqIntegration_;
         };
 
-    }
+    } // namespace
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state) {
         return new TGenericDataSource(std::move(state));

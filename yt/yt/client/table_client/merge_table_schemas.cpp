@@ -55,7 +55,9 @@ TTableSchemaPtr MergeTableSchemas(
             }
             if (firstSchemaColumn->SortOrder() != secondSchemaColumn.SortOrder()) {
                 THROW_ERROR_EXCEPTION("Mismatching sort orders in column %Qv: %Qv and %Qv",
-                    firstSchemaColumn->Name());
+                    firstSchemaColumn->Name(),
+                    firstSchemaColumn->SortOrder(),
+                    secondSchemaColumn.SortOrder());
             }
 
             try {

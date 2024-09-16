@@ -47,6 +47,9 @@ YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor*
         int oneofFields = descriptor->oneof_decl_count();
         for (int idx = 0; idx < oneofFields; ++idx) {
             const OneofDescriptor* fieldDescriptor = descriptor->oneof_decl(idx);
+            if (fieldDescriptor->name().StartsWith("_")) {
+                continue;
+            }
             properties[fieldDescriptor->name()]["type"] = "oneOf";
         }
         for (int idx = 0; idx < fields; ++idx) {

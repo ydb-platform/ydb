@@ -25,6 +25,7 @@ enum class EUserDataBlockUsage {
     Content,
     Udf,
     Library,
+    PgExt,
     End,
 };
 typedef TEnumBitSet<EUserDataBlockUsage, static_cast<int>(EUserDataBlockUsage::Begin),

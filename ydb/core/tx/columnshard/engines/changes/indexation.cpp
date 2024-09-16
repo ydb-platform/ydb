@@ -36,9 +36,7 @@ void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSha
         if (!DataToIndex.empty()) {
             self->UpdateInsertTableCounters();
         }
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+        self->Counters.GetTabletCounters()->OnInsertionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten, context.Duration);
     }
 }
 
@@ -53,7 +51,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
 
 public:
-    TBatchInfo(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const NEvWrite::EModificationType modificationType)
+    TBatchInfo(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const NEvWrite::EModificationType /*modificationType*/)
         : Batch(batch) {
     }
 };
@@ -100,7 +98,7 @@ public:
         return UsageColumnIds;
     }
 
-    void AddChunkInfo(const TInsertedData& data, const TConstructionContext& context) {
+    void AddChunkInfo(const TCommittedData& data, const TConstructionContext& context) {
         AFL_VERIFY(!Finished);
         if (UsageColumnIds.size() == FullColumnsCount) {
             return;
@@ -145,7 +143,7 @@ public:
         return result;
     }
 
-    void AddChunkInfo(const NOlap::TInsertedData& data, const TConstructionContext& context) {
+    void AddChunkInfo(const NOlap::TCommittedData& data, const TConstructionContext& context) {
         ColumnsInfo.AddChunkInfo(data, context);
     }
 
@@ -153,7 +151,7 @@ public:
         return ColumnsInfo.HasDeletion();
     }
 
-    void AddBatch(const NOlap::TInsertedData& data, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
+    void AddBatch(const NOlap::TCommittedData& data, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
         AFL_VERIFY(ColumnsInfo.IsFinished());
         AFL_VERIFY(batch);
         Batches.emplace_back(batch, data.GetMeta().GetModificationType());
@@ -188,18 +186,18 @@ public:
         return Data;
     }
 
-    void AddChunkInfo(const NOlap::TInsertedData& inserted, const TConstructionContext& context) {
-        auto shardingFilterCommit = context.SchemaVersions.GetShardingInfoOptional(inserted.PathId, inserted.GetSnapshot());
-        auto it = Data.find(inserted.PathId);
+    void AddChunkInfo(const NOlap::TCommittedData& inserted, const TConstructionContext& context) {
+        auto shardingFilterCommit = context.SchemaVersions.GetShardingInfoOptional(inserted.GetPathId(), inserted.GetSnapshot());
+        auto it = Data.find(inserted.GetPathId());
         if (it == Data.end()) {
-            it = Data.emplace(inserted.PathId, TPathData(shardingFilterCommit, ResultSchema)).first;
+            it = Data.emplace(inserted.GetPathId(), TPathData(shardingFilterCommit, ResultSchema)).first;
         }
         it->second.AddChunkInfo(inserted, context);
         it->second.AddShardingInfo(shardingFilterCommit);
     }
 
-    void AddBatch(const NOlap::TInsertedData& inserted, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
-        auto it = Data.find(inserted.PathId);
+    void AddBatch(const NOlap::TCommittedData& inserted, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
+        auto it = Data.find(inserted.GetPathId());
         AFL_VERIFY(it != Data.end());
         it->second.AddBatch(inserted, batch);
     }
@@ -222,6 +220,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     TPathesData pathBatches(resultSchema);
     for (auto& inserted : DataToIndex) {
+        if (inserted.GetRemove()) {
+            continue;
+        }
         pathBatches.AddChunkInfo(inserted, context);
     }
 
@@ -229,6 +230,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     for (auto& inserted : DataToIndex) {
         const TBlobRange& blobRange = inserted.GetBlobRange();
+        if (inserted.GetRemove()) {
+            Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
+            continue;
+        }
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
 
         std::shared_ptr<NArrow::TGeneralContainer> batch;
@@ -237,16 +242,16 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             auto batchSchema =
                 std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema()->fields()));
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
+            blobSchema->AdaptBatchToSchema(*batch, resultSchema);
         }
         IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot());
 
-        auto& pathInfo = pathBatches.GetPathInfo(inserted.PathId);
+        auto& pathInfo = pathBatches.GetPathInfo(inserted.GetPathId());
 
         if (pathInfo.HasDeletion()) {
             IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
         }
 
-        batch = resultSchema->NormalizeBatch(*blobSchema, batch, pathInfo.GetUsageColumnIds()).DetachResult();
         pathBatches.AddBatch(inserted, batch);
     }
 
@@ -263,11 +268,12 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         filters.resize(batches.size());
 
         auto itGranule = PathToGranule.find(pathId);
-        AFL_VERIFY(itGranule != PathToGranule.end());
+        AFL_VERIFY(itGranule != PathToGranule.end())("path_id", pathId);
         NCompaction::TMerger merger(context, SaverContext, std::move(batches), std::move(filters));
         merger.SetOptimizationWritingPackMode(true);
         auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
+            i.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
             AppendedPortions.emplace_back(std::move(i));
         }
     }

@@ -9,9 +9,15 @@
 #include <yt/yt/core/misc/crash_handler.h>
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/ytree/yson_struct.h>
+
+#include <yt/yt/core/yson/writer.h>
+
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
+#include <library/cpp/yt/system/exit.h>
 
 #include <util/datetime/base.h>
 #include <util/stream/file.h>
@@ -29,9 +35,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void CollectAndDumpMemoryProfile(const TString& memoryProfilePath)
+void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::ProfileType profileType)
 {
-    auto profile = NYTProf::ReadHeapProfile(tcmalloc::ProfileType::kHeap);
+    auto profile = NYTProf::ReadHeapProfile(profileType);
     SymbolizeByExternalPProf(&profile, NYTProf::TSymbolizationOptions{
         .RunTool = [] (const std::vector<TString>& args) {
             TShellCommand command{args[0], TList<TString>{args.begin()+1, args.end()}};
@@ -49,13 +55,47 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath)
 void MemoryProfileTimeoutHandler(int /*signal*/)
 {
     WriteToStderr("*** Process hung during dumping heap profile ***\n");
-    ::_exit(1);
+    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
 }
 
 void SetupMemoryProfileTimeout(int timeout)
 {
     ::signal(SIGALRM, &MemoryProfileTimeoutHandler);
     ::alarm(timeout);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(TOomProfilePaths)
+
+struct TOomProfilePaths
+    : public NYTree::TYsonStruct
+{
+    TString HeapProfilePath;
+    TString PeakProfilePath;
+
+    REGISTER_YSON_STRUCT(TOomProfilePaths);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("heap_profile_path", &TThis::HeapProfilePath)
+            .Default();
+        registrar.Parameter("peak_profile_path", &TThis::PeakProfilePath)
+            .Default();
+    }
+};
+
+DEFINE_REFCOUNTED_TYPE(TOomProfilePaths)
+
+////////////////////////////////////////////////////////////////////////////////
+
+void DumpProfilePaths(const TOomProfilePathsPtr& links, const TString& fileName)
+{
+    TFileOutput output(fileName);
+    NYson::TYsonWriter writer(&output, NYson::EYsonFormat::Pretty);
+    Serialize(links, &writer);
+    writer.Flush();
+    output.Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,7 +140,6 @@ private:
     std::condition_variable CV_;
     std::thread Thread_;
 
-
     void Handle()
     {
         std::unique_lock<std::mutex> lock(Mutex_);
@@ -112,9 +151,16 @@ private:
             return;
         }
 
-        auto heapDumpPath = GetHeapDumpPath();
+        auto timestamp = TInstant::Now().FormatLocalTime("%Y%m%dT%H%M%S");
+        auto profilePaths = New<TOomProfilePaths>();
+        auto profilePathsFile = GetProfilePaths(timestamp);
+        profilePaths->HeapProfilePath = GetHeapDumpPath(timestamp);
+        profilePaths->PeakProfilePath = GetPeakDumpPath(timestamp);
+
         Cerr << "TTCMallocLimitHandler: Fork process to write heap profile: "
-            << heapDumpPath
+            << profilePaths->HeapProfilePath
+            << " peak profile path: " << profilePaths->PeakProfilePath
+            << " profiles path file: " << profilePathsFile
             << Endl;
 
         SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
@@ -122,32 +168,50 @@ private:
 
         if (childPid == 0) {
             SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
-            CollectAndDumpMemoryProfile(heapDumpPath);
+            CollectAndDumpMemoryProfile(profilePaths->HeapProfilePath, tcmalloc::ProfileType::kHeap);
+            CollectAndDumpMemoryProfile(profilePaths->PeakProfilePath, tcmalloc::ProfileType::kPeakHeap);
+            DumpProfilePaths(profilePaths, profilePathsFile);
 
-            Cerr << "TTCMallocLimitHandler: Heap profile written" << Endl;
-            ::_exit(0);
+            Cerr << "TTCMallocLimitHandler: Heap profiles are written" << Endl;
+            AbortProcess(ToUnderlying(EProcessExitCode::OK));
         }
 
         if (childPid < 0) {
             Cerr << "TTCMallocLimitHandler: Fork failed: " << LastSystemErrorText() << Endl;
-            ::_exit(1);
+            AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
         }
 
         ExecWaitForChild(childPid);
-        ::_exit(0);
+        AbortProcess(ToUnderlying(EProcessExitCode::OK));
     }
 
-    TString GetHeapDumpPath() const
+    TString GetHeapDumpPath(const TString& timestamp) const
     {
         return Format(
             "%v/heap_%v.pb.gz",
             Options_.HeapDumpDirectory,
-            TInstant::Now().FormatLocalTime("%Y%m%dT%H%M%S"));
+            timestamp);
+    }
+
+    TString GetPeakDumpPath(const TString& timestamp) const
+    {
+        return Format(
+            "%v/peak_%v.pb.gz",
+            Options_.HeapDumpDirectory,
+            timestamp);
+    }
+
+    TString GetProfilePaths(const TString& timestamp) const
+    {
+        return Format(
+            "%v/oom_profile_paths_%v.yson",
+            Options_.HeapDumpDirectory,
+            timestamp);
     }
 
     void ExecWaitForChild(int pid)
     {
-        Cerr << "TTCMallocLimitHandler: Before waiting for child" << Endl;
+        Cerr << "TTCMallocLimitHandler: Start waiting for the child" << Endl;
 
         auto command = Format("while [ -e /proc/%v ]; do sleep 1; done;", pid);
         execl("/bin/bash", "/bin/bash", "-c",  command.c_str(), (void*)nullptr);

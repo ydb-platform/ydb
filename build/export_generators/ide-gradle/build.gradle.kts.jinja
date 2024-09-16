@@ -43,6 +43,14 @@ plugins {
 {%      endif -%}
 {%- endif %}
 }
+{# language level #}
+{%- if target.required_jdk != "" %}
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of("{{ target.required_jdk }}")
+    }
+}
+{%  endif -%}
 {%- if target.with_kotlinc_plugin_allopen %}
 
 allOpen {

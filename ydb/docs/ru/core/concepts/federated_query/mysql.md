@@ -4,11 +4,14 @@
 
 Для работы с внешней базой данных MySQL необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-    ```sql
+
+    ```yql
     CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
+
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных MySQL. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-    ```sql
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
         SOURCE_TYPE="MySQL",
         LOCATION="<host>:<port>",
@@ -19,17 +22,19 @@
         USE_TLS="TRUE"
     );
     ```
+
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
-## Синтаксис запросов { #query }
+## Синтаксис запросов {#query}
 Для работы с MySQL используется следующая форма SQL-запроса:
 
-```sql
+```yql
 SELECT * FROM mysql_datasource.<table_name>
 ```
 
 где:
+
 - `mysql_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
@@ -43,7 +48,7 @@ SELECT * FROM mysql_datasource.<table_name>
 
 ## Поддерживаемые типы данных
 
-В базе данных MySQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для любой колонки любой таблицы хранится в виде значения столбца `IS_NULLABLE` системной таблицы [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы MySQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](https://ydb.tech/docs/ru/yql/reference/types/optional) типы.
+В базе данных MySQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для любой колонки любой таблицы хранится в виде значения столбца `IS_NULLABLE` системной таблицы [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы MySQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../yql/reference/types/optional.md) типы.
 
 Ниже приведена таблица соответствия типов MySQL и {{ ydb-short-name }}. Все остальные типы данных, за исключением перечисленных, не поддерживаются.
 

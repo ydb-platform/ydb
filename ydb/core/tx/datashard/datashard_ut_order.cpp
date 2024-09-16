@@ -13,6 +13,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/util/memory_tracker.h>
 #include <util/system/valgrind.h>
 
@@ -3876,6 +3877,9 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
         ui64 AllowedStep = 0;
     };
     THashMap<ui32, TNodeState> mediatorState;
+
+    // Don't allow granular timecast side-stepping mediator time hacks in this test
+    TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
     bool mustWaitForSteps[2] = { false, false };
 

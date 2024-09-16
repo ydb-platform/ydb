@@ -4,19 +4,18 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

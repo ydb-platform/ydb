@@ -8,37 +8,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr {
-
-namespace NDataShard {
-    class TChangeRecord;
-}
-
-namespace NReplication::NService {
-    class TChangeRecord;
-}
-
-namespace NBackup::NImpl {
-    class TChangeRecord;
-}
-
-struct TBaseChangeRecordContainer {
-    virtual ~TBaseChangeRecordContainer() = default;
-    virtual TString Out() = 0;
-};
-
-template <class T>
-struct TChangeRecordContainer {};
-
-}
-
 namespace NKikimr::NChangeExchange {
-
-using TChangeRecordVector = std::variant<
-    std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>,
-    std::shared_ptr<TChangeRecordContainer<NBackup::NImpl::TChangeRecord>>
->;
 
 struct TEvChangeExchange {
     enum EEv {
@@ -103,10 +73,10 @@ struct TEvChangeExchange {
     };
 
     struct TEvRecords: public TEventLocal<TEvRecords, EvRecords> {
-        TChangeRecordVector Records;
+        TVector<IChangeRecord::TPtr> Records;
 
-        explicit TEvRecords(const TChangeRecordVector& records);
-        explicit TEvRecords(TChangeRecordVector&& records);
+        explicit TEvRecords(const TVector<IChangeRecord::TPtr>& records);
+        explicit TEvRecords(TVector<IChangeRecord::TPtr>&& records);
         TString ToString() const override;
     };
 

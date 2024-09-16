@@ -48,7 +48,7 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "hundred,ten = hundred,_equijoin_column_0",
+                                                "Condition": "t1.hundred,t1.ten = qr.hundred,qr._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -68,7 +68,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
@@ -80,7 +80,7 @@
                                                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "thousand = unique2",
+                                                                                "Condition": "t2.thousand = t3.unique2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1
@@ -109,7 +109,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 4,
                                                                                         "Plans": [
                                                                                             {
@@ -249,7 +249,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

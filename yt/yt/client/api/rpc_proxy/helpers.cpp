@@ -447,6 +447,11 @@ void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSche
     } else {
         protoSchema->clear_expression();
     }
+    if (schema.Materialized()) {
+        protoSchema->set_materialized(*schema.Materialized());
+    } else {
+        protoSchema->clear_materialized();
+    }
     if (schema.Aggregate()) {
         protoSchema->set_aggregate(*schema.Aggregate());
     } else {
@@ -520,12 +525,13 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     }
 
     schema->SetLogicalType(std::move(columnType));
-    schema->SetLock(protoSchema.has_lock() ? std::make_optional(protoSchema.lock()) : std::nullopt);
-    schema->SetExpression(protoSchema.has_expression() ? std::make_optional(protoSchema.expression()) : std::nullopt);
-    schema->SetAggregate(protoSchema.has_aggregate() ? std::make_optional(protoSchema.aggregate()) : std::nullopt);
-    schema->SetSortOrder(protoSchema.has_sort_order() ? std::make_optional(ESortOrder(protoSchema.sort_order())) : std::nullopt);
-    schema->SetGroup(protoSchema.has_group() ? std::make_optional(protoSchema.group()) : std::nullopt);
-    schema->SetMaxInlineHunkSize(protoSchema.has_max_inline_hunk_size() ? std::make_optional(protoSchema.max_inline_hunk_size()) : std::nullopt);
+    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
+    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
+    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
+    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
 
 void ToProto(NProto::TTableSchema* protoSchema, const NTableClient::TTableSchema& schema)
@@ -617,22 +623,6 @@ void FromProto(
     statistics->MemoryUsage = protoStatistics.memory_usage();
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
-}
-
-void ToProto(
-    NProto::TVersionedReadOptions* protoOptions,
-    const NTableClient::TVersionedReadOptions& options)
-{
-    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
-}
-
-void FromProto(
-    NTableClient::TVersionedReadOptions* options,
-    const NProto::TVersionedReadOptions& protoOptions)
-{
-    if (protoOptions.has_read_mode()) {
-        options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
-    }
 }
 
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
@@ -1233,6 +1223,8 @@ void ToProto(
     if (statistics.LegacyChunkRowCount) {
         protoStatistics->set_legacy_chunk_row_count(*statistics.LegacyChunkRowCount);
     }
+
+    ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 }
 
 void FromProto(
@@ -1261,6 +1253,8 @@ void FromProto(
     } else {
         statistics->LegacyChunkRowCount.reset();
     }
+
+    FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 }
 
 void ToProto(
@@ -1919,6 +1913,92 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for query state");
     }
     YT_ABORT();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    Y_UNUSED(req, path, options);
+}
+
+void FromProto(
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteSession* mutableSession,
+    TRspStartDistributedWriteSession&& rsp)
+{
+    Y_UNUSED(mutableSession, rsp);
+}
+
+void ToProto(
+    TRspStartDistributedWriteSession* rsp,
+    const TDistributedWriteSessionPtr& session)
+{
+    Y_UNUSED(rsp, session);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    Y_UNUSED(req, session, options);
+}
+
+void FromProto(
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteSession* mutableSession,
+    const TReqFinishDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableSession, req);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqParticipantWriteTable* req,
+    const TDistributedWriteCookiePtr& cookie,
+    const TParticipantTableWriterOptions& options)
+{
+    Y_UNUSED(req, cookie, options);
+}
+
+void FromProto(
+    TParticipantTableWriterOptions* mutableOptions,
+    const TReqParticipantWriteTable& req)
+{
+    Y_UNUSED(req, mutableOptions);
+}
+
+void FromProto(
+    TDistributedWriteCookie* cookie,
+    const TReqParticipantWriteTable& req)
+{
+    Y_UNUSED(cookie, req);
+}
+
+void ToProto(
+    TRspParticipantWriteTable* rsp,
+    const TDistributedWriteCookiePtr& cookie)
+{
+    Y_UNUSED(rsp, cookie);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

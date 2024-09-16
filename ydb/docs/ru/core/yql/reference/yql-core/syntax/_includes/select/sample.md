@@ -1,6 +1,6 @@
 # TABLESAMPLE и SAMPLE
 
-{% if oss == "true" and backend_name == "YDB" %}
+{% if oss == true and backend_name == "YDB" %}
 
 {% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
 
@@ -26,7 +26,7 @@
 
 {% endnote %}
 
-**Примеры:**
+## Примеры
 
 ``` yql
 SELECT *

@@ -141,6 +141,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         shardingActualVersion = shardingActual->GetSnapshotVersion();
     }
     AppendedPortions = merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
+    for (auto&& p : AppendedPortions) {
+        p.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
+    }
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
@@ -192,17 +195,15 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->IncCounter(
-            context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
-        self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
-        self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
+        self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
+            context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(
+    self.Counters.GetCSCounters().OnSplitCompactionInfo(
         g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 

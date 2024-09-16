@@ -28,6 +28,9 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
 
         ++Self->KeepAliveSeqNo; // cancel timeout events
 
+        Self->TabletCounters->Simple()[COUNTER_AGGREGATION_TIME].Set(0);
+        Self->AggregationRequestBeginTime = TInstant::Zero();
+
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto& column : Record.GetColumns()) {
@@ -58,8 +61,8 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         }
 
         std::unordered_map<ui32, std::vector<ui64>> nonLocalTablets;
-
         Self->TabletsForReqDistribution.clear();
+
         for (auto& tablet : Record.GetFailedTablets()) {
             auto error = tablet.GetError();
             switch (error) {
@@ -82,6 +85,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                 } else if (Action != EAction::SendReqDistribution) {
                     nonLocalTablets[nodeId].push_back(tablet.GetTabletId());
                 }
+                break;
             }
         }
 
@@ -121,6 +125,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         case EAction::SendAggregate:
             ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), Request.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            Self->AggregationRequestBeginTime = AppData(ctx)->TimeProvider->Now();
             break;
 
         default:

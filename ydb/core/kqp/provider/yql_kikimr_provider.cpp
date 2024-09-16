@@ -73,6 +73,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateSequence::CallableName());
         DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
+        DataSinkNames.insert(TKiAnalyzeTable::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -234,7 +235,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
             if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
                 type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
             } else {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
+                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
             }
         }
 
@@ -667,7 +668,7 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
         auto actualPgType = valueType->Cast<TPgExprType>();
         YQL_ENSURE(actualPgType);
 
-        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
         if (!typeDesc) {
             return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
         }

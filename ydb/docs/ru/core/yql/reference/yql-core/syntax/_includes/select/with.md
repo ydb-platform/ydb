@@ -30,7 +30,7 @@
 
 {% endif %}
 
-**Примеры:**
+## Примеры
 
 ``` yql
 SELECT key FROM my_table WITH INFER_SCHEMA;

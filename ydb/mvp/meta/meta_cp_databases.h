@@ -59,7 +59,7 @@ public:
         NActors::TActorId actorId = ctx.SelfID;
 
         {
-            Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+            Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
             });
@@ -204,9 +204,17 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        TStringBuf status = event->Get()->Response->Status;
-        if (event->Get()->Error.empty() && status == "200") {
+        if (event->Get()->Error.empty() && event->Get()->Response && event->Get()->Response->Status == "200") {
             NJson::ReadJsonTree(event->Get()->Response->Body, &JsonReaderConfig, &TenantInfo);
+        } else {
+            if (event->Get()->Response && event->Get()->Response->Status.size() == 3) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Response->Reverse(Request.Request)));
+            } else if (!event->Get()->Error.empty()) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable(event->Get()->Error, "text/plain")));
+            } else {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseServiceUnavailable("Endpoint returned unknown status", "text/plain")));
+            }
+            return Die(ctx);
         }
         if (--Requests == 0) {
             ReplyAndDie(ctx);

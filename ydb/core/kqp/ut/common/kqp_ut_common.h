@@ -97,6 +97,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        FeatureFlags.SetEnableSparsedColumns(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -364,8 +365,17 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 
-/* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrder(const TString& deserializedPlan);
+struct TGetPlanParams {
+    bool IncludeFilters = false;
+    bool IncludeOptimizerEstimation = false;
+    bool IncludeTables = true;
+};
+
+/* Gets join order with details as: join algo, join type and scan type. */
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params = {});
+
+/* Gets tables join order without details : only tables. */
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
 } // namespace NKqp
 } // namespace NKikimr

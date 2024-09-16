@@ -133,6 +133,7 @@ TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) 
 }
 
 NMvp::TTokensConfig TMVP::TokensConfig;
+TString TMVP::MetaDatabaseTokenName;
 
 TMVP::TMVP(int argc, char** argv)
     : ActorSystemStoppingLock()
@@ -174,6 +175,7 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
     MetaDatabase = meta["meta_database"].as<std::string>("");
     MetaCache = meta["meta_cache"].as<bool>(false);
+    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(
@@ -204,9 +206,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
     }
 

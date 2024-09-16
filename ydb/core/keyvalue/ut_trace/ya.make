@@ -4,6 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(5)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
@@ -20,7 +24,5 @@ PEERDIR(
 SRCS(
     keyvalue_ut_trace.cpp
 )
-
-REQUIREMENTS(ram:16)
 
 END()

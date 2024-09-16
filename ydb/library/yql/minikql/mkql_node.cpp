@@ -658,7 +658,8 @@ static const THashSet<TStringBuf> PG_SUPPORTED_PRESORT = {
 };
 
 TPgType::TPgType(ui32 typeId, const TTypeEnvironment& env)
-    : TType(EKind::Pg, env.GetTypeOfTypeLazy(), PG_SUPPORTED_PRESORT.contains(NYql::NPg::LookupType(typeId).Name))
+    : TType(EKind::Pg, env.GetTypeOfTypeLazy(), 
+        NYql::NPg::HasType(typeId) && PG_SUPPORTED_PRESORT.contains(NYql::NPg::LookupType(typeId).Name))
     , TypeId(typeId)
 {
 }

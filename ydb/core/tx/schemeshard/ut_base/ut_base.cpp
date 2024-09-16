@@ -6331,6 +6331,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
@@ -6853,7 +6854,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResults(runtime, txId-1, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -11302,4 +11303,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(CreateSystemColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SystemColumnForbidden"
+            Columns { Name: "__ydb_SomeColumn"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["__ydb_SomeColumn", "value"]
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SystemColumnAllowed"
+            Columns { Name: "__ydb_SomeColumn"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["__ydb_SomeColumn", "value"]
+            SystemColumnNamesAllowed: true
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
+    }
 }

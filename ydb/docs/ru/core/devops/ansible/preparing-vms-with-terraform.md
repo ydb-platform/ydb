@@ -18,7 +18,7 @@ resource "aws_instance" "ydb-vm" {
   key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-  
+
   tags = {
     Name                 = "ydb-node-${count.index +1}"
     Username             = "ubuntu"
@@ -45,7 +45,8 @@ resource "aws_instance" "ydb-vm" {
 * `outputs.tf` – переменные, которые содержат результаты работы ресурса (IP-адреса ВМ, ID сетей/подсетей и т.д.).
 
 Модули подключаются к проекту в корневом файле `main.tf` следующим образом:
-```
+
+```tf
 module "vpc" {
   source                     = "./modules/vpc"
   subnets_count              = var.subnets_count
@@ -96,7 +97,8 @@ module "vpc" {
 Чтобы воспользоваться готовыми Terraform-сценариями из репозитория, нужно скачать репозиторий командой `git clone https://github.com/ydb-platform/ydb-terraform.git`, внести изменения в конфигурационный файл Terraform `~/.terraformrc`, задать актуальные значения глобальных переменных сценария и скачать CLI того облачного провайдера, где будет создана инфраструктура.
 
 Если вы планируете использовать несколько провайдеров, можно добавить следующий код в `~/.terraformrc`, который установит пути скачивания для всех провайдеров, описанных ниже:
-```
+
+```tf
 provider_installation {
   network_mirror {
     url     = "https://terraform-mirror.yandexcloud.net/"

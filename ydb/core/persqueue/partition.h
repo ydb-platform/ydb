@@ -390,6 +390,7 @@ private:
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
+                                  NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -915,6 +916,8 @@ private:
 
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
+
+    TLastCounter SourceIdCounter;
 
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 

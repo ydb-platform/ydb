@@ -258,7 +258,8 @@ namespace NKikimr {
                             VCtx->Top->GetOrderNumber(VCtx->ShortSelfVDisk));
                 CreateQueuesForVDisks(VPatchCtx->AsyncBlobQueues, SelfId(), GInfo, VCtx, GInfo->GetVDisks(), patchGroup,
                         patchQueueClientId, NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob,
-                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA);
+                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA,
+                        Config->UseActorSystemTimeInBSQueue);
             }
         }
 
@@ -2551,6 +2552,10 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
+            if (VCtx->GroupId.GetRawId() == 0) {
+                // don't run balancing for the static group
+                return;
+            }
             if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }

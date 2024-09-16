@@ -14,6 +14,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/libs/double-conversion
     library/cpp/string_utils/quote
     ydb/core/kqp/ut/common

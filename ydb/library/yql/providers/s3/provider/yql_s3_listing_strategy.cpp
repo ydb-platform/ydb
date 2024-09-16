@@ -16,6 +16,7 @@
 #include <util/generic/overloaded.h>
 #include <deque>
 #include <utility>
+#include <mutex>
 
 namespace NYql {
 IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& options) {
@@ -491,8 +492,14 @@ public:
                 });
         return NextDirectoryListeningChunk;
     }
+
+    static TString ParseBasePath(const TString& path) {
+        TString basePath = TString{TStringBuf{path}.RBefore('/')};
+        return basePath == path && !basePath.EndsWith('/') ? TString{} : basePath;
+    }
+
     void PerformEarlyStop(TListEntries& result, const TString& sourcePrefix) {
-        result.Directories.push_back({.Path = sourcePrefix});
+        result.Directories.push_back({.Path = ParseBasePath(sourcePrefix)});
         for (auto& directoryPrefix : DirectoryPrefixQueue) {
             result.Directories.push_back({.Path = directoryPrefix});
         }

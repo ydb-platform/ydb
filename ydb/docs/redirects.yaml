@@ -33,6 +33,8 @@ common:
     to: /public-materials/videos.md
   - from: /concepts/databases.md
     to: /concepts/glossary.md
+  - from: /postgresql/pg-dump.md
+    to: /postgresql/import.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
@@ -278,23 +280,47 @@ common:
   - from: reference/ydb-sdk/recipes/upsert.md
     to: recipes/ydb-sdk/upsert.md
 
-# Redirects from export_import to export-import   
+# Redirects from export_import to export-import
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md
   - from: /reference/ydb-cli/export_import/s3_export.md
-    to: /reference/ydb-cli/export-import/export-s3.md    
+    to: /reference/ydb-cli/export-import/export-s3.md
   - from: /reference/ydb-cli/export_import/file_structure.md
-    to: /reference/ydb-cli/export-import/file-structure.md     
+    to: /reference/ydb-cli/export-import/file-structure.md
   - from: /reference/ydb-cli/export_import/import-file.md
-    to: /reference/ydb-cli/export-import/import-file.md      
+    to: /reference/ydb-cli/export-import/import-file.md
   - from: /reference/ydb-cli/export_import/s3_import.md
-    to: /reference/ydb-cli/export-import/import-s3.md   
+    to: /reference/ydb-cli/export-import/import-s3.md
   - from: /reference/ydb-cli/export_import/index.md
-    to: /reference/ydb-cli/export-import/index.md   
+    to: /reference/ydb-cli/export-import/index.md
   - from: /reference/ydb-cli/export_import/tools_dump.md
-    to: /reference/ydb-cli/export-import/tools-dump.md   
+    to: /reference/ydb-cli/export-import/tools-dump.md
   - from: /reference/ydb-cli/export_import/tools_restore.md
     to: /reference/ydb-cli/export-import/tools-restore.md
+
+# Redirects for integrations
+  - from: /integrations/grafana.md
+    to: /integrations/visualization/grafana.md
+  - from: /integrations/ide/dbeaver.md
+    to: /integrations/gui/dbeaver.md
+  - from: /integrations/ide/datagrip.md
+    to: /integrations/gui/datagrip.md
+  - from: /integrations/fluent-bit.md
+    to: /integrations/ingestion/fluent-bit.md
+  - from: /integrations/import-jdbc.md
+    to: /integrations/ingestion/import-jdbc.md
+  - from: /integrations/logstash.md
+    to: /integrations/ingestion/logstash.md
+  - from: /integrations/spring-data-jdbc.md
+    to: /integrations/orm/spring-data-jdbc.md
+  - from: /integrations/flyway.md
+    to: /integrations/migration/flyway.md
+  - from: /integrations/goose.md
+    to: /integrations/migration/goose.md
+  - from: /integrations/hibernate.md
+    to: /integrations/orm/hibernate.md
+  - from: /integrations/liquibase.md
+    to: /integrations/migration/liquibase.md
 
 ru:
   - from: /concepts/column-table.md
@@ -303,3 +329,5 @@ ru:
     to: /postgresql/intro.md
   - from: /db/terraform.md
     to: /dev/terraform.md
+  - from: /postgresql/docker-connect.md
+    to: /postgresql/connect.md

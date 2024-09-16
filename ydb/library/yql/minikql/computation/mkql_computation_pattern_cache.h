@@ -6,6 +6,7 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <memory>
+#include <mutex>
 
 namespace NKikimr::NMiniKQL {
 

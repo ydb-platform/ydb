@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ydb
-Version: 3.13.0
+Version: 3.17.1
 Summary: YDB Python SDK
 Home-page: http://github.com/ydb-platform/ydb-python-sdk
 Author: Yandex LLC
@@ -29,6 +29,12 @@ YDB Python SDK
 [![Style checks](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/style.yaml/badge.svg)](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/style.yaml)
 
 Officially supported Python client for YDB.
+
+---
+
+**Documentation**: <a href="https://ydb-platform.github.io/ydb-python-sdk" target="_blank">https://ydb-platform.github.io/ydb-python-sdk</a>
+
+---
 
 ## Quickstart
 

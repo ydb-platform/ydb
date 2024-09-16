@@ -31,6 +31,7 @@ struct TDqManagerConfig
     NYTree::INodePtr YtCoordinator;
     NYTree::INodePtr Scheduler;
     NYTree::INodePtr ICSettings;
+    NYTree::INodePtr AddressResolver;
 
     TMap<TString, TString> UdfsWithMd5; // autofilled by yql_plugin
     NYql::TFileStoragePtr FileStorage; // autofilled by yql_plugin

@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 import argparse
 import dataclasses
-import datetime
 import os
-import re
-import json
 import sys
-from github import Github, Auth as GithubAuth
-from github.PullRequest import PullRequest
+import traceback
+from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
-from typing import List, Optional, Dict
+from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
-from gh_status import update_pr_comment_text
 from get_test_history import get_test_history
 
 
@@ -40,6 +36,7 @@ class TestResult:
     log_urls: Dict[str, str]
     elapsed: float
     count_of_passed: int
+    owners: str
 
     @property
     def status_display(self):
@@ -99,7 +96,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0)
+        return cls(classname, name, status, log_urls, elapsed, 0,'')
 
 
 class TestSummaryLine:
@@ -246,29 +243,46 @@ def render_testlist_html(rows, fn, build_preset):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
-    # get failed tests
-    failed_tests_array = []
-    history={}
-    for test in status_test.get(TestStatus.FAIL, []):
-        failed_tests_array.append(test.full_name)
-
-    if failed_tests_array:
-        try:
-            history = get_test_history(failed_tests_array, last_n_runs, build_preset)
-        except Exception as e:
-            print(f'Error:{e}')
+    # get testowners
+    all_tests = [test for status in status_order for test in status_test.get(status)]
         
-    # sorting, at first show tests with passed resuts in history
+    dir = os.path.dirname(__file__)
+    git_root = f"{dir}/../../.."
+    codeowners = f"{git_root}/.github/TESTOWNERS"
+    get_codeowners_for_tests(codeowners, all_tests)
+    
+    # statuses for history
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    status_for_history = [s for s in status_for_history if s in status_test]
+    
+    tests_names_for_history = []
+    history= {}
+    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
+    
+    # get tests for history
+    for test in tests_in_statuses:
+        tests_names_for_history.append(test.full_name)
 
-    if TestStatus.FAIL in status_test:
-        for test in status_test.get(TestStatus.FAIL, []):
-            if test.full_name in history:
-                test.count_of_passed = history[test.full_name][
-                    next(iter(history[test.full_name]))
-                ]["count_of_passed"]
-            else:
-                test.count_of_passed = 0
-        status_test[TestStatus.FAIL].sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+    try:
+        history = get_test_history(tests_names_for_history, last_n_runs, build_preset)
+    except Exception:
+        print(traceback.format_exc())
+   
+    #geting count of passed tests in history for sorting
+    for test in tests_in_statuses:
+        if test.full_name in history:
+            test.count_of_passed = len(
+                [
+                    history[test.full_name][x]
+                    for x in history[test.full_name]
+                    if history[test.full_name][x]["status"] == "passed"
+                ]
+            )
+    # sorting, 
+    # at first - show tests with passed resuts in history
+    # at second - sorted by test name
+    for current_status in status_for_history:
+        status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
 
     content = env.get_template("summary.html").render(
         status_order=status_order,
@@ -297,6 +311,20 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
+def get_codeowners_for_tests(codeowners_file_path, tests_data):
+    with open(codeowners_file_path, 'r') as file:
+        data = file.read()
+        owners_odj = CodeOwners(data)
+
+        tests_data_with_owners = []
+        for test in tests_data:
+            target_path = test.classname
+            owners = owners_odj.of(target_path)
+            test.owners = joined_owners = ";;".join(
+                [(":".join(x)) for x in owners])
+            tests_data_with_owners.append(test)
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):
     summary = TestSummary(is_retry=is_retry)
 
@@ -318,7 +346,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset)
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
+def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
     color = "red"
     if summary.is_failed:
         color = "red" if is_last_retry else "yellow"
@@ -369,6 +397,8 @@ def main():
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument('--is_retry', required=True, type=int)
     parser.add_argument('--is_last_retry', required=True, type=int)
+    parser.add_argument('--comment_color_file', required=True)
+    parser.add_argument('--comment_text_file', required=True)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -387,21 +417,17 @@ def main():
     else:
         overall_status = "success"
 
-    if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
-        gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
-        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
+    color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
-        with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
-            event = json.load(fp)
+    with open(args.comment_color_file, "w") as f:
+        f.write(color)
 
-        pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        color, text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
+    with open(args.comment_text_file, "w") as f:
+        f.write('\n'.join(text))
+        f.write('\n')
 
-        update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
-
-    if args.status_report_file:
-        with open(args.status_report_file, 'w') as fo:
-            fo.write(overall_status)
+    with open(args.status_report_file, "w") as f:
+        f.write(overall_status)
 
 
 if __name__ == "__main__":

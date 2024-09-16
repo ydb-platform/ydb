@@ -1,7 +1,8 @@
 # String
+
 Функции для работы с ASCII-строками.
 
-**Список функций**
+## Список функций
 
 * ```String::Base32Encode(string:String{Flags:AutoMap}) -> String```
 * ```String::Base32Decode(string:String) -> String?```
@@ -18,21 +19,21 @@
 * ```String::CgiEscape(string:String{Flags:AutoMap}) -> String```
 * ```String::CgiUnescape(string:String{Flags:AutoMap}) -> String```
 
-  Кодирует или декодирует строку указанным образом.
+Кодирует или декодирует строку указанным образом.
 
-**Пример**
+## Пример
 
-```sql
+```yql
 SELECT String::Base64Encode("YQL"); -- "WVFM"
 ```
 
-* ```String::Strip(string:String{Flags:AutoMap}) -> String```
+```String::Strip(string:String{Flags:AutoMap}) -> String```
 
-  Вырезает из строки крайние пробелы.
+Вырезает из строки крайние пробелы.
 
-**Пример**
+### Пример
 
-```sql
+```yql
 SELECT String::Strip("YQL ");       -- "YQL"
 ```
 
@@ -78,13 +79,14 @@ SELECT String::Strip("YQL ");       -- "YQL"
   ```string``` -- исходная строка
   ```delimeter``` -- разделитель
   Именованные параметры:
-  - DelimeterString:Bool? — считать разделитель строкой (true, по умолчанию) или набором символов "любой из" (false)
-  - SkipEmpty:Bool? - пропускать ли пустые строки в результате, по умолчанию false
-  - Limit:Uint64? - ограничение на число извлекаемых компонент, по умолчанию не ограничено; необработанный суффикс оригинальной строки возвращается последним элементом при превышении лимита
 
-**Пример**
+  - `DelimeterString:Bool?` — считать разделитель строкой (true, по умолчанию) или набором символов "любой из" (false)
+  - `SkipEmpty:Bool?` - пропускать ли пустые строки в результате, по умолчанию false
+  - `Limit:Uint64?` - ограничение на число извлекаемых компонент, по умолчанию не ограничено; необработанный суффикс оригинальной строки возвращается последним элементом при превышении лимита
 
-```sql
+### Пример
+
+```yql
 SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3", "4,5,6,7"]
 ```
 
@@ -106,9 +108,9 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 
   Заменяют все/первое/последнее вхождения(е) строки ```find``` в ```input``` на ```replacement```.
 
-* ```String::RemoveAll(input:String{Flags:AutoMap}, symbols:String) -> String ```
-* ```String::RemoveFirst(input:String{Flags:AutoMap}, symbols:String) -> String ```
-* ```String::RemoveLast(input:String{Flags:AutoMap}, symbols:String) -> String ```
+* ```String::RemoveAll(input:String{Flags:AutoMap}, symbols:String) -> String```
+* ```String::RemoveFirst(input:String{Flags:AutoMap}, symbols:String) -> String```
+* ```String::RemoveLast(input:String{Flags:AutoMap}, symbols:String) -> String```
 
   Удаляют все/первое/последнее вхождения(е) символа в наборе ```symbols``` из ```input```. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
 
@@ -143,7 +145,7 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 * ```String::HumanReadableDuration(value:Uint64{Flags:AutoMap}) -> String```
 * ```String::HumanReadableQuantity(value:Uint64{Flags:AutoMap}) -> String```
 * ```String::HumanReadableBytes(value:Uint64{Flags:AutoMap}) -> String```
-* ```String::Prec(Double{Flags:AutoMap}, digits:Uint64) -> String ```
+* ```String::Prec(Double{Flags:AutoMap}, digits:Uint64) -> String```
 
   Распечатывает значение указанным образом.
 

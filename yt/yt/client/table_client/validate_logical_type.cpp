@@ -235,8 +235,7 @@ private:
         if (Cursor_.GetCurrent().GetType() == EYsonItemType::EndList) {
             THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
                 "Cannot parse %Qv; empty yson",
-                GetDescription(fieldId),
-                Cursor_.GetCurrent().GetType());
+                GetDescription(fieldId));
         }
         ValidateLogicalType(type.GetElement(), fieldId.OptionalElement());
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::EndList) {

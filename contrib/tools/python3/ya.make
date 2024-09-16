@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.12.4)
+VERSION(3.12.5)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.5.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -38,6 +38,13 @@ NO_UTIL()
 CFLAGS(
     -DPy_BUILD_CORE
     -DPy_BUILD_CORE_BUILTIN
+    -DUSE_ZLIB_CRC32
+    -DABIFLAGS=\"\"
+    -DPREFIX=\"/var/empty\"
+    -DEXEC_PREFIX=\"/var/empty\"
+    -DVERSION=\"3.12\"
+    -DVPATH=\"\"
+    -DPLATLIBDIR=\"lib\"
 )
 
 IF (CLANG_CL)
@@ -47,9 +54,21 @@ IF (CLANG_CL)
 ENDIF()
 
 IF (OS_DARWIN)
+    CFLAGS(
+        -DPLATFORM=\"darwin\"
+        -DMULTIARCH=\"darwin\"
+        -DSOABI=\"cpython-312-darwin\"
+    )
+
     LDFLAGS(
         -framework CoreFoundation
         -framework SystemConfiguration
+    )
+ELSEIF (OS_LINUX)
+    CFLAGS(
+        -DPLATFORM=\"linux\"
+        -DMULTIARCH=\"x86_64-linux-gnu\"
+        -DSOABI=\"cpython-312-x86_64-linux-gnu\"
     )
 ELSEIF (OS_WINDOWS)
     CFLAGS(
@@ -61,8 +80,6 @@ ELSEIF (OS_WINDOWS)
         Shlwapi.lib
         Winmm.lib
     )
-
-    # DISABLE(MSVC_INLINE_OPTIMIZED)
 ENDIF()
 
 SRCS(

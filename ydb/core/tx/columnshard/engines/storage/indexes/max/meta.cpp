@@ -1,6 +1,6 @@
 #include "meta.h"
 
-#include <ydb/core/formats/arrow/scalar/serialization.h>
+#include <ydb/library/formats/arrow/scalar/serialization.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>

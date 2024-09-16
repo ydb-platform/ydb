@@ -26,9 +26,12 @@ namespace NYdb {
             void AddWriterEvent(size_t writerIdx, const TTopicWorkloadStats::WriterEvent& event);
             void AddReaderEvent(size_t readerIdx, const TTopicWorkloadStats::ReaderEvent& event);
             void AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event);
-            void AddSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event);
-            void AddUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event);
-            void AddCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event);
+            void AddReaderSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event);
+            void AddReaderUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event);
+            void AddReaderCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event);
+            void AddWriterSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event);
+            void AddWriterUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event);
+            void AddWriterCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event);
 
             ui64 GetTotalReadMessages() const;
             ui64 GetTotalWriteMessages() const;
@@ -57,9 +60,12 @@ namespace NYdb {
             TEventQueues<TTopicWorkloadStats::WriterEvent> WriterEventQueues;
             TEventQueues<TTopicWorkloadStats::ReaderEvent> ReaderEventQueues;
             TEventQueues<TTopicWorkloadStats::LagEvent> LagEventQueues;
-            TEventQueues<TTopicWorkloadStats::SelectEvent> SelectEventQueues;
-            TEventQueues<TTopicWorkloadStats::UpsertEvent> UpsertEventQueues;
-            TEventQueues<TTopicWorkloadStats::CommitTxEvent> CommitTxEventQueues;
+            TEventQueues<TTopicWorkloadStats::SelectEvent> ReaderSelectEventQueues;
+            TEventQueues<TTopicWorkloadStats::UpsertEvent> ReaderUpsertEventQueues;
+            TEventQueues<TTopicWorkloadStats::CommitTxEvent> ReaderCommitTxEventQueues;
+            TEventQueues<TTopicWorkloadStats::SelectEvent> WriterSelectEventQueues;
+            TEventQueues<TTopicWorkloadStats::UpsertEvent> WriterUpsertEventQueues;
+            TEventQueues<TTopicWorkloadStats::CommitTxEvent> WriterCommitTxEventQueues;
 
             bool Quiet;
             bool PrintTimestamp;

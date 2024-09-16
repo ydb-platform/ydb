@@ -307,7 +307,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -323,7 +323,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>()
         );
     }
 
@@ -1242,6 +1243,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .MaxPathElementLength = rowSet.template GetValueOrDefault<Schema::SubDomains::PathElementLength>(defaults.MaxPathElementLength),
             .ExtraPathSymbolsAllowed = rowSet.template GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(defaults.ExtraPathSymbolsAllowed),
             .MaxTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(defaults.MaxTableColumns),
+            .MaxColumnTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::ColumnTableColumnsLimit>(defaults.MaxColumnTableColumns),
             .MaxTableColumnNameLength = rowSet.template GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(defaults.MaxTableColumnNameLength),
             .MaxTableKeyColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(defaults.MaxTableKeyColumns),
             .MaxTableIndices = rowSet.template GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(defaults.MaxTableIndices),
@@ -1825,7 +1827,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
 
                     if (tableInfo->IsAsyncReplica()) {
-                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                        Self->PathsById.at(pathId)->SetAsyncReplica(true);
+                    }
+                }
+
+                if (const auto incrementalBackupConfig = std::get<12>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableIncrementalBackupConfig(), incrementalBackupConfig);
+                    Y_ABORT_UNLESS(parseOk);
+
+                    if (tableInfo->IsRestoreTable()) {
+                        Self->PathsById.at(pathId)->SetRestoreTable();
                     }
                 }
 
@@ -2285,6 +2296,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.RowCount = rowSet.GetValue<Schema::TablePartitionStats::RowCount>();
                 stats.DataSize = rowSet.GetValue<Schema::TablePartitionStats::DataSize>();
                 stats.IndexSize = rowSet.GetValue<Schema::TablePartitionStats::IndexSize>();
+                stats.ByKeyFilterSize = rowSet.GetValue<Schema::TablePartitionStats::ByKeyFilterSize>();
                 if (rowSet.HaveValue<Schema::TablePartitionStats::StoragePoolsStats>()) {
                     NKikimrTableStats::TStoragePoolsStats protobufRepresentation;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
@@ -4199,8 +4211,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TString settings = rowset.GetValue<Schema::Exports::Settings>();
                     auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::Exports::DomainPathOwnerId>(selfId),
                                                 rowset.GetValue<Schema::Exports::DomainPathId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Exports::PeerName>();
 
-                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId);
+                    TExportInfo::TPtr exportInfo = new TExportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
@@ -4297,11 +4310,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TImportInfo::EKind kind = static_cast<TImportInfo::EKind>(rowset.GetValue<Schema::Imports::Kind>());
                     auto domainPathId = TPathId(rowset.GetValue<Schema::Imports::DomainPathOwnerId>(),
                                                 rowset.GetValue<Schema::Imports::DomainPathLocalId>());
+                    TString peerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>();
 
                     Ydb::Import::ImportFromS3Settings settings;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(settings, rowset.GetValue<Schema::Imports::Settings>()));
 
-                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId);
+                    TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
@@ -4366,6 +4380,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Scheme = scheme;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::Permissions>()) {
+                        Ydb::Scheme::ModifyPermissionsRequest permissions;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(permissions, rowset.GetValue<Schema::ImportItems::Permissions>()));
+                        item.Permissions = permissions;
+                    }
+
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
@@ -4394,9 +4414,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 while (!rowset.EndOfSet()) {
                     TIndexBuildInfo::TPtr indexInfo = TIndexBuildInfo::FromRow(rowset);
 
-                    Y_ABORT_UNLESS(!Self->IndexBuilds.contains(indexInfo->Id));
-                    Self->IndexBuilds[indexInfo->Id] = indexInfo;
+                    auto [it, emplaced] = Self->IndexBuilds.emplace(indexInfo->Id, indexInfo);
+                    Y_ABORT_UNLESS(emplaced);
                     if (indexInfo->Uid) {
+                        // TODO(mbkkt) It also should be unique, but we're not sure.
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
                         Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
                     }
 
@@ -4422,11 +4444,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildColumns::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddIndexColumnInfo(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddIndexColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4442,11 +4464,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::BuildColumnOperationSettings::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddBuildColumnInfo(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddBuildColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4463,11 +4485,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildShardStatus::Id>();
-                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
                                    << ": id# " << id);
-
-                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-                    buildInfo->AddShardStatus(rowset);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.AddShardStatus(rowset);
 
                     if (!rowset.Next()) {
                         return false;

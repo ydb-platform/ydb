@@ -5,4 +5,4 @@
 
 namespace NYql {
     TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig);
-}
+} // namespace NYql

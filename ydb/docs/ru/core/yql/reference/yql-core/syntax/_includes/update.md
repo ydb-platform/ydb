@@ -1,12 +1,12 @@
 # UPDATE
 
-{% if backend_name == "YDB" %}
+{% if oss == true and backend_name == "YDB" %}
 
 {% note warning %}
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+{% include [ways_add_data_to_olap.md](../../../../_includes/ways_add_data_to_olap.md) %}
 
 {% endnote %}
 
@@ -18,9 +18,9 @@
 
 `UPDATE` не может менять значение `PRIMARY_KEY`.
 
-**Пример**
+## Пример
 
-```sql
+```yql
 UPDATE my_table
 SET Value1 = YQL::ToString(Value2 + 1), Value2 = Value2 - 1
 WHERE Key1 > 1;
@@ -32,9 +32,9 @@ WHERE Key1 > 1;
 
 Для поиска обновляемых записей используется значение первичного ключа. В каждой найденной записи при выполнении оператора изменяются значения неключевых колонок, указанных в подзапросе. Значения колонок таблицы, которые отсутствуют в возвращаемых колонках подзапроса, остаются неизменными.
 
-**Пример**
+### Пример
 
-```sql
+```yql
 $to_update = (
     SELECT Key, SubKey, "Updated" AS Value FROM my_table
     WHERE Key = 1

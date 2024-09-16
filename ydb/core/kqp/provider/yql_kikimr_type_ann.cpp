@@ -1520,7 +1520,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     static bool CheckTopicSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
-        ui32 minParts = 0, partsLimit = 0;
+        ui32 minParts = 0, maxPartitions = 0;
         TPosition errorPos;
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
@@ -1542,11 +1542,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 );
                 minParts = value;
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setPartitionsLimit") {
+            } else if (name == "setMaxPartitions") {
                 ui32 value = FromString<ui32>(
                         setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
                 );
-                partsLimit = value;
+                maxPartitions = value;
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
@@ -1555,10 +1555,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 );
                 return false;
             }
-            if (minParts && partsLimit && partsLimit < minParts) {
+            if (minParts && maxPartitions && maxPartitions < minParts) {
                 ctx.AddError(TIssue(
                         errorPos,
-                        TStringBuilder() << "partitions_limit cannot be less than min_partitions")
+                        TStringBuilder() << "max_partitions cannot be less than min_partitions")
                 );
                 return false;
             }
@@ -2090,6 +2090,16 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
             << "Document API table cannot be modified from YQL query: " << meta.Name));
         return false;
+    }
+
+    virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
+        if (!table) {
+            return TStatus::Error;
+        }
+    
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
     }
 
 private:

@@ -56,7 +56,7 @@
                                                 "Predicate": "Not Exist(item.qa.id) Or item.qa.id > 0"
                                             },
                                             {
-                                                "Condition": "a_id = id",
+                                                "Condition": "qb.a_id = qa.id",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 15
@@ -81,8 +81,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 14
@@ -95,7 +95,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 12,
                                                         "Plans": [
                                                             {
@@ -225,7 +225,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

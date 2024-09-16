@@ -11,8 +11,7 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    token: your_ydb_token
-    token_file: path/to/ydb_token
+    token_file: path/to/tokenator_config
 
 oidc:
   client_id: "client-id"
@@ -20,7 +19,7 @@ oidc:
   session_service_endpoint: "grpcs://ss.private-api.cloud-preprod.yandex.net:8655"
   session_service_token_name: "ss-token"
   authorization_server_address: "https://auth-preprod.cloud.yandex.ru"
-  auth_profile: "yandex"
+  access_service_type: "yandex_v2"
   allowed_proxy_hosts:
     - "*.yandex.net"
     - "*.yandex-team.ru"

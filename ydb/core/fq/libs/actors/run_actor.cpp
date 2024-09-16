@@ -779,11 +779,7 @@ private:
             mkqlDefaultLimit = 8_GB;
         }
 
-        // This part is for backward compatibility. TODO: remove this part after migration to TS3GatewayConfig
-        auto s3ReadDefaultInflightLimit = Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetDataInflight();
-        if (s3ReadDefaultInflightLimit == 0) {
-            s3ReadDefaultInflightLimit = Params.Config.GetGateways().GetS3().GetDataInflight();
-        }
+        auto s3ReadDefaultInflightLimit = Params.Config.GetGateways().GetS3().GetDataInflight();
         if (s3ReadDefaultInflightLimit == 0) {
             s3ReadDefaultInflightLimit = 200_MB;
         }
@@ -1264,7 +1260,21 @@ private:
                 << ". " << it->second.Index << " response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount());
 
-            queryResult.Data = result.yson();
+            TVector<NDq::TDqSerializedBatch> rows;
+            for (const auto& s : result.GetSample()) {
+                NDq::TDqSerializedBatch batch;
+                batch.Proto = s;
+                rows.emplace_back(std::move(batch));
+            }
+
+            TProtoBuilder protoBuilder(ResultFormatSettings->ResultType, ResultFormatSettings->Columns);
+
+            bool ysonTruncated = false;
+            queryResult.Data = protoBuilder.BuildYson(std::move(rows), ResultFormatSettings->SizeLimit.GetOrElse(Max<ui64>()),
+                ResultFormatSettings->RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
+
+            queryResult.RowsCount = result.GetRowsCount();
+            queryResult.Truncated = result.GetTruncated() || ysonTruncated;
 
             TIssues issues;
             IssuesFromMessage(result.GetIssues(), issues);
@@ -1294,8 +1304,6 @@ private:
             }
 
             queryResult.AddIssues(issues);
-            queryResult.Truncated = result.GetTruncated();
-            queryResult.RowsCount = result.GetRowsCount();
             it->second.Result.SetValue(queryResult);
             EvalInfos.erase(it);
         }
@@ -1515,6 +1523,7 @@ private:
         *request.MutableSettings() = dqGraphParams.GetSettings();
         *request.MutableSecureParams() = dqGraphParams.GetSecureParams();
         *request.MutableColumns() = dqGraphParams.GetColumns();
+        PrepareResultFormatSettings(dqGraphParams, *dqConfiguration);
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         Send(info.ExecuterId, new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId));
         LOG_D("Evaluation Executer: " << info.ExecuterId << ", Controller: " << info.ControlId << ", ResultActor: " << info.ResultId);
@@ -1552,9 +1561,12 @@ private:
                     CreateResultWriter(
                         ExecuterId, dqGraphParams.GetResultType(),
                         writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ResultBytesLimit));
+
+            PrepareResultFormatSettings(dqGraphParams, *dqConfiguration);
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;
+            ClearResultFormatSettings();
         }
 
         if (enableCheckpointCoordinator) {
@@ -1602,6 +1614,21 @@ private:
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         Send(ExecuterId, new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId));
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
+    }
+
+    void PrepareResultFormatSettings(NFq::NProto::TGraphParams& dqGraphParams, const TDqConfiguration& dqConfiguration) {
+        ResultFormatSettings.ConstructInPlace();
+        for (const auto& c : dqGraphParams.GetColumns()) {
+            ResultFormatSettings->Columns.push_back(c);
+        }
+
+        ResultFormatSettings->ResultType = dqGraphParams.GetResultType();
+        ResultFormatSettings->SizeLimit = dqConfiguration._AllResultsBytesLimit.Get();
+        ResultFormatSettings->RowsLimit = dqConfiguration._RowsLimitPerWrite.Get();
+    }
+
+    void ClearResultFormatSettings() {
+        ResultFormatSettings.Clear();
     }
 
     void SetupYqlCore(NYql::TYqlCoreConfig& yqlCore) const {
@@ -1939,8 +1966,7 @@ private:
         }
 
         {
-           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory,
-                Params.Config.GetReadActorsFactoryConfig().HasS3ReadActorFactoryConfig() ? Params.Config.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetAllowLocalFiles() : Params.Config.GetGateways().GetS3().GetAllowLocalFiles())); // This part is for backward compatibility. TODO: remove this part after migration to TS3GatewayConfig
+           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, NActors::TActivationContext::ActorSystem()));
         }
 
         {
@@ -2255,6 +2281,8 @@ private:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     TMap<TString, TString> Statistics;
+
+    TMaybe<NCommon::TResultFormatSettings> ResultFormatSettings;
 
     // Consumers creation
     NActors::TActorId ReadRulesCreatorId;

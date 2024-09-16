@@ -7,6 +7,7 @@
 #include "source.h"
 
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 
 #include <util/generic/scope.h>
@@ -55,7 +56,7 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
 
 NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
     NSQLTranslation::TTranslationSettings settings;
-    
+
     settings.ClusterMapping = base.ClusterMapping;
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
@@ -85,6 +86,7 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
+using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
@@ -1612,15 +1614,15 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         }
 
                         auto& token = spec.GetBlock2().GetToken1();
-                        switch (token.GetId()) {
-                            case SQLv1LexerTokens::TOKEN_ASC:
-                                return true;
-                            case SQLv1LexerTokens::TOKEN_DESC:
-                                desc = true;
-                                return true;
-                            default:
-                                Ctx.Error() << "Unsupported direction token: " << token.GetId();
-                                return false;
+                        auto tokenId = token.GetId();
+                        if (IS_TOKEN(tokenId, ASC)) {
+                            return true;
+                        } else if (IS_TOKEN(tokenId, DESC)) {
+                            desc = true;
+                            return true;
+                        } else {
+                            Ctx.Error() << "Unsupported direction token: " << token.GetId();
+                            return false;
                         }
                     };
 
@@ -2038,6 +2040,17 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
     return true;
 }
 
+bool TSqlTranslation::ValidateTableSettings(const TTableSettings& settings) {
+    if (settings.PartitionCount) {
+        if (!settings.StoreType || to_lower(settings.StoreType->Name) != "column") {
+            Ctx.Error() << " PARTITION_COUNT can be used only with STORE=COLUMN";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
@@ -2093,6 +2106,16 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             return false;
         }
         if (!StoreInt(*value, settings.MaxPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "partition_count") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+
+        if (!StoreInt(*value, settings.PartitionCount, Ctx)) {
             Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
@@ -2186,7 +2209,8 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
     }
-    return true;
+
+    return ValidateTableSettings(settings);
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
@@ -2407,15 +2431,15 @@ static bool StoreTopicSettingsEntry(
             }
             settings.MinPartitions.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "partition_count_limit") {
+    } else if (to_lower(id.Name) == "partition_count_limit" || to_lower(id.Name) == "max_active_partitions") {
         if (reset) {
-            settings.PartitionsLimit.Reset();
+            settings.MaxPartitions.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
                 ctx.Error() << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
-            settings.PartitionsLimit.Set(valueExprNode);
+            settings.MaxPartitions.Set(valueExprNode);
         }
     } else if (to_lower(id.Name) == "retention_period") {
         if (reset) {
@@ -2476,6 +2500,46 @@ static bool StoreTopicSettingsEntry(
                 return false;
             }
             settings.SupportedCodecs.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_stabilization_window") {
+        if (reset) {
+            settings.AutoPartitioningStabilizationWindow.Reset();
+        } else {
+            if (valueExprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for retention";
+                return false;
+            }
+            settings.AutoPartitioningStabilizationWindow.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_up_utilization_percent") {
+        if (reset) {
+            settings.AutoPartitioningUpUtilizationPercent.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.AutoPartitioningUpUtilizationPercent.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_down_utilization_percent") {
+        if (reset) {
+            settings.AutoPartitioningDownUtilizationPercent.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.AutoPartitioningDownUtilizationPercent.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_strategy") {
+        if (reset) {
+            settings.AutoPartitioningStrategy.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+                ctx.Error() << to_upper(id.Name) << " value should be string";
+                return false;
+            }
+            settings.AutoPartitioningStrategy.Set(valueExprNode);
         }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
@@ -3566,18 +3630,16 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
-        switch (token.GetId()) {
-            case SQLv1LexerTokens::TOKEN_ASC:
-                Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-                break;
-            case SQLv1LexerTokens::TOKEN_DESC:
-                asc = false;
-                Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
-                break;
-            default:
-                Ctx.IncrementMonCounter("sql_errors", "UnknownOrderBy");
-                Error() << "Unsupported direction token: " << token.GetId();
-                return false;
+        auto tokenId = token.GetId();
+        if (IS_TOKEN(tokenId, ASC)) {
+            Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
+        } else if (IS_TOKEN(tokenId, DESC)) {
+            asc = false;
+            Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
+        } else {
+            Ctx.IncrementMonCounter("sql_errors", "UnknownOrderBy");
+            Error() << "Unsupported direction token: " << token.GetId();
+            return false;
         }
     } else {
         Ctx.IncrementMonCounter("sql_features", "OrderByDefault");
@@ -3601,11 +3663,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT;
+    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) {
+    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }
@@ -3829,6 +3891,91 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& n
     if (withGrantOption) {
         result.emplace_back(Ctx.Pos(), "grant");
     }
+    return true;
+}
+
+bool TSqlTranslation::StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+    YQL_ENSURE(value);
+
+    const TString key = to_lower(id.Name);
+    if (result.find(key) != result.end()) {
+        Ctx.Error() << to_upper(key) << " duplicate keys";
+        return false;
+    }
+
+    switch (value->Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2:
+            return StoreString(*value, result[key], Ctx, to_upper(key));
+
+        default:
+            Ctx.Error() << to_upper(key) << " value should be a string literal";
+            return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreStringSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
+bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings) {
+    const auto& firstEntry = settings.GetRule_backup_collection_settings_entry1();
+    if (!StoreStringSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(), result)) {
+        return false;
+    }
+    for (const auto& block : settings.GetBlock2()) {
+        const auto& entry = block.GetRule_backup_collection_settings_entry2();
+        if (!StoreStringSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions) {
+    auto parseAction = [&](auto& actionVariant) {
+        switch (actionVariant.Alt_case()) {
+            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction1: {
+                const auto& action = actionVariant.GetAlt_alter_backup_collection_action1().GetRule_alter_table_set_table_setting_compat1();
+                if (!StoreStringSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                    return false;
+                }
+                for (const auto& entry : action.GetBlock4()) {
+                    if (!StoreStringSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction2: {
+                const auto& action = actionVariant.GetAlt_alter_backup_collection_action2().GetRule_alter_table_reset_table_setting1();
+                const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+                toReset.insert(firstKey);
+                for (const auto& key : action.GetBlock4()) {
+                    toReset.insert(to_lower(IdEx(key.GetRule_an_id2(), *this).Name));
+                }
+                return true;
+            }
+            case TRule_alter_backup_collection_action::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+    };
+
+    const auto& firstAction = actions.GetRule_alter_backup_collection_action1();
+    if (!parseAction(firstAction)) {
+        return false;
+    }
+
+    for (const auto& action : actions.GetBlock2()) {
+        if (!parseAction(action.GetRule_alter_backup_collection_action2())) {
+            return false;
+        }
+    }
+
+
     return true;
 }
 
@@ -4428,7 +4575,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     if (isParallel) {
         --Ctx.ParallelModeCount;
     }
-    
+
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};
@@ -4729,7 +4876,7 @@ public:
     void AddColumn(const NSQLv1Generated::TRule_an_id & rule, TTranslation& ctx) {
         ColumnNames.push_back(NSQLTranslationV1::Id(rule, ctx));
     }
-    
+
     bool DoInit(TContext& ctx, ISource* source) override {
         Node = Y();
         if (Star) {
@@ -4818,14 +4965,7 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
 bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction) {
     switch (alterAction.Alt_case()) {
         case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction1: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreResourcePoolSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
-        }
-        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction2: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action2().GetRule_alter_table_set_table_setting_compat1();
+            const auto& action = alterAction.GetAlt_alter_resource_pool_action1().GetRule_alter_table_set_table_setting_compat1();
             if (!StoreResourcePoolSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
                 return false;
             }
@@ -4836,8 +4976,8 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
             }
             return true;
         }
-        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction3: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action3().GetRule_alter_table_reset_table_setting1();
+        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction2: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_action2().GetRule_alter_table_reset_table_setting1();
             const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
             toReset.insert(firstKey);
             for (const auto& key : action.GetBlock4()) {
@@ -4846,6 +4986,77 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
             return true;
         }
         case TRule_alter_resource_pool_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+bool TSqlTranslation::StoreResourcePoolClassifierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+    YQL_ENSURE(value);
+
+    const TString key = to_lower(id.Name);
+    if (result.find(key) != result.end()) {
+        Ctx.Error() << to_upper(key) << " duplicate keys";
+        return false;
+    }
+
+    switch (value->Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2:
+            return StoreString(*value, result[key], Ctx, to_upper(key));
+
+        case TRule_table_setting_value::kAltTableSettingValue3:
+            return StoreInt(*value, result[key], Ctx, to_upper(key));
+
+        default:
+            Ctx.Error() << to_upper(key) << " value should be a string literal or integer";
+            return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::StoreResourcePoolClassifierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreResourcePoolClassifierSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
+bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
+    const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
+    if (!StoreResourcePoolClassifierSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(), result)) {
+        return false;
+    }
+    for (const auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_table_settings_entry2();
+        if (!StoreResourcePoolClassifierSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_classifier_action& alterAction) {
+    switch (alterAction.Alt_case()) {
+        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction1: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action1().GetRule_alter_table_set_table_setting_compat1();
+            if (!StoreResourcePoolClassifierSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                return false;
+            }
+            for (const auto& entry : action.GetBlock4()) {
+                if (!StoreResourcePoolClassifierSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction2: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action2().GetRule_alter_table_reset_table_setting1();
+            const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+            toReset.insert(firstKey);
+            for (const auto& key : action.GetBlock4()) {
+                toReset.insert(to_lower(IdEx(key.GetRule_an_id2(), *this).Name));
+            }
+            return true;
+        }
+        case TRule_alter_resource_pool_classifier_action::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
 }

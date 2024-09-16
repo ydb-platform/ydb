@@ -15,6 +15,7 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 ### Configuration examples {#example}
 
 Example of a minimal dynamic configuration for a single-datacenter cluster:
+
 ```yaml
 # Configuration metadata.
 # This field is managed by the server.
@@ -125,12 +126,14 @@ This mechanism prevents concurrent configuration modifications and makes updates
 Some system settings are updated without restarting nodes. To change them, upload a new configuration and wait for it to propagate across the cluster.
 
 List of dynamically updated settings:
-* `log_config`
+
 * `immediate_controls_config`
-* `table_service_config`
+* `log_config`
+* `memory_controller_config`
 * `monitoring_config`
-* `tracing_config.sampling`
+* `table_service_config`
 * `tracing_config.external_throttling`
+* `tracing_config.sampling`
 
 The list may be expanded in the future.
 

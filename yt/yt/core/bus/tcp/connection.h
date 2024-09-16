@@ -80,11 +80,11 @@ public:
         TConnectionId id,
         SOCKET socket,
         EMultiplexingBand multiplexingBand,
-        const TString& endpointDescription,
+        const std::string& endpointDescription,
         const NYTree::IAttributeDictionary& endpointAttributes,
         const NNet::TNetworkAddress& endpointNetworkAddress,
-        const std::optional<TString>& endpointAddress,
-        const std::optional<TString>& unixDomainSocketPath,
+        const std::optional<std::string>& endpointAddress,
+        const std::optional<std::string>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
@@ -104,9 +104,9 @@ public:
     void OnShutdown() override;
 
     // IBus implementation.
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointAddress() const override;
+    const std::string& GetEndpointAddress() const override;
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
     bool IsEndpointLocal() const override;
     bool IsEncrypted() const override;
@@ -187,7 +187,7 @@ private:
     const TBusConfigPtr Config_;
     const EConnectionType ConnectionType_;
     const TConnectionId Id_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<TString> EndpointAddress_;
@@ -288,7 +288,7 @@ private:
     void Close();
     void CloseSslSession(ESslState newSslState);
 
-    void Abort(const TError& error);
+    void Abort(const TError& error, NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 

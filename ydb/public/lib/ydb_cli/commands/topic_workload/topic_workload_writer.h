@@ -2,6 +2,7 @@
 
 #include "topic_workload_defines.h"
 #include "topic_workload_stats_collector.h"
+#include "topic_workload_reader_transaction_support.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
@@ -20,6 +21,7 @@ namespace NYdb {
             std::shared_ptr<std::atomic<bool>> ErrorFlag;
             std::shared_ptr<std::atomic_uint> StartedCount;
             const std::vector<TString>& GeneratedMessages;
+            TString Database;
             TString TopicName;
             size_t ByteRate;
             size_t MessageSize;
@@ -30,11 +32,17 @@ namespace NYdb {
             bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
+            bool UseAutoPartitioning = false;
+            bool UseTableSelect = false;
+            bool UseTableUpsert = false;
+            size_t CommitPeriod = 15;
+            size_t CommitMessages = 1'000'000;
         };
 
         class TTopicWorkloadWriterWorker {
         public:
-            static void WriterLoop(TTopicWorkloadWriterParams& params);
+            static void RetryableWriterLoop(TTopicWorkloadWriterParams& params);
+            static void WriterLoop(TTopicWorkloadWriterParams& params, TInstant endTime);
             static std::vector<TString> GenerateMessages(size_t messageSize);
         private:
             TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);
@@ -42,7 +50,7 @@ namespace NYdb {
 
             void Close();
 
-            void Process();
+            void Process(TInstant endTime);
 
             void CreateWorker();
 
@@ -59,10 +67,15 @@ namespace NYdb {
 
             TInstant GetCreateTimestamp() const;
 
+            void TryCommitTx(TTopicWorkloadWriterParams& params,
+                             TInstant& commitTime);
+            void TryCommitTableChanges(TTopicWorkloadWriterParams& params);
+
             TTopicWorkloadWriterParams Params;
             ui64 MessageId = 0;
             ui64 AckedMessageId = 0;
             ui64 BytesWritten = 0;
+            std::optional<TTransactionSupport> TxSupport;
             std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
             TInstant StartTimestamp;
 
@@ -73,6 +86,7 @@ namespace NYdb {
 
             // SeqNo - CreateTime
             THashMap<ui64, TInstant> InflightMessages;
+            bool WaitForCommitTx = false;
         };
     }
 }

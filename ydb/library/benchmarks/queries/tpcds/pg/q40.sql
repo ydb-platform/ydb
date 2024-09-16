@@ -15,7 +15,7 @@ select
   ,{{item}}
   ,{{date_dim}}
  where
-     i_current_price between 0.99 and 1.49
+     i_current_price between 0.99::numeric and 1.49::numeric
  and i_item_sk          = cs_item_sk
  and cs_warehouse_sk    = w_warehouse_sk
  and cs_sold_date_sk    = d_date_sk

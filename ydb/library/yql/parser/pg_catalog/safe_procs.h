@@ -6,6 +6,24 @@
 "version",
 "pow",
 
+// some json/jsonb functions
+"json_build_object",
+"jsonb_build_object",
+"jsonb_object",
+"jsonb_array_elements",
+"jsonb_array_elements_text",
+"jsonb_each",
+"jsonb_each_text",
+"jsonb_extract_path",
+"jsonb_extract_path_text",
+"jsonb_object_keys",
+"jsonb_strip_nulls",
+"jsonb_path_match_tz",
+"jsonb_path_query_tz",
+"jsonb_path_query_array_tz",
+"jsonb_path_query_first_tz",
+"jsonb_typeof",
+
 "set_config",//pgadmin
 "pg_is_in_recovery",//pgadmin
 "pg_is_wal_replay_paused",//pgadmin
@@ -21,3 +39,9 @@
 
 // postgis
 "postgis_lib_version",
+
+//dbeaver
+"pg_get_expr",
+"pg_get_partkeydef",
+"pg_tablespace_location",
+"current_schemas",

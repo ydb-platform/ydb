@@ -59,8 +59,6 @@ def execute_binary(binary_name, cmd, stdin_string=None):
 class BasePostgresTest(object):
     @classmethod
     def setup_class(cls):
-        cls.pm = yatest.common.network.PortManager()
-        cls.pgport = cls.pm.get_port()
         cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(
             additional_log_configs={
                 'LOCAL_PGWIRE': LogLevels.DEBUG,
@@ -69,15 +67,15 @@ class BasePostgresTest(object):
                 'KQP_COMPILE_REQUEST': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG
             },
-            extra_feature_flags=['enable_table_pg_types', 'enable_temp_tables'],
-            pgwire_port=cls.pgport
+            extra_feature_flags=['enable_table_pg_types', 'enable_temp_tables', 'enable_pg_syntax'],
         ))
         cls.cluster.start()
+
+        cls.pgport = cls.cluster.nodes[1].pgwire_port
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
-        cls.pm.release()
 
 
 class TestPostgresSuite(BasePostgresTest):

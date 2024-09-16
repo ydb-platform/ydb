@@ -82,6 +82,12 @@ public:
 
     static void Register(TRegistrar registrar);
 
+protected:
+    virtual TFuture<NApi::ITableWriterPtr> CreateTableWriter(
+        const ICommandContextPtr& context) const;
+
+    void DoExecuteImpl(const ICommandContextPtr& context);
+
 private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr TableWriter;
@@ -374,6 +380,7 @@ private:
     NTableClient::TRetentionConfigPtr RetentionConfig;
 
     void DoExecute(ICommandContextPtr context) override;
+    bool HasResponseParameters() const override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

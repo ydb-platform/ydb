@@ -441,9 +441,10 @@ private:
             return TStatus::Error;
         }
 
-        if (initialWrite && !replaceMeta && columnGroups) {
+        if (initialWrite && !replaceMeta && columnGroups != description.ColumnGroupSpec) {
             ctx.AddError(TIssue(pos, TStringBuilder()
                 << "Insert with "
+                << (outTableInfo.Epoch.GetOrElse(0) ? "different " : "")
                 << ToString(EYtSettingType::ColumnGroups).Quote()
                 << " to existing table is not allowed"));
             return TStatus::Error;
@@ -607,7 +608,7 @@ private:
                 if (initialWrite) {
                     ++nextDescription.WriteValidateCount;
                     if (nextDescription.IsReplaced) {
-                        nextDescription.RowSpec->CopySortness(*contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
+                        nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
                         if (auto contentNativeType = contentRowSpecs.front()->GetNativeYtType()) {
                             nextDescription.RowSpec->CopyTypeOrders(*contentNativeType);
                         }
@@ -615,7 +616,7 @@ private:
                     } else {
                         nextDescription.MonotonicKeys = monotonicKeys;
                         if (description.RowSpec) {
-                            nextDescription.RowSpec->CopySortness(*description.RowSpec, TYqlRowSpecInfo::ECopySort::Exact);
+                            nextDescription.RowSpec->CopySortness(ctx, *description.RowSpec, TYqlRowSpecInfo::ECopySort::Exact);
                             const auto currNativeType = description.RowSpec->GetNativeYtType();
                             if (currNativeType && nextDescription.RowSpec->GetNativeYtType() != currNativeType) {
                                 nextDescription.RowSpec->CopyTypeOrders(*currNativeType);
@@ -643,7 +644,7 @@ private:
 
                 const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
                 for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                    const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(*contentRowSpecs[s]);
+                    const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
                     const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
                     if (monotonicKeys) {
                         if (breaksSorting) {
@@ -932,6 +933,29 @@ private:
             return TStatus::Error;
         }
 
+        TStringBuf outGroup;
+        if (auto setting = NYql::GetSetting(copy.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+            outGroup = setting->Tail().Content();
+        }
+
+        TStringBuf inputColGroupSpec;
+        const auto& path = copy.Input().Item(0).Paths().Item(0);
+        if (auto table = path.Table().Maybe<TYtTable>()) {
+            if (auto tableDesc = State_->TablesData->FindTable(copy.DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
+                inputColGroupSpec = tableDesc->ColumnGroupSpec;
+            }
+        } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                inputColGroupSpec = setting->Tail().Content();
+            }
+        }
+
+        if (outGroup != inputColGroupSpec) {
+            ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
+                << "has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
+            return TStatus::Error;
+        }
+
         input->SetTypeAnn(MakeOutputOperationType(copy, ctx));
         return TStatus::Ok;
     }
@@ -949,7 +973,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::TransformColGroups | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
 
@@ -1762,7 +1786,7 @@ private:
             for (auto out: publish.Input()) {
                 contentRowSpecs.push_back(MakeIntrusive<TYqlRowSpecInfo>(GetOutTable(out).Cast<TYtOutTable>().RowSpec()));
                 if (IsUnorderedOutput(out)) {
-                    contentRowSpecs.back()->ClearSortness();
+                    contentRowSpecs.back()->ClearSortness(ctx);
                 }
             }
             TExprNode::TPtr content; // Don't try to convert content

@@ -36,19 +36,19 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 With automatic creation of the `backup_...` directory In the current directory:
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump
 ```
 
 To a specific directory:
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump -o ~/backup_quickstart
 ```
 
 ### Dumping the table structure within a specified database directory (including subdirectories)
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
 

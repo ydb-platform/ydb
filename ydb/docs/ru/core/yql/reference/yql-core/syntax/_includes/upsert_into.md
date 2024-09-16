@@ -1,12 +1,12 @@
 # UPSERT INTO
 
-{% if backend_name == "YDB" %}
+{% if oss == true and backend_name == "YDB" %}
 
 {% note warning %}
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
 
 {% endnote %}
 
@@ -24,11 +24,11 @@ UPSERT (расшифровывается как UPDATE or INSERT) обновля
 
 Сопоставление столбцов при использовании `UPSERT INTO ... SELECT` производится по именам. Используйте `AS` для получения колонки с нужным именем в `SELECT`.
 
-**Примеры**
+## Примеры
 
 ``` yql
 UPSERT INTO my_table
-SELECT pk_column, data_column1, col24 as data_column3 FROM other_table  
+SELECT pk_column, data_column1, col24 as data_column3 FROM other_table
 ```
 
 ``` yql

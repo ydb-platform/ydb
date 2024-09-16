@@ -1,11 +1,14 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/counters/columnshard.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
 
+namespace NKikimr::NOlap::NTxInteractions {
+class TManager;
+}
 
 namespace NKikimr::NColumnShard {
 
@@ -14,10 +17,12 @@ class TColumnShard;
 struct TBasicTxInfo {
     const NKikimrTxColumnShard::ETransactionKind TxKind;
     const ui64 TxId;
+
 public:
     TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
         : TxKind(txKind)
         , TxId(txId) {
+        AFL_VERIFY(txKind != NKikimrTxColumnShard::TX_KIND_NONE);
     }
 
     bool operator==(const TBasicTxInfo& item) const = default;
@@ -42,12 +47,18 @@ public:
     TActorId Source;
     ui64 Cookie = 0;
     std::optional<TMessageSeqNo> SeqNo;
+
 public:
+    static TFullTxInfo BuildFake(const NKikimrTxColumnShard::ETransactionKind kind) {
+        return TFullTxInfo(kind, 0, NActors::TActorId(), 0, {});
+    }
+
     bool operator==(const TFullTxInfo& item) const = default;
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << TBase::DebugString() << ";min=" << MinStep << ";max=" << MaxStep << ";plan=" << PlanStep << ";src=" << Source << ";cookie=" << Cookie;
+        sb << TBase::DebugString() << ";min=" << MinStep << ";max=" << MaxStep << ";plan=" << PlanStep << ";src=" << Source
+           << ";cookie=" << Cookie;
         if (SeqNo) {
             sb << *SeqNo << ";";
         }
@@ -75,12 +86,12 @@ public:
         : TBasicTxInfo(txKind, txId) {
     }
 
-    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo)
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie,
+        const std::optional<TMessageSeqNo>& seqNo)
         : TBasicTxInfo(txKind, txId)
         , Source(source)
         , Cookie(cookie)
-        , SeqNo(seqNo)
-    {
+        , SeqNo(seqNo) {
     }
 };
 
@@ -89,6 +100,7 @@ public:
     class TProposeResult {
         YDB_READONLY(NKikimrTxColumnShard::EResultStatus, Status, NKikimrTxColumnShard::EResultStatus::PREPARED);
         YDB_READONLY_DEF(TString, StatusMessage);
+
     public:
         TProposeResult() = default;
         TProposeResult(NKikimrTxColumnShard::EResultStatus status, const TString& statusMessage)
@@ -109,16 +121,15 @@ private:
     std::optional<TBasicTxInfo> BaseTxInfo;
     std::optional<TFullTxInfo> FullTxInfo;
     TProposeResult ProposeResult;
+
 public:
     TTxProposeResult(const TBasicTxInfo& txInfo, TProposeResult&& result)
         : BaseTxInfo(txInfo)
         , ProposeResult(std::move(result)) {
-
     }
     TTxProposeResult(const TFullTxInfo& txInfo, TProposeResult&& result)
         : FullTxInfo(txInfo)
         , ProposeResult(std::move(result)) {
-
     }
 
     ui64 GetTxId() const noexcept {
@@ -152,8 +163,8 @@ public:
 
         TPlanQueueItem(const ui64 step, const ui64 txId)
             : Step(step)
-            , TxId(txId)
-        {}
+            , TxId(txId) {
+        }
 
         inline bool operator<(const TPlanQueueItem& rhs) const {
             return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId);
@@ -180,10 +191,12 @@ public:
             ReplySent,
             Failed
         };
+
     protected:
         TTxInfo TxInfo;
         YDB_READONLY_DEF(std::optional<TTxController::TProposeResult>, ProposeStartInfo);
         std::optional<EStatus> Status = EStatus::Created;
+
     private:
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
@@ -191,11 +204,19 @@ public:
         virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual void DoFinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual TString DoGetOpType() const = 0;
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
         virtual bool DoCheckTxInfoForReply(const TFullTxInfo& /*originalTxInfo*/) const {
             return true;
+        }
+        virtual bool DoPingTimeout(TColumnShard& /*owner*/, const TMonotonic /*now*/) {
+            return false;
+        }
+
+        virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
+            return nullptr;
         }
 
         void SwitchStateVerified(const EStatus from, const EStatus to);
@@ -204,7 +225,6 @@ public:
         }
 
         virtual void DoOnTabletInit(TColumnShard& /*owner*/) {
-        
         }
 
         void ResetStatusOnUpdate() {
@@ -218,6 +238,11 @@ public:
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+        using OpType = TString;
+
+        bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
+            return DoPingTimeout(owner, now);
+        }
 
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
@@ -229,6 +254,10 @@ public:
 
         bool CheckAllowUpdate(const TFullTxInfo& currentTxInfo) const {
             return DoCheckAllowUpdate(currentTxInfo);
+        }
+
+        std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            return DoBuildTxPrepareForProgress(owner);
         }
 
         bool IsFail() const {
@@ -253,18 +282,23 @@ public:
         }
 
         ITransactionOperator(const TTxInfo& txInfo)
-            : TxInfo(txInfo)
-        {}
+            : TxInfo(txInfo) {
+        }
 
         ui64 GetTxId() const {
             return TxInfo.TxId;
+        }
+
+        OpType GetOpType() const {
+            return DoGetOpType();
         }
 
         bool IsAsync() const {
             return DoIsAsync() && Status != EStatus::Failed && Status != EStatus::ReplySent;
         }
 
-        virtual ~ITransactionOperator() {}
+        virtual ~ITransactionOperator() {
+        }
 
         virtual bool TxWithDeadline() const {
             return true;
@@ -274,14 +308,15 @@ public:
             const bool result = DoParse(owner, data);
             if (!result) {
                 AFL_VERIFY(!onLoad);
-                ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << TxInfo.TxId
-                    << ". Parsing error");
+                ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
+                    TStringBuilder() << "Error processing commit TxId# " << TxInfo.TxId << ". Parsing error");
                 SwitchStateVerified(EStatus::Created, EStatus::Failed);
             } else {
                 SwitchStateVerified(EStatus::Created, EStatus::Parsed);
             }
             if (onLoad) {
-                ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::PREPARED, "success on iteration before restart");
+                ProposeStartInfo =
+                    TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::PREPARED, "success on iteration before restart");
                 Status = {};
             }
             return result;
@@ -346,6 +381,9 @@ public:
             DoOnTabletInit(owner);
         }
     };
+    TTxProgressCounters& GetCounters() {
+        return Counters;
+    }
 
 private:
     const TDuration MaxCommitTxDelay = TDuration::Seconds(30);
@@ -353,43 +391,75 @@ private:
     std::set<TPlanQueueItem> DeadlineQueue;
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
+    TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
-
 private:
     ui64 GetAllowedStep() const;
     bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
-    TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
-    TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
+    TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
+        NTabletFlatExecutor::TTransactionContext& txc);
+    TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
+        NTabletFlatExecutor::TTransactionContext& txc);
     bool StartedFlag = false;
+
 public:
     TTxController(TColumnShard& owner);
 
-    ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
-    ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
+    ITransactionOperator::TPtr GetTxOperatorOptional(const ui64 txId) const {
+        auto it = Operators.find(txId);
+        if (it == Operators.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
+    ITransactionOperator::TPtr GetTxOperatorVerified(const ui64 txId) const {
+        return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
+    }
+    template <class TExpectedTransactionOperator>
+    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
+        auto result = GetTxOperatorOptional(txId);
+        AFL_VERIFY(result);
+        auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
+        AFL_VERIFY(resultClass);
+        return resultClass;
+    }
+
+    void PingTimeouts(const TMonotonic now) {
+        auto txInfo = GetFirstPlannedTx();
+        if (!txInfo) {
+            return;
+        }
+        GetTxOperatorVerified(txInfo->GetTxId())->PingTimeout(Owner, now);
+    }
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
-    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc);
+    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> UpdateTxSourceInfo(
+        const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc);
 
     [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(
         const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
-    void StartProposeOnComplete(const ui64 txId, const TActorContext& ctx);
-
+    void StartProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-
+    void FinishProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
+    void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
+        NIceDb::TNiceDb db(txc.DB);
+        NColumnShard::Schema::UpdateTxInfoBody(db, txId, data);
+    }
     bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);
 
-    std::optional<TTxInfo> StartPlannedTx();
-    void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void CompleteRunningTx(const TPlanQueueItem& tx);
+    std::optional<TTxInfo> GetFirstPlannedTx() const;
+    std::optional<TTxInfo> PopFirstPlannedTx();
+    void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    void ProgressOnComplete(const TPlanQueueItem& tx);
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;
@@ -410,5 +480,4 @@ public:
     void OnTabletInit();
 };
 
-}
-
+}   // namespace NKikimr::NColumnShard

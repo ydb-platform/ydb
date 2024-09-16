@@ -74,12 +74,19 @@ TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, 
     writer.OnBeginList();
 
     auto full = WriteData(std::move(rows), [&](const NYql::NUdf::TUnboxedValuePod& value) {
-        auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
-        writer.OnListItem();
-        writer.OnRaw(rowYson);
-        size += rowYson.size();
-        ++count;
-        return size <= maxBytesLimit && count <= maxRowsLimit;
+        bool ret = (size <= maxBytesLimit && count <= maxRowsLimit);
+        if (ret) {
+            auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
+            size += rowYson.size();
+            ++count;
+            ret = (size <= maxBytesLimit && count <= maxRowsLimit);
+            if (ret) {
+                writer.OnListItem();
+                writer.OnRaw(rowYson);
+            }
+        }
+
+        return ret;
     });
 
     if (!full) {

@@ -18,7 +18,7 @@ resource "aws_instance" "ydb-vm" {
   key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-  
+
   tags = {
     Name                 = "ydb-node-${count.index +1}"
     Username             = "ubuntu"
@@ -45,6 +45,7 @@ Blocks are written in files with the `.tf` extension and are logically grouped i
 * `outputs.tf` – variables that contain the results of the resource's operation (VM IP addresses, network/subnet IDs, etc.).
 
 Modules are connected to the project in the root file `main.tf` as follows:
+
 ```
 module "vpc" {
   source                     = "./modules/vpc"
@@ -52,9 +53,11 @@ module "vpc" {
   subnets_availability_zones = var.availability_zones
 }
 ```
+
 In the example, the `vpc` module is connected (the module name is assigned when connecting). The required parameter is `source`, a path to the directory where the module is located. `subnets_count` and `subnets_availability_zones` are variables inside the `vpc` module that take values from the global level variables `var.subnets_count`, `var.availability_zones`.
 
 Modules, just like blocks, are placed one after another in the root `main.tf` file of the project. The main advantage of the modular approach to project organization is the ability to manage logically related sets of resources easily. Therefore, our [repository](https://github.com/ydb-platform/ydb-terraform) with ready-made Terraform scenarios is organized as follows:
+
 ```txt
 .
 ├── README.md
@@ -122,7 +125,7 @@ Most cluster parameters are adjustable (number of VMs, size and type of connecte
 
 ## Create infrastructure in AWS to deploy {{ ydb-short-name }} cluster {#aws-cluster}
 
-{% include [aws](./_includes/terraform/aws.md) %} 
+{% include [aws](./_includes/terraform/aws.md) %}
 
 ## Create infrastructure in Azure to deploy {{ ydb-short-name }} cluster {#azure-cluster}
 

@@ -1,17 +1,11 @@
 #pragma once
-#include <unordered_map>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/protos/node_whiteboard.pb.h>
-#include <ydb/core/viewer/protos/viewer.pb.h>
-#include "viewer.h"
-#include "viewer_helper.h"
 #include "json_pipe_req.h"
-#include "json_vdiskinfo.h"
-#include "json_pdiskinfo.h"
+#include "viewer.h"
+#include "viewer_bsgroupinfo.h"
+#include "viewer_vdiskinfo.h"
+#include "viewer_pdiskinfo.h"
+#include "viewer_helper.h"
+#include "wb_merge.h"
 
 template<>
 struct std::hash<NKikimrBlobStorage::TVSlotId> {
@@ -31,8 +25,7 @@ struct std::equal_to<NKikimrBlobStorage::TVSlotId> {
     }
 };
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -104,10 +97,10 @@ protected:
         TString Erasure;
         ui32 Degraded;
         float Usage;
-        uint64 Used;
-        uint64 Limit;
-        uint64 Read;
-        uint64 Write;
+        ui64 Used;
+        ui64 Limit;
+        ui64 Read;
+        ui64 Write;
 
         TGroupRow()
             : Used(0)
@@ -560,5 +553,4 @@ public:
     }
 };
 
-}
 }

@@ -271,7 +271,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 
     case NKikimr::NScheme::NTypeIds::Pg:
     {
-        auto typeDesc = type.GetTypeDesc();
+        auto typeDesc = type.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
         return type.IsDescending() ? -result : result;
@@ -372,7 +372,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     }
 
     if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        auto typeDesc = info.GetTypeDesc();
+        auto typeDesc = info.GetPgTypeDesc();
         Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
@@ -555,12 +555,19 @@ public:
         return Cells;
     }
 
+    explicit operator bool() const
+    {
+        return !Cells.empty();
+    }    
+
     // read headers, assuming the buf is correct and append additional cells at the end
     static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);
 
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
     static TString Serialize(TConstArrayRef<TCell> cells);
+
+    static size_t SerializedSize(TConstArrayRef<TCell> cells);
 
     const TString &GetBuffer() const { return Buf; }
 

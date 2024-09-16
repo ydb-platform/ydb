@@ -5235,7 +5235,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
     NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
-    NProtoAST::TProtoASTBuilder<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
+    NProtoAST::TProtoASTBuilder3<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
     return builder.BuildAST(collector);
 }
 
@@ -5244,7 +5244,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
 #if defined(_tsan_enabled_)
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-    NProtoAST::TProtoASTBuilder<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
+    NProtoAST::TProtoASTBuilder3<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
     return builder.BuildAST(err);
 }
 

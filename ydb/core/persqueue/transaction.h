@@ -75,7 +75,6 @@ struct TDistributedTransaction {
     bool HaveAllRecipientsReceive() const;
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request, EState state);
-    void AddCmdDelete(NKikimrClient::TKeyValueRequest& request);
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
@@ -91,7 +90,9 @@ struct TDistributedTransaction {
     void InitPartitions();
 
     template<class E>
-    void OnPartitionResult(const E& event, EDecision decision);
+    void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
+
+    TString LogPrefix() const;
 
     struct TSerializedMessage {
         ui32 Type;

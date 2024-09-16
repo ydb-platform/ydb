@@ -39,19 +39,19 @@
             "formula": {
                 "by_platform": {
                     "darwin-arm64": {
-                        "uri": "sbr:6635026071"
+                        "uri": "sbr:6816406079"
                     },
                     "darwin-x86_64": {
-                        "uri": "sbr:6635026187"
+                        "uri": "sbr:6816406420"
                     },
                     "linux-aarch64": {
-                        "uri": "sbr:6635025898"
+                        "uri": "sbr:6816405372"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:6635026422"
+                        "uri": "sbr:6816407233"
                     },
                     "win32-x86_64": {
-                        "uri": "sbr:6635026287"
+                        "uri": "sbr:6816406896"
                     }
                 }
             }
@@ -253,6 +253,22 @@
                 ]
             },
             "formula": "build/platform/java/jdk/jdk17/jdk.json"
+        },
+        "ktlint_bundle": {
+            "executable": {
+                "ktlint": [
+                    "run.bat"
+                ]
+            },
+            "formula": "build/platform/java/ktlint/ktlint.json"
+        },
+        "ktlint_old_bundle": {
+            "executable": {
+                "ktlint_old": [
+                    "run.bat"
+                ]
+            },
+            "formula": "build/platform/java/ktlint_old/ktlint.json"
         },
         "python": {
             "executable": {
@@ -1882,6 +1898,45 @@
                 }
             }
         },
+        "ktlint_bundle": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "ktlint": {
+                    "bottle": "ktlint_bundle",
+                    "executable": "ktlint"
+                },
+                "ktlint_old": {
+                    "bottle": "ktlint_old_bundle",
+                    "executable": "ktlint_old"
+                }
+            }
+        },
         "python": {
             "platforms": [
                 {
@@ -2152,6 +2207,12 @@
         },
         "javac17": {
             "description": "Run javac 17"
+        },
+        "ktlint": {
+            "description": "Run kotlin styler"
+        },
+        "ktlint_old": {
+            "description": "Run old kotlin styler"
         },
         "llvm-cov": {
             "description": "Run llvm-cov Clang utility"

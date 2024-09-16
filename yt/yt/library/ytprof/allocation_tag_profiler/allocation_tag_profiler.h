@@ -25,7 +25,7 @@ DEFINE_REFCOUNTED_TYPE(IAllocationTagProfiler);
 ////////////////////////////////////////////////////////////////////////////////
 
 IAllocationTagProfilerPtr CreateAllocationTagProfiler(
-    std::vector<TString> tagNames,
+    std::vector<TAllocationTagKey> tagKeys,
     IInvokerPtr invoker,
     std::optional<TDuration> updatePeriod,
     std::optional<i64> samplingRate,

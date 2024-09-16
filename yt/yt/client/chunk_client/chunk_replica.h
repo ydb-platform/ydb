@@ -6,6 +6,9 @@
 
 #include <yt/yt/client/node_tracker_client/public.h>
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
 namespace NYT::NChunkClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -121,6 +124,12 @@ private:
 
     friend void ToProto(ui32* value, TChunkReplica replica);
     friend void FromProto(TChunkReplica* replica, ui32 value);
+
+    using TLoadContext = NPhoenix2::TLoadContext;
+    using TSaveContext = NPhoenix2::TSaveContext;
+    using TPersistenceContext = NPhoenix2::TPersistenceContext;
+
+    PHOENIX_DECLARE_TYPE(TChunkReplica, 0x004d1b8a);
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf spec);

@@ -1054,6 +1054,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqJoin(input, ctx);
             }
 
+            if (TDqPhyGraceJoin::Match(input.Get())) {
+                return AnnotateDqMapOrDictJoin(input, ctx);
+            }
+
             if (TDqPhyMapJoin::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
             }

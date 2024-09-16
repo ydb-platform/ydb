@@ -3,7 +3,8 @@
 A table is a relational [table](https://en.wikipedia.org/wiki/Table_(database)) containing a set of related data, composed of rows and columns. Tables represent entities. For instance, a blog article can be represented by a table named article with columns: `id`, `date_create`, `title`, `author`, `body` and so on.
 
 Rows in the table hold the data, while columns define the data types. For example, the id column cannot be empty (`NOT NULL`) and should contain only unique integer values. A record in YQL might look like this:
-```sql
+
+```yql
 CREATE TABLE article (
     id Int64 NOT NULL,
     date_create Date,
@@ -134,10 +135,11 @@ If there are multiple followers, their delay from the leader may vary: although 
 | `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Yes | Yes |
 
 Where `<unit>` is a unit of measurement, specified only for column with a [numeric type](../../../concepts/ttl.md#restrictions):
-* `SECONDS`;
-* `MILLISECONDS`;
-* `MICROSECONDS`;
-* `NANOSECONDS`.
+
+* `SECONDS`
+* `MILLISECONDS`
+* `MICROSECONDS`
+* `NANOSECONDS`
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md).
 
@@ -149,7 +151,7 @@ Operations are performed in isolation, the external process sees only two states
 
 The speed of renaming is determined by the type of data transactions currently running against the table and doesn't depend on the table size.
 
-* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table.md#rename)
+* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
 ### Bloom filter {#bloom-filter}
@@ -161,6 +163,7 @@ Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Yes | No |
 
 ## Column-oriented tables {#column-oriented-tables}
+
 {% note warning %}
 
 Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
@@ -172,14 +175,16 @@ YDB's column-oriented tables store data of each column separately (independently
 At the moment, the main use case for YDB column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to YDB column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
 
 In most cases, working with YDB column-oriented tables is similar to working with row tables, but there are differences:
+
 * Only `NOT NULL` columns can be used as the primary key.
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns, to evenly distribute the data across the hosts.
 * Column-oriented tables support a limited set of data types:
-    + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-    + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
+
+  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
+  + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
 
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
-```sql
+```yql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
     author String,
@@ -206,7 +211,8 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 Unlike row-oriented {{ ydb-short-name }} tables, you cannot partition column-oriented tables by primary keys but only by specially designated partitioning keys. Partitioning keys constitute a subset of the table's primary keys.
 
 Example of column-oriented partitioning:
-```sql
+
+```yql
 CREATE TABLE article_column_table (
     id Int64 NOT NULL,
     author String,
@@ -219,7 +225,6 @@ WITH (STORE = COLUMN);
 ```
 
 Unlike data partitioning in row-oriented {{ ydb-short-name }} tables, key values are not used to partition data in column-oriented tables. This way, you can uniformly distribute data across all your existing partitions. This kind of partitioning enables you to avoid hotspots at data inserta and speeding up analytical queries that process (that is, read) large amounts of data.
-
 
 How you select partitioning keys substantially affects the performance of queries to your column-oriented tables. Learn more in [{#T}](../../../dev/primary-key/column-oriented.md).
 

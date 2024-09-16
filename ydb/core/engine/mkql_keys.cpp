@@ -275,7 +275,7 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     NYql::NUdf::TStringRef ref;
     bool isPg = (type.GetTypeId() == NScheme::NTypeIds::Pg);
     if (isPg) {
-        auto typeDesc = type.GetTypeDesc();
+        auto typeDesc = type.GetPgTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
             TMaybe<TString> err;
             binary = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);

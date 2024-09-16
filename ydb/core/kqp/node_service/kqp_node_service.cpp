@@ -199,6 +199,26 @@ private:
 
         auto schedulerNow = TlsActivationContext->Monotonic();
 
+        TString schedulerGroup = msg.GetSchedulerGroup();
+
+        if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
+            auto share = msg.GetPoolMaxCpuShare();
+            if (share <= 0 && msg.HasQueryCpuShare()) {
+                share = 1.0;
+            }
+            if (share > 0) {
+                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow);
+                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+            } else {
+                schedulerGroup = "";
+            }
+        } 
+
+        std::optional<ui64> querySchedulerGroup;
+        if (msg.HasQueryCpuShare() && schedulerGroup) {
+            querySchedulerGroup = Scheduler->MakePerQueryGroup(schedulerNow, msg.GetQueryCpuShare(), schedulerGroup);
+        }
+
         // start compute actors
         TMaybe<NYql::NDqProto::TRlPath> rlPath = Nothing();
         if (msgRtSettings.HasRlPath()) {
@@ -212,30 +232,21 @@ private:
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-            TString group = msg.GetSchedulerGroup();
-
             TComputeActorSchedulingOptions schedulingTaskOptions {
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
                 .Scheduler = Scheduler.get(),
-                .Group = group,
+                .Group = schedulerGroup,
                 .Weight = 1,
-                .NoThrottle = false,
+                .NoThrottle = schedulerGroup.empty(),
                 .Counters = Counters
             };
 
-            if (SchedulerOptions.Scheduler->Disabled(group)) {
-                auto share = msg.GetMaxCpuShare();
-                if (share > 0) {
-                    Scheduler->UpdateMaxShare(group, share, schedulerNow);
-                    Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabaseId(), group, share));
-                } else {
-                    schedulingTaskOptions.NoThrottle = true;
-                }
-            } 
-
             if (!schedulingTaskOptions.NoThrottle) {
                 schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
+                if (querySchedulerGroup) {
+                    Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
+                }
             }
 
             auto result = CaFactory_->CreateKqpComputeActor({

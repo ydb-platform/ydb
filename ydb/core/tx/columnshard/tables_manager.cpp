@@ -153,6 +153,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            auto& key = VersionToKey[info.GetSchema().GetVersion()];
+            key.PlanStep = version.GetPlanStep();
+            key.TxId = version.GetTxId();
+            key.Id = id;
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
@@ -272,6 +276,13 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
+void TTablesManager::RemoveUnusedSchemaVersion(NTable::TDatabase* database, ui64 version) {
+    auto iter = VersionToKey.find(version);
+    AFL_VERIFY(iter != VersionToKey.end());
+    NIceDb::TNiceDb db(*database);
+    db.Table<Schema::SchemaPresetVersionInfo>().Key(iter->second.Id, iter->second.PlanStep, iter->second.TxId).Delete();
+}
+
 void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
     Y_ABORT_UNLESS(SchemaPresetsIds.contains(presetId));
 
@@ -283,6 +294,10 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
 
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (versionInfo.HasSchema()) {
+        auto& key = VersionToKey[versionInfo.GetSchema().GetVersion()];
+        key.Id = presetId;
+        key.PlanStep = version.GetPlanStep();
+        key.TxId = version.GetTxId();
         if (!PrimaryIndex) {
             PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema, CS);
             for (auto&& i : Tables) {

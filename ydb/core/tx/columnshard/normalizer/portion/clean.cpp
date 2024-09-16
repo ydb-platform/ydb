@@ -28,6 +28,13 @@ public:
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
             portion->RemoveFromDatabase(db);
+            LOG_S_CRIT("Removing portion from normalizer");
+            NColumnShard::TColumnShard* cs = static_cast<NColumnShard::TColumnShard*>(txc.Owner);
+            ui32 refCount = cs->VersionRemoveRef(portion->GetPortion(), portion->GetPathId(), portion->GetSchemaVersionVerified());
+            if (refCount == 0) {
+                LOG_S_CRIT("Ref count is set to 0 for version " << portion->GetSchemaVersionVerified() << " need to delete");
+                cs->RemoveUnusedSchemaVersion(&txc.DB, portion->GetSchemaVersionVerified());
+            }
         }
         return true;
     }
@@ -87,7 +94,7 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
 
  TConclusion<bool> TCleanPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
     LOG_S_CRIT("TCleanPortionsNormalizer init");
-    exit(1);
+//    exit(1);
     return true;
 }
 

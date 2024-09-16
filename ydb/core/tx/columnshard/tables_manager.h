@@ -143,6 +143,14 @@ public:
 
 class TTablesManager {
 private:
+    class TSchemaKey {
+    public:
+        ui64 PlanStep;
+        ui64 TxId;
+        ui32 Id;
+    };
+
+private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
@@ -151,6 +159,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
     NColumnShard::TColumnShard* CS = nullptr;
+    THashMap<ui64, TSchemaKey> VersionToKey;
 
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, NColumnShard::TColumnShard* cs);
@@ -247,6 +256,7 @@ public:
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
+    void RemoveUnusedSchemaVersion(NTable::TDatabase* database, ui64 version);
     void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);

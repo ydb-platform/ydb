@@ -729,6 +729,9 @@ public:
         return VersionCounts.VersionRemoveRef(TInsertKey(planStep, txId, pathId, dedupId, recType), version);
     }
 
+    void RemoveUnusedSchemaVersion(NTable::TDatabase* database, ui64 version) {
+        TablesManager.RemoveUnusedSchemaVersion(database, version);
+    }
 
 private:
      TVersionCounts VersionCounts;

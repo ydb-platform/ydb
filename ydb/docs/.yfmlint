@@ -22,7 +22,7 @@ log-levels:
   MD025: 'error' # Multiple top-level headings in the same document
   MD026: 'error' # Trailing punctuation in heading
   MD027: 'error' # Multiple spaces after blockquote symbol
-  MD028: 'disabled' # Blank line inside blockquote
+  MD028: 'error' # Blank line inside blockquote
   MD029: 'disabled' # Ordered list item prefix
   MD030: 'error' # Spaces after list markers
   MD031: 'error' # Fenced code blocks should be surrounded by blank lines

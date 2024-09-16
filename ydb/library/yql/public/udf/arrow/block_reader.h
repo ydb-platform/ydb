@@ -7,6 +7,7 @@
 
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 
 namespace NYql {
 namespace NUdf {
@@ -349,6 +350,62 @@ private:
     IBlockReader& Inner;
 };
 
+struct TListArrowScalarRef: public NUdf::TBoxedValue {
+    struct TListArrowIterator: public TBoxedValue {
+        TListArrowIterator(const std::shared_ptr<arrow::Array>& array, IBlockReader& inner)
+            : Array(array)
+            , Inner(inner)
+        {}
+
+        bool Next(NUdf::TUnboxedValue& value) final {
+            if (From >= Array->length()) {
+                return false;
+            }
+            auto item = Inner.GetScalarItem(**Array->GetScalar(From++));
+            if (item.IsEmbedded()) {
+                NUdf::TUnboxedValuePod embedded;
+                std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+                value = embedded;
+            } else if (item.IsBoxed()) {
+                value = NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+            } else {
+                value = NYql::NUdf::TUnboxedValuePod(TStringValue{item.AsStringRef()});
+            }
+            return true;
+        }
+
+    private:
+        std::shared_ptr<arrow::Array> Array;
+        arrow::ListType::offset_type From;
+        IBlockReader& Inner;
+    };
+
+    TListArrowScalarRef(const std::shared_ptr<arrow::Array>& array, IBlockReader& inner)
+        : Array(array)
+        , Inner(inner)
+    {}
+
+    bool HasFastListLength() const override {
+        return true;
+    }
+
+    ui64 GetListLength() const override {
+        return Array->length();
+    }
+
+    ui64 GetEstimatedListLength() const override {
+        return Array->length();
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const override {
+        return NUdf::TUnboxedValuePod(new TListArrowIterator(Array, Inner));
+    }
+
+private:
+    std::shared_ptr<arrow::Array> Array;
+    IBlockReader& Inner;
+};
+
 template<bool Nullable>
 class TListBlockReader : public IBlockReader {
 public:
@@ -369,8 +426,14 @@ public:
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
-        Y_UNUSED(scalar);
-        ythrow yexception() << "GetScalarItem not implemented for list";
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return {};
+            }
+        }
+        const auto& listScalar = arrow::internal::checked_cast<const arrow::ListScalar&>(scalar);
+        NUdf::IBoxedValuePtr boxed(new TListArrowScalarRef(listScalar.value,  *Inner));
+        return TBlockItem(std::move(boxed));
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {

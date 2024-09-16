@@ -4284,10 +4284,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        Y_ABORT_UNLESS(tx.WriteInProgress,
-                       "PQ %" PRIu64 ", TxId %" PRIu64,
-                       TabletID(), tx.TxId);
-
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));

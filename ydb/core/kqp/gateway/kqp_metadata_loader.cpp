@@ -126,8 +126,8 @@ TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
     if (typeInfoMod.TypeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
         YQL_ENSURE(NScheme::TryGetTypeName(typeInfoMod.TypeInfo.GetTypeId(), typeName));
     } else {
-        YQL_ENSURE(typeInfoMod.TypeInfo.GetTypeDesc(), "no pg type descriptor");
-        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc(), typeInfoMod.TypeMod);
+        YQL_ENSURE(typeInfoMod.TypeInfo.GetPgTypeDesc(), "no pg type descriptor");
+        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc(), typeInfoMod.TypeMod);
     }
     return typeName;
 }

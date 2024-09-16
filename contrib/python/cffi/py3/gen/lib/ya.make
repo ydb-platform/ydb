@@ -1,5 +1,7 @@
 PY3_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(MIT)
 
 PEERDIR(

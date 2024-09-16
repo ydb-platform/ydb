@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         ui16 rowCount = 10,
         TVector<TString> colNames = {"key", "value"}
     ) {
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
         TTableBuilder builder;
@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         std::function<TString()> textIn,
         size_t rowCount = 1
     ) {
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
         auto paramsHash = THash<TString>()(typeMod);
@@ -3213,7 +3213,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto tableClient = kikimr.GetTableClient();
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto tableName = createTable(tableClient, session, spec.TypeId, spec.IsKey, true, spec.TextIn, "", 0);
-            auto* typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
+            auto typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
             auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             auto keyType = spec.IsKey ? typeName : "pgint2";
             auto req = Sprintf("\
@@ -5063,6 +5063,33 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         UNIT_ASSERT_VALUES_EQUAL(colNames.size(), ydbResults.begin()->Getcolumns().size());
         for (size_t i = 0; i < colNames.size(); i++) {
             UNIT_ASSERT_VALUES_EQUAL(ydbResults.begin()->Getcolumns().at(i).Getname(), colNames[i]);
+        }
+    }
+
+    Y_UNIT_TEST(LongDomainName) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting})
+            .SetDomainRoot(std::string(65, 'a'));
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (id INT PRIMARY KEY, data1 UUID[]);
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                SELECT * FROM t;
+            )");
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 }

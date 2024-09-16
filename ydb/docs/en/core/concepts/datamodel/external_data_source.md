@@ -18,14 +18,15 @@ CREATE EXTERNAL DATA SOURCE test_data_source WITH (
   AUTH_METHOD="BASIC",
   USE_TLS="TRUE",
   LOGIN="login",
-  PASSWORD_SECRET_NAME="test_password_name"
-)
+  PASSWORD_SECRET_NAME="test_password_name",
+  PROTOCOL="NATIVE"
+);
 ```
 
 After creating an external data source, you can read data from the created `EXTERNAL DATA SOURCE` object. The example below illustrates reading data from the `test_table` table in the `default` database in the ClickHouse cluster:
 
 ```yql
-SELECT * FROM test_data_source.test_table
+SELECT * FROM test_data_source.test_table;
 ```
 
 External data sources allow execution of [federated queries](../federated_query/index.md) for cross-system data analytics tasks.

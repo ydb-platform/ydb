@@ -37,6 +37,10 @@ int main(int argc, char *argv[])
 
 	fd = open(filename, O_RDONLY | O_DIRECT, 0644);
 	if (fd < 0) {
+		if (errno == EINVAL) {
+			unlink(filename);
+			return T_EXIT_SKIP;
+		}
 		perror("open");
 		goto err_unlink;
 	}

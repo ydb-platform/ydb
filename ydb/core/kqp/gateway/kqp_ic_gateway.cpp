@@ -1891,7 +1891,8 @@ public:
 
     TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query,
         TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target,
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -1901,6 +1902,10 @@ public:
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1990,7 +1995,8 @@ public:
     }
 
     TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query, TQueryData::TPtr params,
-        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
+        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings, 
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -2000,6 +2006,10 @@ public:
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -2065,11 +2075,16 @@ public:
     }
 
     TFuture<TQueryResult> ExecGenericQuery(const TString& cluster, const TString& query, TQueryData::TPtr params,
-        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
+        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings, 
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
+        }
 
         auto& request = *ev->Record.MutableRequest();
         request.SetCollectStats(settings.CollectStats);
@@ -2091,7 +2106,8 @@ public:
 
     TFuture<TQueryResult> StreamExecGenericQuery(const TString& cluster, const TString& query,
         TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target,
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -2101,6 +2117,10 @@ public:
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);

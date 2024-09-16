@@ -72,6 +72,7 @@ static struct iovec buffers_iov[__BUF_NR];
 
 static bool has_sendzc;
 static bool has_sendmsg;
+static bool hit_enomem;
 
 static int probe_zc_support(void)
 {
@@ -537,6 +538,17 @@ static int do_test_inet_send(struct io_uring *ring, int sock_client, int sock_se
 			if (cqe->user_data == nr_reqs - 1)
 				expected = chunk_size_last;
 			if (cqe->res != expected) {
+				if (cqe->res == -ENOMEM) {
+					if (!hit_enomem) {
+						fprintf(stderr, "Hit -ENOMEM. "
+							"Increase ulimit -l "
+							"limit for a complete "
+							"test run. Skipping "
+							"parts.\n");
+						hit_enomem = 1;
+					}
+					return 0;
+				}
 				fprintf(stderr, "invalid cqe->res %d expected %d\n",
 						 cqe->res, expected);
 				return 1;

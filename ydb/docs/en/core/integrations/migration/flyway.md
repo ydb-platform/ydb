@@ -294,7 +294,7 @@ As a result, `series`, `season`, and `episode` tables will be created and filled
 
 ![_assets/flyway-migrate-step-1.png](_assets/flyway-migrate-step-1.png)
 
-Then, we evolve the schema by adding a [secondary index](../../yql/reference/syntax/alter_table.md) to the `series` table:
+Then, we evolve the schema by adding a [secondary index](../../yql/reference/syntax/alter_table/index.md) to the `series` table:
 
 ```text
 db/migration:

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -557,6 +558,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 }
             }
         )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AlterColumns { Name: "comment" DefaultValue: "10" }
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
     }
 
     Y_UNIT_TEST(AlterTtl) {

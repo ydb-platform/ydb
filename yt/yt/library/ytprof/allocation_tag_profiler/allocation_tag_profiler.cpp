@@ -22,17 +22,17 @@ class TAllocationTagProfiler
 {
 public:
     TAllocationTagProfiler(
-        std::vector<TString> tagNames,
+        std::vector<TAllocationTagKey> tagKeys,
         IInvokerPtr invoker,
         std::optional<TDuration> updatePeriod,
         std::optional<i64> samplingRate,
         NProfiling::TProfiler profiler)
         : Profiler_(std::move(profiler))
-        , TagNames_(std::move(tagNames))
+        , TagKeys_(std::move(tagKeys))
         , UpdateExecutor_(New<TPeriodicExecutor>(
             std::move(invoker),
             BIND(&TAllocationTagProfiler::UpdateGauges, MakeWeak(this)),
-            std::move(updatePeriod)))
+            updatePeriod))
     {
         if (samplingRate) {
             tcmalloc::MallocExtension::SetProfileSamplingRate(*samplingRate);
@@ -43,35 +43,34 @@ public:
 
 private:
     const NProfiling::TProfiler Profiler_;
-    const std::vector<TString> TagNames_;
+    const std::vector<TAllocationTagKey> TagKeys_;
 
     const NConcurrency::TPeriodicExecutorPtr UpdateExecutor_;
 
-    THashMap<TString, THashMap<TString, NProfiling::TGauge>> HeapUsageByType_;
+    THashMap<TAllocationTagKey, THashMap<TAllocationTagValue, NProfiling::TGauge>> Guages_;
 
     void UpdateGauges()
     {
-        auto memorySnapshot = GetMemoryUsageSnapshot();
-        YT_VERIFY(memorySnapshot);
+        auto memorySnapshot = GetGlobalMemoryUsageSnapshot();
 
-        for (const auto& tagName : TagNames_) {
-            auto& heapUsageMap = HeapUsageByType_.emplace(tagName, THashMap<TString, TGauge>{}).first->second;
-            const auto& snapshotSlice = memorySnapshot->GetUsage(tagName);
+        for (const auto& tagKey : TagKeys_) {
+            auto& guages = Guages_.emplace(tagKey, THashMap<TAllocationTagValue, TGauge>{}).first->second;
+            const auto& slice = memorySnapshot->GetUsageSlice(tagKey);
 
-            for (auto& [tagValue, gauge] : heapUsageMap) {
-                if (auto it = snapshotSlice.find(tagValue)) {
+            for (auto& [tagValue, gauge] : guages) {
+                if (auto it = slice.find(tagValue)) {
                     gauge.Update(it->second);
                 } else {
                     gauge.Update(0.0);
                 }
             }
 
-            for (const auto& [tagValue, usage] : snapshotSlice) {
-                auto it = heapUsageMap.find(tagValue);
-                if (it == heapUsageMap.end()) {
-                    it = heapUsageMap.emplace(tagValue, Profiler_
-                        .WithTag(tagName, tagValue)
-                        .Gauge(Format("/%v", NYPath::ToYPathLiteral(tagName))))
+            for (const auto& [tagValue, usage] : slice) {
+                auto it = guages.find(tagValue);
+                if (it == guages.end()) {
+                    it = guages.emplace(tagValue, Profiler_
+                        .WithTag(tagKey, tagValue)
+                        .Gauge(Format("/%v", NYPath::ToYPathLiteral(tagKey))))
                         .first;
                     it->second.Update(usage);
                 }
@@ -95,14 +94,14 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 IAllocationTagProfilerPtr CreateAllocationTagProfiler(
-    std::vector<TString> tagNames,
+    std::vector<TAllocationTagKey> tagKeys,
     IInvokerPtr invoker,
     std::optional<TDuration> updatePeriod,
     std::optional<i64> samplingRate,
     NYT::NProfiling::TProfiler profiler)
 {
     return New<TAllocationTagProfiler>(
-        std::move(tagNames),
+        std::move(tagKeys),
         std::move(invoker),
         std::move(updatePeriod),
         std::move(samplingRate),

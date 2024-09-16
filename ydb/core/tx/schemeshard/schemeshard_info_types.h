@@ -2769,6 +2769,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
+        TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

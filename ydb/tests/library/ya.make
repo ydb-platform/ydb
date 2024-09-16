@@ -23,7 +23,6 @@ PY_SRCS(
     serializability/__init__.py
     serializability/checker.py
     harness/__init__.py
-    harness/blockstore.py
     harness/daemon.py
     harness/kikimr_client.py
     harness/kikimr_node_interface.py

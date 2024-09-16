@@ -81,7 +81,7 @@ ParserFileHeader(file, parser, namedActions, contextSuperClass) ::= <<
 <namedActions.preinclude>
 
 #include "antlr4-runtime.h"
-#include \<ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include \<ydb/library/yql/parser/proto_ast/antlr4/proto_ast_antlr4.h>
 
 <namedActions.postinclude>
 
@@ -103,7 +103,7 @@ ParserFile(file, parser, namedActions, contextSuperClass) ::= <<
 <if (file.genVisitor)>#include "<file.grammarName>Visitor.h"<endif>
 
 #include "<file.parser.name>.h"
-#include \<ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include \<ydb/library/yql/parser/proto_ast/antlr4/proto_ast_antlr4.h>
 #include \<@PROTOBUF_HEADER_PATH@/SQLv1Parser@PROTOBUF_SUFFIX_PATH@>
 
 <namedActions.postinclude>

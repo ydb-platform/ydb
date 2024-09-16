@@ -256,7 +256,8 @@ public:
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
     TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
-        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns);
+        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+        const TArrayRef<const ui32>& leftKeyDrops = {});
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -579,6 +580,10 @@ public:
     TRuntimeNode DecimalMod(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalMul(TRuntimeNode data1, TRuntimeNode data2);
 
+    TRuntimeNode BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockDecimalMod(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockDecimalMul(TRuntimeNode first, TRuntimeNode second);
+
     //-- bit logical functions
     TRuntimeNode BitNot(TRuntimeNode data);
     TRuntimeNode CountBits(TRuntimeNode data);
@@ -748,6 +753,9 @@ protected:
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
+    
+    TRuntimeNode BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
+
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);
 

@@ -24,6 +24,7 @@
 
 {% if feature_map_tables %}
 
+* [ALTER TABLE](alter_table/index.md)
 * [UPDATE](update.md)
 * [DELETE](delete.md)
 

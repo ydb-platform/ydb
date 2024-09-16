@@ -151,7 +151,7 @@ Operations are performed in isolation, the external process sees only two states
 
 The speed of renaming is determined by the type of data transactions currently running against the table and doesn't depend on the table size.
 
-* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table.md#rename)
+* [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
 ### Bloom filter {#bloom-filter}

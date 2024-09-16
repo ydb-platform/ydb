@@ -1,3 +1,5 @@
 items:
+- name: Apache Superset
+  href: superset.md
 - name: Grafana data source
   href: grafana.md

@@ -26,15 +26,10 @@ ui32 TSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
 }
 
 int TSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
-    const TString& columnName = IndexInfo.GetColumnName(columnId, false);
-    if (!columnName) {
-        return -1;
-    }
-    std::string name(columnName.data(), columnName.size());
-    return Schema->GetFieldIndex(name);
+    return IndexInfo.GetColumnIndexOptional(columnId).value_or(-1);
 }
 
-const std::shared_ptr<arrow::Schema>& TSnapshotSchema::GetSchema() const {
+const std::shared_ptr<NArrow::TSchemaLite>& TSnapshotSchema::GetSchema() const {
     return Schema;
 }
 

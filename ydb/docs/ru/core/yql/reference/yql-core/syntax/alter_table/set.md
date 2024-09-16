@@ -4,7 +4,7 @@
 
 В общем случае команда для изменения любого параметра таблицы выглядит следующим образом:
 
-```sql
+```yql
 ALTER TABLE table_name SET (key = value);
 ```
 
@@ -12,7 +12,7 @@ ALTER TABLE table_name SET (key = value);
 
 Пример изменения параметра `TTL`, отвечающего за время жизни записей в таблицы:
 
-```sql
+```yql
 ALTER TABLE series SET (TTL = Interval("PT0S") ON expire_at);
 ```
 
@@ -20,7 +20,7 @@ ALTER TABLE series SET (TTL = Interval("PT0S") ON expire_at);
 
 Некоторые параметры таблиц в {{ ydb-short-name }}, приведенные на странице [описания таблицы]({{ concept_table }}), можно сбросить командой ```ALTER```. Команда для сброса параметра таблиц выглядит следующим образом:
 
-```sql
+```yql
 ALTER TABLE table_name RESET (key);
 ```
 
@@ -28,6 +28,6 @@ ALTER TABLE table_name RESET (key);
 
 Например, такая команда сбросит (удалит) настройки TTL для строковых или колоночных таблиц:
 
-```sql
+```yql
 ALTER TABLE series RESET (TTL);
 ```

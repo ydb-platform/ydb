@@ -6,7 +6,8 @@
 * `CurrentOperationSharedId()` — публичный идентификатор операции;
 * `CurrentAuthenticatedUser()` — логин текущего пользователя.
 
-**Сигнатуры**
+### Сигнатуры
+
 ```
 CurrentOperationId()->String
 CurrentOperationSharedId()->String
@@ -17,7 +18,8 @@ CurrentAuthenticatedUser()->String
 
 При отсутствии данной информации, например, при запуске в embedded режиме, возвращают пустую строку.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT
     CurrentOperationId(),

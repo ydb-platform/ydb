@@ -486,6 +486,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("with-final-issues", "Include some final messages (like statistic) in issues").NoArgument();
     opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
+    opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
 
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
@@ -739,6 +740,7 @@ int Main(int argc, const char *argv[])
         settings.Flags = sqlFlags;
         settings.SyntaxVersion = syntaxVersion;
         settings.AnsiLexer = res.Has("ansi-lexer");
+        settings.TestAntlr4 = res.Has("test-antlr4");
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
         settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
         if (res.Has("discover")) {
@@ -933,6 +935,7 @@ int RunUI(int argc, const char* argv[])
 
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = YtProviderName;
+    THashSet<TString> sqlFlags;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('u', "udf", "Load shared library with UDF by given path").AppendTo(&udfsPaths);
@@ -949,6 +952,7 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption("gateways-cfg", "gateways configuration file").Optional().RequiredArgument("FILE").StoreResult(&gatewaysCfgFile);
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
+    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
 
     TServerConfig config;
     config.SetAssetsPath("http/www");
@@ -991,6 +995,10 @@ int RunUI(int argc, const char* argv[])
         if (!gatewaysConfig) {
             return -1;
         }
+
+        if (gatewaysConfig->HasSqlCore()) {
+            sqlFlags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+        }
     }
 
     THolder<TFileStorageConfig> fsConfig;
@@ -1026,7 +1034,7 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, THashSet<TString>());
+        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping)) {
             Cerr << "Errors loading default YQL libraries:" << Endl;
@@ -1056,6 +1064,7 @@ int RunUI(int argc, const char* argv[])
                 funcRegistry.Get(), udfIndex, ctx.NextUniqueId,
                 userData,
                 std::move(gatewaysConfig),
+                sqlFlags,
                 moduleResolver, udfResolver, fileStorage);
     server->Start();
     server->Wait();

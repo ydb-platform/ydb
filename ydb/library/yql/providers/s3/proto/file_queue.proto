@@ -4,6 +4,7 @@ option cc_enable_arenas = true;
 package NYql.NS3.FileQueue;
 
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TEvUpdateConsumersCount {
@@ -29,6 +30,7 @@ message TEvObjectPathBatch {
 
 message TEvObjectPathReadError {
     repeated Ydb.Issue.IssueMessage Issues = 1;
+    optional NYql.NDqProto.StatusIds.StatusCode FatalCode = 2;
 
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }

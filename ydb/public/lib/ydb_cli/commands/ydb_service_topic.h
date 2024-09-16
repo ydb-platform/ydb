@@ -71,8 +71,7 @@ namespace NYdb::NConsoleClient {
         ui64 RetentionPeriodHours_;
         ui64 RetentionStorageMb_;
         ui32 MinActivePartitions_;
-        ui32 MaxActivePartitions_;
-
+        TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
     };
 

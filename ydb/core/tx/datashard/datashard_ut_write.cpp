@@ -3,6 +3,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include "datashard_ut_common_kqp.h"
 

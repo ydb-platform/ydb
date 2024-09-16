@@ -58,6 +58,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     const int GROUP_START_ID = 0x80000000;
     const int VCARD_START_ID = 55;
+    const int PDISK_START_ID = 42;
     const int DEFAULT_GROUP_GENERATION = 3;
 
     const TPathId SUBDOMAIN_KEY = {7000000000, 1};
@@ -181,7 +182,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void AddVSlotsToSysViewResponse(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr* ev, size_t groupCount,
-                                    const TVDisks& vslots, ui32 groupStartId = GROUP_START_ID) {
+                                    const TVDisks& vslots, ui32 groupStartId = GROUP_START_ID,
+                                    bool withPdisk = false) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
@@ -190,10 +192,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         for (size_t i = 0; i < groupCount; ++i) {
             auto vslotId = VCARD_START_ID;
+            auto pdiskId = PDISK_START_ID;
             for (const auto& vslot : vslots) {
                 auto* entry = record.add_entries();
                 entry->CopyFrom(entrySample);
                 entry->mutable_key()->set_vslotid(vslotId);
+                if (withPdisk) {
+                    entry->mutable_key()->set_pdiskid(pdiskId);
+                }
                 entry->mutable_info()->set_groupid(groupId);
                 entry->mutable_info()->set_failrealm(vslotId);
                 if (vslot.Status) {
@@ -202,6 +208,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 entry->mutable_info()->set_groupgeneration(vslot.Generation);
                 entry->mutable_info()->set_vdisk(vslotId);
                 ++vslotId;
+                ++pdiskId;
             }
             ++groupId;
         }
@@ -213,6 +220,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto* entry = record.add_entries();
         entry->mutable_key()->set_storagepoolid(1);
         entry->mutable_info()->set_name(STORAGE_POOL_NAME);
+    }
+
+    void AddPDisksToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev, size_t count, double occupancy) {
+        auto& record = (*ev)->Get()->Record;
+        auto entrySample = record.entries(0);
+        record.clear_entries();
+        auto pdiskId = PDISK_START_ID;
+        const size_t totalSize = 3'200'000'000'000ull;
+        for (size_t i = 0; i < count; ++i) {
+            auto* entry = record.add_entries();
+            entry->CopyFrom(entrySample);
+            entry->mutable_key()->set_pdiskid(pdiskId);
+            entry->mutable_info()->set_totalsize(totalSize);
+            entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
+            ++pdiskId;
+        }
     }
 
     void AddGroupVSlotInControllerConfigResponseWithStaticGroup(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev,
@@ -415,7 +438,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords);
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks, bool forStaticGroup = false) {
+    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks, bool forStaticGroup = false, double occupancy = 0) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -451,10 +474,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
                     if (forStaticGroup) {
-                        AddVSlotsToSysViewResponse(x, 1, vdisks, 0);
+                        AddVSlotsToSysViewResponse(x, 1, vdisks, 0, true);
                     } else {
-                        AddVSlotsToSysViewResponse(x, 1, vdisks);
+                        AddVSlotsToSysViewResponse(x, 1, vdisks, GROUP_START_ID, true);
                     }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    AddPDisksToSysViewResponse(x, vdisks.size(), occupancy);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
@@ -667,6 +695,19 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, vdisks);
         Cerr << result.ShortDebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
+
+    Y_UNIT_TEST(YellowGroupIssueOnYellowSpace) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+    }
+
+    Y_UNIT_TEST(RedGroupIssueOnRedSpace) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.95);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
 
     /* HC currently infers group status on its own, so it's never unknown

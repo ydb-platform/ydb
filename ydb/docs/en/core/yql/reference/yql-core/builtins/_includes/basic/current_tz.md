@@ -4,7 +4,7 @@
 
 The arguments that follow are optional and work same as [RANDOM](../../basic.md#random).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT CurrentTzDate("Europe/Moscow");
@@ -25,7 +25,7 @@ Arguments:
 
 Result type: `TzDate`/`TzDatetime`/`TzTimestamp`, depending on the input data type.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");

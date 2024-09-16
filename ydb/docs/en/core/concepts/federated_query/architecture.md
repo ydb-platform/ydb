@@ -12,7 +12,7 @@ Once external data sources and (if necessary) external tables are registered in 
 
 While executing federated queries, {{ ydb-short-name }} needs to access external data storage systems over the network, for which it uses their client libraries. Including such dependencies negatively affects the codebase size, compilation time, and binary file size of {{ ydb-short-name }}, as well as the product's overall stability.
 
-The list of supported data sources for federated queries is constantly expanding. The most popular sources, such as [S3](s3), are natively supported by {{ ydb-short-name }}. However, not all users require support for all sources simultaneously. Support can be optionally enabled using _connectors_ - special microservices implementing a unified interface for accessing external data sources.
+The list of supported data sources for federated queries is constantly expanding. The most popular sources, such as S3, are natively supported by {{ ydb-short-name }}. However, not all users require support for all sources simultaneously. Support can be optionally enabled using _connectors_ - special microservices implementing a unified interface for accessing external data sources.
 
 The functions of connectors include:
 

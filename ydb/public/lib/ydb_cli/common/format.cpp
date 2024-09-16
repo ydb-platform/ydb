@@ -22,14 +22,14 @@ namespace {
     };
 
     THashMap<EFramingFormat, TString> InputFramingDescriptions = {
-        { EFramingFormat::NewlineDelimited, "Newline character delimits parameter sets on input and triggers "
+        { EFramingFormat::NewlineDelimited, "Newline character delimits parameter sets on the input and triggers "
                                             "processing in accordance to \"--input-batch\" option" },
         { EFramingFormat::NoFraming, "Data from input is taken as a single set of parameters" },
     };
 
     THashMap<EBinaryStringEncodingFormat, TString> BinaryStringEncodingFormatDescriptions = {
-        { EBinaryStringEncodingFormat::Unicode, "Binary strings are encoded with unicode" },
-        { EBinaryStringEncodingFormat::Base64, "Binary strings are encoded with base64" },
+        { EBinaryStringEncodingFormat::Unicode, "Every byte in binary strings that is not a printable ASCII symbol (codes 32-126) should be encoded as utf-8" },
+        { EBinaryStringEncodingFormat::Base64, "Binary strings should be fully encoded with base64" },
     };
 
     THashMap<EDataFormat, TString> FormatDescriptions = {
@@ -120,6 +120,9 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
         AllowedInputFormats.insert(format);
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        description << Endl << "Use -hh option to see all options relevant to input format.";
+    }
     config.Opts->AddLongOption("input-format", description.Str())
         .RequiredArgument("STRING").StoreResult(&InputFormat);
 }
@@ -142,14 +145,17 @@ void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
         AllowedInputFramingFormats.insert(format);
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("input-framing", description.Str())
+    auto& inputFraming = config.Opts->AddLongOption("input-framing", description.Str())
             .RequiredArgument("STRING").StoreResult(&InputFramingFormat);
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        inputFraming.Hidden();
+    }
 }
 
 void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TConfig& config,
         const TVector<EBinaryStringEncodingFormat>& allowedFormats, EBinaryStringEncodingFormat defaultFormat) {
     TStringStream description;
-    description << "Reresentation of binary strings in the input data. Available options: ";
+    description << "Input binary strings encoding format. Sets how binary strings in the input should be interterpreted. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default binary string format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());

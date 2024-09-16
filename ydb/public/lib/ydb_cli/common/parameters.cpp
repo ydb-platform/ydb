@@ -14,15 +14,10 @@ namespace {
     const TDuration DEFAULT_BATCH_MAX_DELAY = TDuration::Seconds(1);
 
     THashMap<EDataFormat, TString> InputFormatParamDescriptions = {
-        { EDataFormat::Json, "Parameter names and values in json format, binary string encoding can be set with --input-binary-strings option" },
-        { EDataFormat::JsonUnicode, "Parameter names and values in json unicode format" },
-        { EDataFormat::JsonBase64, "Parameter names and values in json unicode format, binary string parameter values are base64-encoded" },
-        { EDataFormat::Csv, "Parameter names and values in csv format" },
-        { EDataFormat::Tsv, "Parameter names and values in tsv format" },
-        { EDataFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
-                                            "processing in accordance to \"--input-batch\" option" },
-        { EDataFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"--input-param-name\" option" },
-        { EDataFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
+        { EDataFormat::Json, "Parameters from the input are parsed in json format, binary string encoding can be set with --input-binary-strings option" },
+        { EDataFormat::Csv, "Parameters from the input are parsed in csv format" },
+        { EDataFormat::Tsv, "Parameters from the input are parsed in tsv format" },
+        { EDataFormat::Raw, "Input is read as parameter value[s] with no transformation or parsing. Parameter name should be set with \"--input-param-name\" option" },
     };
 }
 
@@ -33,34 +28,48 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
     if (clarification) {
         descr << ' ' << clarification;
     }
-    descr << Endl << "Several parameter options can be specified. " << Endl
-        // TODO: to change binary strings encoding use --input-binary-strings option
-        //<< "To change input format use --input-format option." << Endl
+    descr << Endl << "Format should be 'name=value' or '$name=value' where value is parsed as Json." << Endl
+        << "Several parameter options can be specified. "
+        << "To change binary strings encoding use --input-binary-strings option. "
         << "Escaping depends on operating system.";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        descr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
+    }
+    descr << Endl << "More information and examples in the documentation:" << Endl
+        << "  https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
     config.Opts->AddLongOption('p', "param", descr.Str())
-        .RequiredArgument("name=value or $name=value").AppendTo(&ParameterOptions);
+        .RequiredArgument("STRING").AppendTo(&ParameterOptions);
 
-    AddOptionExamples(
-        "param",
-        TExampleSetBuilder()
-            .Title("Examples (with default json-unicode format)")
-            .BeginExample()
-                .Title("One parameter of type Uint64")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("Two parameters of types Uint64 and Utf8")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
-            .EndExample()
-        .Build()
-    );
+    TStringStream inputFileDescr;
+    inputFileDescr << "File name with input parameter names and values. Format is configured with --input-format option.";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        inputFileDescr << Endl << "Use -hh option to see all options to work with parameters.";
+    }
+    AddInputFileOption(config, false, inputFileDescr.Str());
+
+    if (config.HelpCommandVerbosiltyLevel > 1) {
+        AddOptionExamples(
+            "param",
+            TExampleSetBuilder()
+                .Title("Examples (with default json-unicode format)")
+                .BeginExample()
+                    .Title("One parameter of type Uint64")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("Two parameters of types Uint64 and Utf8")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
+                .EndExample()
+            .Build()
+        );
+    }
 }
 
 void TCommandWithParameters::AddLegacyParametersFileOption(TClientCommand::TConfig& config) {
@@ -70,20 +79,20 @@ void TCommandWithParameters::AddLegacyParametersFileOption(TClientCommand::TConf
         .Hidden();
 }
 
-void TCommandWithParameters::AddParamFormats(TClientCommand::TConfig& config) {
+void TCommandWithParameters::AddDefaultParamFormats(TClientCommand::TConfig& config) {
     AddInputFormats(config, {
         EDataFormat::Json,
-        EDataFormat::Raw,
         EDataFormat::Csv,
-        EDataFormat::Tsv
+        EDataFormat::Tsv,
+        EDataFormat::Raw,
     });
     AddInputFramingFormats(config, {
         EFramingFormat::NoFraming,
         EFramingFormat::NewlineDelimited,
     });
     AddInputBinaryStringEncodingFormats(config, {
-        EBinaryStringEncodingFormat::Base64,
         EBinaryStringEncodingFormat::Unicode,
+        EBinaryStringEncodingFormat::Base64,
     });
 }
 
@@ -95,11 +104,9 @@ void TCommandWithParameters::AddLegacyParamFormats(TClientCommand::TConfig& conf
 }
 
 void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString) {
-    AddInputFileOption(config, false, "File name with parameter names and values."
-        " Format is configured with --input-format option.");
     TStringStream descr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    descr << "Batching mode for stdin parameters processing. Available options:\n  "
+    descr << "Batching mode for input parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
         "when no framing specified in \"stdin-format\")\n  "
@@ -109,22 +116,30 @@ void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& 
         << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
         "or the waiting time reaches batch-max-delay."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("input-param-name",
-            "Parameter name on input stream, required/applicable when input format implies values only (i.e. raw).")
+    auto& inputParamName = config.Opts->AddLongOption("input-param-name",
+            "Parameter name on the input stream, required/applicable when input format implies values only (i.e. raw).")
         .RequiredArgument("STRING").AppendTo(&InputParamNames);
-    config.Opts->AddLongOption("input-columns", "String with column names that replaces header. "
+    auto& inputColumns = config.Opts->AddLongOption("input-columns", "String with column names that replaces CSV/TSV header. "
             "Relevant when passing parameters in CSV/TSV format only. "
             "It is assumed that there is no header in the file")
             .RequiredArgument("STR").StoreResult(&Columns);
-    config.Opts->AddLongOption("input-skip-rows",
-            "Number of header rows to skip in input data (not including the row of column names, if any). "
+    auto& inputSkipRows = config.Opts->AddLongOption("input-skip-rows",
+            "Number of CSV/TSV header rows to skip in the input data (not including the row of column names, if any). "
             "Relevant when passing parameters in CSV/TSV format only.")
             .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
-    config.Opts->AddLongOption("input-batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
-    config.Opts->AddLongOption("input-batch-max-rows", "Maximum size of list for input adaptive batching mode")
+    auto& inputBatch = config.Opts->AddLongOption("input-batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
+    auto& inputBatchMaxRows = config.Opts->AddLongOption("input-batch-max-rows", "Maximum size of list for input adaptive batching mode")
         .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
-    config.Opts->AddLongOption("input-batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
+    auto& inputBatchMaxDelay = config.Opts->AddLongOption("input-batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
             .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        inputParamName.Hidden();
+        inputColumns.Hidden();
+        inputSkipRows.Hidden();
+        inputBatch.Hidden();
+        inputBatchMaxRows.Hidden();
+        inputBatchMaxDelay.Hidden();
+    }
 }
 
 void TCommandWithParameters::AddLegacyBatchParametersOptions(TClientCommand::TConfig& config) {
@@ -270,7 +285,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     }
 
     if (InputFiles.empty()) {
-        if (!IsStdinInteractive() && !ReadingFromStdin) {
+        if (!IsStdinInteractive() && !ReadingSomethingFromStdin) {
             // By default reading params from stdin
             SetParamsInputFromStdin();
         }
@@ -283,7 +298,13 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             }
             SetParamsInputFromStdin();
         } else {
-            SetParamsInputFromFile(file);
+            if (IsStdinInteractive() || ReadingSomethingFromStdin) {
+                SetParamsInputFromFile(file);
+            } else {
+                throw TMisuseException() << "Path to input file is \"" << file << "\", meaning that parameter value[s]"
+                    " should be read from file. This is only available in interactive mode. Can't read parameters both"
+                    " from stdin and file. Choose only one of theese options";
+            }
         }
     }
 
@@ -331,10 +352,10 @@ void TCommandWithParameters::SetParamsInput(IInputStream* input) {
 }
 
 void TCommandWithParameters::SetParamsInputFromStdin() {
-    if (ReadingFromStdin) {
+    if (ReadingSomethingFromStdin) {
         throw TMisuseException() << "Can't read both parameters and query text from stdinput";
     }
-    ReadingFromStdin = true;
+    ReadingSomethingFromStdin = true;
     SetParamsInput(&Cin);
 }
 

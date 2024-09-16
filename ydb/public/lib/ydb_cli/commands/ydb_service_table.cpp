@@ -379,7 +379,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     AddParametersOption(config, "(for data, scan and generic queries)");
     AddLegacyParametersFileOption(config);
 
-    AddParamFormats(config);
+    AddDefaultParamFormats(config);
     AddLegacyParamFormats(config);
 
     AddBatchParametersOptions(config, "query");

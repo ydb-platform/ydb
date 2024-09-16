@@ -29,7 +29,7 @@ protected:
     void AddLegacyParametersFileOption(TClientCommand::TConfig& config);
     void AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString);
     void AddLegacyBatchParametersOptions(TClientCommand::TConfig& config);
-    void AddParamFormats(TClientCommand::TConfig& config);
+    void AddDefaultParamFormats(TClientCommand::TConfig& config);
     void AddLegacyParamFormats(TClientCommand::TConfig& config);
     bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder);
     
@@ -68,7 +68,7 @@ protected:
     size_t BatchLimit;
     TDuration BatchMaxDelay;
     THolder<NScripting::TExplainYqlResult> ValidateResult;
-    bool ReadingFromStdin = false;
+    bool ReadingSomethingFromStdin = false;
 };
 
 }

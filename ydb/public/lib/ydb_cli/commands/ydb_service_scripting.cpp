@@ -45,7 +45,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     AddParametersOption(config);
     AddLegacyParametersFileOption(config);
 
-    AddParamFormats(config);
+    AddDefaultParamFormats(config);
     AddLegacyParamFormats(config);
 
     AddBatchParametersOptions(config, "script");

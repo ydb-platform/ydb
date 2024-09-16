@@ -53,9 +53,12 @@ void TCommandSql::Config(TConfig& config) {
     });
 
     AddParametersOption(config);
+
+    AddDefaultParamFormats(config);
+
     AddBatchParametersOptions(config, "script");
 
-    AddParamFormats(config);
+    CheckExamples(config);
 
     config.SetFreeArgsNum(0);
 }
@@ -85,16 +88,16 @@ void TCommandSql::Parse(TConfig& config) {
                 throw TMisuseException() << "Path to script file is \"-\", meaning that script text should be read "
                     "from stdin. This is only available in non-interactive mode";
             }
-            if (ReadingFromStdin) {
+            if (ReadingSomethingFromStdin) {
                 throw TMisuseException() << "Can't read both script file and parameters from stdin";
             }
-            ReadingFromStdin = true;
+            ReadingSomethingFromStdin = true;
             Query = Cin.ReadAll();
         } else {
             Query = ReadFromFile(QueryFile, "query");
         }
     }
-    // Should be called after setting ReadingFromStdin
+    // Should be called after setting ReadingSomethingFromStdin
     ParseParameters(config);
 }
 

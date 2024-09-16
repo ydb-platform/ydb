@@ -57,12 +57,13 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const TString& sessionToke
 void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): OK");
     auto response = event->Get()->Response;
+    NHttp::THeadersBuilder responseHeaders;
     for (const auto& cookie : response.Getset_cookie_header()) {
-        ResponseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
+        responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
     NHttp::THttpOutgoingResponsePtr httpResponse;
-    ResponseHeaders.Set("Location", RedirectUrl);
-    httpResponse = Request->CreateResponse("302", "Cookie set", ResponseHeaders);
+    responseHeaders.Set("Location", RedirectUrl);
+    httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }
@@ -71,10 +72,11 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, ResponseHeaders, IsAjaxRequest);
+        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
     } else {
-        ResponseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, ResponseHeaders, event->Get()->Details);
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Content-Type", "text/plain");
+        httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
     }
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);

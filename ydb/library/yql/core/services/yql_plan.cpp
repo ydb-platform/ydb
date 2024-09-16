@@ -414,7 +414,9 @@ public:
         THashMap<TPinKey, ui32, TPinKey::THash> allInputs;
         THashMap<TPinKey, ui32, TPinKey::THash> allOutputs;
         for (auto node : order) {
-            auto& info = nodes.find(node.Get())->second;
+            const auto found = nodes.find(node.Get());
+            YQL_ENSURE(found != nodes.cend());
+            auto& info = found->second;
             if (!info.IsVisible) {
                 continue;
             }

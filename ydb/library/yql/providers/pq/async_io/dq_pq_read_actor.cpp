@@ -12,6 +12,7 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -28,10 +29,13 @@
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
+
 
 #include <queue>
 #include <variant>
@@ -702,7 +706,25 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
-        return CreateDqPqReadActor(
+
+        if (!settings.GetSharedReading()) {
+            return CreateDqPqReadActor(
+                std::move(settings),
+                args.InputIndex,
+                args.StatsLevel,
+                args.TxId,
+                args.TaskId,
+                args.SecureParams,
+                args.TaskParams,
+                driver,
+                credentialsFactory,
+                args.ComputeActorId,
+                args.HolderFactory,
+                counters,
+                PQReadDefaultFreeSpace);
+        }
+
+        return CreateDqPqRdReadActor(
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,
@@ -710,9 +732,9 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.TaskId,
             args.SecureParams,
             args.TaskParams,
-            driver,
             credentialsFactory,
             args.ComputeActorId,
+            NFq::RowDispatcherServiceActorId(),
             args.HolderFactory,
             counters,
             PQReadDefaultFreeSpace);

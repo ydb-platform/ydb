@@ -36,6 +36,7 @@ message TDqPqTopicSource {
     repeated string Columns = 12;
     repeated string ColumnTypes = 13;
     string Predicate = 14;
+    bool SharedReading = 15;
 }
 
 message TDqPqTopicSink {

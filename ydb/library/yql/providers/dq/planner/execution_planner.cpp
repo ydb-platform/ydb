@@ -283,7 +283,7 @@ namespace NYql::NDqs {
     }
 
     static bool IsInfiniteSourceType(const TString& sourceType) {
-        return sourceType == "PqSource" || sourceType == "PqRdSource"; // Now it is the only infinite source type. Others are finite.
+        return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
     void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {

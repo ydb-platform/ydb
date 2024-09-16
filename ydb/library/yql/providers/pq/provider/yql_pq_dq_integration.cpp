@@ -279,15 +279,18 @@ public:
                     }
                 }
 
-                TString predicateSql = NYql::FormatWhere(predicateProto);
-                srcDesc.SetPredicate(predicateSql);
-
-                protoSettings.PackFrom(srcDesc);
+                //sharedReading = true;
                 sharedReading = sharedReading && (format == "json_each_row");
+                TString predicateSql = NYql::FormatWhere(predicateProto);
+                if (sharedReading) {
+                    srcDesc.SetPredicate(predicateSql);
+                    srcDesc.SetSharedReading(true);
+                }
+                protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
-                sourceType = !sharedReading ? "PqSource" : "PqRdSource";
+                sourceType = "PqSource";
             }
         }
     }

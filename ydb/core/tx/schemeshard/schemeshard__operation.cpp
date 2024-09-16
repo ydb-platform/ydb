@@ -277,6 +277,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     THolder<TProposeResponse> Response = nullptr;
 
     TString UserSID;
+    TString SanitizedToken;
 
     TSideEffects OnComplete;
 
@@ -305,6 +306,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         }
         if (userToken) {
             UserSID = userToken->GetUserSID();
+            SanitizedToken = userToken->GetSanitizedToken();
         }
 
         TMemoryChanges memChanges;
@@ -372,7 +374,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", response: " << Response->Record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
-        AuditLogModifySchemeTransaction(record, Response->Record, Self, UserSID);
+        AuditLogModifySchemeTransaction(record, Response->Record, Self, UserSID, SanitizedToken);
 
         //NOTE: Double audit output into the common log as a way to ease
         // transition to a new auditlog stream.

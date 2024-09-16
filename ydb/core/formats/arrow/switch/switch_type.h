@@ -93,9 +93,9 @@ template <typename TFunc>
                 case TEXTOID:
                     return callback(TTypeWrapper<arrow::StringType>());
                 default:
-                    break;
+                    return false;
             }
-            break; // TODO: support pg types
+            break;
     }
     return false;
 }

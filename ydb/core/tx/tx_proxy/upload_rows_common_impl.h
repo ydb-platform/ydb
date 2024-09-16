@@ -109,7 +109,7 @@ public:
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
-        PackageSizeRecordsByRecords->Collect(rowsCount, rowsCount);
+        PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
         PackageSizeCountByRecords->Collect(rowsCount);
     }
 

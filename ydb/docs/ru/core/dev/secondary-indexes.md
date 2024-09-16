@@ -85,7 +85,7 @@ SELECT * FROM `Table` WHERE (Key1, Key2, Key3) < ($param1, $param2, $param3) AND
 #### Примеры автоматического выбора индексов
 
 ```yql
-CREATE TABLE `/Root/Table` (
+CREATE TABLE `Table` (
      Key Int32,
      SubKey1 Int32,
      SubKey2 String,

@@ -4,7 +4,7 @@
 
 Общий вид команды:
 
-```sql
+```yql
 CREATE TOPIC topic_path (
     CONSUMER consumer_name [WITH (consumer_option = value[, ...])]
     ) WITH (topic_option = value[, ...]);
@@ -39,7 +39,7 @@ CREATE TOPIC topic_path (
 
 Следующая команда создаст топик без читателей с настройками по умолчанию:
 
-```sql
+```yql
 CREATE TOPIC `my_topic`;
 ```
 
@@ -49,7 +49,7 @@ CREATE TOPIC `my_topic`;
 
 Чтобы создать топик с важным читателем и временем хранения данных 1 сутки, выполните команду:
 
-```sql
+```yql
 CREATE TOPIC `my_topic` (
     CONSUMER my_consumer WITH (important = true)
     ) WITH (retention_period = Interval('P1D')

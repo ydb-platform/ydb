@@ -2,7 +2,7 @@
 
 Набор вспомогательных функций для [агрегатной функции HISTOGRAM](../../../builtins/aggregation.md). В описании сигнатур ниже под HistogramStruct подразумевается результат работы агрегатной функции `HISTOGRAM`, `LinearHistogram` или `LogarithmicHistogram`, который является структурой определенного вида.
 
-**Список функций**
+## Список функций
 
 * ```Histogram::Print(HistogramStruct{Flags:AutoMap}, Byte?) -> String```
 * ```Histogram::Normalize(HistogramStruct{Flags:AutoMap}, [Double?]) -> HistogramStruct``` - во втором аргументе желаемая площадь гистограммы, по умолчанию 100.

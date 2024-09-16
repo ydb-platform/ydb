@@ -16,6 +16,8 @@ VERSION(8.5.0)
 ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8.5.0.tar.bz2)
 
 PEERDIR(
+    contrib/libs/brotli/dec
+    contrib/libs/brotli/enc
     contrib/libs/libc_compat
     contrib/libs/nghttp2
     contrib/libs/openssl

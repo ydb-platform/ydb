@@ -2552,6 +2552,10 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
+            if (VCtx->GroupId.GetRawId() == 0) {
+                // don't run balancing for the static group
+                return;
+            }
             if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }

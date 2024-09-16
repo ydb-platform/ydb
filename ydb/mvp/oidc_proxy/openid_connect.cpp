@@ -1,10 +1,15 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include "openid_connect.h"
+#include "oidc_settings.h"
+
+namespace NMVP {
+namespace NOIDC {
 
 namespace {
 
@@ -18,7 +23,6 @@ TString GenerateState() {
 }
 
 struct TRedirectUrlParameters {
-    TStringBuf SessionServerCheckDetails;
     TOpenIdConnectSettings OidcSettings;
     TStringBuf CallbackUrl;
     TStringBuf State;
@@ -28,25 +32,9 @@ struct TRedirectUrlParameters {
     TStringBuf AuthUrlPath;
 };
 
-bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AccessServiceType != NMvp::yandex_v2) {
-        return false;
-    }
-    const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(parameters.AuthUrlPath);
-    if (posAuthUrl != TStringBuf::npos) {
-        size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthUrlPath;
-        return true;
-    }
-    return false;
-}
-
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    if (!TryAppendAuthEndpointFromDetailsYandexProfile(parameters, locationHeaderValue)) {
-        locationHeaderValue << parameters.OidcSettings.GetAuthEndpointURL();
-    }
+    locationHeaderValue << parameters.OidcSettings.GetAuthEndpointURL();
     locationHeaderValue << "?response_type=code"
                         << "&scope=openid"
                         << "&state=" << parameters.State
@@ -116,10 +104,9 @@ TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& 
     return Base64Encode(cookieStruct);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, NHttp::THeadersBuilder& responseHeaders, bool isAjaxRequest) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, NHttp::THeadersBuilder& responseHeaders, bool isAjaxRequest) {
     TString state = GenerateState();
-    const TString redirectUrl = CreateRedirectUrl({.SessionServerCheckDetails = eventDetails,
-                                                    .OidcSettings = settings,
+    const TString redirectUrl = CreateRedirectUrl({.OidcSettings = settings,
                                                     .CallbackUrl = GetAuthCallbackUrl(),
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
@@ -138,9 +125,9 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
     return request->CreateResponse("302", "Authorization required", responseHeaders);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
     NHttp::THeadersBuilder responseHeaders;
-    return GetHttpOutgoingResponsePtr(eventDetails, request, settings, responseHeaders, isAjaxRequest);
+    return GetHttpOutgoingResponsePtr(request, settings, responseHeaders, isAjaxRequest);
 }
 
 bool DetectAjaxRequest(const NHttp::THeaders& headers) {
@@ -175,3 +162,6 @@ TString CreateSecureCookie(const TString& key, const TString& value) {
             << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }
+
+}  // NOIDC
+}  // NMVP

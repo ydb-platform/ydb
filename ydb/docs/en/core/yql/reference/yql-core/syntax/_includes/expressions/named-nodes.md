@@ -4,7 +4,7 @@ Complex queries may be sophisticated, containing lots of nested levels and/or re
 
 A named expression is defined as follows:
 
-```
+```yql
 <named-expr> = <expression> | <subquery>;
 ```
 
@@ -12,7 +12,7 @@ Here `<named-expr>` consists of a $ character and an arbitrary non-empty identif
 
 If the expression on the right is a tuple, you can automatically unpack it by specifying several named expressions separated by commas on the left:
 
-```
+```yql
 <named-expr1>, <named-expr2>, <named-expr3> ... = <expression-returning-tuple>;
 ```
 
@@ -54,7 +54,7 @@ If named expression substitution results in completely identical subgraphs in th
 
 {% endnote %}
 
-**Examples**
+### Examples
 
 ```yql
 $multiplier = 712;

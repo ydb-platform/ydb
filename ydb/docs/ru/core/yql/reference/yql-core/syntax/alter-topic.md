@@ -4,7 +4,7 @@
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path action1, action2, ..., actionN;
 ```
 
@@ -18,7 +18,7 @@ ALTER TOPIC topic_path action1, action2, ..., actionN;
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path SET (option = value[, ...]);
 ```
 
@@ -39,7 +39,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 
 Следующая команда изменит время хранения данных в топике и квоту на скорость записи в 1 партицию:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` SET (
     retention_period = Interval('PT36H'),
     partition_write_speed_bytes_per_second = 3000000
@@ -54,7 +54,7 @@ ALTER TOPIC `my_topic` SET (
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path RESET (option[, option2, ...]);
 ```
 
@@ -62,7 +62,7 @@ ALTER TOPIC topic_path RESET (option[, option2, ...]);
 
 Следующая команда сбросит значения параметров _минимальное количество активных партиций_ и _максимальное количество активных партиций_ в значения по умолчанию:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` RESET (
     min_active_partitions,
     partition_count_limit
@@ -79,7 +79,7 @@ ALTER TOPIC `my_topic` RESET (
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])];
 ```
 
@@ -95,13 +95,13 @@ ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])]
 
 Следующая команда добавит к топику читателя с настройками по умолчанию:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ADD CONSUMER my_consumer;
 ```
 
 Следующая команда добавит к топику важного читателя:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ADD CONSUMER my_consumer2 WITH (important = true);
 ```
 
@@ -111,7 +111,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER my_consumer2 WITH (important = true);
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path ALTER CONSUMER consumer_name SET (option = value[, ...]);
 ```
 
@@ -119,13 +119,13 @@ ALTER TOPIC topic_path ALTER CONSUMER consumer_name SET (option = value[, ...]);
 
 Следующая команда сделает читателя важным:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer SET (important = true);
 ```
 
 В одной команде может быть указано несколько `ALTER CONSUMER` действий, настройки в них не должны повторяться:
 
-```sql
+```yql
 ALTER TOPIC `my_topic`
     ALTER CONSUMER my_consumer SET (important = true)
     ALTER CONSUMER my_consumer SET (read_from = 0);
@@ -139,7 +139,7 @@ ALTER TOPIC `my_topic`
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path ALTER CONSUMER consumer_name RESET (option[, ...]);
 ```
 
@@ -147,7 +147,7 @@ ALTER TOPIC topic_path ALTER CONSUMER consumer_name RESET (option[, ...]);
 
 Данный пример сбросит параметр `read_from` в значение по умолчанию:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer RESET (read_from);
 ```
 
@@ -159,12 +159,12 @@ ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer RESET (read_from);
 
 Общий вид команды:
 
-```sql
+```yql
 ALTER TOPIC topic_path DROP CONSUMER consumer_name;
 ```
 
 Следующая команда удалит читателя с именем `old_consumer`:
 
-```sql
+```yql
 ALTER TOPIC `my_topic` DROP CONSUMER old_consumer;
 ```

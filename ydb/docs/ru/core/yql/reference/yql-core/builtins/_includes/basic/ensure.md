@@ -8,7 +8,8 @@
 
 Если проверка не прошла успешно, то весь запрос завершается с ошибкой.
 
-**Сигнатуры**
+### Сигнатуры
+
 ```
 Ensure(T, Bool, String)->T
 EnsureType(T, Type<T>, String)->T
@@ -27,7 +28,8 @@ EnsureConvertibleTo(T, Type<T>, String)->T
 
 {% endif %}
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT Ensure(
     value,

@@ -107,7 +107,7 @@ RuleActionFunction(r, actions) ::= <<
 RuleSempredFunction(r, actions) ::= <<
 >>
 
-RuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,namedActions,finallyAction,postamble,exceptions) ::= <<
+RuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,namedActions,finallyAction,postamble,exceptions,elemId) ::= <<
 // rule $ANTLR start "<currentRule.name>"
 message TRule_<currentRule.name> {
     <if((!rest(code))&&first(code).alts&&rest(first(code).alts))>

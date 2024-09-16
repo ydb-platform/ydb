@@ -122,7 +122,6 @@ public:
     using TFieldsType = std::bitset<+EGroupFields::COUNT>;
 
     // Common
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResult;
     std::unordered_map<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
     std::unordered_map<TPathId, TTabletId> PathId2HiveId;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
@@ -145,8 +144,6 @@ public:
     ui64 PDiskStateRequestsInFlight = 0;
 
     ui32 Timeout = 0;
-    TString Database;
-    bool Direct = false;
     TString Filter;
     std::unordered_set<TString> DatabaseStoragePools;
     std::unordered_set<TString> FilterStoragePools;
@@ -168,6 +165,8 @@ public:
 
     EGroupFields SortBy = EGroupFields::PoolName;
     EGroupFields GroupBy = EGroupFields::GroupId;
+    EGroupFields FilterGroupBy = EGroupFields::GroupId;
+    TString FilterGroup;
     EWith With = EWith::Everything;
     bool ReverseSort = false;
     std::optional<std::size_t> Offset;
@@ -478,6 +477,35 @@ public:
         ui64 GetLatencyForSort() const {
             return PutTabletLogLatency;
         }
+
+        TString GetGroupName(EGroupFields groupBy) {
+            switch (groupBy) {
+                case EGroupFields::GroupId:
+                    return ToString(GroupId);
+                case EGroupFields::Erasure:
+                    return Erasure;
+                case EGroupFields::Usage:
+                    return GetUsageForGroup();
+                case EGroupFields::DiskSpaceUsage:
+                    return GetDiskUsageForGroup();
+                case EGroupFields::PoolName:
+                    return PoolName;
+                case EGroupFields::Kind:
+                    return Kind;
+                case EGroupFields::Encryption:
+                    return GetEncryptionForGroup();
+                case EGroupFields::MediaType:
+                    return MediaType;
+                case EGroupFields::MissingDisks:
+                    return GetMissingDisksForGroup();
+                case EGroupFields::State:
+                    return State;
+                case EGroupFields::Latency:
+                    return GetLatencyForGroup();
+                default:
+                    return {};
+            }
+        }
     };
 
     using TGroupData = std::vector<TGroup>;
@@ -610,18 +638,11 @@ public:
         : TBase(viewer, ev)
     {
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Database = params.Get("tenant");
-        if (Database.empty()) {
-            Database = params.Get("database");
-        }
         if (!Database.empty()) {
             FieldsRequired.set(+EGroupFields::PoolName);
             NeedFilter = true;
         }
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
-
         FieldsRequired.set(+EGroupFields::GroupId);
         TString filterStoragePool = params.Get("pool");
         if (!filterStoragePool.empty()) {
@@ -650,6 +671,12 @@ public:
             Filter = params.Get("filter");
             FieldsRequired.set(+EGroupFields::PoolName);
             FieldsRequired.set(+EGroupFields::GroupId);
+            NeedFilter = true;
+        }
+        if (params.Has("filter_group") && params.Has("filter_group_by")) {
+            FilterGroup = params.Get("filter_group");
+            FilterGroupBy = ParseEGroupFields(params.Get("filter_group_by"));
+            FieldsRequired.set(+FilterGroupBy);
             NeedFilter = true;
         }
         if (params.Get("with") == "missing") {
@@ -726,32 +753,35 @@ public:
 
 public:
     void Bootstrap() override {
-        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-
-        if (Database && !Direct) {
-            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        } else {
-            if (Database) {
-                DatabaseNavigateResult = MakeRequestSchemeCacheNavigate(Database, 0);
-            }
-            if (FallbackToWhiteboard) {
-                RequestWhiteboard();
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        if (Database) {
+            if (!DatabaseNavigateResponse) {
+                DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, 0);
             } else {
-                if (FieldsNeeded(FieldsBsGroups)) {
-                    GetGroupsResponse = RequestBSControllerGroups();
-                }
-                if (FieldsNeeded(FieldsBsPools)) {
-                    GetStoragePoolsResponse = RequestBSControllerPools();
-                }
-                if (FieldsNeeded(FieldsBsVSlots)) {
-                    GetVSlotsResponse = RequestBSControllerVSlots();
-                }
-                if (FieldsNeeded(FieldsBsPDisks)) {
-                    GetPDisksResponse = RequestBSControllerPDisks();
-                }
+                auto pathId = GetPathId(DatabaseNavigateResponse->GetRef());
+                auto result = NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
+                ProcessNavigate(result.first->second, true);
             }
         }
+        if (FallbackToWhiteboard) {
+            RequestWhiteboard();
+        } else {
+            if (FieldsNeeded(FieldsBsGroups)) {
+                GetGroupsResponse = RequestBSControllerGroups();
+            }
+            if (FieldsNeeded(FieldsBsPools)) {
+                GetStoragePoolsResponse = RequestBSControllerPools();
+            }
+            if (FieldsNeeded(FieldsBsVSlots)) {
+                GetVSlotsResponse = RequestBSControllerVSlots();
+            }
+            if (FieldsNeeded(FieldsBsPDisks)) {
+                GetPDisksResponse = RequestBSControllerPDisks();
+            }
+        }
+
         if (Requests == 0) {
             return ReplyAndPassAway();
         }
@@ -897,17 +927,27 @@ public:
                 Filter.clear();
                 GroupsByGroupId.clear();
             }
-            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty();
+            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (group->GetGroupName(FilterGroupBy) == FilterGroup) {
+                        groupView.push_back(group);
+                    }
+                }
+                GroupView.swap(groupView);
+                FilterGroup.clear();
+                GroupsByGroupId.clear();
+            }
+            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty() || !FilterGroup.empty();
             FoundGroups = GroupView.size();
         }
     }
 
-    template<typename F>
-    void GroupCollection(F&& groupBy) {
+    void GroupCollection() {
         std::unordered_map<TString, size_t> groupGroups;
         GroupGroups.clear();
         for (TGroup* group : GroupView) {
-            auto gb = groupBy(group);
+            auto gb = group->GetGroupName(GroupBy);
             TGroupGroup* groupGroup = nullptr;
             auto it = groupGroups.find(gb);
             if (it == groupGroups.end()) {
@@ -925,48 +965,23 @@ public:
         if (!NeedFilter && NeedGroup && FieldsAvailable.test(+GroupBy)) {
             switch (GroupBy) {
                 case EGroupFields::GroupId:
-                    GroupCollection([](const TGroup* group) { return ToString(group->GroupId); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Erasure:
-                    GroupCollection([](const TGroup* group) { return group->Erasure; });
+                case EGroupFields::PoolName:
+                case EGroupFields::Kind:
+                case EGroupFields::Encryption:
+                case EGroupFields::MediaType:
+                case EGroupFields::State:
+                    GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
+                    NeedGroup = false;
                     break;
                 case EGroupFields::Usage:
-                    GroupCollection([](const TGroup* group) { return group->GetUsageForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
                 case EGroupFields::DiskSpaceUsage:
-                    GroupCollection([](const TGroup* group) { return group->GetDiskUsageForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
-                case EGroupFields::PoolName:
-                    GroupCollection([](const TGroup* group) { return group->PoolName; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::Kind:
-                    GroupCollection([](const TGroup* group) { return group->Kind; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::Encryption:
-                    GroupCollection([](const TGroup* group) { return group->GetEncryptionForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::MediaType:
-                    GroupCollection([](const TGroup* group) { return group->MediaType; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::MissingDisks:
-                    GroupCollection([](const TGroup* group) { return group->GetMissingDisksForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
-                case EGroupFields::State:
-                    GroupCollection([](const TGroup* group) { return group->State; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Latency:
-                    GroupCollection([](const TGroup* group) { return group->GetLatencyForGroup(); });
+                    GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
+                    NeedGroup = false;
                     break;
                 case EGroupFields::Read:
                 case EGroupFields::Write:
@@ -981,7 +996,6 @@ public:
                 case EGroupFields::PDiskId:
                     break;
             }
-            NeedGroup = false;
         }
     }
 
@@ -1100,19 +1114,7 @@ public:
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        bool firstNavigate = (ev->Cookie == 0);
-        TPathId pathId = GetPathId(ev);
-        if (firstNavigate && DatabaseNavigateResult.has_value() && pathId) {
-            NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResult));
-        }
-        auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
-        if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
-            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
-            return RequestDone();
-        }
-        auto& navigateResult(itNavigateKeySetResult->second);
-        navigateResult.Set(std::move(ev));
+    void ProcessNavigate(TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& navigateResult, bool firstNavigate) {
         if (navigateResult.IsOk()) {
             TString path = CanonizePath(navigateResult->Request->ResultSet.begin()->Path);
             TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription> domainDescription = navigateResult->Request->ResultSet.begin()->DomainDescription;
@@ -1134,6 +1136,22 @@ public:
                 }
             }
         }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        bool firstNavigate = (ev->Cookie == 0);
+        TPathId pathId = GetPathId(ev);
+        if (firstNavigate && DatabaseNavigateResponse && pathId) {
+            NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
+        }
+        auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
+        if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
+            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
+            return RequestDone();
+        }
+        auto& navigateResult(itNavigateKeySetResult->second);
+        navigateResult.Set(std::move(ev));
+        ProcessNavigate(navigateResult, firstNavigate);
         RequestDone();
     }
 
@@ -1943,6 +1961,9 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::Available)) {
                     jsonGroup.SetAvailable(group->Available);
                 }
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                    jsonGroup.SetDiskSpaceUsage(group->DiskSpaceUsage);
+                }
                 if (FieldsAvailable.test(+EGroupFields::Latency)) {
                     jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
                     jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
@@ -2020,6 +2041,28 @@ public:
                     type: string
                   - name: filter
                     description: filter to search for in group ids and pool names
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        filter group by:
+                          * `GroupId`
+                          * `Erasure`
+                          * `Usage`
+                          * `DiskSpaceUsage`
+                          * `PoolName`
+                          * `Kind`
+                          * `Encryption`
+                          * `MediaType`
+                          * `MissingDisks`
+                          * `State`
+                          * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: content for filter group by
                     required: false
                     type: string
                   - name: sort

@@ -15,10 +15,12 @@ To connect with S3, you need to specify an endpoint and bucket:
 Except when you import data from a public bucket, to connect, log in with an account that has write access to the bucket (for export to it) and read access to the bucket (for import from it).
 
 You need two parameters to authenticate with S3:
+
 - ID of the access key (access_key_id).
 - Secret access key (secret_access_key).
 
 The YDB CLI takes values of these parameters from the following sources (listed in descending priority):
+
 1. The command line.
 2. Environment variables.
 3. The `~/.aws/credentials` file.
@@ -60,7 +62,6 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
    ```yaml
    folder-id: b2ge70qdcff4bo9q6t19
    ```
-
 
 3. To [create a service account]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create){% endif %}, run the command:
 
@@ -112,6 +113,7 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
    ```
 
    In this result:
+
    - `access_key.key_id` is the access key ID
    - `secret` is the secret access key
 

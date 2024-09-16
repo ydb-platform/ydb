@@ -133,6 +133,7 @@ class TSourcesStorageForMemoryOptimization {
 private:
     class TSourceInfo {
     private:
+        YDB_READONLY(ui64, Memory, 0);
         YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
         YDB_READONLY_DEF(std::shared_ptr<TFetchingScript>, FetchingInfo);
 
@@ -140,77 +141,76 @@ private:
         TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetchingInfo)
             : Source(source)
             , FetchingInfo(fetchingInfo) {
+            Memory = FetchingInfo->PredictRawBytes(Source);
         }
 
         NJson::TJsonValue DebugJson() const {
             NJson::TJsonValue result = NJson::JSON_MAP;
             result.InsertValue("source", Source->DebugJsonForMemory());
-            //            result.InsertValue("fetching", Fetching->DebugJsonForMemory());
+            result.InsertValue("memory", Memory);
+            //            result.InsertValue("FetchingInfo", FetchingInfo->DebugJsonForMemory());
             return result;
         }
+
+        bool ReduceMemory() {
+            const bool result = FetchingInfo->InitSourceSeqColumnIds(Source);
+            if (result) {
+                Memory = FetchingInfo->PredictRawBytes(Source);
+            }
+            return result;
+        }
+
+        bool operator<(const TSourceInfo& item) const {
+            return Memory < item.Memory;
+        }
+
     };
 
-    std::map<ui64, THashMap<ui32, TSourceInfo>> Sources;
+    std::vector<TSourceInfo> Sources;
     YDB_READONLY(ui64, MemorySum, 0);
-    YDB_READONLY_DEF(std::set<ui64>, PathIds);
 
 public:
     TString DebugString() const {
         NJson::TJsonValue resultJson;
         auto& memorySourcesArr = resultJson.InsertValue("sources_by_memory", NJson::JSON_ARRAY);
         resultJson.InsertValue("sources_by_memory_count", Sources.size());
-        for (auto it = Sources.rbegin(); it != Sources.rend(); ++it) {
+        for (auto&& it: Sources) {
             auto& sourceMap = memorySourcesArr.AppendValue(NJson::JSON_MAP);
-            sourceMap.InsertValue("memory", it->first);
             auto& sourcesArr = sourceMap.InsertValue("sources", NJson::JSON_ARRAY);
-            for (auto&& s : it->second) {
-                sourcesArr.AppendValue(s.second.DebugJson());
-            }
+            sourcesArr.AppendValue(it.DebugJson());
         }
         return resultJson.GetStringRobust();
     }
 
-    void UpdateSource(const ui64 oldMemoryInfo, const ui32 sourceIdx) {
-        auto it = Sources.find(oldMemoryInfo);
-        AFL_VERIFY(it != Sources.end());
-        auto itSource = it->second.find(sourceIdx);
-        AFL_VERIFY(itSource != it->second.end());
-        auto sourceInfo = itSource->second;
-        it->second.erase(itSource);
-        if (it->second.empty()) {
-            Sources.erase(it);
-        }
-        AFL_VERIFY(MemorySum >= oldMemoryInfo);
-        MemorySum -= oldMemoryInfo;
-        AddSource(sourceInfo.GetSource(), sourceInfo.GetFetchingInfo());
-    }
-
     void AddSource(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetching) {
-        const ui64 sourceMemory = fetching->PredictRawBytes(source);
-        MemorySum += sourceMemory;
-        AFL_VERIFY(Sources[sourceMemory].emplace(source->GetSourceIdx(), TSourceInfo(source, fetching)).second);
-        PathIds.emplace(source->GetPathId());
+        Sources.emplace_back(TSourceInfo(source, fetching));
+        MemorySum += Sources.back().GetMemory();
     }
 
     bool Optimize(const ui64 memoryLimit) {
-        bool modified = true;
-        while (MemorySum > memoryLimit && modified) {
-            modified = false;
-            for (auto it = Sources.rbegin(); it != Sources.rend(); ++it) {
-                for (auto&& [sourceIdx, sourceInfo] : it->second) {
-                    if (!sourceInfo.GetFetchingInfo()->InitSourceSeqColumnIds(sourceInfo.GetSource())) {
-                        continue;
-                    }
-                    modified = true;
-                    UpdateSource(it->first, sourceIdx);
-                    break;
-                }
-                if (modified) {
-                    break;
-                }
-            }
+        if (MemorySum <= memoryLimit) {
+            return true;
         }
-        return MemorySum < memoryLimit;
+        std::sort(Sources.begin(), Sources.end());
+        while (true) {
+            std::vector<TSourceInfo> nextSources;
+            while (memoryLimit < MemorySum && Sources.size()) {
+                const ui64 currentMemory = Sources.back().GetMemory();
+                if (Sources.back().ReduceMemory()) {
+                    AFL_VERIFY(currentMemory <= MemorySum);
+                    MemorySum -= currentMemory;
+                    MemorySum += Sources.back().GetMemory();
+                    nextSources.emplace_back(std::move(Sources.back()));
+                }
+                Sources.pop_back();
+            }
+            if (nextSources.empty() || MemorySum <= memoryLimit) {
+                break;
+            }
+            std::sort(nextSources.begin(), nextSources.end());
+            std::swap(nextSources, Sources);
+        }
+        return MemorySum <= memoryLimit;
     }
 };
 
@@ -228,16 +228,16 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(
     if (!optimizer.Optimize(Context->ReduceMemoryIntervalLimit) && Context->RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")("reason", "a lot of memory need")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
-            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()))(
+            "need", optimizer.GetMemorySum())("path_id", Context->GetReadMetadata()->GetPathId())(
             "details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString()
                                                                                                                : "NEED_DEBUG_LEVEL");
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryFailed(optimizer.GetMemorySum());
         return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " + ::ToString(optimizer.GetMemorySum()) +
-                                       " path_ids: " + JoinSeq(",", optimizer.GetPathIds()) + ". We need wait compaction processing. Sorry.");
+                                       " path_id: " + Context->GetReadMetadata()->GetPathId() + ". We need wait compaction processing. Sorry.");
     } else if (optimizer.GetMemorySum() < startMemory) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")("reason", "need reduce memory")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
-            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()));
+            "need", optimizer.GetMemorySum())("path_id", Context->GetReadMetadata()->GetPathId());
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryReduced(startMemory - optimizer.GetMemorySum());
     }
     Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryRequired(optimizer.GetMemorySum());

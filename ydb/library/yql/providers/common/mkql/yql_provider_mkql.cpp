@@ -504,6 +504,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},
         {"DecimalMod", &TProgramBuilder::DecimalMod},
 
+        {"BlockDecimalMul", &TProgramBuilder::BlockDecimalMul},
+        {"BlockDecimalDiv", &TProgramBuilder::BlockDecimalDiv},
+        {"BlockDecimalMod", &TProgramBuilder::BlockDecimalMod},
+
         {"==", &TProgramBuilder::Equals},
         {"!=", &TProgramBuilder::NotEquals},
         {"<", &TProgramBuilder::Less},

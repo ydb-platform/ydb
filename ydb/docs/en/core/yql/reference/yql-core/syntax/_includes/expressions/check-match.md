@@ -17,7 +17,7 @@ All other characters are literals that represent themselves.
 
 The most popular way to use the `LIKE` and `REGEXP` keywords is to filter a table using the statements with the `WHERE` clause. However, there are no restrictions on using templates in this context: you can use them in most of contexts involving strings, for example, with concatenation by using `||`.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT * FROM my_table

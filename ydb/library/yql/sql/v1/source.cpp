@@ -287,11 +287,16 @@ inline TNodePtr ISource::AliasOrColumn(const TNodePtr& node, bool withSource) {
 }
 
 bool ISource::AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func) {
-    YQL_ENSURE(func->IsOverWindow());
-    if (func->IsDistinct()) {
-        ctx.Error(func->GetPos()) << "Aggregation with distinct is not allowed over window: " << windowName;
-        return false;
+    if (ctx.DistinctOverWindow) {
+        YQL_ENSURE(func->IsOverWindow() || func->IsOverWindowDistinct());    
+    } else {
+        YQL_ENSURE(func->IsOverWindow());
+        if (func->IsDistinct()) {
+            ctx.Error(func->GetPos()) << "Aggregation with distinct is not allowed over window: " << windowName;
+            return false;
+        }
     }
+
     if (!FindWindowSpecification(ctx, windowName)) {
         return false;
     }

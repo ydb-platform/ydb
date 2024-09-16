@@ -87,7 +87,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
-    if (!items || !count)
+    if (items == nullptr || count == 0) {
         return HolderFactory_.GetEmptyContainerLazy();
 
     TUnboxedValueVector list;
@@ -321,6 +321,10 @@ bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
     return false;
+}
+
+NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::NewListBuilder() const {
+    return HolderFactory_.NewList();
 }
 
 } // namespace NMiniKQL

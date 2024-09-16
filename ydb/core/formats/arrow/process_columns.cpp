@@ -1,17 +1,45 @@
 #include "process_columns.h"
 
 #include "common/adapter.h"
-#include "modifier/schema.h"
-#include "modifier/subset.h"
+
+#include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow {
 
 namespace {
-template <class TDataContainer, class TStringImpl>
+
+template <class T>
+class TColumnNameAccessor {
+public:
+    static const std::string& GetFieldName(const T& val) {
+        return val;
+    }
+    static TString DebugString(const std::vector<T>& items) {
+        return JoinSeq(",", items);
+    }
+};
+
+template <>
+class TColumnNameAccessor<std::shared_ptr<arrow::Field>> {
+public:
+    static const std::string& GetFieldName(const std::shared_ptr<arrow::Field>& val) {
+        return val->name();
+    }
+    static TString DebugString(const std::vector<std::shared_ptr<arrow::Field>>& items) {
+        TStringBuilder sb;
+        for (auto&& i : items) {
+            sb << i->name() << ",";
+        }
+        return sb;
+    }
+};
+
+template <class TDataContainer, class TStringContainer>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(
-    const std::shared_ptr<TDataContainer>& srcBatch, const std::vector<TStringImpl>& columnNames) {
+    const std::shared_ptr<TDataContainer>& srcBatch, const std::vector<TStringContainer>& columnNames) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columnNames.size());
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
@@ -19,7 +47,7 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(
 
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
-        const int pos = srcSchema->GetFieldIndex(name);
+        const int pos = srcSchema->GetFieldIndex(TColumnNameAccessor<TStringContainer>::GetFieldName(name));
         if (Y_LIKELY(pos > -1)) {
             fields.push_back(srcSchema->field(pos));
             columns.push_back(srcBatch->column(pos));
@@ -70,16 +98,16 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
     return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), srcBatch->num_rows());
 }
 
-template <class TDataContainer, class TStringType>
+template <class TDataContainer, class TStringContainer>
 std::shared_ptr<TDataContainer> ExtractImpl(const TColumnOperator::EExtractProblemsPolicy& policy,
-    const std::shared_ptr<TDataContainer>& incoming, const std::vector<TStringType>& columnNames) {
+    const std::shared_ptr<TDataContainer>& incoming, const std::vector<TStringContainer>& columnNames) {
     AFL_VERIFY(incoming);
     AFL_VERIFY(columnNames.size());
     auto result = ExtractColumnsValidateImpl(incoming, columnNames);
     switch (policy) {
         case TColumnOperator::EExtractProblemsPolicy::Verify:
             AFL_VERIFY((ui32)result->num_columns() == columnNames.size())("schema", incoming->schema()->ToString())(
-                                                          "required", JoinSeq(",", columnNames));
+                                                          "required", TColumnNameAccessor<TStringContainer>::DebugString(columnNames));
             break;
         case TColumnOperator::EExtractProblemsPolicy::Null:
             if ((ui32)result->num_columns() != columnNames.size()) {
@@ -121,6 +149,16 @@ std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
 std::shared_ptr<arrow::Table> TColumnOperator::Extract(
     const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::string>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
+}
+
+std::shared_ptr<arrow::Table> TColumnOperator::Extract(
+    const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns) {
+    return ExtractImpl(AbsentColumnPolicy, incoming, columns);
+}
+
+std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
+    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns) {
+    return ExtractImpl(AbsentColumnPolicy, incoming, columns);
 }
 
 std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
@@ -170,6 +208,48 @@ NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Reord
 NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Reorder(
     const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames) {
     return ReorderImpl(incoming, columnNames);
+}
+namespace {
+template <class TDataContainer, class TSchemaImpl>
+TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(
+    const std::shared_ptr<TDataContainer>& srcBatch, const std::shared_ptr<TSchemaImpl>& dstSchema) {
+    AFL_VERIFY(srcBatch);
+    AFL_VERIFY(dstSchema);
+    if (dstSchema->num_fields() < srcBatch->schema()->num_fields()) {
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "incorrect columns set: destination must been wider than source")(
+            "source", srcBatch->schema()->ToString())("destination", dstSchema->ToString());
+        return TConclusionStatus::Fail("incorrect columns set: destination must been wider than source");
+    }
+    std::set<ui32> fieldIdx;
+    auto itSrc = srcBatch->schema()->fields().begin();
+    auto itDst = dstSchema->fields().begin();
+    while (itSrc != srcBatch->schema()->fields().end() && itDst != dstSchema->fields().end()) {
+        if ((*itSrc)->name() != (*itDst)->name()) {
+            ++itDst;
+        } else {
+            fieldIdx.emplace(itDst - dstSchema->fields().begin());
+            if (!(*itDst)->Equals(*itSrc)) {
+                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
+                    "column_type", (*itDst)->ToString(true))("incoming_type", (*itSrc)->ToString(true));
+                return TConclusionStatus::Fail("incompatible column types");
+            }
+
+            ++itDst;
+            ++itSrc;
+        }
+    }
+    if (itDst == dstSchema->fields().end() && itSrc != srcBatch->schema()->fields().end()) {
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "incorrect columns order in source set")("source", srcBatch->schema()->ToString())(
+            "destination", dstSchema->ToString());
+        return TConclusionStatus::Fail("incorrect columns order in source set");
+    }
+    return TSchemaSubset(fieldIdx, dstSchema->num_fields());
+}
+}   // namespace
+
+TConclusion<TSchemaSubset> TColumnOperator::BuildSequentialSubset(
+    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema) {
+    return BuildSequentialSubsetImpl(incoming, dstSchema);
 }
 
 }   // namespace NKikimr::NArrow

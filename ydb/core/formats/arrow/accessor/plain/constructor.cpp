@@ -1,9 +1,8 @@
 #include "accessor.h"
 #include "constructor.h"
 
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
-
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NArrow::NAccessor::NPlain {

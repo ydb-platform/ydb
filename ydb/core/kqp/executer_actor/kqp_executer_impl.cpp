@@ -80,17 +80,17 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         return CreateKqpDataExecuter(
             std::move(request), database, userToken, counters, false, tableServiceConfig,
             std::move(asyncIoFactory), creator, 
-            userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, 
-            federatedQuerySetup, /*GUCSettings*/nullptr
+            userRequestContext, statementResultIndex, 
+            federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo
         );
     }
 
@@ -112,8 +112,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, counters, false, tableServiceConfig,
                 std::move(asyncIoFactory), creator, 
-                userRequestContext, enableOlapSink, useEvWrite, statementResultIndex, 
-                federatedQuerySetup, /*GUCSettings*/nullptr
+                userRequestContext, statementResultIndex, 
+                federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
@@ -127,8 +127,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, counters, true,
                 tableServiceConfig, std::move(asyncIoFactory), creator,
-                userRequestContext, enableOlapSink, useEvWrite, statementResultIndex,
-                federatedQuerySetup, GUCSettings
+                userRequestContext, statementResultIndex,
+                federatedQuerySetup, GUCSettings, shardIdToTableInfo
             );
 
         default:

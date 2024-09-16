@@ -7203,4 +7203,53 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
+
+    Y_UNIT_TEST(BacktickMatching) {
+        auto req = "select\n"
+                   "    1 as `Schema has \\`RealCost\\``\n"
+                   "    -- foo`bar";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        res = SqlToYqlWithAnsiLexer(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+
+        req = "select 1 as `a``b`, 2 as ````, 3 as `\\x60a\\x60`, 4 as ```b```, 5 as `\\`c\\``";
+        res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        res = SqlToYqlWithAnsiLexer(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(OlapPartitionCount) {
+    Y_UNIT_TEST(CorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE `mytable` (id Uint32, PRIMARY KEY (id))
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 8);
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(UseWithoutColumnStore) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE `mytable` (id Uint32, PRIMARY KEY (id))
+            WITH (PARTITION_COUNT = 8);
+        )sql");
+
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "PARTITION_COUNT can be used only with STORE=COLUMN");
+    }
 }

@@ -2,6 +2,7 @@
 #include "range_ops.h"
 #include "scan_common.h"
 #include "upload_stats.h"
+#include "buffer_data.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -27,36 +28,11 @@ namespace NKikimr::NDataShard {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
-using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
-using TTypes = NTxProxy::TUploadTypes;
-using TRows = NTxProxy::TUploadRows;
-
-static TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
-    TColumnsTypes result;
-
-    for (const auto& it : tableInfo.Columns) {
-        result[it.second.Name] = it.second.Type;
-    }
-
-    return result;
-}
-
-static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo) {
-    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-        auto* typeDesc = typeInfo.GetTypeDesc();
-        auto* pg = type->mutable_pg_type();
-        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-    } else {
-        type->set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-    }
-}
-
-static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
+static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
     auto types = GetAllTypes(tableInfo);
 
     Y_ABORT_UNLESS(buildSettings.columnSize() > 0);
-    auto result = std::make_shared<TTypes>();
+    auto result = std::make_shared<NTxProxy::TUploadTypes>();
     result->reserve(tableInfo.KeyColumnIds.size() + buildSettings.columnSize());
 
     for (const auto& keyColId : tableInfo.KeyColumnIds) {
@@ -72,10 +48,10 @@ static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, const NKi
     return result;
 }
 
-static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, TProtoColumnsCRef indexColumns, TProtoColumnsCRef dataColumns) {
+static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, TProtoColumnsCRef indexColumns, TProtoColumnsCRef dataColumns) {
     auto types = GetAllTypes(tableInfo);
 
-    auto result = std::make_shared<TTypes>();
+    auto result = std::make_shared<NTxProxy::TUploadTypes>();
     result->reserve(indexColumns.size() + dataColumns.size());
 
     for (const auto& colName : indexColumns) {
@@ -119,74 +95,6 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
     return true;
 }
 
-class TBufferData: public IStatHolder, public TNonCopyable {
-public:
-    TBufferData()
-        : Rows(new TRows)
-    {
-    }
-
-    ui64 GetRows() const override final {
-        return Rows->size();
-    }
-
-    std::shared_ptr<TRows> GetRowsData() const {
-        return Rows;
-    }
-
-    ui64 GetBytes() const override final {
-        return ByteSize;
-    }
-
-    void FlushTo(TBufferData& other) {
-        if (this == &other) {
-            return;
-        }
-
-        Y_ABORT_UNLESS(other.Rows);
-        Y_ABORT_UNLESS(other.IsEmpty());
-
-        other.Rows.swap(Rows);
-        other.ByteSize = ByteSize;
-        other.LastKey = std::move(LastKey);
-
-        Clear();
-    }
-
-    void Clear() {
-        Rows->clear();
-        ByteSize = 0;
-        LastKey = {};
-    }
-
-    void AddRow(TSerializedCellVec&& key, TSerializedCellVec&& targetPk, TString&& targetValue) {
-        Rows->emplace_back(std::move(targetPk), std::move(targetValue));
-        ByteSize += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
-        LastKey = std::move(key);
-    }
-
-    bool IsEmpty() const {
-        return Rows->empty();
-    }
-
-    bool IsReachLimits(const TUploadLimits& Limits) {
-        return Rows->size() >= Limits.BatchRowsLimit || ByteSize > Limits.BatchBytesLimit;
-    }
-
-    void ExtractLastKey(TSerializedCellVec& out) {
-        out = std::move(LastKey);
-    }
-
-    const TSerializedCellVec& GetLastKey() const {
-        return LastKey;
-    }
-
-private:
-    std::shared_ptr<TRows> Rows;
-    ui64 ByteSize = 0;
-    TSerializedCellVec LastKey;
-};
-
 template <NKikimrServices::TActivity::EType Activity>
 class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
     using TThis = TBuildScanUpload<Activity>;
@@ -202,8 +110,8 @@ protected:
     const ui64 DataShardId;
     const TActorId ProgressActorId;
 
-    TTags ScanTags;                             // first: columns we scan, order as in IndexTable
-    std::shared_ptr<TTypes> UploadColumnsTypes; // columns types we upload to indexTable
+    TTags ScanTags;                                             // first: columns we scan, order as in IndexTable
+    std::shared_ptr<NTxProxy::TUploadTypes> UploadColumnsTypes; // columns types we upload to indexTable
     NTxProxy::EUploadRowsMode UploadMode;
 
     const TTags KeyColumnIds;
@@ -242,8 +150,7 @@ protected:
         , KeyColumnIds(tableInfo.KeyColumnIds)
         , KeyTypes(tableInfo.KeyColumnTypes)
         , TableRange(tableInfo.Range)
-        , RequestedRange(range)
-    {
+        , RequestedRange(range) {
     }
 
     template <typename TAddRow>
@@ -322,11 +229,8 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(TBase::SelfId());
-
         if (Uploader) {
-            TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
-            ctx.Send(Uploader, poison.Release());
+            this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
         }
 
@@ -349,7 +253,7 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
-        ctx.Send(ProgressActorId, progress.Release());
+        this->Send(ProgressActorId, progress.Release());
 
         LOG_D("Finish " << Debug());
 
@@ -382,11 +286,7 @@ public:
               << " WriteBuf empty: " << WriteBuf.IsEmpty()
               << " " << Debug());
 
-        if (ReadBuf.IsEmpty()) {
-            return EScan::Feed;
-        }
-
-        if (WriteBuf.IsEmpty()) {
+        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
             ReadBuf.FlushTo(WriteBuf);
             Upload();
         }
@@ -433,7 +333,7 @@ private:
 
         if (UploadStatus.IsSuccess()) {
             Stats.Aggr(&WriteBuf);
-            WriteBuf.ExtractLastKey(LastUploadedKey);
+            LastUploadedKey = WriteBuf.ExtractLastKey();
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
@@ -451,7 +351,7 @@ private:
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
             UploadStatusToMessage(progress->Record);
 
-            ctx.Send(ProgressActorId, progress.Release());
+            this->Send(ProgressActorId, progress.Release());
 
             if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
                 ReadBuf.FlushTo(WriteBuf);
@@ -488,13 +388,13 @@ private:
         LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            TBase::SelfId(), TargetTable,
+            this->SelfId(), TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::AsActorContext().MakeFor(TBase::SelfId()).Register(actor);
+        Uploader = this->Register(actor);
     }
 };
 
@@ -513,8 +413,7 @@ public:
                     const TUserTable& tableInfo,
                     TUploadLimits limits)
         : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
-        , TargetDataColumnPos(targetIndexColumns.size())
-    {
+        , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
         UploadMode = NTxProxy::EUploadRowsMode::WriteToTableShadow;
@@ -545,8 +444,7 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
-    {
+        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits) {
         Y_ABORT_UNLESS(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
@@ -582,8 +480,7 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     TProtoColumnsCRef targetDataColumns,
     const NKikimrIndexBuilder::TColumnBuildSettings& columnsToBuild,
     const TUserTable& tableInfo,
-    TUploadLimits limits)
-{
+    TUploadLimits limits) {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
             buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, limits);
@@ -596,8 +493,7 @@ class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTran
 public:
     TTxHandleSafeBuildIndexScan(TDataShard* self, TEvDataShard::TEvBuildIndexCreateRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
-    {
+        , Ev(std::move(ev)) {
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) {
@@ -627,7 +523,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                      std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
-
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     auto badRequest = [&](const TString& error) {

@@ -26,6 +26,7 @@ struct TQueryRunnerSettings {
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
     FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
+    FLUENT_SETTING_DEFAULT(TVector<TString>, GroupSIDs, {});
     FLUENT_SETTING_DEFAULT(TString, Database, "");
 
     // Runner settings
@@ -70,6 +71,8 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
+    FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");

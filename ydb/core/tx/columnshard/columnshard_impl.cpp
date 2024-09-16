@@ -201,66 +201,56 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
 }
 
-TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
+TInsertWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
         if (itPart != it->second.end()) {
-            return (TWriteId)itPart->second->WriteId;
+            return itPart->second->InsertWriteId;
         }
     }
-    return (TWriteId)0;
+    return (TInsertWriteId)0;
 }
 
-TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId) {
+TInsertWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId) {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
         if (itPart != it->second.end()) {
-            return (TWriteId)itPart->second->WriteId;
+            return itPart->second->InsertWriteId;
         }
     } else {
         it = LongTxWritesByUniqueId.emplace(longTxId.UniqueId, TPartsForLTXShard()).first;
     }
 
-    TWriteId writeId = BuildNextWriteId(db);
-    auto& lw = LongTxWrites[writeId];
-    lw.WriteId = (ui64)writeId;
+    TInsertWriteId insertWriteId = InsertTable->BuildNextWriteId(db);
+    auto& lw = LongTxWrites[insertWriteId];
+    lw.InsertWriteId = insertWriteId;
     lw.WritePartId = partId;
     lw.LongTxId = longTxId;
     lw.GranuleShardingVersionId = granuleShardingVersionId;
     it->second[partId] = &lw;
 
-    Schema::SaveLongTxWrite(db, writeId, partId, longTxId, granuleShardingVersionId);
-    return writeId;
+    Schema::SaveLongTxWrite(db, insertWriteId, partId, longTxId, granuleShardingVersionId);
+    return insertWriteId;
 }
 
-TWriteId TColumnShard::BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
-    return BuildNextWriteId(db);
+void TColumnShard::AddLongTxWrite(const TInsertWriteId writeId, ui64 txId) {
+    auto it = LongTxWrites.find(writeId);
+    AFL_VERIFY(it != LongTxWrites.end());
+    it->second.PreparedTxId = txId;
 }
 
-TWriteId TColumnShard::BuildNextWriteId(NIceDb::TNiceDb& db) {
-    TWriteId writeId = ++LastWriteId;
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastWriteId, (ui64)writeId);
-    return writeId;
-}
-
-void TColumnShard::AddLongTxWrite(TWriteId writeId, ui64 txId) {
-    auto& lw = LongTxWrites.at(writeId);
-    lw.PreparedTxId = txId;
-}
-
-void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
+void TColumnShard::LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
     auto& lw = LongTxWrites[writeId];
     lw.WritePartId = writePartId;
-    lw.WriteId = (ui64)writeId;
+    lw.InsertWriteId = writeId;
     lw.LongTxId = longTxId;
     lw.GranuleShardingVersionId = granuleShardingVersion;
     LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 
-bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId) {
+bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
@@ -282,8 +272,8 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId
     }
 }
 
-void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
-    std::vector<TWriteId> failedAborts;
+void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort) {
+    std::vector<TInsertWriteId> failedAborts;
     for (auto& writeId : writesToAbort) {
         if (!RemoveLongTxWrite(db, writeId, 0)) {
             failedAborts.push_back(writeId);
@@ -631,14 +621,14 @@ public:
     using TBase::TBase;
 };
 
-void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex) {
+void TColumnShard::StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex) {
     Counters.GetCSCounters().IndexationInput(bytesToIndex);
 
-    std::vector<NOlap::TInsertedData> data;
+    std::vector<NOlap::TCommittedData> data;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
-        if (!TablesManager.HasTable(data.back().PathId)) {
+        if (!TablesManager.HasTable(data.back().GetPathId())) {
             data.back().SetRemove();
         }
     }
@@ -691,7 +681,7 @@ void TColumnShard::SetupIndexation() {
     Counters.GetCSCounters().OnSetupIndexation();
     ui64 bytesToIndex = 0;
     ui64 txBytesWrite = 0;
-    std::vector<const NOlap::TInsertedData*> dataToIndex;
+    std::vector<const NOlap::TCommittedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
@@ -919,7 +909,13 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(ev->Get()->Record.GetTxId());
+    auto opPtr = GetProgressTxController().GetTxOperatorOptional(ev->Get()->Record.GetTxId());
+    if (!opPtr) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "missed_read_set_ack")("proto", ev->Get()->Record.DebugString())(
+            "tx_id", ev->Get()->Record.GetTxId());
+        return;
+    }
+    auto op = TValidator::CheckNotNull(dynamic_pointer_cast<TEvWriteCommitSyncTransactionOperator>(opPtr));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
     Execute(tx.release(), ctx);

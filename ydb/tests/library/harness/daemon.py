@@ -17,7 +17,7 @@ from . import param_constants
 logger = logging.getLogger(__name__)
 
 
-def extract_stderr_details(stderr_file, max_lines=0):
+def _extract_stderr_details(stderr_file, max_lines=0):
     if max_lines == 0:
         return []
 
@@ -43,7 +43,7 @@ class DaemonError(RuntimeError):
                     "Stdout file name: \n{}".format(stdout if stdout is not None else "is not present."),
                     "Stderr file name: \n{}".format(stderr if stderr is not None else "is not present."),
                 ]
-                + extract_stderr_details(stderr, max_stderr_lines)
+                + _extract_stderr_details(stderr, max_stderr_lines)
             )
         )
 
@@ -54,6 +54,7 @@ class SeveralDaemonErrors(RuntimeError):
 
 
 class Daemon(object):
+    """Local process executed as process in current host"""
     def __init__(
         self,
         command,
@@ -208,6 +209,7 @@ class Daemon(object):
 
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):
+    """External daemon, executed as process in separate host, managed via ssh"""
     def __init__(self, host):
         self._host = host
         self._ssh_username = param_constants.ssh_username
@@ -261,12 +263,6 @@ class ExternalNodeDaemon(object):
         self.ssh_command("sudo dmesg --clear", raise_on_error=True)
         self.ssh_command(
             'sudo rm -rf {}/* && sudo service rsyslog restart'.format(self.logs_directory), raise_on_error=True
-        )
-
-    def sky_get_and_move(self, rb_torrent, item_to_move, target_path):
-        self.ssh_command(['sky get -d %s %s' % (self._artifacts_path, rb_torrent)], raise_on_error=True)
-        self.ssh_command(
-            ['sudo mv %s %s' % (os.path.join(self._artifacts_path, item_to_move), target_path)], raise_on_error=True
         )
 
     def send_signal(self, signal):

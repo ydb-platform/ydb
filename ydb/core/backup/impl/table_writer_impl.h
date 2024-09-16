@@ -7,36 +7,27 @@
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 
-namespace NKikimr {
-
-namespace NBackup::NImpl {
-
-class TChangeRecord;
-
-} // namespace NBackup::NImpl
-
-template <>
-struct TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> {
-    NBackup::NImpl::EWriterType Type;
-
-    TChangeRecordBuilderContextTrait(NBackup::NImpl::EWriterType type)
-        : Type(type)
-    {}
-
-    // just copy type
-    TChangeRecordBuilderContextTrait(const TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord>& other) = default;
-};
-
-} // namespace NKikimr
-
 namespace NKikimr::NBackup::NImpl {
+
+class TChangeRecordBuilder;
 
 class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
     using TPtr = TIntrusivePtr<TChangeRecord>;
-    const static NKikimrSchemeOp::ECdcStreamFormat StreamType = NKikimrSchemeOp::ECdcStreamFormatProto;
+    using TBuilder = TChangeRecordBuilder;
+
+    struct TSerializationContext {
+        const NBackup::NImpl::EWriterType Type;
+
+        TSerializationContext(NBackup::NImpl::EWriterType type)
+            : Type(type)
+        {}
+
+        // just copy type
+        TSerializationContext(const TSerializationContext& other) = default;
+    };
 
     ui64 GetGroup() const override {
         return ProtoBody.GetGroup();
@@ -50,14 +41,8 @@ public:
     EKind GetKind() const override {
         return EKind::CdcDataChange;
     }
-    TString GetSourceId() const {
-        return SourceId;
-    }
 
-    void Serialize(
-        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record,
-        TChangeRecordBuilderContextTrait<TChangeRecord>& ctx) const
-    {
+    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TSerializationContext& ctx) const {
         switch (ctx.Type) {
             case EWriterType::Backup:
                 return SerializeBackup(record);
@@ -77,8 +62,12 @@ public:
         Y_ABORT_UNLESS(Key);
         return Key->GetCells();
     }
+
+    void Accept(NChangeExchange::IVisitor& visitor) const override {
+        return visitor.Visit(*this);
+    }
+
 private:
-    TString SourceId;
     NKikimrChangeExchange::TChangeRecord ProtoBody;
     NReplication::NService::TLightweightSchema::TCPtr Schema;
 
@@ -185,21 +174,5 @@ public:
     }
 
 }; // TChangeRecordBuilder
-
-}
-
-namespace NKikimr {
-
-template <>
-struct TChangeRecordContainer<NBackup::NImpl::TChangeRecord>
-    : public TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>
-{
-    using TBaseChangeRecordContainer<NBackup::NImpl::TChangeRecord>::TBaseChangeRecordContainer;
-};
-
-template <>
-struct TChangeRecordBuilderTrait<NBackup::NImpl::TChangeRecord>
-    : public NBackup::NImpl::TChangeRecordBuilder
-{};
 
 }

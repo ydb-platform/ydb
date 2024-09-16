@@ -42,6 +42,21 @@ std::shared_ptr<FormatConfig> MakeJsonListConfig(const THashMap<TString, TString
 }
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
+    static THashSet<TString> supportedParams {
+        "format",
+        "compression",
+        "filepattern",
+        "partitionedby",
+        "projection",
+        "csvdelimiter",
+    };
+
+    for (const auto& [param, value] : params) {
+        if (!supportedParams.contains(param)) {
+            throw yexception() << "parameter is not supported with type inference: " << param;
+        }
+    }
+
     EFileFormat format;
     if (auto formatPtr = params.FindPtr("format"); formatPtr) {
         format = ConvertFileFormat(*formatPtr);

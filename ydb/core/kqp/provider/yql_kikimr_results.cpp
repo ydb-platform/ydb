@@ -888,7 +888,7 @@ const TTypeAnnotationNode* ParseTypeFromYdbType(const Ydb::Type& type, TExprCont
         case Ydb::Type::kPgType: {
             if (!type.pg_type().type_name().empty()) {
                 const auto& typeName = type.pg_type().type_name();
-                auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
                 return ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
             }
             return ctx.MakeType<TPgExprType>(type.pg_type().Getoid());

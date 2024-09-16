@@ -64,14 +64,12 @@ struct TEvRowDispatcher {
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
             ui64 partitionId,
             const TString token,
-            bool addBearerToToken,
             TMaybe<ui64> readOffset,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;
             Record.SetPartitionId(partitionId);
             Record.SetToken(token);
-            Record.SetAddBearerToToken(addBearerToToken);
             if (readOffset) {
                 Record.SetOffset(*readOffset);
             }

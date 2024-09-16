@@ -66,7 +66,6 @@ public:
             source,
             PartitionId,
             "Token",
-            true,       // AddBearerToToken
             readOffset, // readOffset,
             0,         // StartingMessageTimestamp;
             "QueryId");

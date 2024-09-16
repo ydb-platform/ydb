@@ -64,9 +64,12 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     };
 
     struct RowDispatcherInfo {
+        RowDispatcherInfo(bool connected, bool isLocal) 
+            : Connected(connected)
+            , IsLocal(isLocal) {}
         bool Connected = false;
-        THashSet<TPartitionKey, TPartitionKeyHash> Locations;
         bool IsLocal = false;
+        THashSet<TPartitionKey, TPartitionKeyHash> Locations;
     };
 
     NConfig::TRowDispatcherCoordinatorConfig Config;
@@ -89,7 +92,7 @@ public:
 
     void Bootstrap();
 
-    static constexpr char ActorName[] = "YQ_RD_COORDINATOR";
+    static constexpr char ActorName[] = "FQ_RD_COORDINATOR";
 
     void Handle(NActors::TEvents::TEvPing::TPtr& ev);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -158,8 +161,8 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal
         RowDispatchers.insert(std::move(node));
         return;
     }
-    RowDispatchers[actorId].Connected = true;
-    RowDispatchers[actorId].IsLocal = isLocal;
+
+    RowDispatchers.emplace(actorId, RowDispatcherInfo{true, isLocal});
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
@@ -211,6 +214,7 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             continue;
         }
         info.Connected = false;
+        return;
     }
 }
 

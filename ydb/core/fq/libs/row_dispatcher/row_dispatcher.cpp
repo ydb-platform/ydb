@@ -362,6 +362,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     if (topicSessionInfo.Sessions.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
+            TActivationContext::ActorSystem(),
             source.GetTopicPath(),
             Config,
             SelfId(),
@@ -370,7 +371,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             CreateCredentialsProviderFactoryForStructuredToken(
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
-                ev->Get()->Record.GetAddBearerToToken()),
+                source.GetAddBearerToToken()),
             Counters);
         SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
         sessionInfo.Consumers[ev->Sender] = consumerInfo;

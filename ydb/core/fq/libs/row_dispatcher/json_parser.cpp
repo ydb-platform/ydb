@@ -229,14 +229,10 @@ namespace NFq {
 class TJsonParser::TImpl {
 public:
     TImpl(
-        const TString& udfDir,
         const TVector<TString>& columns,
         TCallback callback)
         : Sql(GenerateSql(columns)) {
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
-        if (!udfDir.empty()) {
-            options.SetUDFsDir(udfDir);
-        }
         auto factory = NYql::NPureCalc::MakeProgramFactory(options);
 
         LOG_ROW_DISPATCHER_DEBUG("Creating program...");
@@ -256,14 +252,14 @@ public:
         InputConsumer->OnObject(std::make_pair(offset, value));
     }
 
-    TString GetSql() {
+    TString GetSql() const {
         return Sql;
     }
 
 private:
     TString GenerateSql(const TVector<TString>& columns) {
         TStringStream str;
-        str << R"($json = SELECT CAST(data AS Json) as `Json`, )" << OffsetFieldName << " FROM Input;"; 
+        str << "$json = SELECT CAST(data AS Json) as `Json`, " << OffsetFieldName << " FROM Input;"; 
         str << "\nSELECT " << OffsetFieldName << ", ";
         for (auto it = columns.begin(); it != columns.end(); ++it) {
             str << R"(CAST(Unwrap(JSON_VALUE(`Json`, "$.)" << *it << "\")) as String) as "
@@ -281,10 +277,9 @@ private:
 };
 
 TJsonParser::TJsonParser(
-    const TString& udfDir,
     const TVector<TString>& columns,
     TCallback callback)
-    : Impl(std::make_unique<TJsonParser::TImpl>(udfDir, columns, callback)) { 
+    : Impl(std::make_unique<TJsonParser::TImpl>(columns, callback)) { 
 }
 
 TJsonParser::~TJsonParser() {
@@ -299,10 +294,9 @@ TString TJsonParser::GetSql() {
 }
 
 std::unique_ptr<TJsonParser> NewJsonParser(
-    const TString& udfDir,
     const TVector<TString>& columns,
     TCallback callback) {
-    return std::unique_ptr<TJsonParser>(new TJsonParser(udfDir, columns, callback));
+    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, callback));
 }
 
 } // namespace NFq

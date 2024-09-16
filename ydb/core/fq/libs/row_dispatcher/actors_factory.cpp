@@ -9,6 +9,7 @@ struct TActorFactory : public IActorFactory {
     TActorFactory() {}
 
     NActors::TActorId RegisterTopicSession(
+        NActors::TActorSystem* actorSystem,
         const TString& topicPath,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
@@ -26,7 +27,7 @@ struct TActorFactory : public IActorFactory {
             credentialsProviderFactory,
             counters
         );
-        return NActors::TlsActivationContext->ExecutorThread.RegisterActor(actorPtr.release(), NActors::TMailboxType::HTSwap, Max<ui32>());
+        return actorSystem->Register(actorPtr.release());
     }
 };
 

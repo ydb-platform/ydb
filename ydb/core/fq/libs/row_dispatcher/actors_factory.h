@@ -11,6 +11,7 @@ struct IActorFactory : public TThrRefBase {
     using TPtr = TIntrusivePtr<IActorFactory>;
 
     virtual NActors::TActorId RegisterTopicSession(
+        NActors::TActorSystem* actorSystem,
         const TString& topicPath,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,

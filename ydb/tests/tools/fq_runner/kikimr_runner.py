@@ -521,9 +521,9 @@ class YqTenant(BaseTenant):
             'send_status_period_sec': 2,
             'max_session_used_memory': 1000000,
             'without_consumer': True}
-        fq_config['row_dispatcher']['coordinator'] = {'node_path': "row_dispatcher"}
-        fq_config['row_dispatcher']['coordinator']['storage'] = {}
-        self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['storage'],
+        fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator']['database'] = {}
+        self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
                                  "RowDispatcher_" + self.uuid)
 
         fq_config['quotas_manager'] = {'enabled': True}

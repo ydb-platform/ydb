@@ -51,24 +51,23 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
-        if (data.Version == StateVersion) { // Current version
-            NPq::NProto::TDqPqTopicSourceState stateProto;
-            YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
-            YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
-            PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
-            for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
-                ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
-                if (offset) {
-                    offset = Min(offset, partitionProto.GetOffset());
-                } else {
-                    offset = partitionProto.GetOffset();
-                }
-            }
-            minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
-            ingressBytes += stateProto.GetIngressBytes();
-        } else {
-            ythrow yexception() << "Invalid state version " << data.Version;
+        if (data.Version != StateVersion) {
+            ythrow yexception() << "Invalid state version, expected " << StateVersion << ", actual " << data.Version;
         }
+        NPq::NProto::TDqPqTopicSourceState stateProto;
+        YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
+        YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
+        PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
+        for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
+            ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
+            if (offset) {
+                offset = Min(offset, partitionProto.GetOffset());
+            } else {
+                offset = partitionProto.GetOffset();
+            }
+        }
+        minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
+        ingressBytes += stateProto.GetIngressBytes();
     }
     for (const auto& [key, value] : PartitionToOffset) {
         SRC_LOG_D("SessionId: " << GetSessionId() << " Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);

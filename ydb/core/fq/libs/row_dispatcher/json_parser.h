@@ -12,7 +12,6 @@ public:
     
 public:
     TJsonParser(
-        const TString& udfDir,
         const TVector<TString>& columns,
         TCallback callback);
     ~TJsonParser();
@@ -25,7 +24,6 @@ private:
 };
 
 std::unique_ptr<TJsonParser> NewJsonParser(
-    const TString& udfDir,
     const TVector<TString>& columns,
     TJsonParser::TCallback callback);
 

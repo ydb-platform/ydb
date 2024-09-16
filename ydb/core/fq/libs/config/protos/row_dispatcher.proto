@@ -9,8 +9,8 @@ import "ydb/core/fq/libs/config/protos/storage.proto";
 ////////////////////////////////////////////////////////////
 
 message TRowDispatcherCoordinatorConfig {
-    TYdbStorageConfig Storage = 1;
-    string NodePath = 2;
+    TYdbStorageConfig Database = 1;
+    string CoordinationNodePath = 2;
 }
 message TRowDispatcherConfig {
     bool Enabled = 1;

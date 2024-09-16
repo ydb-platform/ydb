@@ -34,11 +34,11 @@ public:
         ReadActor2 = Runtime.AllocateEdgeActor(0);
 
         NConfig::TRowDispatcherCoordinatorConfig config;
-        auto& storage = *config.MutableStorage();
-        storage.SetEndpoint("YDB_ENDPOINT");
-        storage.SetDatabase("YDB_DATABASE");
-        storage.SetToken("");
-        storage.SetTablePrefix("tablePrefix");
+        config.SetCoordinationNodePath("RowDispatcher");
+        auto& database = *config.MutableDatabase();
+        database.SetEndpoint("YDB_ENDPOINT");
+        database.SetDatabase("YDB_DATABASE");
+        database.SetToken("");
 
         Coordinator = Runtime.Register(NewCoordinator(
             LocalRowDispatcherId,

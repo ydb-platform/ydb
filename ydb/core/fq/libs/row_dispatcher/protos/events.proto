@@ -25,10 +25,9 @@ message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     uint32 PartitionId = 2;
     string Token = 3;
-    bool AddBearerToToken = 4;
-    optional uint64 Offset = 5;
-    uint64 StartingMessageTimestampMs = 6;
-    string QueryId = 7;
+    optional uint64 Offset = 4;
+    uint64 StartingMessageTimestampMs = 5;
+    string QueryId = 6;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

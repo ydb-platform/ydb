@@ -33,7 +33,6 @@ public:
 
     void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
         Parser = NFq::NewJsonParser(
-            "",
             columns,
             callback);
     }

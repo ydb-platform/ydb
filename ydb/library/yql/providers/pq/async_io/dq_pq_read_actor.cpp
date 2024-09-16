@@ -657,7 +657,6 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.TaskId,
             args.SecureParams,
             args.TaskParams,
-            credentialsFactory,
             args.ComputeActorId,
             NFq::RowDispatcherServiceActorId(),
             args.HolderFactory,

@@ -31,11 +31,11 @@ public:
         Coordinator3 = Runtime.AllocateEdgeActor();
 
         NConfig::TRowDispatcherCoordinatorConfig config;
-        auto& storage = *config.MutableStorage();
-        storage.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-        storage.SetDatabase(GetEnv("YDB_DATABASE"));
-        storage.SetToken("");
-        storage.SetTablePrefix("tablePrefix");
+        config.SetCoordinationNodePath("RowDispatcher");
+        auto& database = *config.MutableDatabase();
+        database.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        database.SetDatabase(GetEnv("YDB_DATABASE"));
+        database.SetToken("");
                 
         LeaderElection1 = Runtime.Register(NewLeaderElection(
             RowDispatcher,

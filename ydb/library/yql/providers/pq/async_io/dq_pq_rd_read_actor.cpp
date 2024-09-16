@@ -117,7 +117,6 @@ public:
 private:
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     const TString Token;
-    bool AddBearerToToken;
     TMaybe<NActors::TActorId> CoordinatorActorId;
     NActors::TActorId LocalRowDispatcherActorId;
     std::queue<TReadyBatch> ReadyBuffer;
@@ -159,11 +158,9 @@ public:
         const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
-        bool addBearerToToken,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
@@ -223,16 +220,13 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const THolderFactory& /*holderFactory*/,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
-        bool addBearerToToken,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Token(token)
-        , AddBearerToToken(addBearerToToken)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
         , Metrics(txId, taskId, counters)
 {
@@ -292,7 +286,6 @@ void TDqPqRdReadActor::ProcessState() {
                     SourceParams,
                     partitionId,
                     Token,
-                    AddBearerToToken,
                     readOffset,
                     StartingMessageTimestamp.MilliSeconds(),
                     std::visit([](auto arg) { return ToString(arg); }, TxId));
@@ -616,7 +609,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NActors::TActorId& localRowDispatcherActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -631,7 +623,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
 
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
-    const bool addBearerToToken = settings.GetAddBearerToToken();
 
     TDqPqRdReadActor* actor = new TDqPqRdReadActor(
         inputIndex,
@@ -641,42 +632,13 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         holderFactory,
         std::move(settings),
         std::move(readTaskParamsMsg),
-        CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         localRowDispatcherActorId,
         token,
-        addBearerToToken,
         counters
     );
 
     return {actor, actor};
-}
-
-void RegisterDqPqRdReadActorFactory(
-    TDqAsyncIoFactory& factory,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters) {
-    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqRdSource",
-        [credentialsFactory = std::move(credentialsFactory), counters](
-            NPq::NProto::TDqPqTopicSource&& settings,
-            IDqAsyncIoFactory::TSourceArguments&& args)
-    {
-        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
-        return CreateDqPqRdReadActor(
-            std::move(settings),
-            args.InputIndex,
-            args.StatsLevel,
-            args.TxId,
-            args.TaskId,
-            args.SecureParams,
-            args.TaskParams,
-            credentialsFactory,
-            args.ComputeActorId,
-            NFq::RowDispatcherServiceActorId(),
-            args.HolderFactory,
-            counters,
-            PQRdReadDefaultFreeSpace);
-    });
 }
 
 } // namespace NYql::NDq

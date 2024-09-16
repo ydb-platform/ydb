@@ -103,7 +103,6 @@ public:
             return false;
         }
 
-        SCHEMA_LOG_DEBUG("Schedule next attempt, delay " << delayMaybe->ToString());
         this->Schedule(*delayMaybe, new NActors::TEvents::TEvWakeup());
         return true;
     }

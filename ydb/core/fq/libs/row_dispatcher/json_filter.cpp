@@ -242,7 +242,7 @@ public:
         InputConsumer->OnObject(std::make_pair(offset, value));
     }
 
-    TString GetSql() {
+    TString GetSql() const {
         return Sql;
     }
 

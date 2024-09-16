@@ -46,7 +46,6 @@ struct TFixture : public TPqIoTestFixture {
                 0,
                 secureParams,
                 taskParams,
-                nullptr,                // credentialsFactory
                 actor.SelfId(),         // computeActorId
                 LocalRowDispatcherId,
                 actor.GetHolderFactory(),

@@ -126,7 +126,7 @@ public:
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
-        const TString tenant,
+        const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
@@ -174,13 +174,13 @@ TLeaderElection::TLeaderElection(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    const TString tenant,
+    const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
-    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
-    , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
+    , YdbConnection(NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
+    , CoordinationNodePath(JoinPath(config.GetCoordinationNodePath(), tenant))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
     , Tenant(tenant)
@@ -319,7 +319,7 @@ void TLeaderElection::StartSession() {
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_ERROR("Schema created error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("Schema creation error " << ev->Get()->Result.GetIssues());
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -332,7 +332,7 @@ void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
 void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     auto result = ev->Get()->Result.GetValue();
     if (!result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("StartSession fail, " << result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("CreateSession failed, " << result.GetIssues());
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -360,7 +360,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     PendingAcquire = false;
 
     if (!result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("Acquired fail " << result.GetIssues());
+        LOG_ROW_DISPATCHER_ERROR("Failed to acquire semaphore, " << result.GetIssues());
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -433,7 +433,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     }
 
     const NYdb::NCoordination::TSemaphoreDescription& description = result.GetResult();
-    Y_ABORT_UNLESS(description.GetOwners().size() == 1, "To many owners");
+    Y_ABORT_UNLESS(description.GetOwners().size() <= 1, "To many owners");
     if (description.GetOwners().empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Empty owners");
         // Wait OnChanged.

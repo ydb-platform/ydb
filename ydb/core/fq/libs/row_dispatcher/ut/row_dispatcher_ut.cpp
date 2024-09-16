@@ -26,6 +26,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
     }
 
     NActors::TActorId RegisterTopicSession(
+        NActors::TActorSystem* /*actorSystem*/,
         const TString& /*topicPath*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
@@ -55,11 +56,11 @@ public:
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
         NConfig::TRowDispatcherCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
-        auto& storage = *coordinatorConfig.MutableStorage();
-        storage.SetEndpoint("YDB_ENDPOINT");
-        storage.SetDatabase("YDB_DATABASE");
-        storage.SetToken("");
-        storage.SetTablePrefix("tablePrefix");
+        coordinatorConfig.SetCoordinationNodePath("RowDispatcher");
+        auto& database = *coordinatorConfig.MutableDatabase();
+        database.SetEndpoint("YDB_ENDPOINT");
+        database.SetDatabase("YDB_DATABASE");
+        database.SetToken("");
 
         NConfig::TCommonConfig commonConfig;
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
@@ -112,7 +113,6 @@ public:
             source,
             partitionId,          // partitionId
             "Token",
-            true,       // AddBearerToToken
             Nothing(),  // readOffset,
             0,          // StartingMessageTimestamp;
             "QueryId");

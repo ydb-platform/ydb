@@ -650,14 +650,24 @@ create_table_entry:
   | an_id_schema
 ;
 
-create_backup_collection_stmt: CREATE backup_collection WITH LPAREN backup_collection_settings RPAREN;
-alter_backup_collection_stmt: ALTER backup_collection alter_backup_collection_actions;
+create_backup_collection_stmt: CREATE backup_collection WITH LPAREN backup_collection_settings RPAREN database_or_table_list?;
+alter_backup_collection_stmt: ALTER backup_collection (alter_backup_collection_actions | alter_backup_collection_entries);
 drop_backup_collection_stmt: DROP backup_collection;
+
+database_or_table_list: DATABASE | table_list;
+table_list: TABLE an_id_table (COMMA TABLE an_id_table)*;
 
 alter_backup_collection_actions: alter_backup_collection_action (COMMA alter_backup_collection_action)*;
 alter_backup_collection_action:
     alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
+;
+alter_backup_collection_entries: alter_backup_collection_entry (COMMA alter_backup_collection_entry)*;
+alter_backup_collection_entry:
+    ADD DATABASE
+  | DROP DATABASE
+  | ADD TABLE an_id_table
+  | DROP TABLE an_id_table
 ;
 backup_collection: BACKUP COLLECTION object_ref;
 backup_collection_settings: backup_collection_settings_entry (COMMA backup_collection_settings_entry)*;

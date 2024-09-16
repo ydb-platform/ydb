@@ -1,10 +1,15 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include "openid_connect.h"
+#include "oidc_settings.h"
+
+namespace NMVP {
+namespace NOIDC {
 
 namespace {
 
@@ -175,3 +180,6 @@ TString CreateSecureCookie(const TString& key, const TString& value) {
             << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }
+
+}  // NOIDC
+}  // NMVP

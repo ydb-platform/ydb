@@ -191,7 +191,7 @@ private:
                 if (tabletId && *tabletId != i) {
                     continue;
                 }
-                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+                owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
                     new TEvPipeCache::TEvForward(
                         new TEvTxProcessing::TEvReadSetAck(0, GetTxId(), owner.TabletID(), i, owner.TabletID(), 0), i, true),
                     IEventHandle::FlagTrackDelivery, GetTxId());
@@ -205,7 +205,7 @@ private:
         readSetData.SetDecision(*TxBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         for (auto&& i : ReceivingShards) {
             if (WaitShardsResultAck.contains(i)) {
-                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+                owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
                     new TEvPipeCache::TEvForward(new TEvTxProcessing::TEvReadSet(TxInfo.PlanStep, GetTxId(), owner.TabletID(), i,
                                                      owner.TabletID(), readSetData.SerializeAsString()),
                         i, true),

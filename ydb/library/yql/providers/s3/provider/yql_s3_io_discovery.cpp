@@ -322,6 +322,8 @@ private:
                 generatedColumnsConfig = &it->second;
             }
 
+            auto settings = read.Ref().Child(4)->ChildrenList();
+
             const bool assumeDirectories = generatedColumnsConfig && generatedColumnsConfig->Generator;
             bool needsListingOnActors = false;
             for (auto& req : requests) {
@@ -357,6 +359,13 @@ private:
 
                 auto specific = std::make_shared<TS3ProviderStatistics>();
                 specific->RawByteSize = listEntries.ListedObjectSize;
+                for (auto setting : settings) {
+                    if (setting->Head().IsAtom("format")) {
+                        specific->Format = setting->Tail().Content();
+                    } else if (setting->Head().IsAtom("compression")) {
+                        specific->Compression = setting->Tail().Content();
+                    }
+                }
                 auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0.0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(), TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(), EStorageType::NA, specific);
                 State_->Types->SetStats(read.DataSource().Raw(), stats);
 
@@ -449,7 +458,6 @@ private:
                 );
             }
 
-            auto settings = read.Ref().Child(4)->ChildrenList();
             const auto settingsPos = read.Ref().Child(4)->Pos();
             auto userSchema = ExtractSchema(settings);
             if (pathNodes.empty()) {

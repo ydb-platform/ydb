@@ -594,8 +594,8 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                 if (specific->FullRawRowAvgSize == 0.0) {
                     auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
                     stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
-                    newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, "", "", false);
-                    newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, "", "", true);
+                    newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
+                    newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
                     specific = newSpecific.get();
                     typeCtx->SetStats(s3DataSource.Raw(), stats);
                 }
@@ -616,8 +616,8 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                     }
                     if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize())) {
                         stats->Ncols = rowType->GetSize();
-                        newSpecific->PrunedRawRowAvgSize = EstimateRowSize(*rowType, "", "", false);
-                        newSpecific->PrunedDecodedRowAvgSize = EstimateRowSize(*rowType, "", "", true);
+                        newSpecific->PrunedRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
+                        newSpecific->PrunedDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
                         stats->ByteSize = 0.0;
                     }
                     if (stats->ByteSize == 0.0) {

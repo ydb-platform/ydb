@@ -11,6 +11,8 @@ struct TS3ProviderStatistics : public IProviderStatistics {
     double FullDecodedRowAvgSize = 0.0;
     double PrunedRawRowAvgSize = 0.0;
     double PrunedDecodedRowAvgSize = 0.0;
+    TString Format;
+    TString Compression;
 };
 
 } // namespace NYql

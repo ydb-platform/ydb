@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/public/lib/value/value.h>
 
@@ -1139,6 +1139,11 @@ private:
                     {"gt", ">"},
                     {"gte", ">="}
                 };
+                THashSet<TString> strRegexp = {
+                    "string_contains",
+                    "starts_with",
+                    "ends_with"
+                };
                 TString compSign = TString(listPtr->Child(0)->Content());
                 if (strComp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
@@ -1148,6 +1153,8 @@ private:
                     }
                     
                     return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
+                } else if (strRegexp.contains(compSign)) {
+                    return compSign;
                 }
             }
         }

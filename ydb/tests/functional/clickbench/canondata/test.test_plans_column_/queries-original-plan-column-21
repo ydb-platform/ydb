@@ -68,7 +68,7 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": ""
+                                                                        "Predicate": "string_contains"
                                                                     },
                                                                     {
                                                                         "Inputs": [],

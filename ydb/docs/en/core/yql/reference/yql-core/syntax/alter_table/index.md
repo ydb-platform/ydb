@@ -2,7 +2,7 @@
 
 Using the `ALTER TABLE` command, you can modify the columns and additional parameters of {% if backend_name == "YDB" %}row and column tables{% else %}tables{% endif %}. Multiple actions can be specified in a single command. Generally, the `ALTER TABLE` command looks like this:
 
-```sql
+```yql
 ALTER TABLE table_name action1, action2, ..., actionN;
 ```
 

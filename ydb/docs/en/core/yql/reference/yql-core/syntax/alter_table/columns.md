@@ -4,12 +4,12 @@
 
 `ADD COLUMN` — adds a column with the specified name and type. The code below will add a column named `views` with data type `Uint64` to the `episodes` table.
 
-```sql
+```yql
 ALTER TABLE episodes ADD COLUMN views Uint64;
 ```
 
 `DROP COLUMN` — deletes a column with the specified name. The code below will delete the column named `views` from the `episodes` table.
 
-```sql
+```yql
 ALTER TABLE episodes DROP COLUMN views;
 ```

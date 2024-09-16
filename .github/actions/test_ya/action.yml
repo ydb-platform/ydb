@@ -335,7 +335,8 @@ runs:
           fi
 
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
-          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          # Can be used in tests in which you want to publish the results in s3 for each retry separately
+          export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 
           if [ ${{ inputs.testman_token }} ]; then

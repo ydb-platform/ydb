@@ -146,9 +146,9 @@ namespace NKqp {
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
-        switch (Type) {
+        switch (TypeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Pg:
-            str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
+            str << NPg::PgTypeNameFromTypeDesc(TypeInfo.GetPgTypeDesc());
             break;
         case NScheme::NTypeIds::Decimal: {
             TTypeBuilder builder;
@@ -157,12 +157,17 @@ namespace NKqp {
             break;
         }
         default:
-            str << NScheme::GetTypeName(Type);
+            str << NScheme::GetTypeName(TypeInfo.GetTypeId());
         }
         if (!NullableFlag) {
             str << " NOT NULL";
         }
         return str;
+    }
+
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(NScheme::TTypeId typeId) {
+        TypeInfo = NScheme::TTypeInfo(typeId);
+        return *this;
     }
 
     TString TTestHelper::TColumnTableBase::BuildQuery() const {
@@ -184,7 +189,7 @@ namespace NKqp {
     std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
         std::vector<std::shared_ptr<arrow::Field>> result;
         for (auto&& col : columns) {
-            result.push_back(BuildField(col.GetName(), col.GetType(), col.GetTypeDesc(), col.IsNullable()));
+            result.push_back(BuildField(col.GetName(), col.GetTypeInfo(), col.IsNullable()));
         }
         return std::make_shared<arrow::Schema>(result);
     }
@@ -198,8 +203,8 @@ namespace NKqp {
         return JoinStrings(columnStr, ", ");
     }
 
-    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const {
-        switch (typeId) {
+    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
+        switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return arrow::field(name, arrow::boolean(), nullable);
         case NScheme::NTypeIds::Int8:
@@ -249,7 +254,7 @@ namespace NKqp {
         case NScheme::NTypeIds::Decimal:
             return arrow::field(name, arrow::decimal(22, 9));
         case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
+            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:
                     return arrow::field(name, arrow::int16(), true);
                 case INT4OID:

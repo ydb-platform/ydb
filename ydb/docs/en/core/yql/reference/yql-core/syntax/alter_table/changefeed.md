@@ -8,7 +8,8 @@
 
 `ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])`: Adds a [changefeed](../../../../concepts/cdc) with the specified name and options.
 
-### Changefeed options {#changefeed-options}
+
+## Changefeed options {#changefeed-options}
 
 * `MODE`: Operation mode. Specifies what to write to a changefeed each time table data is altered.
    * `KEYS_ONLY`: Only the primary key components and change flag are written.
@@ -32,7 +33,7 @@
 
 The code below adds a changefeed named `updates_feed`, where the values of updated table columns will be exported in JSON format:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES'
@@ -41,7 +42,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Records in this changefeed will be stored for 24 hours (default value). The code in the following example will create a changefeed with a record retention period of 12 hours:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -51,7 +52,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 The example of creating a changefeed with enabled virtual timestamps:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -61,7 +62,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Example of creating a changefeed with initial scan:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -71,6 +72,6 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 `DROP CHANGEFEED`: Deletes the changefeed with the specified name. The code below deletes the `updates_feed` changefeed:
 
-```sql
+```yql
 ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ```

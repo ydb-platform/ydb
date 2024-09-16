@@ -23,10 +23,16 @@ using namespace Aws::Client;
 using namespace Aws::S3;
 using namespace Aws;
 
+// Downloads scheme-related objects from S3
 class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/scheme.pb";
+    }
+
+    static TString PermissionsKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/permissions.pb";
     }
 
     void HeadObject(const TString& key) {
@@ -36,10 +42,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
 
-    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+    void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_D("HandleScheme TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -51,6 +57,25 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         GetObject(SchemeKey, std::make_pair(0, contentLength - 1));
     }
 
+    void HandlePermissions(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandlePermissions TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (result.GetError().GetErrorType() == S3Errors::RESOURCE_NOT_FOUND
+            || result.GetError().GetErrorType() == S3Errors::NO_SUCH_KEY) {
+            Reply(); // permissions are optional
+            return;
+        } else if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        const auto contentLength = result.GetResult().GetContentLength();
+        GetObject(PermissionsKey, std::make_pair(0, contentLength - 1));
+    }
+
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
         auto request = Model::GetObjectRequest()
             .WithKey(key)
@@ -59,11 +84,11 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
-    void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+    void HandleScheme(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("Handle TEvExternalStorage::TEvGetObjectResponse"
+        LOG_D("HandleScheme TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -74,13 +99,45 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse"
+        LOG_T("Trying to parse scheme"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
 
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &item.Scheme)) {
             return Reply(false, "Cannot parse scheme");
         }
+
+        if (NeedDownloadPermissions) {
+            StartDownloadingPermissions();
+        } else {
+            Reply();
+        }
+    }
+
+    void HandlePermissions(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandlePermissions TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items.at(ItemIdx);
+
+        LOG_T("Trying to parse permissions"
+            << ": self# " << SelfId()
+            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+
+        Ydb::Scheme::ModifyPermissionsRequest permissions;
+        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &permissions)) {
+            return Reply(false, "Cannot parse permissions");
+        }
+        item.Permissions = std::move(permissions);
 
         Reply();
     }
@@ -123,6 +180,33 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         TActor::PassAway();
     }
 
+    void Download(const TString& key) {
+        if (Client) {
+            Send(Client, new TEvents::TEvPoisonPill());
+        }
+        Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+
+        HeadObject(key);
+    }
+
+    void DownloadScheme() {
+        Download(SchemeKey);
+    }
+
+    void DownloadPermissions() {
+        Download(PermissionsKey);
+    }
+
+    void ResetRetries() {
+        Attempt = 0;
+    }
+
+    void StartDownloadingPermissions() {
+        ResetRetries();
+        DownloadPermissions();
+        Become(&TThis::StateDownloadPermissions);
+    }
+
 public:
     explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
         : ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings))
@@ -130,26 +214,33 @@ public:
         , ImportInfo(importInfo)
         , ItemIdx(itemIdx)
         , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx))
+        , PermissionsKey(PermissionsKeyFromSettings(importInfo->Settings, itemIdx))
         , Retries(importInfo->Settings.number_of_retries())
+        , NeedDownloadPermissions(!importInfo->Settings.no_acl())
     {
     }
 
     void Bootstrap() {
-        if (Client) {
-            Send(Client, new TEvents::TEvPoisonPill());
-        }
-        Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
-
-        HeadObject(SchemeKey);
-        Become(&TThis::StateWork);
+        DownloadScheme();
+        Become(&TThis::StateDownloadScheme);
     }
 
-    STATEFN(StateWork) {
+    STATEFN(StateDownloadScheme) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
-            hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleScheme);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleScheme);
 
-            sFunc(TEvents::TEvWakeup, Bootstrap);
+            sFunc(TEvents::TEvWakeup, DownloadScheme);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    STATEFN(StateDownloadPermissions) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandlePermissions);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandlePermissions);
+
+            sFunc(TEvents::TEvWakeup, DownloadPermissions);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
@@ -161,12 +252,15 @@ private:
     const ui32 ItemIdx;
 
     const TString SchemeKey;
+    const TString PermissionsKey;
 
     const ui32 Retries;
     ui32 Attempt = 0;
 
     TDuration Delay = TDuration::Minutes(1);
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
+
+    const bool NeedDownloadPermissions = true;
 
     TActorId Client;
 

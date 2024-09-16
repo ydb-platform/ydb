@@ -7,7 +7,7 @@
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
 
-Instead of using `DELETE FROM` to remove data from columnar tables, you can use the mechanism of deleting rows by time — [TTL](../../../../concepts/ttl.md). TTL can be set when [creating](../create_table/index.md) the table via `CREATE TABLE` or [modified](../alter_table/index.md) later via `ALTER TABLE`.
+Instead of using `DELETE FROM` to delete data from colum-oriented tables, you can use the mechanism of deleting rows by time — [TTL](../../../../concepts/ttl.md). TTL can be set when [creating](../create_table/index.md) the table via `CREATE TABLE` or [modified](../alter_table/index.md) later via `ALTER TABLE`.
 
 {% endnote %}
 

@@ -322,7 +322,7 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
-    friend class TAsyncIndexChangeSenderShard;
+    friend class TBaseChangeSenderShard;
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;

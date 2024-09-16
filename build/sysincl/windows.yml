@@ -18,6 +18,7 @@
   - capi.h
   - cet.h
   - cfg.h
+  - combaseapi.h
   - comdef.h
   - commctrl.h
   - commdlg.h
@@ -48,6 +49,7 @@
   - devguid.h
   - dinput.h
   - direct.h
+  - directxmath.h
   - dispex.h
   - dos.h
   - downloadmgr.h
@@ -81,6 +83,7 @@
   - fltuser.h
   - fltuserstructures.h
   - fttypes.h
+  - functiondiscoverykeys_devpkey.h
   - fwpmu.h
   - gb18030.h
   - gdiplus.h
@@ -188,6 +191,7 @@
   - processtopologyapi.h
   - profileapi.h
   - projectedfslib.h
+  - propidl.h
   - provider.h
   - psapi.h
   - pshpack1.h
@@ -340,3 +344,12 @@
     - wrl/ftm.h
     - wrl/implements.h
     - wrl/wrappers/corewrappers.h
+
+# These headers are required to use Windows Graphics Capture API.
+- case_sensitive: false
+  includes:
+    - windows.graphics.capture.interop.h
+    - windows.graphics.directx.direct3d11.interop.h
+    - winrt/windows.foundation.metadata.h
+    - winrt/windows.graphics.capture.h
+    - winrt/windows.system.h

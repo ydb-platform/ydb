@@ -6,7 +6,7 @@
 
 {% endif %}
 
-```sql
+```yql
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
@@ -20,6 +20,6 @@ If a YQL query contains multiple `ALTER TABLE ... RENAME TO ...` commands, each 
 
 Renaming can be used to move a table from one directory within the database to another, for example:
 
-``` sql
+``` yql
 ALTER TABLE `table1` RENAME TO `/backup/table1`;
 ```

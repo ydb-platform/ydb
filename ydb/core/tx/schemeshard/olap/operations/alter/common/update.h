@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/context.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -63,6 +64,17 @@ protected:
         auto result = GetTargetSSEntity();
         AFL_VERIFY(!!result);
         return result;
+    }
+
+    bool CheckTargetSchema(const TOlapSchema& targetSchema) {
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            for (auto& [_, column]: targetSchema.GetColumns().GetColumns()) {
+                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
 public:

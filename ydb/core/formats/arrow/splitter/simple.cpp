@@ -1,8 +1,8 @@
 #include "simple.h"
 
-#include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSplitter {

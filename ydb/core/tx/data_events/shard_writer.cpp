@@ -18,19 +18,25 @@ namespace NKikimr::NEvWrite {
 
     void TWritersController::OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId) {
         WriteIds[WritesIndex.Inc() - 1] = TWriteIdForShard(shardId, writeId, writePartId);
+        Counters->OnCSReply(TMonotonic::Now() - StartInstant);
         if (!WritesCount.Dec()) {
-            auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
-            for (auto&& i : WriteIds) {
-                req->AddWrite(i.GetShardId(), i.GetWriteId());
-            }
-            LongTxActorId.Send(NLongTxService::MakeLongTxServiceID(LongTxActorId.NodeId()), req.Release());
+            SendReply();
         }
     }
 
     void TWritersController::OnFail(const Ydb::StatusIds::StatusCode code, const TString& message) {
-        NYql::TIssues issues;
-        issues.AddIssue(message);
-        LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(code, issues));
+        Counters->OnCSFailed(code);
+        FailsCount.Inc();
+        if (!Code) {
+            TGuard<TMutex> g(Mutex);
+            if (!Code) {
+                Issues.AddIssue(message);
+                Code = code;
+            }
+        }
+        if (!WritesCount.Dec()) {
+            SendReply();
+        }
     }
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const IShardInfo::TPtr& data,

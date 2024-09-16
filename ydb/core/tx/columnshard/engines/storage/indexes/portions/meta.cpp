@@ -6,16 +6,6 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(
-    const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const {
-    AFL_VERIFY(!bRange.IsValid());
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
-}
-
-void TPortionIndexChunk::DoAddInplaceIntoPortion(TPortionInfoConstructor& portionInfo) const {
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, GetData()));
-}
-
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(
     const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
     AFL_VERIFY(Serializer);

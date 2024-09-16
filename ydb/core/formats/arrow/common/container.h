@@ -1,5 +1,5 @@
 #pragma once
-#include "accessor.h"
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 
 #include <ydb/core/formats/arrow/modifier/schema.h>
 
@@ -73,6 +73,8 @@ public:
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data);
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
+
+    void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
 
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);

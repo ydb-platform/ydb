@@ -361,8 +361,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            const auto inserted = uniquePortions.emplace(info->GetAddress()).second;
-            Y_ABORT_UNLESS(inserted);
+            AFL_VERIFY(uniquePortions.emplace(info->GetAddress()).second);
             changes->PortionsToDrop.push_back(*info);
             ++portionsFromDrop;
         }
@@ -381,8 +380,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            const auto inserted = uniquePortions.emplace(it->second[i].GetAddress()).second;
-            if (inserted) {
+            if (uniquePortions.emplace(it->second[i].GetAddress()).second) {
                 AFL_VERIFY(it->second[i].CheckForCleanup(snapshot))("p_snapshot", it->second[i].GetRemoveSnapshotOptional())("snapshot", snapshot);
                 if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                     txSize += it->second[i].GetTxVolume();

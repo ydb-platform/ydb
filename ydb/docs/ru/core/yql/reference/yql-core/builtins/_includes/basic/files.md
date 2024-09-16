@@ -6,7 +6,8 @@
 
 {% endif %}
 
-**Сигнатуры**
+### Сигнатуры
+
 ```
 FilePath(String)->String
 FileContent(String)->String
@@ -14,7 +15,8 @@ FileContent(String)->String
 
 Аргумент `FileContent` и `FilePath` — строка с алиасом.
 
-**Примеры**
+### Примеры
+
 ``` yql
 SELECT "Content of "
   || FilePath("my_file.txt")
@@ -25,7 +27,8 @@ SELECT "Content of "
 
 Получение пути до корня директории с несколькими «приложенными» файлами с указанным общим префиксом.
 
-**Сигнатура**
+### Сигнатура
+
 ```
 FolderPath(String)->String
 ```
@@ -34,7 +37,8 @@ FolderPath(String)->String
 
 Также см. [PRAGMA File](../../../syntax/pragma.md#file) и [PRAGMA Folder](../../../syntax/pragma.md#folder).
 
-**Примеры**
+### Примеры
+
 ``` yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
 PRAGMA File("foo/2.txt", "http://url/to/somewhere/else");
@@ -50,7 +54,8 @@ SELECT FolderPath("foo"); -- в директории по возвращённо
 
 Поддерживается только один формат файла — по одному значению на строку.{% if feature_udf_noncpp and oss != true %} Для чего-то более сложного прямо сейчас придется написать небольшую UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md). {% endif %}
 
-**Сигнатура**
+### Сигнатура
+
 ```
 ParseFile(String, String)->List<T>
 ```
@@ -66,7 +71,8 @@ ParseFile(String, String)->List<T>
 
 {% endnote %}
 
-**Примеры:**
+### Примеры
+
 ``` yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
 ```

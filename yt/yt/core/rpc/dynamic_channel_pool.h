@@ -28,7 +28,7 @@ public:
     TDynamicChannelPool(
         TDynamicChannelPoolConfigPtr config,
         IChannelFactoryPtr channelFactory,
-        TString endpointDescription,
+        const std::string& endpointDescription,
         NYTree::IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
         IPeerDiscoveryPtr peerDiscovery);

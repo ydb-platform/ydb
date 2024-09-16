@@ -51,9 +51,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(timestamp)
             WITH (
                 STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
+                PARTITION_COUNT = %d
                 )
-            )", storeName.data(), tableName.data(), shardsCount);
+            )",
+                             storeName.data(), tableName.data(), shardsCount);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             if (result.GetStatus() != EStatus::SUCCESS) {
                 Cerr << result.GetIssues().ToOneLineString() << Endl;
@@ -1365,7 +1366,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(num);
@@ -1432,6 +1433,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
         auto runtime = server->GetRuntime();
+        runtime->SetScheduledLimit(1000000);
+
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
@@ -1451,7 +1454,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
@@ -1515,7 +1518,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
@@ -1585,7 +1588,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
@@ -1843,8 +1846,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(WatchID)
             WITH (
                 STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =)" << numShards
-            << ")";
+                PARTITION_COUNT =)" << numShards
+                                      << ")";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -1931,10 +1934,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                    PARTITION_COUNT = 1
                 );
-            )"
-        );
+            )");
 
         lHelper.StartDataRequest(
             R"(
@@ -1986,10 +1988,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                    PARTITION_COUNT = 1
                 );
-            )"
-        );
+            )");
 
         lHelper.StartDataRequest(
             R"(
@@ -1998,7 +1999,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         );
 
     }
-/*
+    /*
     Y_UNIT_TEST(OlapDeletePlanned) {
         TPortManager pm;
 
@@ -2038,7 +2039,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8
+                    PARTITION_COUNT = 8
                 );
             )"
         );
@@ -2509,7 +2510,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 PRIMARY KEY (a)
             )
             PARTITION BY HASH(a)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -2879,6 +2880,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
             CompareYson("[[200u]]", result);
+        }
+    }
+
+    Y_UNIT_TEST(TableSinkWithOlapStore) {
+       NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTables();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable0", 0, 1000000, 3, true);
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/olapStore/olapTable0` ORDER BY timestamp;
+                INSERT INTO `/Root/olapStore/olapTable1` SELECT * FROM `/Root/olapStore/olapTable0`;
+                REPLACE INTO `/Root/olapStore/olapTable0` SELECT * FROM `/Root/olapStore/olapTable1`;
+                SELECT * FROM `/Root/olapStore/olapTable1` ORDER BY timestamp;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 }

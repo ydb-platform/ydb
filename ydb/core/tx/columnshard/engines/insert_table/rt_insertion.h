@@ -1,7 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/insert_table.h>
-#include <ydb/library/accessor/accessor.h>
+#include "inserted.h"
 #include "path_info.h"
+
+#include <ydb/core/tx/columnshard/counters/insert_table.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
 class IBlobsDeclareRemovingAction;
@@ -19,8 +22,8 @@ private:
     TCounters StatsCommitted;
     const NColumnShard::TInsertTableCounters Counters;
 
-    THashMap<TWriteId, TInsertedData> Inserted;
-    THashMap<TWriteId, TInsertedData> Aborted;
+    THashMap<TInsertWriteId, TInsertedData> Inserted;
+    THashMap<TInsertWriteId, TInsertedData> Aborted;
     mutable TInstant MinInsertedTs = TInstant::Zero();
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
@@ -33,8 +36,27 @@ private:
     void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     static TAtomicCounter CriticalInserted;
+
 public:
-    void MarkAsNotAbortable(const TWriteId writeId) {
+    bool HasPathIdData(const ui64 pathId) const {
+        auto it = PathInfo.find(pathId);
+        if (it == PathInfo.end()) {
+            return false;
+        }
+        return !it->second.IsEmpty();
+    }
+
+    void ErasePath(const ui64 pathId) {
+        auto it = PathInfo.find(pathId);
+        if (it == PathInfo.end()) {
+            return;
+        }
+        RemovePriority(it->second);
+        AFL_VERIFY(it->second.IsEmpty());
+        PathInfo.erase(it);
+    }
+
+    void MarkAsNotAbortable(const TInsertWriteId writeId) {
         auto it = Inserted.find(writeId);
         if (it == Inserted.end()) {
             return;
@@ -42,34 +64,37 @@ public:
         it->second.MarkAsNotAbortable();
     }
 
-    THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
+    THashSet<TInsertWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
-    THashSet<TWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;
+    THashSet<TInsertWriteId> GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const;
 
-    const THashMap<TWriteId, TInsertedData>& GetInserted() const {
+    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const {
         return Inserted;
     }
-    const THashMap<TWriteId, TInsertedData>& GetAborted() const {
+    const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
         return Aborted;
     }
 
     const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
-    bool EraseAborted(const TWriteId writeId);
-    bool HasAborted(const TWriteId writeId);
+    bool EraseAborted(const TInsertWriteId writeId);
+    bool HasAborted(const TInsertWriteId writeId);
 
-    bool EraseCommitted(const TInsertedData& data);
-    bool HasCommitted(const TInsertedData& data);
+    bool EraseCommitted(const TCommittedData& data);
+    bool HasCommitted(const TCommittedData& data);
 
     const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
-    std::optional<TInsertedData> ExtractInserted(const TWriteId id);
+    std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id);
 
-    const TCounters& GetCountersPrepared() const { return StatsPrepared; }
-    const TCounters& GetCountersCommitted() const { return StatsCommitted; }
+    const TCounters& GetCountersPrepared() const {
+        return StatsPrepared;
+    }
+    const TCounters& GetCountersCommitted() const {
+        return StatsCommitted;
+    }
     const NColumnShard::TInsertTableCounters& GetCounters() const {
         return Counters;
     }
     NKikimr::NOlap::TPathInfo& GetPathInfo(const ui64 pathId);
-    std::optional<TPathInfo> ExtractPathInfo(const ui64 pathId);
     TPathInfo* GetPathInfoOptional(const ui64 pathId);
     const TPathInfo* GetPathInfoOptional(const ui64 pathId) const;
 
@@ -84,4 +109,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

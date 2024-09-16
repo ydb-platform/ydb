@@ -2,14 +2,13 @@
 
 #include "kqp_ut_common.h"
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/batch.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -18,13 +17,13 @@ namespace NKqp {
     class TTestHelper {
     public:
         class TColumnSchema {
-            using TTypeDesc = void*;
             YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
-            YDB_ACCESSOR_DEF(TTypeDesc, TypeDesc);
+            YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
             YDB_FLAG_ACCESSOR(Nullable, true);
         public:
             TString BuildQuery() const;
+
+            TColumnSchema& SetType(NScheme::TTypeId typeId);
         };
 
         using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
@@ -49,7 +48,7 @@ namespace NKqp {
         private:
             virtual TString GetObjectType() const = 0;
             TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const;
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const;
+            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const;
         };
 
         class TColumnTable : public TColumnTableBase {
@@ -63,9 +62,9 @@ namespace NKqp {
         };
 
     private:
-        TKikimrRunner Kikimr;
-        NYdb::NTable::TTableClient TableClient;
-        NYdb::NTable::TSession Session;
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+        std::unique_ptr<NYdb::NTable::TSession> Session;
 
     public:
         TTestHelper(const TKikimrSettings& settings);

@@ -1,7 +1,6 @@
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
 #include "kqp_planner_strategy.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -279,8 +278,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto placingOptions = ResourceManager_->GetPlacingOptions();
 
+    ui64 nonParallelLimit = placingOptions.MaxNonParallelTasksExecutionLimit;
+    if (MayRunTasksLocally) {
+        // not applied to column shards and external sources
+        nonParallelLimit = placingOptions.MaxNonParallelDataQueryTasksLimit;
+    }
+
     bool singleNodeExecutionMakeSence = (
-        ResourceEstimations.size() <= placingOptions.MaxNonParallelTasksExecutionLimit ||
+        ResourceEstimations.size() <= nonParallelLimit ||
         // all readers are located on the one node.
         TasksPerNode.size() == 1
     );

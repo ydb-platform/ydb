@@ -66,7 +66,7 @@
 Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
 {% endif %}
 
-**Пример**
+### Пример
 
     CREATE TABLE my_table (
 {% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
@@ -85,7 +85,7 @@
 
 Конструкция INDEX используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} на таблице:
 
-```sql
+```yql
 CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
@@ -94,14 +94,15 @@ CREATE TABLE table_name (
 ```
 
 где:
+
 * **index_name** — уникальное имя индекса, по которому будет возможно обращение к данным.
 * **SYNC/ASYNC** — синхронная или асинхронная запись в индекс, если не указано — синхронная.
 * **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
 * **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
-**Пример**
+### Пример
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
@@ -116,7 +117,7 @@ CREATE TABLE my_table (
 
 {% if feature_temp_tables %}
 {% if feature_olap_tables %}#{%endif%}## Создание временных таблиц {#temporary_tables}
-```sql
+```yql
 CREATE TEMPORARY TABLE table_name (
     ...
 );
@@ -130,7 +131,7 @@ CREATE TEMPORARY TABLE table_name (
 
 Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -145,9 +146,7 @@ WITH (
 
 Например, такой код создаст таблицу с включенным автоматическим партиционированием по размеру партиции и предпочитаемым размером каждой партиции 512 мегабайт:
 
-<small>Листинг 4</small>
-
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,
@@ -170,7 +169,7 @@ WITH (
 
 В примере ниже для создаваемой таблицы добавляется группа колонок ```family_large``` и устанавливается для колонки ```series_info```, а также переопределяются параметры для группы ```default```, которая по умолчанию установлена для всех остальных колонок.
 
-```sql
+```yql
 CREATE TABLE series_with_families (
     series_id Uint64,
     title Utf8,
@@ -210,7 +209,7 @@ CREATE TABLE series_with_families (
 
 Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/datamodel/table.md#column-tables) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`).
 
-```sql
+```yql
 CREATE TABLE table_name (
     column1 type1,
     column2 type2 NOT NULL,
@@ -236,9 +235,9 @@ WITH (
 
 Без дополнительных модификаторов колонка приобретает [опциональный](../../types/optional.md) тип и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 
-**Пример**
+#### Пример
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64 NOT NULL,
     b String,
@@ -255,7 +254,7 @@ STORE = COLUMN
 
 Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -272,7 +271,7 @@ WITH (
 
 Например, следующий код создает колоночную таблицу с 10-ю партициями:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,

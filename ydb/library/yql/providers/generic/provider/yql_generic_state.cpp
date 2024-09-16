@@ -25,4 +25,4 @@ namespace NYql {
         return pair;
     }
 
-}
+} // namespace NYql

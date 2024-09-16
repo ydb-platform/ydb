@@ -14,17 +14,17 @@ Here's the mechanism for putting part of the query into a separate attached file
 
 {% note info %}
 
-You can use the library to include [lambdas](../expressions.md#lambda), [actions](../action.md){% if feature_subquery %}, [named subqueries](../subquery.md){% endif %}, constants and expressions, but __not subqueries or aggregate functions__.
+You can use the library to include [lambdas](../expressions.md#lambda), [actions](../action.md){% if feature_subquery %}, [named subqueries](../subquery.md){% endif %}, constants and expressions, but **not subqueries or aggregate functions**.
 
 {% endnote %}
 
 {% note warning %}
 
-The file linked by the [PRAGMA Library](../pragma.md#library) must be attached to the query. __You can't use a [PRAGMA File](../pragma.md#file) for this purpose__.
+The file linked by the [PRAGMA Library](../pragma.md#library) must be attached to the query. **You can't use a [PRAGMA File](../pragma.md#file) for this purpose**.
 
 {% endnote %}
 
-**Examples:**
+### Examples
 
 my_lib.sql:
 

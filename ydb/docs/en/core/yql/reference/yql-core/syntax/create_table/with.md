@@ -2,7 +2,7 @@
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -16,19 +16,21 @@ Here, `key` is the name of the parameter and `value` is its value.
 The list of allowable parameter names and their values is provided on the table description page [{{ backend_name }}]({{ concept_table }}).
 
 For example, such a query will create a string table with automatic partitioning enabled based on partition size and a preferred size of each partition being 512 megabytes:
-```sql
- CREATE TABLE my_table (
-     id Uint64,
-     title Utf8,
-     PRIMARY KEY (id)
- )
- WITH (
-     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-     AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
- );
- ```
 
- {% if backend_name == "YDB" %}
+```yql
+CREATE TABLE my_table (
+    id Uint64,
+    title Utf8,
+    PRIMARY KEY (id)
+)
+WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+);
+```
+
+{% if backend_name == "YDB" %}
+
 
 A colum-oriented table is created by specifying the parameter `STORE = COLUMN` in the `WITH` clause:
 
@@ -82,6 +84,5 @@ Example of creating a row-oriented and column-oriented tables with TTL:
     ```
 
 {% endlist %}
-
 
 {% endif %}

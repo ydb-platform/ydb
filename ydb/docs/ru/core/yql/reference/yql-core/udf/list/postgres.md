@@ -17,7 +17,7 @@
 
 Операторы PostgreSQL (унарные и бинарные) доступны через встроенную функцию `PgOp(<оператор>, <операнды>)`:
 
-``` sql
+```yql
 SELECT
     PgOp("*", 123456789987654321pn, 99999999999999999999pn), --  12345678998765432099876543210012345679
     PgOp('|/', 10000.0p), -- 100.0p (квадратный корень)
@@ -30,7 +30,7 @@ SELECT
 
 Для приведения значения одного Pg типа к другому используется встроенная функция `PgCast(<исходное значение>, <желаемый тип>)`:
 
-``` sql
+```yql
 SELECT
     PgCast(123p, PgText), -- преобразуем число в строку
 ;
@@ -38,7 +38,7 @@ SELECT
 
 При преобразовании из строковых Pg типов в некоторые целевые типы можно указать дополнительные модификаторы. Возможные модификаторы для типа `pginterval` перечислены в [документации](https://www.postgresql.org/docs/16/datatype-datetime.html).
 
-``` sql
+```yql
 SELECT
     PgCast('90'p, pginterval, "day"), -- 90 days
     PgCast('13.45'p, pgnumeric, 10, 1); -- 13.5
@@ -50,7 +50,7 @@ SELECT
 Для некоторых Pg типов возможна конвертация в YQL типы и обратно. Конвертация осуществляется с помощью встроенных функций
 `FromPg(<значение Pg типа>)` и `ToPg(<значение YQL типа>)`:
 
-``` sql
+```yql
 SELECT
     FromPg("тест"pt), -- Just(Utf8("тест")) - pg типы всегда nullable
     ToPg(123.45), -- 123.45pf8
@@ -114,7 +114,7 @@ SELECT
 
 Чтобы вызвать PostgreSQL функцию, необходимо добавить префикс `Pg::` к ее имени:
 
-``` sql
+```yql
 SELECT
     Pg::extract('isodow'p,PgCast('1961-04-12'p,PgDate)), -- 3pn (среда) - работа с датами до 1970 года
     Pg::generate_series(1p,5p), -- [1p,2p,3p,4p,5p] - для функций-генераторов возвращается ленивый список
@@ -123,7 +123,7 @@ SELECT
 
 Существует также альтернативный способ вызова функций через встроенную функцию `PgCall(<имя функции>, <операнды>)`:
 
-``` sql
+```yql
 SELECT
     PgCall('lower', 'Test'p), -- 'test'p
 ;
@@ -131,7 +131,7 @@ SELECT
 
 При вызове функции, возвращающей набор `pgrecord`, можно распаковать результат в список структур, используя функцию `PgRangeCall(<имя функции>, <операнды>)`:
 
-``` sql
+```yql
 SELECT * FROM
     AS_TABLE(PgRangeCall("json_each", pgjson('{"a":"foo", "b":"bar"}')));
     --- 'a'p,pgjson('"foo"')
@@ -145,7 +145,7 @@ SELECT * FROM
 
 Чтобы вызвать агрегационную PostgreSQL функцию, необходимо добавить префикс `Pg::` к ее имени:
 
-``` sql
+```yql
 SELECT
 Pg::string_agg(x,','p)
 FROM (VALUES ('a'p),('b'p),('c'p)) as a(x); -- 'a,b,c'p
@@ -158,7 +158,7 @@ FROM (VALUES ('a'p),('b'p),('c'p)) as a(x); -- 'a'p,'a,b'p,'a,b,c'p
 
 Также можно использовать агрегационную PostgreSQL функцию для построения фабрики агрегационных функций с последующим применением в `AGGREGATE_BY`:
 
-``` sql
+```yql
 $agg_max = AggregationFactory("Pg::max");
 
 SELECT
@@ -174,7 +174,7 @@ FROM (VALUES ('a'p),('b'p),('c'p)) as a(x); -- 'a'p,'b'p,'c'p
 
 Если в агрегационной функции не один аргумент, а ноль или два и более, необходимо использовать кортеж при вызове `AGGREGATE_BY`:
 
-``` sql
+```yql
 $agg_string_agg = AggregationFactory("Pg::string_agg");
 
 SELECT
@@ -196,7 +196,7 @@ FROM (VALUES ('a'p),('b'p),('c'p)) as a(x); -- 'a'p,'a,b'p,'a,b,c'p
 
 Для выполнения логических операций используются функции `PgAnd`, `PgOr`, `PgNot`:
 
-``` sql
+```yql
 SELECT
     PgAnd(PgBool(true), PgBool(true)), -- PgBool(true)
     PgOr(PgBool(false), null), -- PgCast(null, pgbool)

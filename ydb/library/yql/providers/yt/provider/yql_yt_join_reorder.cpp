@@ -1,12 +1,16 @@
 #include "yql_yt_join_impl.h"
 #include "yql_yt_helpers.h"
 
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_provider_context.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
 
 namespace NYql {
 
@@ -59,10 +63,12 @@ public:
     TJoinReorderer(
         TYtJoinNodeOp::TPtr op,
         const TYtState::TPtr& state,
+        const TString& cluster,
         TExprContext& ctx,
         bool debug = false)
         : Root(op)
         , State(state)
+        , Cluster(cluster)
         , Ctx(ctx)
         , Debug(debug)
     {
@@ -75,9 +81,9 @@ public:
 
     TYtJoinNodeOp::TPtr Do() {
         std::shared_ptr<IBaseOptimizerNode> tree;
-        std::shared_ptr<IProviderContext> ctx;
-        BuildOptimizerJoinTree(tree, ctx, Root);
-        auto ytCtx = std::static_pointer_cast<TYtProviderContext>(ctx);
+        std::shared_ptr<IProviderContext> providerCtx;
+        BuildOptimizerJoinTree(State, Cluster, tree, providerCtx, Root, Ctx);
+        auto ytCtx = std::static_pointer_cast<TYtProviderContext>(providerCtx);
 
         std::function<void(const TString& str)> log;
 
@@ -93,14 +99,14 @@ public:
                 YQL_CLOG(ERROR, ProviderYt) << "PG CBO does not support link settings";
                 return Root;
             }
-            opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(*ctx, Ctx, log));
+            opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(*providerCtx, Ctx, log));
             break;
         case ECostBasedOptimizerType::Native:
             if (ytCtx->HasHints) {
                 YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not suppor link hints";
                 return Root;
             }
-            opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(*ctx, 100000));
+            opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(*providerCtx, 100000));
             break;
         default:
             YQL_CLOG(ERROR, ProviderYt) << "Unknown optimizer type " << ToString(State->Types->CostBasedOptimizer);
@@ -137,6 +143,7 @@ public:
 private:
     TYtJoinNodeOp::TPtr Root;
     const TYtState::TPtr& State;
+    TString Cluster;
     TExprContext& Ctx;
     bool Debug;
 };
@@ -169,16 +176,19 @@ public:
 class TOptimizerTreeBuilder
 {
 public:
-    TOptimizerTreeBuilder(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr inputTree)
-        : Tree(tree)
-        , OutCtx(ctx)
+    TOptimizerTreeBuilder(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr inputTree, TExprContext& ctx)
+        : State(state)
+        , Cluster(cluster)
+        , Tree(tree)
+        , OutProviderCtx(providerCtx)
         , InputTree(inputTree)
+        , Ctx(ctx)
     { }
 
     void Do() {
-        Ctx = std::make_shared<TYtProviderContext>();
+        ProviderCtx = std::make_shared<TYtProviderContext>();
         Tree = ProcessNode(InputTree);
-        OutCtx = Ctx;
+        OutProviderCtx = ProviderCtx;
     }
 
 private:
@@ -195,8 +205,6 @@ private:
 
     std::shared_ptr<IBaseOptimizerNode> OnOp(TYtJoinNodeOp* op) {
         auto joinKind = ConvertToJoinKind(TString(op->JoinKind->Content()));
-        auto left = ProcessNode(op->Left);
-        auto right = ProcessNode(op->Right);
         YQL_ENSURE(op->LeftLabel->ChildrenSize() == op->RightLabel->ChildrenSize());
         std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
         for (ui32 i = 0; i < op->LeftLabel->ChildrenSize(); i += 2) {
@@ -204,13 +212,17 @@ private:
             auto lcolumn = op->LeftLabel->Child(i + 1)->Content();
             auto rtable = op->RightLabel->Child(i)->Content();
             auto rcolumn = op->RightLabel->Child(i + 1)->Content();
+            AddRelJoinColumn(TString(ltable), TString(lcolumn));
+            AddRelJoinColumn(TString(rtable), TString(rcolumn));
             NDq::TJoinColumn lcol{TString(ltable), TString(lcolumn)};
             NDq::TJoinColumn rcol{TString(rtable), TString(rcolumn)};
             joinConditions.insert({lcol, rcol});
         }
+        auto left = ProcessNode(op->Left);
+        auto right = ProcessNode(op->Right);
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
-        Ctx->HasForceSortedMerge = Ctx->HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
-        Ctx->HasHints = Ctx->HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
+        ProviderCtx->HasForceSortedMerge = ProviderCtx->HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
+        ProviderCtx->HasHints = ProviderCtx->HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
 
         return std::make_shared<TYtJoinOptimizerNode>(
             left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr
@@ -218,20 +230,25 @@ private:
     }
 
     std::shared_ptr<IBaseOptimizerNode> OnLeaf(TYtJoinNodeLeaf* leaf) {
-        TString label;
-        if (leaf->Label->ChildrenSize() == 0) {
-            label = leaf->Label->Content();
-        } else {
-            for (ui32 i = 0; i < leaf->Label->ChildrenSize(); ++i) {
-                label += leaf->Label->Child(i)->Content();
-                if (i+1 != leaf->Label->ChildrenSize()) {
-                    label += ",";
-                }
-            }
+        TString label = JoinLeafLabel(leaf->Label);
+
+        const TMaybe<ui64> maxChunkCountExtendedStats = State->Configuration->ExtendedStatsMaxChunkCount.Get();
+        bool enableExtendedStats = maxChunkCountExtendedStats.Defined();
+
+        TVector<TString> keyList;
+        auto joinColumns = RelJoinColumns.find(label);
+        if (joinColumns != RelJoinColumns.end()) {
+            keyList.assign(joinColumns->second.begin(), joinColumns->second.end());
         }
 
         TYtSection section{leaf->Section};
         auto stat = std::make_shared<TOptimizerStatistics>();
+        stat->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(
+            new TOptimizerStatistics::TColumnStatMap());
+        auto providerStats = std::make_unique<TYtProviderStatistic>();
+        TVector<IYtGateway::TPathStatReq> pathStatReqs;
+        ui64 totalChunkCount = 0;
+
         if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
             for (const auto& setting : section.Settings()) {
                 if (setting.Name() == "Rows") {
@@ -245,19 +262,80 @@ private:
                 auto tableStat = TYtTableBaseInfo::GetStat(path.Table());
                 stat->Cost += tableStat->DataSize;
                 stat->Nrows += tableStat->RecordsCount;
+                totalChunkCount += tableStat->ChunkCount;
+
+                auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
+                auto ytPath = BuildYtPathForStatRequest(Cluster, *pathInfo, keyList, *State, Ctx);
+                YQL_ENSURE(ytPath);
+
+                if (enableExtendedStats) {
+                    pathStatReqs.push_back(
+                        IYtGateway::TPathStatReq()
+                            .Path(*ytPath)
+                            .IsTemp(pathInfo->Table->IsTemp)
+                            .IsAnonymous(pathInfo->Table->IsAnonymous)
+                            .Epoch(pathInfo->Table->Epoch.GetOrElse(0)));
+                }
+            }
+            auto sorted = section.Ref().GetConstraint<TSortedConstraintNode>();
+            if (sorted) {
+                TVector<TString> key;
+                for (const auto& item : sorted->GetContent()) {
+                    for (const auto& path : item.first) {
+                        const auto& column = path.front();
+                        key.push_back(TString(column));
+                    }
+                }
+                providerStats->SortColumns = key;
             }
         }
 
+        if (!pathStatReqs.empty() &&
+            (*maxChunkCountExtendedStats == 0 || totalChunkCount <= *maxChunkCountExtendedStats)) {
+            IYtGateway::TPathStatOptions pathStatOptions =
+                IYtGateway::TPathStatOptions(State->SessionId)
+                    .Cluster(Cluster)
+                    .Paths(pathStatReqs)
+                    .Config(State->Configuration->Snapshot())
+                    .Extended(true);
+
+            IYtGateway::TPathStatResult pathStats = State->Gateway->TryPathStat(std::move(pathStatOptions));
+            if (pathStats.Success()) {
+                for (const auto& extended : pathStats.Extended) {
+                    if (!extended) {
+                        continue;
+                    }
+                    for (const auto& entry : extended->EstimatedUniqueCounts) {
+                        stat->ColumnStatistics->Data[entry.first].NumUniqueVals = entry.second;
+                    }
+                    for (const auto& entry : extended->DataWeight) {
+                        providerStats->ColumnStatistics[entry.first] = {
+                            .DataWeight = entry.second
+                        };
+                    }
+                }
+            }
+        }
+
+        stat->Specific = std::unique_ptr<const IProviderStatistics>(providerStats.release());
         return std::make_shared<TYtRelOptimizerNode>(
             std::move(label), std::move(stat), leaf
             );
     }
 
-    std::shared_ptr<IBaseOptimizerNode>& Tree;
-    std::shared_ptr<TYtProviderContext> Ctx;
-    std::shared_ptr<IProviderContext>& OutCtx;
+    void AddRelJoinColumn(const TString& rtable, const TString& rcolumn) {
+        auto entry = RelJoinColumns.insert(std::make_pair(rtable, THashSet<TString>{}));
+        entry.first->second.insert(rcolumn);
+    }
 
+    TYtState::TPtr State;
+    const TString Cluster;
+    std::shared_ptr<IBaseOptimizerNode>& Tree;
+    std::shared_ptr<TYtProviderContext> ProviderCtx;
+    std::shared_ptr<IProviderContext>& OutProviderCtx;
+    THashMap<TString, THashSet<TString>> RelJoinColumns;
     TYtJoinNodeOp::TPtr InputTree;
+    TExprContext& Ctx;
 };
 
 TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVector<TString>& scope, TExprContext& ctx, TPositionHandle pos) {
@@ -330,9 +408,9 @@ bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2) {
     }
 }
 
-void BuildOptimizerJoinTree(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op)
+void BuildOptimizerJoinTree(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr op, TExprContext& ctx)
 {
-    TOptimizerTreeBuilder(tree, ctx, op).Do();
+    TOptimizerTreeBuilder(state, cluster, tree, providerCtx, op, ctx).Do();
 }
 
 TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExprContext& ctx, TPositionHandle pos) {
@@ -340,13 +418,13 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExp
     return BuildYtJoinTree(node, scope, ctx, pos);
 }
 
-TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
+TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, const TString& cluster, TExprContext& ctx, bool debug)
 {
     if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable || op->CostBasedOptPassed) {
         return op;
     }
 
-    auto result = TJoinReorderer(op, state, ctx, debug).Do();
+    auto result = TJoinReorderer(op, state, cluster, ctx, debug).Do();
     if (!debug && AreSimilarTrees(result, op)) {
         return op;
     }

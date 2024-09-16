@@ -22,7 +22,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   The basic logic of error handling is implemented by the helper `retry.Retry` function
   The details of repeat query execution are mostly hidden.
+
   The user can affect the logic of the `retry.Retry` function in two ways:
+
   * Via the context (where you can set the deadline and cancel)
   * Via the operation's idempotency flag `retry.WithIdempotent()`. By default, the operation is considered non-idempotent.
 
@@ -31,6 +33,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries to identify this error and executes retries depending on it.
 
   Example of the code that uses the `retry.Retry` function:
+
   ```golang
   package main
 
@@ -139,10 +142,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   The user's code can affect the logic of repeat queries using the context and the idempotence flag, while the {{ ydb-short-name }} Go SDK, in turn, interprets errors returned by `op`.
 
   The user's `op` operation must return an error or `nil`:
+
   - If the custom function returns `nil`, then repeat queries stop.
   - If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries to identify this error and performs retries depending on it.
 
   Example of the code that uses the `retry.Do` function:
+
   ```golang
   import (
     "context"
@@ -193,12 +198,14 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   The user's code can affect the logic of repeat queries using the context and the operation idempotence flag, while the {{ ydb-short-name }} Go SDK, in turn, interprets errors returned by `op`.
 
   The user's `op` operation must return an error or `nil`:
+
   - If the custom function returns `nil`, then repeat queries stop.
   - If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries to identify this error and performs retries depending on it.
 
   By default, `retry.DoTx` uses the read-write isolation mode of the `sql.LevelDefault` transaction and you can change it using the `retry.WithTxOptions` parameter.
 
   Example of the code that uses the `retry.Do` function:
+
   ```golang
   import (
     "context"
@@ -250,7 +257,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 - Java
 
   In the {{ ydb-short-name }} Java SDK, repeat queries are implemented by the `SessionRetryContext` helper class. This class is constructed with the `SessionRetryContext.create` method to which you pass the `SessionSupplier` interface implementation (usually an instance of the `TableClient` class or the `QueryClient` class).
-  Additionally, the user can specify some other options
+
+  Additionally, the user can specify some other options:
+
   * `maxRetries(int maxRetries)`: The maximum number of operation retries, not counting the first execution. Default value: `10`
   * `retryNotFound(boolean retryNotFound)`: The option to retry operations that returned the `NOT_FOUND` status. Enabled by default.
   * `idempotent(boolean idempotent)`: Indicates idempotence of operations. Idempotent operations will be retried for a broader range of errors. Disabled by default.
@@ -259,7 +268,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   * `CompletableFuture<Status> supplyStatus`: Executing the operation that returns the status. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Status>> fn`
   * `CompletableFuture<Result<T>> supplyResult`: Executing the operation that returns data. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Result<T>>> fn`
 
-  When using the `SessionRetryContext` class, make sure that the operation will be retried in the following cases
+  When using the `SessionRetryContext` class, make sure that the operation will be retried in the following cases:
+
   * The lambda function returned a [retryable](../../reference/ydb-sdk/error_handling.md) error code
   * The lambda function invoked an `UnexpectedResultException` with a [retryable](../../reference/ydb-sdk/error_handling.md) error code
 

@@ -66,7 +66,8 @@ void FillSpec(NYT::TNode& spec,
     const TTransactionCache::TEntry::TPtr& entry,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
-    EYtOpProps opProps)
+    EYtOpProps opProps,
+    const TSet<TString>& addSecTags)
 {
     auto& cluster = execCtx.Cluster_;
 
@@ -511,6 +512,14 @@ void FillSpec(NYT::TNode& spec,
 
     if (opProps.HasFlags(EYtOpProp::WithReducer)) {
         spec["reducer"]["environment"]["TMPDIR"] = ".";
+    }
+
+    if (!addSecTags.empty()) {
+        auto secTagsNode = NYT::TNode::CreateList();
+        for (const auto& tag : addSecTags) {
+            secTagsNode.Add(tag);
+        }
+        spec["additional_security_tags"] = std::move(secTagsNode);
     }
 }
 

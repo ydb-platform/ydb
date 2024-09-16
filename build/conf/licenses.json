@@ -365,7 +365,6 @@
         "default": [
             "Service-Default-License",
             "Service-Dll-Harness",
-            "Service-Prebuilt-Tool",
             "Service-Py23-Proxy",
             "Service-Unknown-License-Java"
         ]

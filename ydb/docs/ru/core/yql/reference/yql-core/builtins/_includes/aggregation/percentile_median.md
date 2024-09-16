@@ -1,7 +1,8 @@
 ## PERCENTILE и MEDIAN {#percentile-median}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 PERCENTILE(T, Double)->T
 PERCENTILE(T, Tuple<Double, ...>)->Tuple<T, ...>
 PERCENTILE(T, Struct<name1:Double, ...>)->Struct<name1:T, ...>
@@ -21,10 +22,11 @@ MEDIAN(T, [ List<Double> ])->List<T>
 
 В качестве второго аргумента можно использовать либо один `Double` (значение перцентиля), либо сразу несколько значений перцентиля в виде `Tuple`/`Struct`/`List`.
 
-Значения прецентиля должны лежать в диапазоне от `0.0` до `1.0` включительно.
+Значения прецентиля должны лежать в диапазоне от 0.0 до 1.0 включительно.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
     MEDIAN(numeric_column),
     PERCENTILE(numeric_column, 0.99),

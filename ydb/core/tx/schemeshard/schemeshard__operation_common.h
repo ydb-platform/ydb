@@ -454,7 +454,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+            "[" << context.SS->TabletID() << "] " << DebugHint() << " ProgressState");
         DeleteShards(context);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -473,7 +473,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+            "[" << context.SS->TabletID() << "] " << DebugHint() << " ProgressState");
         DeleteShards(context);
 
         context.OnComplete.DoneOperation(OperationId);
@@ -499,7 +499,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+            "[" << context.SS->TabletID() << "] " << DebugHint() << " ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
 

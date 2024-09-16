@@ -45,7 +45,7 @@ class TTestBus
 public:
     explicit TTestBus(const std::string& address);
 
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
 
@@ -75,7 +75,7 @@ public:
 
 private:
     const std::string Address_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr Attributes_;
     const NNet::TNetworkAddress NetworkAddress_;
 
@@ -98,7 +98,7 @@ public:
         TRealmIdServiceMap defaultServices,
         const std::string& address);
 
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
 

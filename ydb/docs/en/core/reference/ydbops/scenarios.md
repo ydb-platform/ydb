@@ -13,6 +13,7 @@ The subcommand responsible for this operation is `ydbops restart`.
 There are multiple options for `ydbops restart` that act as filters. Filters are implicitly connected with a logical "and", meaning that if you supply multiple filters, only the nodes that satisfy all of them at once will be targeted. Therefore, specifying no filters targets all nodes for restart.
 
 There are two special filters that are an exception to this rule, `--storage` and `--tenant`:
+
 - Specifying only `--storage` will filter storage nodes only.
 - Specifying only `--tenant` will filter tenant nodes only.
 - However, specifying both selects all nodes and is equivalent to not specifying these two filters.

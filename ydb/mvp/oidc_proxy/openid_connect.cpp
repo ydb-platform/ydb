@@ -55,17 +55,6 @@ TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     return locationHeaderValue;
 }
 
-void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
-    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
-    if (origin.empty()) {
-        origin = "*";
-    }
-    headers->Set("Access-Control-Allow-Origin", origin);
-    headers->Set("Access-Control-Allow-Credentials", "true");
-    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
-}
-
 NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
     headers.Set("Content-Type", "application/json; charset=utf-8");
     SetCORS(request, &headers);
@@ -83,6 +72,17 @@ TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool i
 }
 
 } // namespace
+
+void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
+    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+    if (origin.empty()) {
+        origin = "*";
+    }
+    headers->Set("Access-Control-Allow-Origin", origin);
+    headers->Set("Access-Control-Allow-Credentials", "true");
+    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
+    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+}
 
 TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];

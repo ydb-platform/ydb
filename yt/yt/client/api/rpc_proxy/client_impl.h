@@ -273,7 +273,7 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobSpecOptions& options) override;
 
-    TFuture<TSharedRef> GetJobStderr(
+    TFuture<TGetJobStderrResponse> GetJobStderr(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;
@@ -563,6 +563,26 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
+
+    // Shuffle service client
+    TFuture<TShuffleHandlePtr> StartShuffle(
+        const TString& account,
+        int partitionCount,
+        const TStartShuffleOptions& options) override;
+
+    TFuture<void> FinishShuffle(
+        const TShuffleHandlePtr& shuffleHandle,
+        const TFinishShuffleOptions& options) override;
+
+    TFuture<IRowBatchReaderPtr> CreateShuffleReader(
+        const TShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        const NTableClient::TTableReaderConfigPtr& config) override;
+
+    TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
+        const TShuffleHandlePtr& shuffleHandle,
+        const TString& partitionColumn,
+        const NTableClient::TTableWriterConfigPtr& config) override;
 
 private:
     const TConnectionPtr Connection_;

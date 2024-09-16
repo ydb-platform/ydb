@@ -288,10 +288,10 @@ namespace {
 
     // Common
     template <typename T>
-    void PrintOperationImpl(const T& operation, EOutputFormat format) {
+    void PrintOperationImpl(const T& operation, EDataFormat format) {
         switch (format) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
         {
             auto table = MakeTable(operation);
             PrettyPrint(operation, table);
@@ -299,11 +299,11 @@ namespace {
             break;
         }
 
-        case EOutputFormat::Json:
+        case EDataFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                 << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64:
+        case EDataFormat::ProtoJsonBase64:
             Cout << operation.ToJsonString() << Endl;
             break;
 
@@ -313,10 +313,10 @@ namespace {
     }
 
     template <typename T>
-    void PrintOperationsListImpl(const T& operations, EOutputFormat format) {
+    void PrintOperationsListImpl(const T& operations, EDataFormat format) {
         switch (format) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
+        case EDataFormat::Default:
+        case EDataFormat::Pretty:
             if (operations.GetList()) {
                 auto table = MakeTable(operations.GetList().front());
                 for (const auto& operation : operations.GetList()) {
@@ -329,11 +329,11 @@ namespace {
             }
             break;
 
-        case EOutputFormat::Json:
+        case EDataFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                 << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64:
+        case EDataFormat::ProtoJsonBase64:
             Cout << operations.ToJsonString() << Endl;
             break;
 
@@ -345,53 +345,53 @@ namespace {
 }
 
 /// Common
-void PrintOperation(const TOperation& operation, EOutputFormat format) {
+void PrintOperation(const TOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
 /// YT
-void PrintOperation(const NExport::TExportToYtResponse& operation, EOutputFormat format) {
+void PrintOperation(const NExport::TExportToYtResponse& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToYtResponse>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToYtResponse>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 /// S3
 // export
-void PrintOperation(const NExport::TExportToS3Response& operation, EOutputFormat format) {
+void PrintOperation(const NExport::TExportToS3Response& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3Response>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3Response>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 // import
-void PrintOperation(const NImport::TImportFromS3Response& operation, EOutputFormat format) {
+void PrintOperation(const NImport::TImportFromS3Response& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 /// Index build
-void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format) {
+void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
 /// QueryService
-void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EOutputFormat format) {
+void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EOutputFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 

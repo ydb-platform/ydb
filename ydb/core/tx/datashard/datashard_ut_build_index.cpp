@@ -13,11 +13,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-template <>
-inline void Out<NKikimrIndexBuilder::EBuildStatus>(IOutputStream& o, NKikimrIndexBuilder::EBuildStatus status) {
-    o << NKikimrIndexBuilder::EBuildStatus_Name(status);
-}
-
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard::NKqpHelpers;
@@ -167,7 +162,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
+        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](const TEvDataShard::TEvCompactBorrowed::TPtr& event) {
             return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
         });
 

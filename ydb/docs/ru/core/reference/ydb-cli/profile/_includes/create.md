@@ -63,7 +63,7 @@
 Вы можете использовать профиль `quickstart` для соединения с БД в составе одноузлового кластера {{ ydb-short-name }}:
 
 ```bash
-ydb config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
+{{ ydb-cli }} config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
 ```
 
 * `path_database` — путь базы данных. Укажите одно из значений:
@@ -73,12 +73,12 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 
 #### Создание профиля по ранее использованным параметрам соединения {#cmdline-example-from-explicit}
 
-Любая команда выполнения операции в базе данных YDB с явно заданными параметрами соединения может быть преобразована в команду создания профиля перемещением параметров соединения из глобальных опций в опции команды `config profile create`.
+Любая команда выполнения операции в базе данных {{ ydb-short-name }} с явно заданными параметрами соединения может быть преобразована в команду создания профиля перемещением параметров соединения из глобальных опций в опции команды `config profile create`.
 
 Например, если вы успешно выполнили команду `scheme ls` со следующими реквизитами:
 
 ```bash
-{{ydb-cli}} \
+{{ ydb-cli }} \
   -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json \
   scheme ls
 ```
@@ -86,7 +86,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 То создать профиль для соединения с использованной базой данных можно следующей командой:
 
 ```bash
-{{ydb-cli}} \
+{{ ydb-cli }} \
   config profile create db1 \
   -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json
 ```
@@ -94,15 +94,15 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 Теперь можно записать исходную команду гораздо короче:
 
 ```bash
-{{ydb-cli}} -p db1 scheme ls
+{{ ydb-cli }} -p db1 scheme ls
 ```
 
 #### Профиль для соединения с локальной базой данных {#cmdline-example-local}
 
-Создание/замена профиля `local` для соединения с локальной БД YDB, развернутой сценариями [быстрого развертывания](../../../../quickstart.md):
+Создание/замена профиля `local` для соединения с локальной БД {{ ydb-short-name }}, развернутой сценариями [быстрого развертывания](../../../../quickstart.md):
 
 ```bash
-{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/test
+{{ ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/test
 ```
 
 Определение способа аутентификации по логину и паролю в профиле `local`:
@@ -115,17 +115,18 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 
 Профили создаются и изменяются в интерактивном режиме следующими командами:
 
-``` bash
+```bash
 {{ ydb-cli }} init
 ```
 
 или
 
-``` bash
+```bash
 {{ ydb-cli }} config profile create [profile_name] [connection_options]
 ```
 
 В данной команде:
+
 - `[profile_name]` -- необязательное имя создаваемого или изменяемого профиля
 - `[connection_options]` -- необязательные [параметры соединения](../../connect.md#command-line-pars) для записи в профиле
 
@@ -157,6 +158,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 - Profile Create
 
    Если в командной строке не указано имя профиля, то оно запрашивается:
+
    ```text
    Please enter configuration profile name to create or re-configure:
    ```

@@ -31,10 +31,6 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
         : EKind::CdcDataChange;
 }
 
-TString TChangeRecord::GetSourceId() const {
-    return SourceId;
-}
-
 static bool ParseKey(TVector<TCell>& cells,
         const NJson::TJsonValue::TArray& key, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
@@ -131,6 +127,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
 TConstArrayRef<TCell> TChangeRecord::GetKey() const {
     TMemoryPool pool(256);
     return GetKey(pool);
+}
+
+void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
+    return visitor.Visit(*this);
 }
 
 }

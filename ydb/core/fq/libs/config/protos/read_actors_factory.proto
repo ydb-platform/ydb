@@ -8,19 +8,11 @@ import "ydb/library/yql/providers/s3/proto/retry_config.proto";
 
 ////////////////////////////////////////////////////////////
 
-message TS3ReadActorFactoryConfig {
-    NYql.NS3.TRetryConfig RetryConfig = 1;
-    uint64 RowsInBatch = 2; // Default = 1000
-    uint64 MaxInflight = 3; // Default = 20
-    uint64 DataInflight = 4; // Default = 200 MB
-    bool AllowLocalFiles = 5;
-}
-
 message TPqReadActorFactoryConfig {
     bool CookieCommitMode = 1; // Turn off RangesMode setting in PQ read session.
 }
 
 message TReadActorsFactoryConfig {
-    TS3ReadActorFactoryConfig S3ReadActorFactoryConfig = 1;
+    reserved 1;
     TPqReadActorFactoryConfig PqReadActorFactoryConfig = 2;
 }

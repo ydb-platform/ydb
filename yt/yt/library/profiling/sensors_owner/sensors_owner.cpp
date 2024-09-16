@@ -31,12 +31,12 @@ namespace {
 template <typename TSensor, typename... TArgs>
 struct TSensorWrapper
 {
-    template <TSensor (TProfiler::*Getter)(const TString&, TArgs...) const>
+    template <TSensor (TProfiler::*Getter)(const std::string&, TArgs...) const>
     struct TImpl
     {
-        using TKey = TString;
+        using TKey = std::string;
 
-        TImpl(const TProfiler& profiler, const TString& key, TArgs... args)
+        TImpl(const TProfiler& profiler, const std::string& key, TArgs... args)
             : Sensor((profiler.*Getter)(key, std::move(args)...))
         { }
 
@@ -90,35 +90,35 @@ const TSensorsOwner& TSensorsOwner::WithTags(const TTagSet& tags) const
     return GetWithTags<TChild>(tags).SensorsOwner;
 }
 
-const TSensorsOwner& TSensorsOwner::WithTag(const TString& name, const TString& value) const
+const TSensorsOwner& TSensorsOwner::WithTag(const std::string& name, const std::string& value) const
 {
     return WithTags(TTagSet().WithTag({name, value}));
 }
 
-const TSensorsOwner& TSensorsOwner::WithRequiredTag(const TString& name, const TString& value) const
+const TSensorsOwner& TSensorsOwner::WithRequiredTag(const std::string& name, const std::string& value) const
 {
     return WithTags(TTagSet().WithRequiredTag({name, value}));
 }
 
-const TSensorsOwner& TSensorsOwner::WithExcludedTag(const TString& name, const TString& value) const
+const TSensorsOwner& TSensorsOwner::WithExcludedTag(const std::string& name, const std::string& value) const
 {
     return WithTags(TTagSet().WithExcludedTag({name, value}));
 }
 
-const TSensorsOwner& TSensorsOwner::WithAlternativeTag(const TString& name, const TString& value, int alternativeTo) const
+const TSensorsOwner& TSensorsOwner::WithAlternativeTag(const std::string& name, const std::string& value, int alternativeTo) const
 {
     return WithTags(TTagSet().WithAlternativeTag({name, value}, alternativeTo));
 }
 
-const TSensorsOwner& TSensorsOwner::WithPrefix(const TString& prefix) const
+const TSensorsOwner& TSensorsOwner::WithPrefix(const std::string& prefix) const
 {
     struct TChild
     {
-        using TKey = TString;
+        using TKey = std::string;
 
         TSensorsOwner SensorsOwner;
 
-        TChild(const TProfiler& profiler, const TString& prefix)
+        TChild(const TProfiler& profiler, const std::string& prefix)
             : SensorsOwner(profiler.WithPrefix(prefix))
         { }
     };
@@ -140,42 +140,42 @@ const TSensorsOwner& TSensorsOwner::WithGlobal() const
     return Get<TChild>().SensorsOwner;
 }
 
-const TCounter& TSensorsOwner::GetCounter(TStringBuf name) const
+const TCounter& TSensorsOwner::GetCounter(const std::string& name) const
 {
     return Get<TCounterWrapper>(name).Sensor;
 }
 
-const TGauge& TSensorsOwner::GetGauge(TStringBuf name) const
+const TGauge& TSensorsOwner::GetGauge(const std::string& name) const
 {
     return Get<TGaugeWrapper>(name).Sensor;
 }
 
-const TTimeGauge& TSensorsOwner::GetTimeGauge(TStringBuf name) const
+const TTimeGauge& TSensorsOwner::GetTimeGauge(const std::string& name) const
 {
     return Get<TTimeGaugeWrapper>(name).Sensor;
 }
 
-const TEventTimer& TSensorsOwner::GetTimeHistogram(TStringBuf name, std::vector<TDuration> bounds) const
+const TEventTimer& TSensorsOwner::GetTimeHistogram(const std::string& name, std::vector<TDuration> bounds) const
 {
     return Get<TTimeHistogramWrapper<std::vector<TDuration>>>(name, std::move(bounds)).Sensor;
 }
 
-const TEventTimer& TSensorsOwner::GetTimeHistogram(TStringBuf name, TDuration min, TDuration max) const
+const TEventTimer& TSensorsOwner::GetTimeHistogram(const std::string& name, TDuration min, TDuration max) const
 {
     return Get<TTimeHistogramWrapper<TDuration, TDuration>>(name, min, max).Sensor;
 }
 
-const TGaugeHistogram& TSensorsOwner::GetGaugeHistogram(TStringBuf name, std::vector<double> buckets) const
+const TGaugeHistogram& TSensorsOwner::GetGaugeHistogram(const std::string& name, std::vector<double> buckets) const
 {
     return Get<TGaugeHistogramWrapper<std::vector<double>>>(name, std::move(buckets)).Sensor;
 }
 
-const TRateHistogram& TSensorsOwner::GetRateHistogram(TStringBuf name, std::vector<double> buckets) const
+const TRateHistogram& TSensorsOwner::GetRateHistogram(const std::string& name, std::vector<double> buckets) const
 {
     return Get<TRateHistogramWrapper<std::vector<double>>>(name, std::move(buckets)).Sensor;
 }
 
-void TSensorsOwner::Inc(TStringBuf name, i64 delta) const
+void TSensorsOwner::Inc(const std::string& name, i64 delta) const
 {
     GetCounter(name).Increment(delta);
 }

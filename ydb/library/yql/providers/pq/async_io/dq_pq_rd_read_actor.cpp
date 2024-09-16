@@ -13,6 +13,7 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -63,8 +64,6 @@ using namespace NActors;
 using namespace NLog;
 using namespace NKikimr::NMiniKQL;
 
-constexpr ui32 StateVersion = 1;
-
 namespace {
 
 LWTRACE_USING(DQ_PQ_PROVIDER);
@@ -91,9 +90,8 @@ struct TRowDispatcherReadActorMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
 };
 
-class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public IDqComputeActorAsyncInput {
+class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 public:
-    using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
 
     struct TReadyBatch {
@@ -117,22 +115,7 @@ public:
         STARTED
     };
 private:
-    const ui64 InputIndex;
-    TDqAsyncStats IngressStats;
-    const TTxId TxId;
-    [[maybe_unused]] const THolderFactory& HolderFactory;
-    const TString LogPrefix;
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    const NPq::NProto::TDqPqTopicSource SourceParams;
-    const NPq::NProto::TDqReadTaskParams ReadParams;
-    NThreading::TFuture<void> EventFuture;
-    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
-    TInstant StartingMessageTimestamp;
-    const NActors::TActorId ComputeActorId;
-    std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
-    TMaybe<TInstant> NextIdlenesCheckAt;
     const TString Token;
     bool AddBearerToToken;
     TMaybe<NActors::TActorId> CoordinatorActorId;
@@ -221,11 +204,7 @@ public:
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override;
-    void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
-    ui64 GetInputIndex() const override;
-    const TDqAsyncStats& GetIngressStats() const override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
     std::vector<ui64> GetPartitionsToRead() const;
@@ -241,25 +220,17 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
         ui64 taskId,
-        const THolderFactory& holderFactory,
+        const THolderFactory& /*holderFactory*/,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
         bool addBearerToToken,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
-        , InputIndex(inputIndex)
-        , TxId(txId)
-        , HolderFactory(holderFactory)
-        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
-        , CredentialsProviderFactory(std::move(credentialsProviderFactory))
-        , SourceParams(std::move(sourceParams))
-        , ReadParams(std::move(readParams))
-        , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-        , ComputeActorId(computeActorId)
+        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Token(token)
         , AddBearerToToken(addBearerToToken)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
@@ -337,76 +308,8 @@ void TDqPqRdReadActor::ProcessState() {
     }
 }
 
-void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourceState& state) {
-    SRC_LOG_D("SaveState");
-    NPq::NProto::TDqPqTopicSourceState stateProto;
-
-    NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
-    topic->SetDatabaseId(SourceParams.GetDatabaseId());
-    topic->SetEndpoint(SourceParams.GetEndpoint());
-    topic->SetDatabase(SourceParams.GetDatabase());
-    topic->SetTopicPath(SourceParams.GetTopicPath());
-
-    for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
-        const auto& [cluster, partition] = clusterAndPartition;
-        NPq::NProto::TDqPqTopicSourceState::TPartitionReadState* partitionState = stateProto.AddPartitions();
-        partitionState->SetTopicIndex(0); // Now we are supporting only one topic per source.
-        partitionState->SetCluster(cluster);
-        partitionState->SetPartition(partition);
-        partitionState->SetOffset(offset);
-        SRC_LOG_D("SaveState offset " << offset);
-    }
-
-    stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
-    stateProto.SetIngressBytes(IngressStats.Bytes);
-
-    TString stateBlob;
-    YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
-
-    state.Data.emplace_back(stateBlob, StateVersion);
-}
-
-void TDqPqRdReadActor::LoadState(const TSourceState& state) {
-    SRC_LOG_D("LoadState");
-    TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
-    ui64 ingressBytes = 0;
-    for (const auto& data : state.Data) {
-        if (data.Version == StateVersion) { // Current version
-        NPq::NProto::TDqPqTopicSourceState stateProto;
-            YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
-            YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
-            PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
-            for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
-                ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
-                if (offset) {
-                    offset = Min(offset, partitionProto.GetOffset());
-                } else {
-                    offset = partitionProto.GetOffset();
-                }
-            }
-            minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
-            ingressBytes += stateProto.GetIngressBytes();
-        } else {
-            ythrow yexception() << "Invalid state version " << data.Version;
-        }
-    }
-    for (const auto& [key, value] : PartitionToOffset) {
-        SRC_LOG_D("SessionId: " << " Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);
-    }
-    StartingMessageTimestamp = minStartingMessageTs;
-    IngressStats.Bytes += ingressBytes;
-    IngressStats.Chunks++;
-}
 
 void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) {
-}
-
-ui64 TDqPqRdReadActor::GetInputIndex() const {
-    return InputIndex;
-}
-
-const TDqAsyncStats& TDqPqRdReadActor::GetIngressStats() const {
-    return IngressStats;
 }
 
 void TDqPqRdReadActor::StopSessions() {

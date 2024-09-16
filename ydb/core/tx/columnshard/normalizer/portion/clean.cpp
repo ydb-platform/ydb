@@ -27,7 +27,7 @@ public:
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
-            portion->RemoveFromDatabase(db, static_cast<NColumnShard::TColumnShard*>(txc.Owner));
+            portion->RemoveFromDatabase(db);
         }
         return true;
     }
@@ -86,6 +86,8 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
 }
 
  TConclusion<bool> TCleanPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
+    LOG_S_CRIT("TCleanPortionsNormalizer init");
+    exit(1);
     return true;
 }
 

@@ -22,7 +22,11 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     }
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
     for (auto&& p : PortionsToDrop) {
-        p.RemoveFromDatabase(context.DBWrapper, self);
+        p.RemoveFromDatabase(context.DBWrapper);
+        ui32 refCount = self->VersionRemoveRef(p.GetPortion(), p.GetPathId(), p.GetSchemaVersionVerified());
+        if (refCount == 0) {
+            LOG_S_CRIT("Ref count is set to 0 for version " << p.GetSchemaVersionVerified() << " need to delete");
+        }
         p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
         pathIds.emplace(p.GetPathId());
     }

@@ -31,7 +31,7 @@ log-levels:
   MD034: 'error' # Bare URL used
   MD035: 'error' # Horizontal rule style
   MD036: 'disabled' # Emphasis used instead of a heading
-  MD037: 'disabled' # Spaces inside emphasis markers
+  MD037: 'error' # Spaces inside emphasis markers
   MD038: 'error' # Spaces inside code span elements
   MD039: 'disabled' # Spaces inside link text
   MD040: 'error' # Fenced code blocks should have a language specified

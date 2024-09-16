@@ -74,6 +74,11 @@ struct TEvScanExchange {
             , LocksInfo(locksInfo) {
             Y_ABORT_UNLESS(Rows.size());
         }
+
+        TEvSendData(const ui64 tabletId, const TLocksInfo& locksInfo)
+            : TabletId(tabletId)
+            , LocksInfo(locksInfo) {
+        }
     };
 
     class TEvAckData: public NActors::TEventLocal<TEvAckData, EvAckData> {

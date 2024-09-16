@@ -6,7 +6,6 @@
 
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/splitter/stats.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>

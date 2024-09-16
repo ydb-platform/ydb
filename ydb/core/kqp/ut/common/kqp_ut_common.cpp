@@ -132,6 +132,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableUniqConstraint(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
+    ServerSettings->SetEnablePgSyntax(true);
+    ServerSettings->SetEnableOlapCompression(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
 
     if (settings.Storage) {

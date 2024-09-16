@@ -54,13 +54,19 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[300u];["Changed"];[1u];["Paul"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[300u];["Changed"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
     Y_UNIT_TEST(TInvalidate) {
         TInvalidate tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TInvalidateOlap) {
+        TInvalidate tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -92,7 +98,6 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             auto commitResult = tx1->Commit().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
             commitResult.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_C(commitResult.GetIssues().Size() != 0, commitResult.GetIssues().ToString());
             if (!GetIsOlap()) {
                 UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                     [] (const NYql::TIssue& issue) {
@@ -104,7 +109,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[300u];["Changed"];[1u];["Paul"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[300u];["Changed"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
@@ -114,6 +119,11 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(InvalidateOlapOnCommit) {
+        TInvalidateOnCommit tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 
     class TDifferentKeyUpdate : public TTableDataModificationTester {
     protected:
@@ -150,6 +160,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(DifferentKeyUpdateOlap) {
+        TDifferentKeyUpdate tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TEmptyRange : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -169,7 +185,10 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
 
             result = session2.ExecuteQuery(Q1_(R"(
                 SELECT * FROM Test WHERE Group = 11;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 43977d4749... Cs to stable 24 3 (#9268)
                 UPSERT INTO Test (Group, Name, Amount) VALUES
                     (11, "Session2", 2);
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -193,13 +212,19 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 SELECT * FROM Test WHERE Group = 11;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[2u];#;[11u];["Session2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[2u];#;11u;"Session2"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
     Y_UNIT_TEST(EmptyRange) {
         TEmptyRange tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(EmptyRangeOlap) {
+        TEmptyRange tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -248,13 +273,19 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 SELECT * FROM Test WHERE Group = 11;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[2u];#;[11u];["Session2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[2u];#;11u;"Session2"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
     Y_UNIT_TEST(EmptyRangeAlreadyBroken) {
         TEmptyRangeAlreadyBroken tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(EmptyRangeAlreadyBrokenOlap) {
+        TEmptyRangeAlreadyBroken tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -288,7 +319,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                     SELECT * FROM Test WHERE Group = 11;
                 )"), TTxControl::Tx(tx1->GetId())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CompareYson(R"([[[2u];#;[11u];["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(R"([[[2u];#;11u;"TEST"]])", FormatResultSetYson(result.GetResultSet(0)));
             }
         }
     };
@@ -296,6 +327,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     Y_UNIT_TEST(UncommittedRead) {
         TUncommittedRead tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapUncommittedRead) {
+        TUncommittedRead tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

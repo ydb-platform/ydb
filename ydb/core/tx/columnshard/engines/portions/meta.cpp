@@ -33,7 +33,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             break;
     }
 
-    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializeToStringDataOnlyNoCompression());
+    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializePayloadToString());
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());

@@ -4,6 +4,7 @@ RECURSE(
     query_replay
     query_replay_yt
     simple_queue
+    olap_workload
     tsserver
     tstool
     ydbd_slice

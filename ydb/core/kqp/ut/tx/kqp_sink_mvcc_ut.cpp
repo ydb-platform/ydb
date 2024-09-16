@@ -26,8 +26,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto tx = result.GetTransaction();
@@ -85,8 +85,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["ChangedOne"]];
+                [1u;["ChangedOne"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session1.ExecuteQuery(Q_(R"(
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
+                [1u;["One"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session1.ExecuteQuery(Q_(R"(
@@ -119,8 +119,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([
-                [[2u];["Two"]];
-                [[4000000002u];["BigTwo"]]
+                [2u;["Two"]];
+                [4000000002u;["BigTwo"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
@@ -130,7 +130,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.SetIsOlap(false);
         tester.Execute();
     }
-    
+
+    Y_UNIT_TEST(OlapReadOnlyTxCommitsOnConcurrentWrite) {
+        TReadOnlyTxCommitsOnConcurrentWrite tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TReadWriteTxFailsOnConcurrentWrite1 : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -147,8 +153,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -172,6 +178,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite1) {
+        TReadWriteTxFailsOnConcurrentWrite1 tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TReadWriteTxFailsOnConcurrentWrite2 : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -188,8 +200,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             // We need to sleep before the upsert below, otherwise writes
@@ -220,6 +232,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite2) {
+        TReadWriteTxFailsOnConcurrentWrite2 tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TReadWriteTxFailsOnConcurrentWrite3 : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -236,8 +254,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["One"]];
-                [[4000000001u];["BigOne"]]
+                [1u;["One"]];
+                [4000000001u;["BigOne"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -252,8 +270,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([
-                [[2u];["Two"]];
-                [[4000000002u];["BigTwo"]]
+                [2u;["Two"]];
+                [4000000002u;["BigTwo"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             result = session1.ExecuteQuery(Q_(R"(
@@ -268,6 +286,12 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     Y_UNIT_TEST(ReadWriteTxFailsOnConcurrentWrite3) {
         TReadWriteTxFailsOnConcurrentWrite3 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite3) {
+        TReadWriteTxFailsOnConcurrentWrite3 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

@@ -40,7 +40,17 @@ public:
     }
 };
 
-NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
+    auto lastSeqNo = owner.LastSchemaSeqNo;
+
+    // Check if proposal is outdated
+    if (seqNo < lastSeqNo) {
+        auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId " << GetTxId()
+                                             << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo " << lastSeqNo;
+        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+    }
+
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
         {
@@ -65,21 +75,6 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
-    }
-
-    auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
-    auto lastSeqNo = owner.LastSchemaSeqNo;
-
-    // Check if proposal is outdated
-    if (seqNo < lastSeqNo) {
-        auto errorMessage = TStringBuilder()
-            << "Ignoring outdated schema tx proposal at tablet "
-            << owner.TabletID()
-            << " txId " << GetTxId()
-            << " ssId " << owner.CurrentSchemeShardId
-            << " seqNo " << seqNo
-            << " lastSeqNo " << lastSeqNo;
-        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
@@ -166,7 +161,7 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTables(::google::
     } return TConclusionStatus::Success();
 }
 
-bool TSchemaTransactionOperator::DoOnStartAsync(TColumnShard& owner) {
+void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
     AFL_VERIFY(WaitPathIdsToErase.empty());
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
@@ -190,11 +185,9 @@ bool TSchemaTransactionOperator::DoOnStartAsync(TColumnShard& owner) {
     if (WaitPathIdsToErase.size()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_remove_path_id")("pathes", JoinSeq(",", WaitPathIdsToErase))("tx_id", GetTxId());
         owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
-        return true;
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
-        return false;
     }
 }
 

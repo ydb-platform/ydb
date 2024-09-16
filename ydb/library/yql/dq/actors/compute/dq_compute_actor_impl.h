@@ -109,6 +109,7 @@ protected:
 public:
     void Bootstrap() {
         try {
+            StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
                 prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
@@ -1028,9 +1029,13 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
-                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, TStringBuilder()
-                    << "Timeout event from compute actor " << this->SelfId()
-                    << ", TxId: " << TxId << ", task: " << Task.GetId());
+                TStringBuilder reason = TStringBuilder() << "Task execution timeout ";
+                if (RuntimeSettings.Timeout) {
+                    reason << RuntimeSettings.Timeout->MilliSeconds() << "ms ";
+                }
+                reason << "exceeded, terminating after " << (TInstant::Now() - StartTime).MilliSeconds() << "ms";
+
+                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, reason);
 
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
@@ -1042,8 +1047,8 @@ protected:
 
                 this->Send(ExecuterId, abortEv.Release());
 
-                TerminateSources("timeout exceeded", false);
-                Terminate(false, "timeout exceeded");
+                TerminateSources(reason, false);
+                Terminate(false, reason);
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1912,6 +1917,7 @@ protected:
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
 private:
+    TInstant StartTime;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

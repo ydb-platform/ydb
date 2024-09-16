@@ -273,16 +273,43 @@ public:
         hFunc(TEvPrivate::TEvListParts, Handle);
     )
 
-    bool RetryOperation(CURLcode curlResponseCode, ui32 httpResponseCode, const TString& url, const TString& operationName) {
-        auto result = RetryCount && RetryPolicy->CreateRetryState()->GetNextRetryDelay(curlResponseCode, httpResponseCode);
-        Issues.AddIssue(TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", http code: " << httpResponseCode << ", url: " << url);
+    bool RetryOperation(IHTTPGateway::TResult&& operationResult, const TString& url, const TString& operationName) {
+        const auto curlResponseCode = operationResult.CurlResponseCode;
+        const auto httpResponseCode = operationResult.Content.HttpResponseCode;
+        const auto result = RetryCount && GetRetryState(operationName)->GetNextRetryDelay(curlResponseCode, httpResponseCode);
+
+        NYql::TIssues issues = std::move(operationResult.Issues);
+        TStringBuilder errorMessage = TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url;
+        if (const TString errorText = operationResult.Content.Extract()) {
+            TString errorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
+                message = errorText;
+            }
+            issues.AddIssues(BuildIssues(httpResponseCode, errorCode, message));
+        } else {
+            errorMessage << ", HTTP code: " << httpResponseCode;
+        }
+
+        if (issues) {
+            RetryIssues.AddIssues(NS3Util::AddParentIssue(errorMessage, std::move(issues)));
+        } else {
+            RetryIssues.AddIssue(errorMessage);
+        }
+
         if (result) {
             RetryCount--;
         } else {
-            Finish(true, RetryCount
-                ? TString("Number of retries exceeded limit per operation")
-                : TStringBuilder() << "Number of retries exceeded global limit in " << GLOBAL_RETRY_LIMIT << " retries");
+            Issues.AddIssues(NS3Util::AddParentIssue(
+                RetryCount
+                    ? TStringBuilder() << "Number of retries exceeded limit for operation " << operationName
+                    : TStringBuilder() << "Number of retries exceeded global limit in " << GLOBAL_RETRY_LIMIT << " retries",
+                NYql::TIssues(RetryIssues)
+            ));
+            RetryIssues.Clear();
+            Finish(true);
         }
+
         return result;
     }
 
@@ -377,7 +404,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("CommitMultipartUpload ERROR " << url);
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "CommitMultipartUpload")) {
+        if (RetryOperation(std::move(result), url, "CommitMultipartUpload")) {
             PushCommitMultipartUpload(ev->Get()->State);
         }
     }
@@ -422,7 +449,9 @@ public:
                             auto prefix = ev->Get()->State->Url + ev->Get()->State->Prefix;
                             if (!UnknownPrefixes.contains(prefix)) {
                                 UnknownPrefixes.insert(prefix);
-                                Issues.AddIssue(TIssue("Unknown uncommitted upload with prefix: " + prefix));
+                                TIssue issue(TStringBuilder() << "Unknown uncommitted upload with prefix: " << prefix);
+                                issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                                Issues.AddIssue(std::move(issue));
                             }
                         } else {
                             pos += KeyPrefix.size();
@@ -452,7 +481,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("ListMultipartUploads ERROR " << url);
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "ListMultipartUploads")) {
+        if (RetryOperation(std::move(result), url, "ListMultipartUploads")) {
             PushListMultipartUploads(ev->Get()->State);
         }
     }
@@ -476,7 +505,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("AbortMultipartUpload ERROR " << url);
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "AbortMultipartUpload")) {
+        if (RetryOperation(std::move(result), url, "AbortMultipartUpload")) {
             PushAbortMultipartUpload(ev->Get()->State);
         }
     }
@@ -527,7 +556,7 @@ public:
         }
         const TString& url = ev->Get()->State->BuildUrl();
         LOG_D("ListParts ERROR " << url);
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "ListParts")) {
+        if (RetryOperation(std::move(result), url, "ListParts")) {
             PushListParts(ev->Get()->State);
         }
     }
@@ -597,6 +626,13 @@ public:
         actorSystem->Send(new NActors::IEventHandle(selfId, {}, new TEvPrivate::TEvListParts(state, std::move(result))));
     }
 
+    IHTTPGateway::TRetryPolicy::IRetryState::TPtr& GetRetryState(const TString& operationName) {
+        if (const auto it = RetryStates.find(operationName); it != RetryStates.end()) {
+            return it->second;
+        }
+        return RetryStates.insert({operationName, RetryPolicy->CreateRetryState()}).first->second;
+    }
+
 private:
     NActors::TActorId ParentId;
     IHTTPGateway::TPtr Gateway;
@@ -609,11 +645,13 @@ private:
     NYql::NDqProto::TExternalEffect ExternalEffect;
     NActors::TActorSystem* const ActorSystem;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
+    std::unordered_map<TString, IHTTPGateway::TRetryPolicy::IRetryState::TPtr> RetryStates;
     ui64 HttpRequestInflight = 0;
     ui64 RetryCount;
     THashSet<TString> UnknownPrefixes;
     THashSet<TString> CommitUploads;
     NYql::TIssues Issues;
+    NYql::TIssues RetryIssues;
     std::queue<TObjectStorageRequest> RequestQueue;
     bool ApplicationFinished = false;
 };

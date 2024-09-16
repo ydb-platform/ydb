@@ -22,10 +22,12 @@ NActors::IActor* CreateS3FileQueueActor(
         ui64 batchSizeLimit,
         ui64 batchObjectCountLimit,
         IHTTPGateway::TPtr gateway,
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType);
+        NS3Lister::ES3PatternType patternType,
+        bool allowLocalFiles);
 
 } // namespace NYql::NDq

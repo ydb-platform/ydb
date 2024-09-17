@@ -1,7 +1,8 @@
 import os
+import argparse
+import configparser
 import re
 import requests
-import configparser
 import ydb
 from mute_utils import mute_target, pattern_to_re
 from get_file_diff import extract_diff_lines
@@ -10,6 +11,7 @@ dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 repo_path = f"{dir}/../../../"
+muted_ya_path = repo_path + '.github/config/muted_ya.txt'
 config.read(config_file_path)
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
@@ -151,39 +153,49 @@ def write_to_file(text, file):
 
 
 
-def main():
-    
-    s3_all_tests_url = 'https://storage.yandexcloud.net/ydb-gh-logs/ydb-platform/ydb/Tests/all_tests.txt'
+def get_mute_details():
+    parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
+    parser.add_argument('--output_folder', type=str, default=repo_path + '.github/config/mute_info/'  , 
+                        help=f'The folder to output results. Default is the value of repo_path = {repo_path}.github/config/mute_info/.')
+    parser.add_argument('--use_all_tests_s3_file', action='store_true', 
+                        help='pass s3 file url to use it as all test base')
+    args = parser.parse_args()
 
-    path_in_repo = '.github/config/'
-    muted_ya_path = path_in_repo + 'muted_ya.txt'  # имя файла, для которого нужно получить diff
-    added_lines_file = path_in_repo + 'mute_info/added_muted_line.txt'
-    added_lines_file_muted = path_in_repo + 'mute_info/added_muted_test.txt'
-    removed_lines_file = path_in_repo + 'mute_info/removed_muted_line.txt'
-    removed_lines_file_muted = path_in_repo + 'mute_info/removed_muted_test.txt'
-    all_tests_file =  path_in_repo + 'mute_info/all_tests.txt'
-    all_muted_tests_file =  path_in_repo + 'mute_info/all_muted_tests.txt'
+    output_path = args.output_folder
+    use_all_tests_s3_file = args.use_all_tests_s3_file
+       
+
+    added_lines_file = os.path.join(output_path, 'added_muted_line.txt')
+    added_lines_file_muted = os.path.join(output_path, 'added_muted_tests.txt')
+    removed_lines_file = os.path.join(output_path, 'removed_muted_line.txt')
+    removed_lines_file_muted = os.path.join(output_path, 'removed_muted_tests.txt')
+    all_tests_file = os.path.join(output_path, 'all_tests.txt')
+    all_muted_tests_file = os.path.join(output_path, 'all_muted_tests.txt')
+    
+
+    print(f"All tests have been written to {all_tests_file}.")
+    print(f"All mutes tests have been written to {all_muted_tests_file}.")
+    print(f"Added lines have been written to {added_lines_file}.")
+    print(f"Removed lines have been written to {removed_lines_file}.")
     
     added_texts, removed_texts = extract_diff_lines(muted_ya_path)
     write_to_file('\n'.join(added_texts), added_lines_file)
     write_to_file('\n'.join(removed_texts), removed_lines_file)
+  
+    if use_all_tests_s3_file:
+        download_file(use_all_tests_s3_file, all_tests_file)
+        all_tests = read_file(os.path.join(repo_path,all_tests_file))
+    else:
+        all_tests= save_tests_to_file(all_tests_file)
 
-    print(f"Added lines have been written to {added_lines_file}.")
-    print(f"Removed lines have been written to {removed_lines_file}.")
-
-    
-    #get all tests
-    all_tests_file = download_file(s3_all_tests_url, all_tests_file)
-    all_tests = read_file(os.path.join(repo_path,all_tests_file))
-    if not all_tests:
-        all_tests= save_tests_to_file(os.path.join(repo_path,all_tests_file))
-    all_tests= save_tests_to_file(os.path.join(repo_path,all_tests_file))
-
+    if all_tests == 1:
+        return 1
     #all muted
     mute_check = YaMuteCheck()
-    mute_check.load(os.path.join(repo_path,muted_ya_path))
+    mute_check.load(muted_ya_path)
     muted_tests = []
-    print("All muted tests:")
+    print("All muted captured")
+    
     for test in all_tests:
         testsuite = test[0]
         testcase = test[1]
@@ -191,37 +203,48 @@ def main():
             muted_tests.append(testsuite + ' ' + testcase + '\n')
             #print(testsuite + ' ' + testcase+ '\n')
     write_to_file(muted_tests,os.path.join(repo_path, all_muted_tests_file))
+    
     #checking added lines
     mute_check = YaMuteCheck()
-    mute_check.load(os.path.join(repo_path,added_lines_file))
-    added_muted_line = read_file(os.path.join(repo_path,added_lines_file))
+    mute_check.load(added_lines_file)
+    added_muted_line = read_file(added_lines_file)
     added_muted_tests=[]
-    print("New muted tests:")
+    print("New muted tests captured")
     for test in all_tests:
         testsuite = test[0]
         testcase = test[1]
         if mute_check(testsuite, testcase):
             added_muted_tests.append(testsuite + ' '+ testcase + '\n')
-            print(testsuite + ' ' + testcase)
-
-    write_to_file(added_muted_tests,os.path.join(repo_path, added_lines_file_muted))
-    #if mute_check(suite_name, test_name):
+            
     #checking removed lines
     mute_check = YaMuteCheck()
-    mute_check.load(os.path.join(repo_path,removed_lines_file))
+    mute_check.load(removed_lines_file)
    
-    removed_muted_line = read_file(os.path.join(repo_path,removed_lines_file))
+    removed_muted_line = read_file(removed_lines_file)
     removed_muted_tests=[]
-    print("Unmuted tests:")
+    print("Unmuted tests captured")
     for test in all_tests:
         testsuite = test[0]
         testcase = test[1]
         if mute_check(testsuite, testcase):
             removed_muted_tests.append(testsuite + ' '+ testcase + '\n')
-            print(testsuite + ' ' + testcase)
-            
-    write_to_file(removed_muted_tests,os.path.join(repo_path, removed_lines_file_muted))
+           
+    added_set = set(added_muted_tests)
+    removed_set = set(removed_muted_tests)
+    added_unique = added_set - removed_set
+    removed_unique = removed_set - added_set
+    added_muted_tests = list(sorted(added_unique))
+    removed_muted_tests = list(sorted(removed_unique))
+
+    write_to_file(added_muted_tests, added_lines_file_muted)
+    write_to_file(removed_muted_tests, removed_lines_file_muted)
+    
+    #for test in added_muted_tests:
+    #    print(test)
+   #for test in removed_muted_tests:
+    #    print(test)
+
 
 
 if __name__ == "__main__":
-    main()
+    get_mute_details()

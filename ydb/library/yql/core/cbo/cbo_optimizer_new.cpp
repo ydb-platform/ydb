@@ -291,19 +291,19 @@ TVector<TString> TOptimizerHints::GetUnappliedHintStrings() {
 
     for (const auto& hint: JoinAlgoHints->Hints) {
         if (!hint.Applied) {
-            res.push_back(hint.String);
+            res.push_back(hint.StringRepr);
         }
     }
 
     for (const auto& hint: JoinOrderHints->Hints) {
         if (!hint.Applied) {
-            res.push_back(hint.String);
+            res.push_back(hint.StringRepr);
         }
     }
 
     for (const auto& hint: CardinalityHints->Hints) {
         if (!hint.Applied) {
-            res.push_back(hint.String);
+            res.push_back(hint.StringRepr);
         }
     }
 

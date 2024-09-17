@@ -43,6 +43,7 @@ class TsTestType(StrEnum):
     HERMIONE = auto()
     JEST = auto()
     PLAYWRIGHT = auto()
+    PLAYWRIGHT_LARGE = auto()
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
 
@@ -98,6 +99,16 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirs.value,
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
+        df.TsTestForPath.value,
+    ),
+    TsTestType.PLAYWRIGHT_LARGE: (
+        df.ConfigPath.value,
+        df.Size.from_unit,
+        df.Tag.from_unit_fat_external_no_retries,
+        df.Requirements.from_unit_with_full_network,
+        df.TsResources.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
         df.TsTestForPath.value,
     ),
     TsTestType.TSC_TYPECHECK: (
@@ -797,7 +808,7 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
 
-    build_root = "$B" if test_runner == TsTestType.HERMIONE else "$(BUILD_ROOT)"
+    build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(build_root, for_mod_path, node_modules_filename)])
 
     config_path = unit.get("TS_TEST_CONFIG_PATH")
@@ -834,7 +845,7 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
 
     extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-    if test_runner == TsTestType.HERMIONE:
+    if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE]:
         dart_record[df.Size.KEY] = "LARGE"
 
     data = ytest.dump_test(unit, dart_record)

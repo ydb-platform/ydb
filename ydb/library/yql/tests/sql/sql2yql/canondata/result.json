@@ -1126,6 +1126,13 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_agg_phases_agg_apply-avg_/sql.yql"
         }
     ],
+    "test_sql2yql.test[agg_phases_agg_apply-avg_decimal]": [
+        {
+            "checksum": "6995e83bda818a897fdd0eae9d07dcc0",
+            "size": 13095,
+            "uri": "https://{canondata_backend}/1942415/d77582873ccf3369a6a530c6d99bb20a670b52e8/resource.tar.gz#test_sql2yql.test_agg_phases_agg_apply-avg_decimal_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[agg_phases_agg_apply-count]": [
         {
             "checksum": "c3ef6597e1dad8332df19e9bd78f2dc5",
@@ -20787,6 +20794,13 @@
             "checksum": "e8c4e5c3565897eab0e217e890d5baaf",
             "size": 1405,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_agg_phases_agg_apply-avg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases_agg_apply-avg_decimal]": [
+        {
+            "checksum": "8d57ef61f93cb12395632a984257cda6",
+            "size": 1443,
+            "uri": "https://{canondata_backend}/1942415/d77582873ccf3369a6a530c6d99bb20a670b52e8/resource.tar.gz#test_sql_format.test_agg_phases_agg_apply-avg_decimal_/formatted.sql"
         }
     ],
     "test_sql_format.test[agg_phases_agg_apply-count]": [

@@ -5668,7 +5668,7 @@ namespace {
                 }
             }
 
-            if (originalType) {
+            if (originalType && originalType->GetKind() != NYql::ETypeAnnotationKind::Null) {
                 input->SetTypeAnn(originalType);
             } else {
                 input->SetTypeAnn(retType);

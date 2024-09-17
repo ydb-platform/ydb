@@ -133,8 +133,9 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
 
 // out
-bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, 
-    Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillSequenceDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // in
 bool FillSequenceDescription(

@@ -779,6 +779,8 @@ message DescribeTableRequest {
     bool include_table_stats = 6;
     // Includes partition statistics (required include_table_statistics)
     bool include_partition_stats = 7;
+    // Includes set_val settings for sequences
+    bool include_set_val = 8;
 }
 
 message DescribeTableResponse {

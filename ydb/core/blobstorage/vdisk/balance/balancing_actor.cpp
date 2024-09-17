@@ -90,7 +90,6 @@ namespace NBalancing {
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
-                Send(Ctx->SkeletonId, new TEvStartBalancing());
                 PassAway();
                 return;
             }
@@ -122,7 +121,6 @@ namespace NBalancing {
                 // not all vdisks are connected
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Not all vdisks are connected, balancing should work only for full groups"),
                     (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisksInGroup, GInfo->GetTotalVDisksNum()));
-                Send(Ctx->SkeletonId, new TEvStartBalancing());
                 PassAway();
                 return;
             }
@@ -276,6 +274,7 @@ namespace NBalancing {
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
+            Send(Ctx->SkeletonId, new TEvStartBalancing());
             TActorBootstrapped::PassAway();
         }
 

@@ -63,7 +63,8 @@ struct TOptimizerStatistics {
     double Nrows = 0;
     int Ncols = 0;
     double ByteSize = 0;
-    double Cost = 0;
+    double OwnCost = 0; // cost on the single Operator only
+    double Cost = 0; // summary cost with underlying children
     double Selectivity = 1.0;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
@@ -84,6 +85,17 @@ struct TOptimizerStatistics {
         TIntrusivePtr<TColumnStatMap> columnMap = {},
         EStorageType storageType = EStorageType::NA,
         std::shared_ptr<const IProviderStatistics> specific = nullptr);
+
+    TOptimizerStatistics(
+        EStatisticsType type,
+        double nrows,
+        int ncols,
+        double byteSize,
+        double ownCost,
+        double cost,
+        TIntrusivePtr<TKeyColumns> keyColumns = {},
+        TIntrusivePtr<TColumnStatMap> columnMap = {},
+        std::unique_ptr<IProviderStatistics> specific = nullptr);
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;

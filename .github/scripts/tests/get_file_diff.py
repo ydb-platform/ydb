@@ -14,6 +14,7 @@ def get_diff(file_path):
     head_sha = event['pull_request']['head']['sha']
     print(f"base_sha: {base_sha}")
     print(f"head_sha: {head_sha}")
+    print(f"file_path: {file_path}")
     
     # Use git to get the diff
     result = subprocess.run(

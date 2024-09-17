@@ -11,7 +11,7 @@ dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 repo_path = f"{dir}/../../../"
-muted_ya_path = repo_path + '.github/config/muted_ya.txt'
+muted_ya_path = '.github/config/muted_ya.txt'
 config.read(config_file_path)
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]

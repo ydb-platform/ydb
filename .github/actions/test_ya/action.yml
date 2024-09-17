@@ -554,7 +554,9 @@ runs:
       if: always()
       shell: bash
       continue-on-error: true
-      run: python3 .github/scripts/tests/get_file_diff.py .github/config/muted_ya.txt
+      run: 
+          git fetch --depth 100
+          python3 .github/scripts/tests/get_file_diff.py .github/config/muted_ya.txt
       
     - name: show new muted and unmuted tests
       if: always()

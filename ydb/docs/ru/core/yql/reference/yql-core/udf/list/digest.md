@@ -15,7 +15,7 @@
 * `Digest::MurMurHash32(String{Flags:AutoMap}) -> Uint32`
 * `Digest::MurMurHash2A(String{Flags:AutoMap}) -> Uint64`
 * `Digest::MurMurHash2A32(String{Flags:AutoMap}) -> Uint32`
-* `Digest::CityHash(String{Flags:AutoMap}) -> Uint64`
+* `Digest::CityHash(String{Flags:AutoMap}, [Uint64?]) -> Uint64`: Второй опциональный аргумент задает seed
 * `Digest::CityHash128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
 
 CityHash функция для байтовой строки с результатом типа uint128. Результат представлен как пара из двух uint64 чисел `<low, high>`

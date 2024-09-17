@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
+#include <ydb/library/yql/core/yql_opt_hopping.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
@@ -5078,6 +5079,17 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (auto clean = RemoveDeadPayloadColumns(self, ctx); clean != node) {
             return clean;
+        }
+
+        if (auto hopping = NHopping::RewriteAsHoppingWindow(
+                node,
+                ctx,
+                false,                          // analyticsHopping
+                TDuration::MilliSeconds(5'000), // TDqSettings::TDefault::WatermarksLateArrivalDelayMs
+                true,                           // defaultWatermarksMode
+                true);                          // syncActor
+            hopping) {
+            return hopping;
         }
 
         return DropReorder<false>(node, ctx);

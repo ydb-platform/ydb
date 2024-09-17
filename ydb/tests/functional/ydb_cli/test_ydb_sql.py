@@ -575,7 +575,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--input-format", format, "--input-framing", "newline-delimited",
-                       "--input-columns", "a{0}b".format(self.get_delim(format)), "--skip-rows", "1"],
+                       "--input-columns", "a{0}b".format(self.get_delim(format)), "--input-skip-rows", "1"],
             self.get_stdin()
         )
         self.close_stdin()

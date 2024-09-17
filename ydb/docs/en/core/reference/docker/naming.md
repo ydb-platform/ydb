@@ -1,4 +1,4 @@
-## For a docker image [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb), the following naming rules apply for tags:
+## For a docker image [`ydbplatform/local-ydb`](https://hub.docker.com/r/ydbplatform/local-ydb), the following naming rules apply for tags
 
 * **latest** - corresponds to the *stable* version of YDB that was tested on well-known YDB production clusters. The **latest** tag is rebuilt when an entry about a new YDB release appears in [github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb/releases).
 * **edge** - a candidate for the next *stable*, i.e. the version that is currently being tested. You can try out new YDB features in edge, but you should also not expect this build to be stable.

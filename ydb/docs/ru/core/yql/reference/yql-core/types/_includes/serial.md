@@ -26,7 +26,7 @@ alice@example.com | Alice | 1
 bob@example.com | Bob | 2
 John@example.com | John | 3
 
-Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной колонкой.
+Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной целочисленной колонкой:
 ``` yql
 UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com');
 ```

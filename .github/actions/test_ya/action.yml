@@ -532,14 +532,17 @@ runs:
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+    
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch all history for all branches and tags
 
     - name: show diff mute_ya.txt
       if: inputs.build_preset == 'relwithdebinfo'
       shell: bash
       continue-on-error: true
-      run: |
-        git fetch --all --quiet
-        python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
+      run: python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
 
     - name: sync results to s3 and publish links
       if: always()

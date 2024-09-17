@@ -14,5 +14,7 @@ ANALYZE <path_to_table> [ (<column_name> [, ...]) ]
 * `column_name` — форсировать сбор статистики только по определённым колонкам таблицы
 
 {% if oss == true and backend_name == "YDB" %}
+
 Текущий набор статистик указан в разделе [{#T}](../../../concepts/optimizer.md#statistics).
+
 {% endif %}

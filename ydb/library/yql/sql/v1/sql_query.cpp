@@ -1427,7 +1427,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             std::set<TString> toReset;
 
             bool addDatabase = false;
-            bool removeDatabase = false;
+            bool dropDatabase = false;
             TVector<TDeferredAtom> addTables;
             TVector<TDeferredAtom> removeTables;
 
@@ -1441,7 +1441,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
                 if (!ParseBackupCollectionEntries(
                         addDatabase,
-                        removeDatabase,
+                        dropDatabase,
                         addTables,
                         removeTables,
                         node.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1()))
@@ -1453,6 +1453,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET: {} // do nothing
             }
 
+            auto database = addDatabase ?
+                            TAlterBackupCollectionParameters::EDatabase::Add :
+                            dropDatabase ?
+                            TAlterBackupCollectionParameters::EDatabase::Drop :
+                            TAlterBackupCollectionParameters::EDatabase::Unchanged;
+
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildAlterBackupCollection(Ctx.Pos(),
@@ -1460,7 +1466,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                             TAlterBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
                                                                 .SettingsToReset = std::move(toReset),
-                                                                .Database = TAlterBackupCollectionParameters::EDatabase::Unchanged,
+                                                                .Database = database,
                                                                 .TablesToAdd = addTables,
                                                                 .TablesToDrop = removeTables,
                                                                 .MissingOk = false,

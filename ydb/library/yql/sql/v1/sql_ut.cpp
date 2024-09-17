@@ -7161,7 +7161,32 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('settings '('('"storage" '"remote") '('"tag1" '"123"))))#");
-                // UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AlterBackupCollectionEntries) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER BACKUP COLLECTION TestCollection
+                    DROP TABLE `test`,
+                    ADD DATABASE;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('alterEntries)#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('type 'table) '('path '"test") '('action 'drop)))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('type 'database) '('action 'add)))#");
             }
         };
 

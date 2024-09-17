@@ -3352,7 +3352,7 @@ public:
             , Params(params)
     {}
 
-    virtual INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
+    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("alter"))));
 
         auto settings = Y();
@@ -3363,19 +3363,23 @@ public:
 
         auto resetSettings = Y();
         for (auto& key : Params.SettingsToReset) {
-            resetSettings->Add(Q(BuildQuotedAtom(Pos, key)));
+            resetSettings->Add(BuildQuotedAtom(Pos, key));
         }
         options->Add(Q(Y(Q("resetSettings"), Q(resetSettings))));
 
-        // auto entries = Y();
-        // if (Params.Database) {
-        //     entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))))));
-        // }
-        // for (auto& table : Params.Tables) {
-        //     auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
-        //     entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)))));
-        // }
-        // options->Add(Q(Y(Q("entries"), Q(entries))));
+        auto entries = Y();
+        if (Params.Database != TAlterBackupCollectionParameters::EDatabase::Unchanged) {
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))), Q(Y(Q("action"), Q(Params.Database == TAlterBackupCollectionParameters::EDatabase::Add ? "add" : "drop"))))));
+        }
+        for (auto& table : Params.TablesToAdd) {
+            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("add"))))));
+        }
+        for (auto& table : Params.TablesToDrop) {
+            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("drop"))))));
+        }
+        options->Add(Q(Y(Q("alterEntries"), Q(entries))));
 
         return options;
     }

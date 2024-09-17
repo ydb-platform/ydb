@@ -4,6 +4,7 @@
 #include <util/generic/yexception.h>
 #include <vector>
 #include <span>
+#include <functional>
 
 #include <ydb/library/yql/utils/prefetch.h>
 
@@ -36,10 +37,64 @@ struct TRobinHoodBatchRequestItem {
     char* InitialIterator;
 };
 
+using TIsLowMemoryCallback = std::function<bool()>;
+
+template <bool GrowLessOnLowMemory>
+class TRobinHoodGrowManager {
+public:
+    explicit TRobinHoodGrowManager(TIsLowMemoryCallback isLowMemoryCallback = nullptr)
+        : IsLowMemoryCallback(isLowMemoryCallback)
+    {
+        if constexpr (GrowLessOnLowMemory) {
+            Y_ENSURE(isLowMemoryCallback);
+        }
+    }
+
+    bool IsGrowRequired(ui64 size, ui64 capacity) const {
+        if constexpr(GrowLessOnLowMemory) {
+            if (IsLowMemoryCallback()) {
+                return IsGrowRequiredLowMemory(size, capacity);
+            }
+        }
+
+        return size * 2 > capacity;
+    }
+
+    ui64 GetNextCapacity(ui64 capacity) const {
+        if constexpr(GrowLessOnLowMemory) {
+            if (IsLowMemoryCallback()) {
+                return GetNextCapacityLowMemory(capacity);
+            }
+        }
+
+        ui64 growFactor;
+        if (capacity < 100'000) {
+            growFactor = 8;
+        } else if (capacity < 1'000'000) {
+            growFactor = 4;
+        } else {
+            growFactor = 2;
+        }
+        return capacity * growFactor;
+    }
+
+private:
+    bool IsGrowRequiredLowMemory(ui64 size, ui64 capacity) const {
+        return size > capacity / 4 * 3;
+    }
+
+    bool GetNextCapacityLowMemory(ui64 capacity) const {
+        return capacity + capacity / 4;
+    }
+
+private:
+    TIsLowMemoryCallback IsLowMemoryCallback = nullptr;
+};
+
 constexpr ui32 PrefetchBatchSize = 64;
 
 //TODO: only POD key & payloads are now supported
-template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash>
+template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash, typename TGrowManager>
 class TRobinHoodHashBase {
 public:
     using iterator = char*;
@@ -74,13 +129,14 @@ protected:
 
     using TPSLStorage = TPSLStorageImpl<CacheHash>;
 
-    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
+    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal, TIsLowMemoryCallback isLowMemoryCallback)
         : HashLocal(std::move(hash))
         , EqualLocal(std::move(equal))
         , Capacity(initialCapacity)
         , CapacityShift(64 - MostSignificantBit(initialCapacity))
         , Allocator()
         , SelfHash(GetSelfHash(this))
+        , GrowManager(isLowMemoryCallback)
     {
         Y_ENSURE((Capacity & (Capacity - 1)) == 0);
     }
@@ -108,14 +164,14 @@ public:
 
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
-        if (Size * 2 >= Capacity) {
+        if (GrowManager.IsGrowRequired(Size, Capacity)) {
             Grow();
         }
     }
 
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
-        while (2 * (Size + batchRequest.size()) >= Capacity) {
+        while (GrowManager.IsGrowRequired(Size + batchRequest.size(), Capacity)) {
             Grow();
         }
 
@@ -283,15 +339,7 @@ private:
     }
 
     Y_NO_INLINE void Grow() {
-        ui64 growFactor;
-        if (Capacity < 100'000) {
-            growFactor = 8;
-        } else if (Capacity < 1'000'000) {
-            growFactor = 4;
-        } else {
-            growFactor = 2;
-        }
-        auto newCapacity = Capacity * growFactor;
+        auto newCapacity = GrowManager.GetNextCapacity(Capacity);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -386,13 +434,14 @@ private:
     const ui64 SelfHash;
     char* Data = nullptr;
     char* DataEnd = nullptr;
+    TGrowManager GrowManager;
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>, typename TGrowManager = TRobinHoodGrowManager<false>>
+class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash, TGrowManager> {
 public:
     using TSelf = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash, TGrowManager>;
     using TPayloadStore = int;
 
     explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
@@ -455,11 +504,11 @@ private:
     TVec TmpPayload, TmpPayload2;
 };
 
-template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>, typename TGrowManager = TRobinHoodGrowManager<false>>
+class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash, TGrowManager> {
 public:
     using TSelf = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash, TGrowManager>;
     using TPayloadStore = TPayload;
 
     explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1u << 8)
@@ -504,15 +553,15 @@ public:
     }
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>, typename TGrowManager = TRobinHoodGrowManager<false>>
+class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash, TGrowManager> {
 public:
     using TSelf = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash, TGrowManager>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity, hash, equal) {
+    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8, TIsLowMemoryCallback isLowMemoryCallback = nullptr)
+        : TBase(initialCapacity, hash, equal, isLowMemoryCallback) {
         TBase::Init();
     }
 

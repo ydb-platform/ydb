@@ -39,7 +39,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
     ResultRowsBytes += rows.Size();
     auto guard = AllocState->TypeEnv.BindAllocator();
     auto& result = TxResults[idx];
-    if (rows.RowCount() || !result.IsStream) {
+    if (rows.RowCount()) {
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
             static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()));

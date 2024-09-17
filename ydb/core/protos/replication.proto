@@ -6,7 +6,13 @@ package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TReplicationDefaults {
+    message TSchemeOperationLimits {
+        optional uint32 InflightCreateStreamLimit = 1 [default = 1];
+        optional uint32 InflightDropStreamLimit = 2 [default = 1];
+    }
+
     optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
+    optional TSchemeOperationLimits SchemeOperationLimits = 2;
 }
 
 message TStaticCredentials {

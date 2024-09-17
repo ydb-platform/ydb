@@ -57,7 +57,7 @@ protected:
     NActors::TActorId HandlerId;
 
     TString YdbUserToken;
-    TContextStorage ContextStorage;
+    static TContextStorage ContextStorage;
     static NMvp::TTokensConfig TokensConfig;
     static TOpenIdConnectSettings OpenIdConnectSettings;
 

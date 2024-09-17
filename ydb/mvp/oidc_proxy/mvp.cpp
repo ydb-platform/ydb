@@ -191,6 +191,7 @@ TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) 
     return req->Endpoint->Secure ? httpsEndpoint : httpEndpoint;
 }
 
+TContextStorage TMVP::ContextStorage;
 NMvp::TTokensConfig TMVP::TokensConfig;
 TOpenIdConnectSettings TMVP::OpenIdConnectSettings;
 

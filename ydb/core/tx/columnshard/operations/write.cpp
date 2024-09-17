@@ -34,7 +34,7 @@ void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWr
         std::make_shared<NOlap::TBuildBatchesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
             NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
                 owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)),
-            schema, owner.GetLastTxSnapshot());
+            schema, owner.GetLastTxSnapshot(), owner.Counters.GetCSCounters().WritingCounters);
     NConveyor::TCompServiceOperator::SendTaskToExecute(task);
 
     Status = EOperationStatus::Started;

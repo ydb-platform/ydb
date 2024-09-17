@@ -59,7 +59,7 @@ struct TTM64Storage {
         ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
         if (!builder.SplitTzDate32(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId)) {
-            ythrow yexception() << "Error in SplitTzDate32";
+            ythrow yexception() << "Error in SplitTzDate32 tzId " << tzId << " value " << value;
         }
 
         TimezoneId = tzId;
@@ -81,7 +81,7 @@ struct TTM64Storage {
                 value, year, month, day, hour, minute, second,
                 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId))
         {
-            ythrow yexception() << "Error in SplitTzDatetime64";
+            ythrow yexception() << "Error in SplitTzDatetime64 tzId " << tzId << " value " << value;
         }
 
         TimezoneId = tzId;
@@ -109,7 +109,8 @@ struct TTM64Storage {
     i32 ToDate32(const NUdf::IDateBuilder& builder) const {
         i32 date;
         if (!builder.MakeTzDate32(Year, Month, Day, date, TimezoneId)) {
-            ythrow yexception() << "Error in MakeTzDate32";
+            ythrow yexception() << "Error in MakeTzDate32 tzId " << TimezoneId
+                << " " << Year << "-" << Month << "-" << Day;
         }
         return date;
     }
@@ -117,7 +118,8 @@ struct TTM64Storage {
     i64 ToDatetime64(const NUdf::IDateBuilder& builder) const {
         i64 datetime;
         if (!builder.MakeTzDatetime64(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
-            ythrow yexception() << "Error in MakeTzDatetime64";
+            ythrow yexception() << "Error in MakeTzDatetime64 tzId " << TimezoneId
+                << " " << Year << "-" << Month << "-" << Day << "T" << Hour << ":" << Minute << ":" << Second;
         }
         return datetime;
     }

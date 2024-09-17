@@ -73,8 +73,9 @@ struct TTransaction {
         : ProposeTransaction(proposeTx)
         , State(ECommitState::Committed)
     {
-        if (proposeTx->Record.HasSupportivePartitionActor()) {
-            SupportivePartitionActor = ActorIdFromProto(proposeTx->Record.GetSupportivePartitionActor());
+        const auto& record = proposeTx->GetRecord();
+        if (record.HasSupportivePartitionActor()) {
+            SupportivePartitionActor = ActorIdFromProto(record.GetSupportivePartitionActor());
         }
         Y_ABORT_UNLESS(ProposeTransaction);
     }

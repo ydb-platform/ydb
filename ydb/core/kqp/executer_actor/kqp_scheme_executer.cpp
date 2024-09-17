@@ -2,6 +2,7 @@
 #include "kqp_executer_impl.h"
 
 #include <ydb/core/kqp/gateway/actors/scheme.h>
+#include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
@@ -307,6 +308,48 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateTopic: {
+                const auto& modifyScheme = schemeOp.GetCreateTopic();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTopic: {
+                const auto& modifyScheme = schemeOp.GetAlterTopic();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTopic: {
+                const auto& modifyScheme = schemeOp.GetDropTopic();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+            
+            case NKqpProto::TKqpSchemeOperation::kAnalyzeTable: {
+                const auto& analyzeOperation = schemeOp.GetAnalyzeTable();
+
+                auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
+
+                TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
+                IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), columns, analyzePromise);
+
+                auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+                RegisterWithSameMailbox(analyzeActor);
+
+                auto selfId = SelfId();
+                analyzePromise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+                    auto ev = MakeHolder<TEvPrivate::TEvResult>();
+                    ev->Result = future.GetValue();
+
+                    actorSystem->Send(selfId, ev.Release());
+                });
+
+                Become(&TKqpSchemeExecuter::ExecuteState);
+                return;
+
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -435,7 +478,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvMakeTempDirResult::TPtr& result) {
-        if (!result->Get()->Result.Success()) {   
+        if (!result->Get()->Result.Success()) {
             InternalError(TStringBuilder()
                 << "Error creating temporary directory for session " << SessionId
                 << ": " << result->Get()->Result.Issues().ToString(true));

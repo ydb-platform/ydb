@@ -258,10 +258,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
-    const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+    const TSchemeLimits& limits,
+    const TSubDomainInfo& subDomain,
     bool pgTypesEnabled,
     bool datetime64TypesEnabled,
-    TString& errStr, const THashSet<TString>& localSequences)
+    TString& errStr,
+    const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -290,6 +292,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
+    bool allowSystemColumns = op.GetSystemColumnNamesAllowed();
+
     for (auto& col : *op.MutableColumns()) {
         TString colName = col.GetName();
 
@@ -300,7 +304,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
 
-        if (!IsValidColumnName(colName)) {
+        if (!IsValidColumnName(colName, allowSystemColumns)) {
             errStr = Sprintf("Invalid name for column '%s'", colName.data());
             return nullptr;
         }
@@ -379,7 +383,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NScheme::NTypeIds::Utf8:
                         break;
                     case NScheme::NTypeIds::Pg: {
-                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc())) {
+                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetPgTypeDesc())) {
                             case INT2OID:
                             case INT4OID:
                             case INT8OID:
@@ -387,7 +391,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                             case FLOAT8OID:
                                 break;
                             default: {
-                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetTypeDesc());
+                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetPgTypeDesc());
                                 TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID));
                                 errStr = Sprintf(
                                     "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
@@ -465,7 +469,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     }
                 }
             } else {
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                     return nullptr;
@@ -561,7 +565,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         for (const auto& indexDescription : op.GetTableIndexes()) {
             if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                 errStr = "Table with vector indexes doesn't support TTL";
-                return nullptr;                
+                return nullptr;
             }
         }
 
@@ -596,6 +600,26 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         alterData->TableDescriptionFull->MutableReplicationConfig()->CopyFrom(cfg);
+    }
+
+    if (op.HasIncrementalBackupConfig()) {
+        const auto& cfg = op.GetIncrementalBackupConfig();
+
+        switch (cfg.GetMode()) {
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE:
+            if (cfg.HasConsistency() && cfg.GetConsistency() != NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN) {
+                errStr = "Cannot set incremental backup consistency";
+                return nullptr;
+            }
+            break;
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP:
+            break;
+        default:
+            errStr = "Unknown incrementalBackup mode";
+            return nullptr;
+        }
+
+        alterData->TableDescriptionFull->MutableIncrementalBackupConfig()->CopyFrom(cfg);
     }
 
     alterData->IsBackup = op.GetIsBackup();
@@ -1548,6 +1572,10 @@ void TTableInfo::FinishAlter() {
         MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
     }
 
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasIncrementalBackupConfig()) {
+        MutableIncrementalBackupConfig().Swap(AlterData->TableDescriptionFull->MutableIncrementalBackupConfig());
+    }
+
     // Force FillDescription to regenerate TableDescription
     ResetDescriptionCache();
 
@@ -1586,6 +1614,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.RowCount += newStats.RowCount;
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
+        newAggregatedStats.ByKeyFilterSize += newStats.ByKeyFilterSize;
         for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
             auto& [dataSize, indexSize] = newAggregatedStats.StoragePoolsStats[poolKind];
             dataSize += newStoragePoolStats.DataSize;
@@ -1644,7 +1673,7 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats&
     Stats.UpdateShardStats(datashardIdx, newStats);
 }
 
-void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
     if (!PartitionStats.contains(datashardIdx))
         return;
@@ -1672,6 +1701,7 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
     Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
     Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
+    Aggregated.ByKeyFilterSize += (newStats.ByKeyFilterSize - oldStats.ByKeyFilterSize);
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
         auto& [dataSize, indexSize] = Aggregated.StoragePoolsStats[poolKind];
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
@@ -1733,33 +1763,10 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
-void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-    if (!TableStats.contains(pathId)) {
-        TableStats[pathId] = newStats;
-        return;
-    }
-
-    TPartitionStats& oldStats = TableStats[pathId];
-
-    if (newStats.SeqNo <= oldStats.SeqNo) {
-        // Ignore outdated message
-        return;
-    }
-
-    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
-        // Reset incremental counter baselines if tablet has restarted
-        oldStats.ImmediateTxCompleted = 0;
-        oldStats.PlannedTxCompleted = 0;
-        oldStats.TxRejectedByOverload = 0;
-        oldStats.TxRejectedBySpace = 0;
-        oldStats.RowUpdates = 0;
-        oldStats.RowDeletes = 0;
-        oldStats.RowReads = 0;
-        oldStats.RangeReads = 0;
-        oldStats.RangeReadRows = 0;
-    }
-    TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
-    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
+void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+    auto& tableStats = TableStats[pathId];
+    tableStats.PartitionStats[shardIdx]; // insert if none
+    tableStats.UpdateShardStats(shardIdx, newStats);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
@@ -2031,6 +2038,7 @@ TString TExportInfo::ToString() const {
         << " DomainPathId: " << DomainPathId
         << " ExportPathId: " << ExportPathId
         << " UserSID: '" << UserSID << "'"
+        << " PeerName: '" << PeerName << "'"
         << " State: " << State
         << " WaitTxId: " << WaitTxId
         << " Issue: '" << Issue << "'"
@@ -2120,26 +2128,30 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     index.SetName(IndexName);
     index.SetType(IndexType);
 
-    for (const auto& x : IndexColumns) {
-        *index.AddKeyColumnNames() = x;
-    }
+    *index.MutableKeyColumnNames() = {
+        IndexColumns.begin(),
+        IndexColumns.end()
+    };
 
-    for (const auto& x : DataColumns) {
-        *index.AddDataColumnNames() = x;
-    }
+    *index.MutableDataColumnNames() = {
+        DataColumns.begin(),
+        DataColumns.end()
+    };
 
-    for (const auto& implTableDescription : ImplTableDescriptions) {
-        *index.AddIndexImplTableDescriptions() = implTableDescription;
-    }
+    *index.MutableIndexImplTableDescriptions() = {
+        ImplTableDescriptions.begin(),
+        ImplTableDescriptions.end()
+    };
 
     if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
     }
 }
 
-void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumn());
-    result->SetTable(TPath::Init(TablePathId, ss).PathString());
+void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+    Y_ABORT_UNLESS(IsBuildColumns());
+    Y_ASSERT(!TargetName.empty());
+    result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
     }
@@ -2455,7 +2467,7 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 }
 
 // validate type of the sequence
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
         const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr) {
 
     i64 dataTypeMaxValue, dataTypeMinValue;
@@ -2487,9 +2499,9 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
                 errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
                 return std::nullopt;
             }
-        }                    
+        }
     } else {
-        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+        auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {
             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
             return std::nullopt;

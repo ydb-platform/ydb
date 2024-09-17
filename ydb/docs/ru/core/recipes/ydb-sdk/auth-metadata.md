@@ -1,5 +1,7 @@
 # Аутентификация при помощи сервиса метаданных
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [work in progress message](_includes/addition.md) %}
 
 Ниже приведены примеры кода аутентификации при помощи переменных окружения в разных {{ ydb-short-name }} SDK.
@@ -16,7 +18,7 @@
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
+    yc "github.com/ydb-platform/ydb-go-yc-metadata"
   )
 
   func main() {
@@ -24,7 +26,7 @@
     defer cancel()
     db, err := ydb.Open(ctx,
       os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithMetadataCredentials(ctx),
+      yc.WithCredentials(),
       yc.WithInternalCA(), // append Yandex Cloud certificates
     )
     if err != nil {
@@ -46,7 +48,7 @@
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
+    yc "github.com/ydb-platform/ydb-go-yc-metadata"
   )
 
   func main() {
@@ -54,7 +56,7 @@
     defer cancel()
     nativeDriver, err := ydb.Open(ctx,
       os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithMetadataCredentials(ctx),
+      yc.WithCredentials(),
       yc.WithInternalCA(), // append Yandex Cloud certificates
     )
     if err != nil {
@@ -146,7 +148,7 @@
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new MetadataAuthentication()
   ];
 

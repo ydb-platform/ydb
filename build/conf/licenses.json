@@ -315,6 +315,7 @@
             "SSLeay",
             "Sunpro",
             "Unicode",
+            "Unicode-3.0",
             "Unicode-DFS-2016",
             "Unicode-Icu-58",
             "Unicode-Mappings",
@@ -364,7 +365,6 @@
         "default": [
             "Service-Default-License",
             "Service-Dll-Harness",
-            "Service-Prebuilt-Tool",
             "Service-Py23-Proxy",
             "Service-Unknown-License-Java"
         ]

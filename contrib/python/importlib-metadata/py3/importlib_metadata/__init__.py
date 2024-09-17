@@ -7,11 +7,9 @@ import sys
 import json
 import email
 import types
-import inspect
 import pathlib
 import operator
 import textwrap
-import warnings
 import functools
 import itertools
 import posixpath
@@ -25,7 +23,7 @@ from ._compat import (
     install,
 )
 from ._functools import method_cache, pass_none
-from ._itertools import always_iterable, unique_everseen
+from ._itertools import always_iterable, bucket, unique_everseen
 from ._meta import PackageMetadata, SimplePath
 
 from contextlib import suppress
@@ -39,6 +37,7 @@ __all__ = [
     'DistributionFinder',
     'PackageMetadata',
     'PackageNotFoundError',
+    'SimplePath',
     'distribution',
     'distributions',
     'entry_points',
@@ -232,8 +231,25 @@ class EntryPoint:
         >>> ep.matches(attr='bong')
         True
         """
+        self._disallow_dist(params)
         attrs = (getattr(self, param) for param in params)
         return all(map(operator.eq, params.values(), attrs))
+
+    @staticmethod
+    def _disallow_dist(params):
+        """
+        Querying by dist is not allowed (dist objects are not comparable).
+        >>> EntryPoint(name='fan', value='fav', group='fag').matches(dist='foo')
+        Traceback (most recent call last):
+        ...
+        ValueError: "dist" is not suitable for matching...
+        """
+        if "dist" in params:
+            raise ValueError(
+                '"dist" is not suitable for matching. '
+                "Instead, use Distribution.entry_points.select() on a "
+                "located distribution."
+            )
 
     def _key(self):
         return self.name, self.value, self.group
@@ -339,27 +355,7 @@ class FileHash:
         return f'<FileHash mode: {self.mode} value: {self.value}>'
 
 
-class DeprecatedNonAbstract:
-    # Required until Python 3.14
-    def __new__(cls, *args, **kwargs):
-        all_names = {
-            name for subclass in inspect.getmro(cls) for name in vars(subclass)
-        }
-        abstract = {
-            name
-            for name in all_names
-            if getattr(getattr(cls, name), '__isabstractmethod__', False)
-        }
-        if abstract:
-            warnings.warn(
-                f"Unimplemented abstract methods {abstract}",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return super().__new__(cls)
-
-
-class Distribution(DeprecatedNonAbstract):
+class Distribution(metaclass=abc.ABCMeta):
     """
     An abstract Python distribution package.
 
@@ -398,6 +394,17 @@ class Distribution(DeprecatedNonAbstract):
         """
         Given a path to a file in this distribution, return a SimplePath
         to it.
+
+        This method is used by callers of ``Distribution.files()`` to
+        locate files within the distribution. If it's possible for a
+        Distribution to represent files in the distribution as
+        ``SimplePath`` objects, it should implement this method
+        to resolve such objects.
+
+        Some Distribution providers may elect not to resolve SimplePath
+        objects within the distribution by raising a
+        NotImplementedError, but consumers of such a Distribution would
+        be unable to invoke ``Distribution.files()``.
         """
 
     @classmethod
@@ -414,7 +421,7 @@ class Distribution(DeprecatedNonAbstract):
         if not name:
             raise ValueError("A distribution name is required.")
         try:
-            return next(iter(cls.discover(name=name)))
+            return next(iter(cls._prefer_valid(cls.discover(name=name))))
         except StopIteration:
             raise PackageNotFoundError(name)
 
@@ -437,6 +444,16 @@ class Distribution(DeprecatedNonAbstract):
         return itertools.chain.from_iterable(
             resolver(context) for resolver in cls._discover_resolvers()
         )
+
+    @staticmethod
+    def _prefer_valid(dists: Iterable[Distribution]) -> Iterable[Distribution]:
+        """
+        Prefer (move to the front) distributions that have metadata.
+
+        Ref python/importlib_resources#489.
+        """
+        buckets = bucket(dists, lambda dist: bool(dist.metadata))
+        return itertools.chain(buckets[True], buckets[False])
 
     @staticmethod
     def at(path: str | os.PathLike[str]) -> Distribution:
@@ -1146,11 +1163,10 @@ def _get_toplevel_name(name: PackagePath) -> str:
     >>> _get_toplevel_name(PackagePath('foo.dist-info'))
     'foo.dist-info'
     """
-    return _topmost(name) or (
-        # python/typeshed#10328
-        inspect.getmodulename(name)  # type: ignore
-        or str(name)
-    )
+    # Defer import of inspect for performance (python/cpython#118761)
+    import inspect
+
+    return _topmost(name) or (inspect.getmodulename(name) or str(name))
 
 
 def _top_level_inferred(dist):

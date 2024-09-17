@@ -127,6 +127,13 @@ TSharedRef TTestNodeMemoryTracker::Track(TSharedRef reference, bool keepExisting
         New<TTestTrackedReferenceHolder>(std::move(underlyingReference), std::move(guard)));
 }
 
+TErrorOr<TSharedRef> TTestNodeMemoryTracker::TryTrack(
+    TSharedRef reference,
+    bool keepHolder)
+{
+    return Track(std::move(reference), keepHolder);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTestNodeMemoryTracker::TTestTrackedReferenceHolder::TTestTrackedReferenceHolder(

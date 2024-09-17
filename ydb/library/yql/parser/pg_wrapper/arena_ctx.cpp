@@ -118,6 +118,7 @@ TArenaMemoryContext::TArenaMemoryContext() {
 }
 
 TArenaMemoryContext::~TArenaMemoryContext() {
+    MemoryContextDeleteChildren(MyContext);
     Release();
     free(MyContext);
 }

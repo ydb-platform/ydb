@@ -12,7 +12,7 @@ Once external data sources and (if necessary) external tables are registered in 
 
 While executing federated queries, {{ ydb-short-name }} needs to access external data storage systems over the network, for which it uses their client libraries. Including such dependencies negatively affects the codebase size, compilation time, and binary file size of {{ ydb-short-name }}, as well as the product's overall stability.
 
-The list of supported data sources for federated queries is constantly expanding. The most popular sources, such as [S3](s3), are natively supported by {{ ydb-short-name }}. However, not all users require support for all sources simultaneously. Support can be optionally enabled using _connectors_ - special microservices implementing a unified interface for accessing external data sources.
+The list of supported data sources for federated queries is constantly expanding. The most popular sources, such as S3, are natively supported by {{ ydb-short-name }}. However, not all users require support for all sources simultaneously. Support can be optionally enabled using _connectors_ - special microservices implementing a unified interface for accessing external data sources.
 
 The functions of connectors include:
 
@@ -30,8 +30,10 @@ Users can deploy [one of the ready-made connectors](../../deploy/manual/connecto
 
 | Source | Support |
 |--------|---------|
-| [S3](https://aws.amazon.com/ru/s3/) | Built into `ydbd` |
 | [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
-| [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
 | [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
+| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
+| [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
+| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |
+| [S3](https://aws.amazon.com/ru/s3/) | Built into `ydbd` |
+| [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) |

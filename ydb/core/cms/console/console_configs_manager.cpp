@@ -1,6 +1,7 @@
 #include "console_configs_manager.h"
 
 #include "configs_dispatcher.h"
+#include "console_audit.h"
 #include "console_configs_provider.h"
 #include "console_impl.h"
 #include "http.h"
@@ -972,6 +973,26 @@ void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
                     new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvCleanupLog),
                     AppData(ctx)->SystemPoolId,
                     LogCleanupTimerCookieHolder.Get());
+}
+
+void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &) {
+    AuditLogReplaceConfigTransaction(
+        /* peer = */ ev->Get()->Record.GetPeerName(),
+        /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* oldConfig = */ YamlConfig,
+        /* newConfig = */ ev->Get()->Record.GetRequest().config(),
+        /* reason = */ "Unauthorized.",
+        /* success = */ false);
+}
+
+void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &) {
+    AuditLogReplaceConfigTransaction(
+        /* peer = */ ev->Get()->Record.GetPeerName(),
+        /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* oldConfig = */ YamlConfig,
+        /* newConfig = */ ev->Get()->Record.GetRequest().config(),
+        /* reason = */ "Unauthorized.",
+        /* success = */ false);
 }
 
 } // namespace NKikimr::NConsole

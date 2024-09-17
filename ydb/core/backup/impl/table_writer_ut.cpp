@@ -1,4 +1,5 @@
-#include "table_writer_impl.h"
+#include "change_record.h"
+#include "table_writer.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,7 +15,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Tag = 1,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Uint64},
                 });
-        schema->ValueColumns.emplace("__incrBackupImpl_deleted", TLightweightSchema::TColumn{
+        schema->ValueColumns.emplace("__ydb_incrBackupImpl_deleted", TLightweightSchema::TColumn{
                     .Tag = 123,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Bool},
                 });
@@ -48,8 +49,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Backup);
-            record->Serialize(result, ctx);
+            record->Serialize(result, EWriterType::Backup);
 
             TVector<TCell> outCells{
                 TCell::Make<ui64>(4567),
@@ -59,10 +59,10 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             TString out = TSerializedCellVec::Serialize(outCells);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 2);
             UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
             UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
         }
 
         {
@@ -89,21 +89,20 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Backup);
-            record->Serialize(result, ctx);
+            record->Serialize(result, EWriterType::Backup);
 
             TVector<TCell> outCells{
-                TCell::Make<bool>(true),
                 TCell(),
+                TCell::Make<bool>(true),
             };
 
             TString out = TSerializedCellVec::Serialize(outCells);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 2);
-            UNIT_ASSERT(result.GetUpsert().GetTags(0) == 123);
-            UNIT_ASSERT(result.GetUpsert().GetTags(1) == 1);
+            UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
+            UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
         }
     }
 
@@ -144,13 +143,12 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Restore);
-            record->Serialize(result, ctx);
+            record->Serialize(result, EWriterType::Restore);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT_VALUES_EQUAL(upsert.GetData(), result.GetUpsert().GetData());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 1);
             UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
+            UNIT_ASSERT_VALUES_EQUAL(upsert.GetData(), result.GetUpsert().GetData());
         }
 
     }

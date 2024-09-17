@@ -50,8 +50,14 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseLlvm;
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
-    NCommon::TConfSetting<TString, false> OverrideStatistics;
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
+    NCommon::TConfSetting<TString, false> OverridePlanner;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+
+    NCommon::TConfSetting<TString, false> OptOverrideStatistics;
+    NCommon::TConfSetting<TString, false> OptCardinalityHints;
+    NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
+    NCommon::TConfSetting<TString, false> OptJoinOrderHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -83,7 +89,6 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
-    ui64 GetEnabledSpillingNodes() const;
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
@@ -145,7 +150,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpDataQuerySourceRead = false;
     bool EnableKqpScanQueryStreamLookup = false;
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
@@ -163,10 +167,15 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
+    bool EnableHtapTx = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpillingGenericQuery = false;
-    ui32 DefaultCostBasedOptimizationLevel = 3;
+    ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
+    ui64 DefaultEnableSpillingNodes = 0;
+
+    void SetDefaultEnabledSpillingNodes(const TString& node);
+    ui64 GetEnabledSpillingNodes() const;
 };
 
 }

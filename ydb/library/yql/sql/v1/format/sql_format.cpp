@@ -937,6 +937,12 @@ private:
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
     }
 
+    void VisitAnalyze(const TRule_analyze_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
+    }
+
     void VisitUse(const TRule_use_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -1379,10 +1385,11 @@ private:
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
-        Visit(msg.GetRule_topic_ref3());
-        if (msg.HasBlock4()) {
+        Visit(msg.GetBlock3());
+        Visit(msg.GetRule_topic_ref4());
+        if (msg.HasBlock5()) {
             PushCurrentIndent();
-            auto& b = msg.GetBlock4().GetRule_create_topic_entries1();
+            auto& b = msg.GetBlock5().GetRule_create_topic_entries1();
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_create_topic_entry2());
@@ -1395,8 +1402,8 @@ private:
             PopCurrentIndent();
             Visit(b.GetToken4());
         }
-        if (msg.HasBlock5()) {
-            auto& b = msg.GetBlock5().GetRule_with_topic_settings1();
+        if (msg.HasBlock6()) {
+            auto& b = msg.GetBlock6().GetRule_with_topic_settings1();
             VisitKeyword(b.GetToken1());
             VisitKeyword(b.GetToken2());
             PushCurrentIndent();
@@ -1413,11 +1420,12 @@ private:
         NewLine();
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
-        Visit(msg.GetRule_topic_ref3());
+        Visit(msg.GetBlock3());
+        Visit(msg.GetRule_topic_ref4());
         NewLine();
         PushCurrentIndent();
-        Visit(msg.GetRule_alter_topic_action4());
-        for (auto& b : msg.GetBlock5()) {
+        Visit(msg.GetRule_alter_topic_action5());
+        for (auto& b : msg.GetBlock6()) {
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_alter_topic_action2());
@@ -1525,6 +1533,69 @@ private:
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_resource_pool_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitCreateBackupCollection(const TRule_create_backup_collection_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_backup_collection_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterBackupCollection(const TRule_alter_backup_collection_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitToken(msg.GetToken1());
+        Visit(msg.GetRule_backup_collection2());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_backup_collection_actions3().GetRule_alter_backup_collection_action1());
+        for (const auto& action : msg.GetRule_alter_backup_collection_actions3().GetBlock2()) {
+            Visit(action.GetToken1()); // comma
+            NewLine();
+            Visit(action.GetRule_alter_backup_collection_action2());
+        }
+
+        PopCurrentIndent();
+    }
+
+    void VisitDropBackupCollection(const TRule_drop_backup_collection_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_backup_collection_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitCreateResourcePoolClassifier(const TRule_create_resource_pool_classifier_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_resource_pool_classifier_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterResourcePoolClassifier(const TRule_alter_resource_pool_classifier_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitToken(msg.GetToken1());
+        VisitToken(msg.GetToken2());
+        VisitToken(msg.GetToken3());
+        VisitToken(msg.GetToken4());
+        Visit(msg.GetRule_object_ref5());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_resource_pool_classifier_action6());
+        for (const auto& action : msg.GetBlock7()) {
+            Visit(action.GetToken1()); // comma
+            NewLine();
+            Visit(action.GetRule_alter_resource_pool_classifier_action2());
+        }
+
+        PopCurrentIndent();
+    }
+
+    void VisitDropResourcePoolClassifier(const TRule_drop_resource_pool_classifier_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), msg);
     }
 
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
@@ -2743,7 +2814,14 @@ TStaticData::TStaticData()
         {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)},
         {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
         {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
-        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)}
+        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)},
+        {TRule_create_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateBackupCollection)},
+        {TRule_alter_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterBackupCollection)},
+        {TRule_drop_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropBackupCollection)},
+        {TRule_analyze_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAnalyze)},
+        {TRule_create_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePoolClassifier)},
+        {TRule_alter_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePoolClassifier)},
+        {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)}
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
@@ -2794,7 +2872,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -2803,7 +2881,7 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+        auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
         TParsedTokenList allTokens;
         auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
             if (token.Name != "EOF") {
@@ -2857,7 +2935,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -2920,7 +2998,7 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+    auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -2964,6 +3042,7 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
 
 THashSet<TString> GetKeywords() {
     TString grammar;
+    // ANTLR4-MIGRATION: just change SQLv1 to SQLv1Antlr4
     Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;

@@ -49,11 +49,6 @@ void Serialize(const TSummary& summary, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Return the invalid character if the given path is invalid, otherwise return |nullopt|.
-std::optional<char> CheckStatisticPath(const NYPath::TYPath& path);
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TStatistics
 {
 public:
@@ -108,6 +103,15 @@ i64 GetNumericValue(const TStatistics& statistics, const TString& path);
 
 std::optional<i64> FindNumericValue(const TStatistics& statistics, const TString& path);
 std::optional<TSummary> FindSummary(const TStatistics& statistics, const TString& path);
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EStatisticPathConflictType,
+    (HasPrefix)
+    (IsPrefix)
+    (Exists)
+    (None)
+);
 
 ////////////////////////////////////////////////////////////////////////////////
 

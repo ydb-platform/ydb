@@ -34,6 +34,10 @@ inline TString SchemeKey(const TString& objKeyPattern) {
     return Sprintf("%s/scheme.pb", objKeyPattern.c_str());
 }
 
+inline TString PermissionsKey(const TString& objKeyPattern) {
+    return Sprintf("%s/permissions.pb", objKeyPattern.c_str());
+}
+
 inline TString MetadataKey(const TString& objKeyPattern) {
     return Sprintf("%s/metadata.json", objKeyPattern.c_str());
 }

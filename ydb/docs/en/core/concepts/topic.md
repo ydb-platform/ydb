@@ -33,13 +33,13 @@ All messages within a partition have a unique sequence number called an `offset`
 
 ## Message sources and groups {#producer-id}
 
-Messages are ordered using the `producer_id` and `message_group_id`. The order of written messages is maintained within pairs: <producer ID, message group ID>.
+Messages are ordered using the `producer_id` and `message_group_id`. The order of written messages is maintained within pairs: `<producer ID, message group ID>`.
 
-When used for the first time, a pair of <producer ID, message group ID> is linked to a topic's [partition](#partition) using the round-robin algorithm and all messages with this pair of IDs get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
+When used for the first time, a pair of `<producer ID, message group ID>` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with this pair of IDs get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
 
 {% note warning %}
 
-The recommended maximum number of <producer ID, message group ID> pairs is up to 100 thousand per partition in the last 14 days.
+The recommended maximum number of `<producer ID, message group ID>` pairs is up to 100 thousand per partition in the last 14 days.
 
 {% endnote %}
 

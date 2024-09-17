@@ -23,6 +23,8 @@ TString GetYdbDatabase()
 
 TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode)
 {
+    SetEnv("YDB_TOKEN", "root@builin");
+
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
 
     command << "-e" << ("grpc://" + GetYdbEndpoint());
@@ -49,7 +51,7 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
     return command.GetOutput();
 }
 
-ui64 GetFullTimeValue(const TString& output)
+ui64 GetMostRecentValue(const TString& output)
 {
     TVector<TString> lines, columns;
 
@@ -57,6 +59,16 @@ ui64 GetFullTimeValue(const TString& output)
     Split(lines.back(), "\t", columns);
 
     return FromString<ui64>(columns.back());
+}
+
+ui64 GetFullTimeValue(const TString& output)
+{
+    return GetMostRecentValue(output);
+}
+
+ui64 GetCommitTimeValue(const TString& output)
+{
+    return GetMostRecentValue(output);
 }
 
 THashSet<TString> GetCodecsList(const TString& output)

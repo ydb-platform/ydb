@@ -73,6 +73,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateSequence::CallableName());
         DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
+        DataSinkNames.insert(TKiAnalyzeTable::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -234,7 +235,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
             if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
                 type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
             } else {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
+                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
             }
         }
 
@@ -667,7 +668,7 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
         auto actualPgType = valueType->Cast<TPgExprType>();
         YQL_ENSURE(actualPgType);
 
-        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
         if (!typeDesc) {
             return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
         }
@@ -829,6 +830,39 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
+
+Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance) {
+    if (distance == "cosine")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+    else if (distance == "manhattan")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+    else if (distance == "euclidean")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+    else 
+        YQL_ENSURE(false, "Wrong index setting distance: " << distance);
+};
+
+Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity) {
+    if (similarity == "cosine")
+        return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+    else if (similarity == "inner_product")
+        return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+    else
+        YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
+};
+
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType) {
+    if (vectorType == "float")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+    else if (vectorType == "uint8")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+    else if (vectorType == "int8")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+    else if (vectorType == "bit")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+    else
+        YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
+};
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;

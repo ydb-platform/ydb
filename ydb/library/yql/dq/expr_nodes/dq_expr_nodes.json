@@ -48,6 +48,11 @@
         ]
     },
     {
+        "Name": "TDqPhyGraceJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyGraceJoin"}
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}

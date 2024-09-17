@@ -11,8 +11,10 @@ Federated queries allow retrieving information from various data sources without
 To work with data stored in external DBMSs, it is sufficient to create an [external data source](../datamodel/external_data_source.md). To work with unstructured data stored in S3 buckets, you additionally need to create an [external table](../datamodel/external_table.md). In both cases, it is necessary to  create [secrets](../datamodel/secrets.md) objects first that store confidential data required for authentication in external systems.
 
 You can learn about the internals of the federated query processing system in the [architecture](./architecture.md) section. Detailed information on working with various data sources is provided in the corresponding sections:
+
 - [ClickHouse](clickhouse.md)
-- [PostgreSQL](postgresql.md)
-- [{{ ydb-short-name }}](ydb.md)
-- [S3](s3/external_table.md)
 - [Greenplum](greenplum.md)
+- [MySQL](mysql.md)
+- [PostgreSQL](postgresql.md)
+- [S3](s3/external_table.md)
+- [{{ ydb-short-name }}](ydb.md)

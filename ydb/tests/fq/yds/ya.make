@@ -61,6 +61,4 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:16)
-
 END()

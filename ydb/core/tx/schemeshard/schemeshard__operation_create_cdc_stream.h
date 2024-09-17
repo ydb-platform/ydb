@@ -19,7 +19,8 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TPath& workingDirPath,
     const TString& tableName,
     const TString& streamName,
-    bool acceptExisted);
+    bool acceptExisted,
+    bool restore = false);
 
 void DoCreateStream(
     TVector<ISubOperation::TPtr>& result,

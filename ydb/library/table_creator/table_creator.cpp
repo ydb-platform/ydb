@@ -34,12 +34,16 @@ public:
         TVector<NKikimrSchemeOp::TColumnDescription> columns,
         TVector<TString> keyColumns,
         NKikimrServices::EServiceKikimr logService,
-        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing())
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
+        bool isSystemUser = false,
+        TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing())
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
         , LogService(logService)
         , TtlSettings(std::move(ttlSettings))
+        , IsSystemUser(isSystemUser)
+        , PartitioningPolicy(std::move(partitioningPolicy))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -86,8 +90,8 @@ public:
             pathComponents.emplace_back(PathComponents[i]);
         }
         modifyScheme.SetWorkingDir(CanonizePath(pathComponents));
-        LOG_DEBUG_S(*TlsActivationContext, LogService,
-            LogPrefix << "Full table path:" << modifyScheme.GetWorkingDir() << "/" << TableName());
+        TString fullPath = modifyScheme.GetWorkingDir() + "/" + TableName();
+        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Full table path:" << fullPath);
         modifyScheme.SetOperationType(OperationType);
         modifyScheme.SetInternal(true);
         modifyScheme.SetAllowAccessToPrivatePaths(true);
@@ -108,6 +112,14 @@ public:
         if (TtlSettings) {
             tableDesc->MutableTTLSettings()->CopyFrom(*TtlSettings);
         }
+        if (IsSystemUser) {
+            request->Record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
+        }
+        if (PartitioningPolicy) {
+            auto* partitioningPolicy = tableDesc->MutablePartitionConfig()->MutablePartitioningPolicy();
+            partitioningPolicy->CopyFrom(*PartitioningPolicy);
+        }
+
         Send(MakeTxProxyID(), std::move(request));
     }
 
@@ -376,6 +388,8 @@ private:
     const TVector<TString> KeyColumns;
     NKikimrServices::EServiceKikimr LogService;
     const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
+    bool IsSystemUser = false;
+    const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
@@ -392,7 +406,9 @@ THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(cons
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     auto databasePath = SplitPath(database);
     request->DatabaseName = CanonizePath(databasePath);
-    request->UserToken = userToken;
+    if (userToken && !userToken->GetSerializedToken().empty()) {
+        request->UserToken = userToken;
+    }
 
     for (const auto& pathComponents : pathsComponents) {
         auto& entry = request->ResultSet.emplace_back();
@@ -471,10 +487,13 @@ NActors::IActor* CreateTableCreator(
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
-    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings)
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings,
+    bool isSystemUser,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
-        std::move(keyColumns), logService, std::move(ttlSettings));
+        std::move(keyColumns), logService, std::move(ttlSettings), isSystemUser,
+        std::move(partitioningPolicy));
 }
 
 } // namespace NKikimr

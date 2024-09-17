@@ -37,6 +37,8 @@ message TKqpLocks {
     // This may only be used with generic readsets without any other data and
     // currently limited to volatile transactions.
     optional uint64 ArbiterShard = 5;
+
+    optional uint64 ArbiterColumnShard = 6;
 }
 
 message TTableId {
@@ -126,6 +128,7 @@ message TEvWriteResult {
         STATUS_BAD_REQUEST = 7;
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;
+        STATUS_DISK_SPACE_EXHAUSTED = 10;
     }
 
     // Status

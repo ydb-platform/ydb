@@ -1,3 +1,4 @@
+
 UNITTEST_FOR(library/cpp/protobuf/util)
 
 SRCS(

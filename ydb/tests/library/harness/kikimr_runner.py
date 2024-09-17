@@ -68,6 +68,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.mon_port = port_allocator.mon_port
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
+        self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
         if configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
@@ -77,10 +78,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if configurator.use_log_files:
             self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
+            kwargs = {}
         else:
             self.__log_file = None
+            kwargs = {
+                "stdout_file": "/dev/stdout",
+                "stderr_file": "/dev/stderr"
+                }
 
-        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240)
+        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
         self.__binary_path = None
 
     @property
@@ -108,10 +114,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def command(self):
         return self.__make_run_command()
-
-    def set_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        return self.__binary_path
 
     def format_pdisk(self, pdisk_path, disk_size, **kwargs):
         logger.debug("Formatting pdisk %s on node %s, disk_size %s" % (pdisk_path, self, disk_size))
@@ -175,6 +177,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             ]
         )
 
+        if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
+            command.append("--pgwire-port=%d" % self.pgwire_port)
+
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])
 
@@ -209,10 +214,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def host(self):
         return 'localhost'
-
-    @property
-    def hostname(self):
-        return kikimr_config.get_fqdn()
 
     @property
     def port(self):
@@ -375,19 +376,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._nodes[node_index]
 
-    def register_slots(self, database, count=1, encryption_key=None):
-        return [self.register_slot(database, encryption_key) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None):
+        return [self.__register_slot(database, encryption_key) for _ in range(count)]
 
     def register_and_start_slots(self, database, count=1, encryption_key=None):
-        slots = self.register_slots(database, count, encryption_key)
+        slots = self.__register_slots(database, count, encryption_key)
         for slot in slots:
             slot.start()
         return slots
 
-    def register_slot(self, tenant_affiliation=None, encryption_key=None):
-        return self._register_slot(tenant_affiliation, encryption_key)
-
-    def _register_slot(self, tenant_affiliation=None, encryption_key=None):
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -407,12 +405,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._slots[slot_index]
 
-    def unregister_slots(self, slots):
+    def __unregister_slots(self, slots):
         for i in slots:
             del self._slots[i.node_id]
 
     def unregister_and_stop_slots(self, slots):
-        self.unregister_slots(slots)
+        self.__unregister_slots(slots)
         for i in slots:
             i.stop()
 
@@ -613,33 +611,36 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
     def start(self):
         if self.__slot_id is None:
-            return self.ssh_command("sudo start kikimr")
-        return self.ssh_command(
-            [
-                "sudo", "start",
-                "kikimr-multi",
-                "slot={}".format(self.__slot_id),
-                "tenant=/Root/db1",
-                "mbus={}".format(self.__mbus_port),
-                "grpc={}".format(self.__grpc_port),
-                "mon={}".format(self.__mon_port),
-                "ic={}".format(self.__ic_port),
-            ]
+            return self.ssh_command("sudo service kikimr start")
+
+        slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=self.__slot_id)
+        slot_cfg = slot_dir + "/slot_cfg"
+        env_txt = slot_dir + "/env.txt"
+
+        cfg = """\
+tenant=/Root/db1
+grpc={grpc}
+mbus={mbus}
+ic={ic}
+mon={mon}""".format(
+            mbus=self.__mbus_port,
+            grpc=self.__grpc_port,
+            mon=self.__mon_port,
+            ic=self.__ic_port,
         )
+
+        self.ssh_command(["sudo", "mkdir", slot_dir])
+        self.ssh_command(["sudo", "touch", env_txt])
+        self.ssh_command(["/bin/echo", "-e", "\"{}\"".format(cfg),  "|", "sudo", "tee", slot_cfg])
+
+        return self.ssh_command(["sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id)])
 
     def stop(self):
         if self.__slot_id is None:
-            return self.ssh_command("sudo stop kikimr")
+            return self.ssh_command("sudo service kikimr stop")
         return self.ssh_command(
             [
-                "sudo", "stop",
-                "kikimr-multi",
-                "slot={}".format(self.__slot_id),
-                "tenant=/Root/db1",
-                "mbus={}".format(self.__mbus_port),
-                "grpc={}".format(self.__grpc_port),
-                "mon={}".format(self.__mon_port),
-                "ic={}".format(self.__ic_port),
+                "sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id),
             ]
         )
 

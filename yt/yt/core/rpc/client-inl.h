@@ -149,6 +149,7 @@ TIntrusivePtr<T> TProxyBase::CreateRequest(const TMethodDescriptor& methodDescri
     request->SetAcknowledgementTimeout(DefaultAcknowledgementTimeout_);
     request->SetRequestCodec(DefaultRequestCodec_);
     request->SetResponseCodec(DefaultResponseCodec_);
+    request->SetMemoryUsageTracker(DefaultMemoryUsageTracker_);
     request->SetEnableLegacyRpcCodecs(DefaultEnableLegacyRpcCodecs_);
     request->SetMultiplexingBand(methodDescriptor.MultiplexingBand);
 

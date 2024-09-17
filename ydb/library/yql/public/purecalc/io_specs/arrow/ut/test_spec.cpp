@@ -3,11 +3,42 @@
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 #include <ydb/library/yql/public/purecalc/io_specs/arrow/spec.h>
 #include <ydb/library/yql/public/purecalc/ut/lib/helpers.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
 #include <arrow/array/builder_primitive.h>
 
 namespace {
+
+#define Y_UNIT_TEST_ADD_BLOCK_TEST(N, MODE)             \
+    TCurrentTest::AddTest(#N ":BlockEngineMode=" #MODE, \
+        static_cast<void (*)(NUnitTest::TTestContext&)>(&N<NYql::EBlockEngineMode::MODE>), false);
+
+#define Y_UNIT_TEST_BLOCKS(N)                                                \
+    template<NYql::EBlockEngineMode BlockEngineMode>                         \
+    void N(NUnitTest::TTestContext&);                                        \
+    struct TTestRegistration##N {                                            \
+        TTestRegistration##N() {                                             \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Disable)                           \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Auto)                              \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Force)                             \
+        }                                                                    \
+    };                                                                       \
+    static TTestRegistration##N testRegistration##N;                         \
+    template<NYql::EBlockEngineMode BlockEngineMode>                         \
+    void N(NUnitTest::TTestContext&)
+
+NYql::NPureCalc::TProgramFactoryOptions TestOptions(NYql::EBlockEngineMode mode) {
+    static const TMap<NYql::EBlockEngineMode, const TString> mode2settings = {
+        {NYql::EBlockEngineMode::Disable, "disable"},
+        {NYql::EBlockEngineMode::Auto, "auto"},
+        {NYql::EBlockEngineMode::Force, "force"},
+    };
+    auto options = NYql::NPureCalc::TProgramFactoryOptions();
+    options.SetBlockEngineSettings(mode2settings.at(mode));
+    return options;
+}
+
 
 template <typename T>
 struct TVectorStream: public NYql::NPureCalc::IStream<T*> {
@@ -51,21 +82,49 @@ public:
 using ExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
 using ExecBatchConsumerImpl = TVectorConsumer<arrow::compute::ExecBatch>;
 
+template <typename TBuilder>
+arrow::Datum MakeArrayDatumFromVector(
+    const TVector<typename TBuilder::value_type>& data,
+    const TVector<bool>& valid
+) {
+    TBuilder builder;
+    ARROW_OK(builder.Reserve(data.size()));
+    ARROW_OK(builder.AppendValues(data, valid));
+    return arrow::Datum(ARROW_RESULT(builder.Finish()));
+}
 
-arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value) {
-    TVector<uint64_t> data(bsize);
+template <typename TValue>
+TVector<TValue> MakeVectorFromArrayDatum(
+    const arrow::Datum& datum,
+    const int64_t dsize
+) {
+    Y_ENSURE(datum.is_array(), "ExecBatch layout doesn't respect the schema");
+
+    const auto& array = *datum.array();
+    Y_ENSURE(array.length == dsize,
+        "Array Datum size differs from the given ExecBatch size");
+    Y_ENSURE(array.GetNullCount() == 0,
+        "Null values conversion is not supported");
+    Y_ENSURE(array.buffers.size() == 2,
+        "Array Datum layout doesn't respect the schema");
+
+    const TValue* adata1 = array.GetValuesSafe<TValue>(1);
+    return TVector<TValue>(adata1, adata1 + dsize);
+}
+
+arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value, ui64 init = 1) {
+    TVector<uint64_t> data1(bsize);
+    TVector<int64_t> data2(bsize);
     TVector<bool> valid(bsize);
-    std::iota(data.begin(), data.end(), 1);
+    std::iota(data1.begin(), data1.end(), init);
+    std::fill(data2.begin(), data2.end(), value);
     std::fill(valid.begin(), valid.end(), true);
 
-    arrow::UInt64Builder builder;
-    ARROW_OK(builder.Reserve(bsize));
-    ARROW_OK(builder.AppendValues(data, valid));
+    TVector<arrow::Datum> batchArgs = {
+        MakeArrayDatumFromVector<arrow::UInt64Builder>(data1, valid),
+        MakeArrayDatumFromVector<arrow::Int64Builder>(data2, valid)
+    };
 
-    arrow::Datum array(ARROW_RESULT(builder.Finish()));
-    arrow::Datum scalar(std::make_shared<arrow::Int64Scalar>(value));
-
-    TVector<arrow::Datum> batchArgs = {array, scalar};
     return arrow::compute::ExecBatch(std::move(batchArgs), bsize);
 }
 
@@ -74,41 +133,11 @@ TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<arrow::compute::ExecBa
     for (const auto& batch : batches) {
         const auto bsize = batch.length;
 
-        Y_ENSURE(batch.num_values() == 2,
-            "ExecBatch layout doesn't respect the schema");
-        arrow::Datum first = batch.values[0];
-        arrow::Datum second = batch.values[1];
-
-
-        Y_ENSURE(first.is_array(),
-            "ExecBatch layout doesn't respect the schema");
-
-        const auto& array = *first.array();
-        Y_ENSURE(array.length == bsize,
-            "Array Datum size differs from the given ExecBatch size");
-        Y_ENSURE(array.GetNullCount() == 0,
-            "Null values conversion is not supported");
-        Y_ENSURE(array.buffers.size() == 2,
-            "Array Datum layout doesn't respect the schema");
-
-        const ui64* adata = array.GetValuesSafe<ui64>(1);
-        TVector<ui64> avec(adata, adata + bsize);
-
-
-        Y_ENSURE(second.is_scalar(),
-            "ExecBatch layout doesn't respect the schema");
-
-        const auto& scalar = second.scalar();
-        Y_ENSURE(scalar->is_valid,
-            "Null values conversion is not supported");
-
-        const auto& sdata = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*scalar);
-        TVector<i64> svec(bsize);
-        std::fill(svec.begin(), svec.end(), sdata.value);
-
+        const auto& avec1 = MakeVectorFromArrayDatum<ui64>(batch.values[0], bsize);
+        const auto& avec2 = MakeVectorFromArrayDatum<i64>(batch.values[1], bsize);
 
         for (auto i = 0; i < bsize; i++) {
-            result.push_back(std::make_tuple(avec[i], svec[i]));
+            result.push_back(std::make_tuple(avec1[i], avec2[i]));
         }
     }
     std::sort(result.begin(), result.end());
@@ -119,15 +148,15 @@ TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<arrow::compute::ExecBa
 
 
 Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
-    Y_UNIT_TEST(TestSingleInput) {
+    Y_UNIT_TEST_BLOCKS(TestSingleInput) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -147,18 +176,20 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             }
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
         }
     }
 
-    Y_UNIT_TEST(TestMultiInput) {
+    Y_UNIT_TEST_BLOCKS(TestMultiInput) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema, schema}),
                 TArrowOutputSpec(schema),
@@ -189,21 +220,64 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             }
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInputs, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
+        }
+    }
+}
+
+
+Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
+    Y_UNIT_TEST_BLOCKS(TestInc) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
+
+        try {
+            auto program = factory->MakePullListProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                R"(SELECT
+                    uint64 + 1 as uint64,
+                    int64  - 2  as int64,
+                FROM Input)",
+                ETranslationMode::SQL
+            );
+
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
+
+            auto stream = program->Apply(&items);
+
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
+            const auto canonCheck = CanonBatches(check);
+            UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
 
 
 Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
-    Y_UNIT_TEST(TestSingleInput) {
+    Y_UNIT_TEST_BLOCKS(TestSingleInput) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullStreamProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -223,21 +297,64 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
             }
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
+        }
+    }
+}
+
+
+Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
+    Y_UNIT_TEST_BLOCKS(TestInc) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
+
+        try {
+            auto program = factory->MakePullStreamProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                R"(SELECT
+                    uint64 + 1 as uint64,
+                    int64  - 2  as int64,
+                FROM Input)",
+                ETranslationMode::SQL
+            );
+
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
+
+            auto stream = program->Apply(&items);
+
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
+            const auto canonCheck = CanonBatches(check);
+            UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
 
 
 Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
-    Y_UNIT_TEST(TestAllColumns) {
+    Y_UNIT_TEST_BLOCKS(TestAllColumns) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePushStreamProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -256,6 +373,47 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
 
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
+    Y_UNIT_TEST_BLOCKS(TestInc) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
+
+        try {
+            auto program = factory->MakePushStreamProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                R"(SELECT
+                    uint64 + 1 as uint64,
+                    int64  - 2  as int64,
+                FROM Input)",
+                ETranslationMode::SQL
+            );
+
+            arrow::compute::ExecBatch input = MakeBatch(9, 19);
+            const auto canonInput = CanonBatches({input});
+            TVector<arrow::compute::ExecBatch> output;
+
+            auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(output));
+
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnObject(&input); }());
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnFinish(); }());
+
+            const auto canonOutput = CanonBatches(output);
+            const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
+            const auto canonCheck = CanonBatches(check);
+            UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        } catch (const TCompileError& error) {
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }

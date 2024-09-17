@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "dsproxy.h"
+#include "request_history.h"
 
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -97,10 +98,10 @@ struct TBlobState {
     ui64 GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             ui32 diskIdxInSubring, NKikimrBlobStorage::EVDiskQueueId queueId) const;
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-            NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const;
+            NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
+            const TAccelerationParams& accelerationParams) const;
     TString ToString() const;
     bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
-            
     static TString SituationToString(ESituation situation);
 };
 
@@ -158,12 +159,13 @@ class IStrategy {
 public:
     virtual ~IStrategy() = default;
     virtual EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) = 0;
+            TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests,
+            const TAccelerationParams& accelerationParams) = 0;
 };
 
 struct TBlackboard {
     enum EAccelerationMode {
-        AccelerationModeSkipOneSlowest,
+        AccelerationModeSkipNSlowest,
         AccelerationModeSkipMarked
     };
 
@@ -187,7 +189,7 @@ struct TBlackboard {
             NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass)
         : Info(info)
         , GroupQueues(groupQueues)
-        , AccelerationMode(AccelerationModeSkipOneSlowest)
+        , AccelerationMode(AccelerationModeSkipNSlowest)
         , PutHandleClass(putHandleClass)
         , GetHandleClass(getHandleClass)
     {}
@@ -201,14 +203,16 @@ struct TBlackboard {
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber);
 
     EStrategyOutcome RunStrategies(TLogContext& logCtx, const TStackVec<IStrategy*, 1>& strategies,
-        TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
-    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TFinishedBlob> *finished = nullptr,
+            const TAccelerationParams& accelerationParams, TBatchedVec<TFinishedBlob> *finished = nullptr,
             const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
+    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, const TAccelerationParams& accelerationParams,
+            TBatchedVec<TFinishedBlob> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
     TBlobState& GetState(const TLogoBlobID &id);
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-            NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const;
+            NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
+            const TAccelerationParams& accelerationParams) const;
     TString ToString() const;
 
     void ChangeAll() {
@@ -220,6 +224,8 @@ struct TBlackboard {
     void InvalidatePartStates(ui32 orderNumber);
 
     void RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx);
+
+    void MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams);
 
     TBlobState& operator [](const TLogoBlobID& id);
 };

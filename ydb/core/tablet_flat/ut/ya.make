@@ -27,6 +27,7 @@ SRCS(
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h
+    shared_cache_s3fifo_ut.cpp
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp
     ut_btree_index_iter_charge.cpp
@@ -50,7 +51,6 @@ SRCS(
     ut_screen.cpp
     ut_bloom.cpp
     ut_shared_sausagecache.cpp
-    ut_shared_sausagecache_memtable.cpp
     ut_slice.cpp
     ut_slice_loader.cpp
     ut_versions.cpp

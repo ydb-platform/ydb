@@ -1,17 +1,18 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Начало работы
   href: getting-started.md
 - name: Примеры приложений
+  href: example-app/index.md
   include:
     mode: link
     path: example-app/toc_p.yaml
 - name: Туториал по YQL
+  href: yql-tutorial/index.md
   include:
     mode: link
     path: yql-tutorial/toc_p.yaml
 - name: Первичный ключ
+  href: primary-key/index.md
   include:
     mode: link
     path: primary-key/toc_p.yaml

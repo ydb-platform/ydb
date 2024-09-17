@@ -138,11 +138,17 @@ extern __thread PGDLLIMPORT int backend_flush_after;
 extern __thread PGDLLIMPORT int bgwriter_flush_after;
 
 /* in buf_init.c */
-extern __thread PGDLLIMPORT char *BufferBlocks;
+DECLARE_THREAD_VAR(char *, BufferBlocks);
+#ifdef BUILD_PG_EXTENSION
+#define BufferBlocks (*PtrBufferBlocks())
+#endif
 
 /* in localbuf.c */
 extern __thread PGDLLIMPORT int NLocBuffer;
-extern __thread PGDLLIMPORT Block *LocalBufferBlockPointers;
+DECLARE_THREAD_VAR(Block*, LocalBufferBlockPointers);
+#ifdef BUILD_PG_EXTENSION
+#define LocalBufferBlockPointers (*PtrLocalBufferBlockPointers())
+#endif
 extern __thread PGDLLIMPORT int32 *LocalRefCount;
 
 /* upper limit for effective_io_concurrency */

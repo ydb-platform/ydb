@@ -1,19 +1,16 @@
 items:
-- name: Введение
-  href: intro.md
-  hidden: false
-- name: Подключение через PostgreSQL-протокол
-  href: docker-connect.md
-  hidden: false
-- name: Синтаксис PostgreSQL 
+- name: Описание
+  href: ../postgresql/intro.md
+- name: Выполнение запросов
+  href: connect.md
+- name: Интероперабельность PostgreSQL и {{ydb-name}}
+  href: interoperability.md
+- name: Синтаксис PostgreSQL
   include: { mode: link, path: ./statements/toc_m.yaml }
-  hidden: false  
-- name: Механизмы PostgreSQL 
+- name: Механизмы PostgreSQL
   include: { mode: link, path: ./mechanisms/toc_m.yaml }
-  hidden: true    
 - name: Функции PostgreSQL
   href: functions.md
-  hidden: false
 - name: Импорт данных из PostgreSQL
-  href: pg-dump.md
-  hidden: false
+  href: import.md
+

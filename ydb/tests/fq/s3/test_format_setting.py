@@ -744,9 +744,11 @@ Pear;15;33'''
             connection_id=connection_response.result.connection_id,
             columns=[a, b],
             format_setting={
-                "data.datetime.format"
-                if format_name != "ISO" and format_name != "POSIX"
-                else "data.datetime.format_name": format_name
+                (
+                    "data.datetime.format"
+                    if format_name != "ISO" and format_name != "POSIX"
+                    else "data.datetime.format_name"
+                ): format_name
             },
         )
 

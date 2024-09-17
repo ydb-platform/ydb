@@ -4,7 +4,7 @@ from hamcrest import assert_that, greater_than, has_length
 from ydb.tests.library.common.delayed import wait_tablets_state_by_id
 from ydb.tests.library.common.types import TabletTypes, TabletStates
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.matchers.response import is_ok_response, is_valid_response_with_field
+from ydb.tests.library.matchers.response import is_valid_response_with_field
 from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
 
 TIMEOUT_SECONDS = 180
@@ -51,11 +51,7 @@ class TestKillTablets(object):
         hive_id = hive_state_response.TabletStateInfo[0].TabletId
 
         # Act
-        response = self.cluster.client.tablet_kill(hive_id)
-        assert_that(
-            response,
-            is_ok_response()
-        )
+        self.cluster.client.tablet_kill(hive_id, assert_success=True)
 
         wait_tablets_state_by_id(
             self.cluster.client,

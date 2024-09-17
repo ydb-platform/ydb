@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1));
         UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1, s1), yexception);
     }
-}
+} // Y_UNIT_TEST_SUITE(SplitStringTest)
 
 template <typename I, typename C>
 void TestStringSplitterCount(I* str, C delim, size_t good) {
@@ -579,15 +579,15 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         UNIT_ASSERT_VALUES_EQUAL(b, 500);
         UNIT_ASSERT_VALUES_EQUAL(c, 3);
 
-        //not enough tokens
+        // not enough tokens
         parsingSucceeded = StringSplitter("3,14").Split(',').TryCollectInto(&a, &b, &c);
         UNIT_ASSERT(!parsingSucceeded);
 
-        //too many tokens
+        // too many tokens
         parsingSucceeded = StringSplitter("3,14,15,92,6").Split(',').TryCollectInto(&a, &b, &c);
         UNIT_ASSERT(!parsingSucceeded);
 
-        //where single TryFromString fails
+        // where single TryFromString fails
         parsingSucceeded = StringSplitter("ot topota kopyt pyl po polu letit").Split(' ').TryCollectInto(&a, &b, &c);
         UNIT_ASSERT(!parsingSucceeded);
     }
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
     Y_UNIT_TEST(TestStdSplitAfterSplit) {
         std::string_view input = "a*b+a*b";
         for (std::string_view summand : StringSplitter(input).Split('+')) {
-            //FIXME: std::string is used to workaround MSVC ICE
+            // FIXME: std::string is used to workaround MSVC ICE
             UNIT_ASSERT_VALUES_EQUAL(std::string(summand), "a*b");
             std::string_view multiplier1, multiplier2;
             bool splitResult = StringSplitter(summand).Split('*').TryCollectInto(&multiplier1, &multiplier2);
@@ -831,4 +831,4 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         }
         UNIT_ASSERT_VALUES_EQUAL(i, expected.size());
     }
-}
+} // Y_UNIT_TEST_SUITE(StringSplitter)

@@ -135,6 +135,7 @@ class PrettyTable:
         self.int_format = {}
         self.float_format = {}
         self.custom_format = {}
+        self._style = None
 
         if field_names:
             self.field_names = field_names
@@ -187,6 +188,8 @@ class PrettyTable:
             "max_width",
             "min_width",
             "none_format",
+            "escape_header",
+            "escape_data",
         ]
         for option in self._options:
             if option in kwargs:
@@ -223,6 +226,14 @@ class PrettyTable:
             self._reversesort = False
         self._sort_key = kwargs["sort_key"] or (lambda x: x)
 
+        if kwargs["escape_data"] in (True, False):
+            self._escape_data = kwargs["escape_data"]
+        else:
+            self._escape_data = True
+        if kwargs["escape_header"] in (True, False):
+            self._escape_header = kwargs["escape_header"]
+        else:
+            self._escape_header = True
         # Column specific arguments, use property.setters
         self.align = kwargs["align"] or {}
         self.valign = kwargs["valign"] or {}
@@ -379,6 +390,8 @@ class PrettyTable:
             "xhtml",
             "print_empty",
             "oldsortslice",
+            "escape_header",
+            "escape_data",
         ):
             self._validate_true_or_false(option, val)
         elif option == "header_style":
@@ -1251,6 +1264,26 @@ class PrettyTable:
         self._validate_option("oldsortslice", val)
         self._oldsortslice = val
 
+    @property
+    def escape_header(self):
+        """Escapes the text within a header (True or False)"""
+        return self._escape_header
+
+    @escape_header.setter
+    def escape_header(self, val):
+        self._validate_option("escape_header", val)
+        self._escape_header = val
+
+    @property
+    def escape_data(self):
+        """Escapes the text within a data field (True or False)"""
+        return self._escape_data
+
+    @escape_data.setter
+    def escape_data(self, val):
+        self._validate_option("escape_data", val)
+        self._escape_data = val
+
     ##############################
     # OPTION MIXER               #
     ##############################
@@ -1270,6 +1303,7 @@ class PrettyTable:
     ##############################
 
     def set_style(self, style) -> None:
+        self._style = style
         if style == DEFAULT:
             self._set_default_style()
         elif style == MSWORD_FRIENDLY:
@@ -1550,21 +1584,26 @@ class PrettyTable:
 
     def _format_value(self, field, value):
         if isinstance(value, int) and field in self._int_format:
-            return ("%%%sd" % self._int_format[field]) % value
+            return (f"%{self._int_format[field]}d") % value
         elif isinstance(value, float) and field in self._float_format:
-            return ("%%%sf" % self._float_format[field]) % value
+            return (f"%{self._float_format[field]}f") % value
 
         formatter = self._custom_format.get(field, (lambda f, v: str(v)))
         return formatter(field, value)
 
     def _compute_table_width(self, options):
-        table_width = 2 if options["vrules"] in (FRAME, ALL) else 0
+        if options["vrules"] == FRAME:
+            table_width = 2
+        if options["vrules"] == ALL:
+            table_width = 1
+        else:
+            table_width = 0
         per_col_padding = sum(self._get_padding_widths(options))
         for index, fieldname in enumerate(self.field_names):
             if not options["fields"] or (
                 options["fields"] and fieldname in options["fields"]
             ):
-                table_width += self._widths[index] + per_col_padding
+                table_width += self._widths[index] + per_col_padding + 1
         return table_width
 
     def _compute_widths(self, rows, options) -> None:
@@ -1588,23 +1627,33 @@ class PrettyTable:
                     widths[index] = max(widths[index], _get_size(value)[0])
                 if fieldname in self.min_width:
                     widths[index] = max(widths[index], self.min_width[fieldname])
+
+                if self._style == MARKDOWN:
+                    # Markdown needs at least one hyphen in the divider
+                    if self._align[fieldname] in ("l", "r"):
+                        min_width = 1
+                    else:  # "c"
+                        min_width = 3
+                    widths[index] = max(min_width, widths[index])
+
         self._widths = widths
 
+        per_col_padding = sum(self._get_padding_widths(options))
         # Are we exceeding max_table_width?
         if self._max_table_width:
             table_width = self._compute_table_width(options)
             if table_width > self._max_table_width:
                 # Shrink widths in proportion
-                scale = 1.0 * self._max_table_width / table_width
-                widths = [int(w * scale) for w in widths]
-                self._widths = widths
+                markup_chars = per_col_padding * len(widths) + len(widths) - 1
+                scale = (self._max_table_width - markup_chars) / (
+                    table_width - markup_chars
+                )
+                self._widths = [max(1, int(w * scale)) for w in widths]
 
         # Are we under min_table_width or title width?
         if self._min_table_width or options["title"]:
             if options["title"]:
-                title_width = len(options["title"]) + sum(
-                    self._get_padding_widths(options)
-                )
+                title_width = len(options["title"]) + per_col_padding
                 if options["vrules"] in (FRAME, ALL):
                     title_width += 2
             else:
@@ -1619,9 +1668,7 @@ class PrettyTable:
                 borders = 0
 
             # Subtract padding for each column and borders
-            min_width -= (
-                sum([sum(self._get_padding_widths(options)) for _ in widths]) + borders
-            )
+            min_width -= sum([per_col_padding for _ in widths]) + borders
             # What is being scaled is content so we sum column widths
             content_width = sum(widths) or 1
 
@@ -1872,7 +1919,10 @@ class PrettyTable:
         )
         bits.append(endpoint)
         title = " " * lpad + title + " " * rpad
-        bits.append(self._justify(title, len(self._hrule) - 2, "c"))
+        lpad, rpad = self._get_padding_widths(options)
+        sum_widths = sum([n + lpad + rpad + 1 for n in self._widths])
+
+        bits.append(self._justify(title, sum_widths - 1, "c"))
         bits.append(endpoint)
         lines.append("".join(bits))
         return "\n".join(lines)
@@ -1884,9 +1934,11 @@ class PrettyTable:
             if options["hrules"] in (ALL, FRAME):
                 bits.append(self._stringify_hrule(options, "top_"))
                 if options["title"] and options["vrules"] in (ALL, FRAME):
+                    left_j_len = len(self.left_junction_char)
+                    right_j_len = len(self.right_junction_char)
                     bits[-1] = (
                         self.left_junction_char
-                        + bits[-1][1:-1]
+                        + bits[-1][left_j_len:-right_j_len]
                         + self.right_junction_char
                     )
                 bits.append("\n")
@@ -2067,8 +2119,20 @@ class PrettyTable:
         csv_writer = csv.writer(csv_buffer, **csv_options)
 
         if options.get("header"):
-            csv_writer.writerow(self._field_names)
-        for row in self._get_rows(options):
+            if options["fields"]:
+                csv_writer.writerow(
+                    [f for f in self._field_names if f in options["fields"]]
+                )
+            else:
+                csv_writer.writerow(self._field_names)
+
+        rows = self._get_rows(options)
+        if options["fields"]:
+            rows = [
+                [d for f, d in zip(self._field_names, row) if f in options["fields"]]
+                for row in rows
+            ]
+        for row in rows:
             csv_writer.writerow(row)
 
         return csv_buffer.getvalue()
@@ -2092,12 +2156,26 @@ class PrettyTable:
         json_options.update(
             {key: value for key, value in kwargs.items() if key not in options}
         )
-        objects = []
+        objects: list[list[str] | dict[str, Any]] = []
 
         if options.get("header"):
-            objects.append(self.field_names)
-        for row in self._get_rows(options):
-            objects.append(dict(zip(self._field_names, row)))
+            if options["fields"]:
+                objects.append([f for f in self._field_names if f in options["fields"]])
+            else:
+                objects.append(self.field_names)
+        rows = self._get_rows(options)
+        if options["fields"]:
+            for row in rows:
+                objects.append(
+                    {
+                        f: d
+                        for f, d in zip(self._field_names, row)
+                        if f in options["fields"]
+                    }
+                )
+        else:
+            for row in rows:
+                objects.append(dict(zip(self._field_names, row)))
 
         return json.dumps(objects, **json_options)
 
@@ -2116,6 +2194,7 @@ class PrettyTable:
         end - index of last data row to include in output PLUS ONE (list slice style)
         fields - names of fields (columns) to include
         header - print a header showing field names (True or False)
+        escape_header - escapes the text within a header (True or False)
         border - print a border around the table (True or False)
         preserve_internal_border - print a border inside the table even if
             border is disabled (True or False)
@@ -2136,6 +2215,7 @@ class PrettyTable:
             <table> tag
         format - Controls whether or not HTML tables are formatted to match
             styling options (True or False)
+        escape_data - escapes the text within a data field (True or False)
         xhtml - print <br/> tags if True, <br> tags if False"""
 
         options = self._get_options(kwargs)
@@ -2177,9 +2257,13 @@ class PrettyTable:
             for field in self._field_names:
                 if options["fields"] and field not in options["fields"]:
                     continue
+                if options["escape_header"]:
+                    field = escape(field)
+
                 lines.append(
-                    "            <th>%s</th>" % escape(field).replace("\n", linebreak)
+                    "            <th>{}</th>".format(field.replace("\n", linebreak))
                 )
+
             lines.append("        </tr>")
             lines.append("    </thead>")
 
@@ -2192,8 +2276,11 @@ class PrettyTable:
             for field, datum in zip(self._field_names, row):
                 if options["fields"] and field not in options["fields"]:
                     continue
+                if options["escape_data"]:
+                    datum = escape(datum)
+
                 lines.append(
-                    "            <td>%s</td>" % escape(datum).replace("\n", linebreak)
+                    "            <td>{}</td>".format(datum.replace("\n", linebreak))
                 )
             lines.append("        </tr>")
         lines.append("    </tbody>")
@@ -2249,9 +2336,12 @@ class PrettyTable:
             for field in self._field_names:
                 if options["fields"] and field not in options["fields"]:
                     continue
+                if options["escape_header"]:
+                    field = escape(field)
+
                 lines.append(
                     '            <th style="padding-left: %dem; padding-right: %dem; text-align: center">%s</th>'  # noqa: E501
-                    % (lpad, rpad, escape(field).replace("\n", linebreak))
+                    % (lpad, rpad, field.replace("\n", linebreak))
                 )
             lines.append("        </tr>")
             lines.append("    </thead>")
@@ -2276,6 +2366,9 @@ class PrettyTable:
             ):
                 if options["fields"] and field not in options["fields"]:
                     continue
+                if options["escape_data"]:
+                    datum = escape(datum)
+
                 lines.append(
                     '            <td style="padding-left: %dem; padding-right: %dem; text-align: %s; vertical-align: %s">%s</td>'  # noqa: E501
                     % (
@@ -2283,7 +2376,7 @@ class PrettyTable:
                         rpad,
                         align,
                         valign,
-                        escape(datum).replace("\n", linebreak),
+                        datum.replace("\n", linebreak),
                     )
                 )
             lines.append("        </tr>")
@@ -2341,7 +2434,7 @@ class PrettyTable:
 
         alignments = "".join([self._align[field] for field in wanted_fields])
 
-        begin_cmd = "\\begin{tabular}{%s}" % alignments
+        begin_cmd = f"\\begin{{tabular}}{{{alignments}}}"
         lines.append(begin_cmd)
 
         # Headers
@@ -2383,7 +2476,7 @@ class PrettyTable:
         if options["border"] and options["vrules"] in [ALL, FRAME]:
             alignment_str = "|" + alignment_str + "|"
 
-        begin_cmd = "\\begin{tabular}{%s}" % alignment_str
+        begin_cmd = f"\\begin{{tabular}}{{{alignment_str}}}"
         lines.append(begin_cmd)
         if options["border"] and options["hrules"] in [ALL, FRAME]:
             lines.append("\\hline")

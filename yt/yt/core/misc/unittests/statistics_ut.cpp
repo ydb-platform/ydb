@@ -3,6 +3,8 @@
 #include <yt/yt/core/misc/statistics.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/yson/format.h>
+
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -10,6 +12,16 @@ namespace NYT {
 
 using namespace NYTree;
 using namespace NYson;
+
+template <>
+struct TYsonFormatTraits<TSummary>
+    : public TYsonTextFormatTraits
+{ };
+
+std::ostream& operator<<(std::ostream& out, const TSummary& summary)
+{
+    return out << ToStringViaBuilder(summary);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,14 +97,6 @@ TEST(TStatistics, AddSample)
 
     EXPECT_THROW(
         statistics.Merge(CreateStatistics({{"/key", 5}})),
-        std::exception);
-
-    EXPECT_THROW(
-        statistics.AddSample("/invalid.key/subkey", 42),
-        std::exception);
-
-    EXPECT_THROW(
-        statistics.AddSample("/invalid key/subkey", 42),
         std::exception);
 
     statistics.AddSample("/key/subkey/x", 10);
@@ -184,6 +188,61 @@ TEST(TStatistics, BuildingConsumer)
     };
 
     EXPECT_EQ(expectedData, data);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TTaggedStatistics, AppendStatistics)
+{
+    TTaggedStatistics<int> taggedStatistics;
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc/def", 1);
+        statistics.AddSample("/abc/defg", 2);
+        statistics.AddSample("/xyz", 3);
+        taggedStatistics.AppendStatistics(statistics, 1);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc/def", 1);
+        statistics.AddSample("/ijk", 2);
+        taggedStatistics.AppendStatistics(statistics, 2);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc/def", 2);
+        taggedStatistics.AppendStatistics(statistics, 1);
+    }
+
+    {
+        auto actualData = taggedStatistics.GetData();
+
+        std::map<TString, THashMap<int, TSummary>> expectedData {
+            // std::nullopt because Last is always dropped during merge, see TSummary::Merge.
+            {"/abc/def", {
+                    {1, TSummary(3, 2, 1, 2, std::nullopt)},
+                    {2, TSummary(1, 1, 1, 1, 1)}}},
+            {"/abc/defg", {{1, TSummary(2, 1, 2, 2, 2)}}},
+            {"/xyz", {{1, TSummary(3, 1, 3, 3, 3)}}},
+            {"/ijk", {{2, TSummary(2, 1, 2, 2, 2)}}}
+        };
+
+        EXPECT_EQ(expectedData, actualData);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/xyz/suffix", 1);
+        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3), std::exception);
+    }
+
+    {
+        TStatistics statistics;
+        statistics.AddSample("/abc", 1); // prefix
+        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3), std::exception);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

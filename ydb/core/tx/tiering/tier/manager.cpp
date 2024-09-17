@@ -8,6 +8,10 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
     const NYql::TObjectSettingsImpl& settings,
     TInternalModificationContext& context) const
 {
+    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
+        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+    }
+
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     if (settings.GetObjectId().StartsWith("$") || settings.GetObjectId().StartsWith("_")) {
@@ -65,7 +69,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
 
 void TTiersManager::DoPrepareObjectsBeforeModification(std::vector<TTierConfig>&& patchedObjects,
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const TInternalModificationContext& context) const
+    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const
 {
     TActivationContext::Register(new TTierPreparationActor(std::move(patchedObjects), controller, context));
 }

@@ -11,6 +11,9 @@
 using namespace NActors;
 using namespace NKikimr;
 
+//#define LOG_MOCK(MSG) do { Cerr << "IC: " << (void*)this << '@' << SelfId() << ' ' << Prefix << MSG << Endl; } while (false)
+#define LOG_MOCK(MSG) do {} while (false)
+
 using TMock = TSingleThreadInterconnectMock;
 
 struct TMock::TNode {
@@ -64,6 +67,7 @@ public:
         , PeerNodeId(peerNodeId)
         , Common(std::move(common))
     {
+        LOG_MOCK("Created Peer# " << (void*)Peer);
         if (Peer) {
             Peer->Peer = this;
         }
@@ -73,6 +77,7 @@ public:
 
     void Registered(TActorSystem *as, const TActorId& parent) override {
         TActor::Registered(as, parent);
+        LOG_MOCK("Registered");
         Working = true;
         if (Peer && Peer->Working) {
             ProcessPendingEvents();
@@ -80,17 +85,7 @@ public:
         }
     }
 
-    TSessionActor *GetSession() {
-        if (!SessionActor && Working && Peer && Peer->Working) {
-            Y_ABORT_UNLESS(PendingEvents.empty());
-            Y_ABORT_UNLESS(Peer->PendingEvents.empty());
-            CreateSession();
-            Peer->CreateSession();
-        }
-        return SessionActor;
-    }
-
-    void CreateSession();
+    TActorId CreateSession();
     void ForwardToSession(TAutoPtr<IEventHandle> ev);
 
     void DropSessionEvent(std::unique_ptr<IEventHandle> ev);
@@ -128,6 +123,8 @@ class TMock::TSessionActor : public TActor<TSessionActor> {
         EvReceive,
     };
 
+    friend class TProxyActor;
+
 public:
     // The SessionActor exists when and only when there are two working peers connected together and both of them have
     // their respective sessions. That is, when one of these conditions break, we have to terminate both sessions of a
@@ -139,9 +136,12 @@ public:
         : TActor(&TThis::StateFunc)
         , Prefix(TStringBuilder() << "Session[" << proxy->Node->NodeId << ":" << proxy->PeerNodeId << "] ")
         , Proxy(proxy)
-    {}
+    {
+        LOG_MOCK("Created Proxy# " << (void*)Proxy);
+    }
 
     ~TSessionActor() {
+        LOG_MOCK("Destroyed Proxy# " << (void*)Proxy);
         if (Proxy) {
             Proxy->SessionActor = nullptr;
         }
@@ -149,6 +149,8 @@ public:
 
     // Shut down local part of this session.
     void ShutdownSession() {
+        LOG_MOCK("ShutdownSession Proxy# " << (void*)Proxy);
+
         if (!Proxy) {
             return;
         }
@@ -157,6 +159,7 @@ public:
 
         // notify all subscribers
         for (const auto& [actorId, cookie] : Subscribers) {
+            LOG_MOCK("Sending unsubscribe actorId# " << actorId << " cookie# " << cookie);
             auto ev = std::make_unique<TEvInterconnect::TEvNodeDisconnected>(Proxy->PeerNodeId);
             Proxy->Mock->TestActorSystem->Send(new IEventHandle(actorId, SelfId(), ev.release(), 0, cookie),
                 Proxy->Node->NodeId);
@@ -183,6 +186,7 @@ public:
         if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
             TActor::PassAway();
         } else {
+            LOG_MOCK("Undelivered event Sender# " << ev->Sender << " Type# " << ev->GetTypeRewrite());
             TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
         }
     }
@@ -320,11 +324,13 @@ public:
     }
 
     void Subscribe(const TActorId& actorId, ui64 cookie) {
+        LOG_MOCK("Subscribe actorId# " << actorId << " cookie# " << cookie);
         Subscribers[actorId] = cookie;
         Send(actorId, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, cookie);
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev) {
+        LOG_MOCK("Unsubscribe actorId# " << ev->Sender);
         Subscribers.erase(ev->Sender);
     }
 
@@ -342,6 +348,8 @@ public:
 };
 
 TMock::TProxyActor::~TProxyActor() {
+    LOG_MOCK("Destroyed Peer# " << (void*)Peer << " Session# " << (void*)(Peer ? Peer->SessionActor : nullptr));
+
     const auto it = Mock->Proxies.find({Node->NodeId, PeerNodeId});
     Y_ABORT_UNLESS(it != Mock->Proxies.end());
     Y_ABORT_UNLESS(it->second == this);
@@ -354,18 +362,19 @@ TMock::TProxyActor::~TProxyActor() {
     DetachSessionActor();
 }
 
-void TMock::TProxyActor::CreateSession() {
+TActorId TMock::TProxyActor::CreateSession() {
     Y_ABORT_UNLESS(SelfId());
     Y_ABORT_UNLESS(Working);
     Y_ABORT_UNLESS(!SessionActor);
+    LOG_MOCK("CreateSession");
     SessionActor = new TSessionActor(this);
     const TActorId self = SelfId();
-    Mock->TestActorSystem->Register(SessionActor, self, self.PoolID(), self.Hint(), Node->NodeId);
+    return Mock->TestActorSystem->Register(SessionActor, self, self.PoolID(), self.Hint(), Node->NodeId);
 }
 
 void TMock::TProxyActor::ForwardToSession(TAutoPtr<IEventHandle> ev) {
-    if (TSessionActor *session = GetSession()) {
-        InvokeOtherActor(*session, &TSessionActor::Receive, ev);
+    if (SessionActor) {
+        InvokeOtherActor(*SessionActor, &TSessionActor::Receive, ev);
     } else {
         const bool first = PendingEvents.empty();
         PendingEvents.emplace_back(ev.Release());
@@ -407,9 +416,10 @@ void TMock::TProxyActor::HandleDropPendingEvents(TAutoPtr<IEventHandle> ev) {
 }
 
 void TMock::TProxyActor::ProcessPendingEvents() {
+    Y_ABORT_UNLESS(!SessionActor);
+    const TActorId sessionActorId = CreateSession();
     for (auto& ev : std::exchange(PendingEvents, {})) {
-        TSessionActor *session = GetSession();
-        Y_ABORT_UNLESS(session);
+        ev->Rewrite(ev->GetTypeRewrite(), sessionActorId);
         Mock->TestActorSystem->Send(ev.release(), Node->NodeId);
     }
 }

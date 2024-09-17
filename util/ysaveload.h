@@ -59,7 +59,7 @@ static inline void SavePodType(IOutputStream* rh, const T& t) {
 namespace NPrivate {
     [[noreturn]] void ThrowLoadEOFException(size_t typeSize, size_t realSize, TStringBuf structName);
     [[noreturn]] void ThrowUnexpectedVariantTagException(ui8 tagIndex);
-}
+} // namespace NPrivate
 
 template <class T>
 static inline void LoadPodType(IInputStream* rh, T& t) {
@@ -132,7 +132,7 @@ struct TSerializerTakingIntoAccountThePodType {
 
 namespace NHasSaveLoad {
     Y_HAS_MEMBER(SaveLoad);
-}
+} // namespace NHasSaveLoad
 
 template <class T, class = void>
 struct TSerializerMethodSelector;
@@ -140,7 +140,7 @@ struct TSerializerMethodSelector;
 template <class T>
 struct TSerializerMethodSelector<T, std::enable_if_t<NHasSaveLoad::THasSaveLoad<T>::value>> {
     static inline void Save(IOutputStream* out, const T& t) {
-        //assume Save clause do not change t
+        // assume Save clause do not change t
         (const_cast<T&>(t)).SaveLoad(out);
     }
 
@@ -671,7 +671,7 @@ namespace NPrivate {
         ::Load(is, loaded);
         v.template emplace<I>(std::move(loaded));
     }
-}
+} // namespace NPrivate
 
 template <typename... Args>
 struct TSerializer<std::variant<Args...>> {

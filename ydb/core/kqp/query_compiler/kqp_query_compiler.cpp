@@ -184,7 +184,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         }
         phyColumn.SetNotNull(column->NotNull);
         if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-            phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetTypeDesc()));
+            phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetPgTypeDesc()));
         }
     }
 }
@@ -515,6 +515,33 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
+        auto overridePlanner = Config->OverridePlanner.Get();
+        if (overridePlanner) {
+            NJson::TJsonReaderConfig jsonConfig;
+            NJson::TJsonValue jsonNode;
+            if (NJson::ReadJsonTree(*overridePlanner, &jsonConfig, &jsonNode)) {
+                for (auto& stageOverride : jsonNode.GetArray()) {
+                    ui32 txId = 0;
+                    if (auto* txNode = stageOverride.GetValueByPath("tx")) {
+                        txId = txNode->GetIntegerSafe();
+                    }
+                    if (txId < static_cast<ui32>(queryProto.GetTransactions().size())) {
+                        auto& tx = *queryProto.MutableTransactions(txId);
+                        ui32 stageId = 0;
+                        if (auto* stageNode = stageOverride.GetValueByPath("stage")) {
+                            stageId = stageNode->GetIntegerSafe();
+                        }
+                        if (stageId < static_cast<ui32>(tx.GetStages().size())) {
+                            auto& stage = *tx.MutableStages(stageId);
+                            if (auto* tasksNode = stageOverride.GetValueByPath("tasks")) {
+                                stage.SetTaskCount(tasksNode->GetIntegerSafe());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -551,20 +578,22 @@ public:
             }
 
             THashMap<TString, int> columnOrder;
+            TColumnOrder order;
             columnOrder.reserve(kikimrProto.GetStruct().MemberSize());
             if (!txResult.GetColumnHints().empty()) {
                 YQL_ENSURE(txResult.GetColumnHints().size() == (int)kikimrProto.GetStruct().MemberSize());
                 for (int i = 0; i < txResult.GetColumnHints().size(); i++) {
                     const auto& hint = txResult.GetColumnHints().at(i);
-                    columnOrder[TString(hint)] = i;
+                    columnOrder[order.AddColumn(TString(hint))] = i;
                 }
             }
 
             int id = 0;
             for (const auto& column : kikimrProto.GetStruct().GetMember()) {
-                int bindingColumnId = columnOrder.count(column.GetName()) ? columnOrder.at(column.GetName()) : id++;
+                auto it = columnOrder.find(column.GetName());
+                int bindingColumnId = it != columnOrder.end() ? it->second : id++;
                 auto& columnMeta = resultMetaColumns->at(bindingColumnId);
-                columnMeta.Setname(column.GetName());
+                columnMeta.Setname(it != columnOrder.end() ? order.at(it->second).LogicalName : column.GetName());
                 ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
             }
         }
@@ -1050,7 +1079,7 @@ private:
 
                 if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
                     auto& typeInfo = *keyColumnProto->MutableTypeInfo();
-                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
+                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetPgTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
                 }
             }
@@ -1067,7 +1096,7 @@ private:
 
                 if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
                     auto& typeInfo = *columnProto->MutableTypeInfo();
-                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
+                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetPgTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
                 }
             }

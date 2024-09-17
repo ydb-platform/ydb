@@ -1,21 +1,13 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/viewer/yaml/yaml.h>
-#include <ydb/core/util/wildcard.h>
-#include <library/cpp/json/json_writer.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
+#include "viewer.h"
+#include <ydb/core/viewer/yaml/yaml.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 
-class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
+class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -30,7 +22,7 @@ class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
 
 protected:
     using TThis = TPDiskInfo;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
@@ -45,15 +37,11 @@ protected:
     ui32 PDiskId = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
@@ -178,7 +166,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NKikimrViewer::TPDiskInfo proto;
         bool hasPDisk = false;
         bool hasVDisk = false;
@@ -235,53 +223,51 @@ public:
         });
         TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
     }
+
+    static YAML::Node GetSwagger() {
+        YAML::Node node = YAML::Load(R"___(
+          get:
+            tags:
+            - pdisk
+            summary: Gets PDisk info
+            description: Gets PDisk information from Whiteboard and BSC
+            parameters:
+            - name: node_id
+              in: query
+              description: node identifier
+              type: integer
+            - name: pdisk_id
+              in: query
+              description: pdisk identifier
+              required: true
+              type: integer
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            responses:
+              200:
+                description: OK
+                content:
+                  application/json:
+                    schema: {}
+              400:
+                description: Bad Request
+              403:
+                description: Forbidden
+              504:
+                description: Gateway Timeout
+            )___");
+
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TPDiskInfo>();
+        YAML::Node properties(node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["BSC"]["properties"]);
+        TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
+        TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
+        TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
+        TProtoToYaml::FillEnum(properties["VDisks"]["items"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EVDiskStatus>());
+        return node;
+    }
 };
 
-template <>
-YAML::Node TJsonRequestSwagger<TPDiskInfo>::GetSwagger() {
-    YAML::Node node = YAML::Load(R"___(
-        get:
-          tags:
-          - pdisk
-          summary: Gets PDisk info
-          description: Gets PDisk information from Whiteboard and BSC
-          parameters:
-          - name: node_id
-            in: query
-            description: node identifier
-            type: integer
-          - name: pdisk_id
-            in: query
-            description: pdisk identifier
-            required: true
-            type: integer
-          - name: timeout
-            in: query
-            description: timeout in ms
-            required: false
-            type: integer
-          responses:
-            200:
-              description: OK
-              content:
-                application/json:
-                  schema: {}
-            400:
-              description: Bad Request
-            403:
-              description: Forbidden
-            504:
-              description: Gateway Timeout
-        )___");
-
-    node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TPDiskInfo>();
-    YAML::Node properties(node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["BSC"]["properties"]);
-    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
-    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
-    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
-    TProtoToYaml::FillEnum(properties["VDisks"]["items"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EVDiskStatus>());
-    return node;
-}
-
-}
 }

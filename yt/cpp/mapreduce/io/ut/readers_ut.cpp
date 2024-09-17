@@ -17,7 +17,7 @@ using namespace NYT;
 using namespace NYT::NDetail;
 using namespace NSkiff;
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TRetryEmulatingRawTableReader
     : public TRawTableReader
@@ -73,7 +73,7 @@ private:
     int DoReadCallCount_ = 0;
 };
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TReadersTest, YsonGood)
 {
@@ -197,13 +197,13 @@ TEST(TReadersTest, ProtobufGood)
 
     TLenvalProtoTableReader reader(proxy, {TRow::descriptor()});
     TRow row1, row2;
-    row1.SetString("foobar");
-    row1.SetInt32(15);
-    row1.SetFixed64(100500);
+    row1.set_string_field("foobar");
+    row1.set_int32_field(15);
+    row1.set_fixed64_field(100500);
 
-    row2.SetString("abc");
-    row2.SetInt32(31);
-    row2.SetFixed64(-1);
+    row2.set_string_field("abc");
+    row2.set_int32_field(31);
+    row2.set_fixed64_field(-1);
 
     TVector<TRow> expectedRows = {row1, row2};
     for (const auto& expectedRow : expectedRows) {
@@ -211,9 +211,9 @@ TEST(TReadersTest, ProtobufGood)
         EXPECT_TRUE(reader.IsValid());
         EXPECT_TRUE(!reader.IsRawReaderExhausted());
         reader.ReadRow(&row);
-        EXPECT_EQ(row.GetString(), expectedRow.GetString());
-        EXPECT_EQ(row.GetInt32(), expectedRow.GetInt32());
-        EXPECT_EQ(row.GetFixed64(), expectedRow.GetFixed64());
+        EXPECT_EQ(row.string_field(), expectedRow.string_field());
+        EXPECT_EQ(row.int32_field(), expectedRow.int32_field());
+        EXPECT_EQ(row.fixed64_field(), expectedRow.fixed64_field());
         reader.Next();
     }
     EXPECT_TRUE(!reader.IsValid());
@@ -229,4 +229,4 @@ TEST(TReadersTest, ProtobufBad)
     EXPECT_THROW(TLenvalProtoTableReader(proxy, { NYT::NTesting::TRow::descriptor() }).ReadRow(&row), yexception);
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////

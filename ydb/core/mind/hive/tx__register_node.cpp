@@ -87,7 +87,9 @@ public:
         BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
+            Self->NodePingsInProgress.erase(node->Id);
             node->Ping();
+            Self->ProcessNodePingQueue();
         }
     }
 };

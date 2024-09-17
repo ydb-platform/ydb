@@ -139,7 +139,7 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
         if (IsInf(s))
             return neg ? -Inf() : Inf();
         if (IsNan(s))
-            return neg ? -Nan() : Nan();
+            return Nan();
     }
 
     TUint128 v = 0U;

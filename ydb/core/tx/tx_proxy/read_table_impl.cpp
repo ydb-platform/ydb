@@ -1760,7 +1760,7 @@ private:
                     meta->set_name(col.Name);
 
                     if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        auto* typeDesc = col.PType.GetTypeDesc();
+                        auto typeDesc = col.PType.GetPgTypeDesc();
                         auto* pg = meta->mutable_type()->mutable_pg_type();
                         pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));

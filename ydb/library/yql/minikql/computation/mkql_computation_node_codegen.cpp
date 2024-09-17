@@ -5,6 +5,7 @@
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/string/cast.h>
+#include <util/folder/path.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
 
@@ -136,6 +137,9 @@ Function* GenerateCompareFunction(NYql::NCodegen::ICodegen& codegen, const TStri
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -597,6 +601,9 @@ Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TStrin
     ctx.AlwaysInline = true;
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     auto args = ctx.Func->arg_begin();
 
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -726,6 +733,9 @@ Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString&
     ctx.AlwaysInline = true;
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto block = main;
 
@@ -814,6 +824,9 @@ Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TStrin
     ctx.AlwaysInline = true;
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     auto args = ctx.Func->arg_begin();
 
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -873,6 +886,9 @@ Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString&
     ctx.AlwaysInline = true;
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto block = main;
 
@@ -923,6 +939,9 @@ Function* GenerateCompareFunction(NYql::NCodegen::ICodegen& codegen, const TStri
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -991,10 +1010,6 @@ Value* TUnboxedImmutableCodegeneratorNode::CreateGetValue(const TCodegenContext&
     return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue)));
 }
 
-TUnboxedImmutableRunCodegeneratorNode::TUnboxedImmutableRunCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value)
-    : TUnboxedImmutableComputationNode(memInfo, std::move(value))
-{}
-
 TExternalCodegeneratorNode::TExternalCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind)
     : TExternalComputationNode(mutables, kind)
 {}
@@ -1054,6 +1069,9 @@ Function* TExternalCodegeneratorRootNode::GenerateGetValue(NYql::NCodegen::ICode
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     auto args = ctx.Func->arg_begin();
     if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
         auto& firstArg = *args++;
@@ -1092,6 +1110,9 @@ Function* TExternalCodegeneratorRootNode::GenerateSetValue(NYql::NCodegen::ICode
     const auto funcType = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(contextType), valueType}, false);
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -2379,6 +2400,9 @@ Function* TMutableCodegeneratorNodeBase::GenerateInternalGetValue(const TString&
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     ctx.Ctx = &*ctx.Func->arg_begin();
     ctx.Ctx->addAttr(Attribute::NonNull);
@@ -2484,6 +2508,9 @@ Function* TMutableCodegeneratorPtrNodeBase::GenerateInternalGetValue(const TStri
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     ctx.Ctx = &*ctx.Func->arg_begin();
     ctx.Ctx->addAttr(Attribute::NonNull);
@@ -2534,6 +2561,9 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+    DISubprogramAnnotator annotator(ctx, ctx.Func);
+    
+
     auto args = ctx.Func->arg_begin();
     if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
         auto& firstArg = *args++;
@@ -2555,6 +2585,84 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     }
 
     return ctx.Func;
+}
+
+#if __clang__ && (__clang_major__ < 16)
+TSrcLocation TSrcLocation::current() {
+    return {};
+}
+
+const char* TSrcLocation::file_name() const {
+    return __FILE__;
+}
+
+size_t TSrcLocation::line() const {
+    return __LINE__;
+}
+
+size_t TSrcLocation::column() const {
+    return 0;
+}
+#endif
+
+DISubprogramAnnotator::DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const TSrcLocation& location)
+    : Ctx(ctx)
+    , DebugBuilder(std::make_unique<DIBuilder>(ctx.Codegen.GetModule()))
+    , Subprogram(MakeDISubprogram(subprogramFunc->getName(), location))
+    , Func(subprogramFunc)
+{
+    subprogramFunc->setSubprogram(Subprogram);
+    Ctx.Annotator = this;
+}
+
+DISubprogramAnnotator::~DISubprogramAnnotator() {
+    Ctx.Annotator = nullptr;
+    { // necessary stub annotation of "CallInst"s
+        DIScopeAnnotator stubAnnotate(this);
+        for (BasicBlock& block : *Func) {
+            for (Instruction& inst : block) {
+                if (CallInst* callInst = dyn_cast_or_null<CallInst>(&inst)) {
+                    const auto& debugLoc = callInst->getDebugLoc();
+                    if (!debugLoc) {
+                        stubAnnotate(callInst);
+                    }
+                }
+            }
+        }
+    }
+    DebugBuilder->finalizeSubprogram(Subprogram);
+}
+
+DIFile* DISubprogramAnnotator::MakeDIFile(const TSrcLocation& location) {
+    TFsPath path = TString(location.file_name());
+    return DebugBuilder->createFile(path.GetName().c_str(), path.Parent().GetPath().c_str());
+}
+
+DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, const TSrcLocation& location) {
+    const auto file = MakeDIFile(location);
+    const auto unit = DebugBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C_plus_plus, file, "MKQL", false, "", 0);
+    const auto subroutineType = DebugBuilder->createSubroutineType(DebugBuilder->getOrCreateTypeArray({}));
+    return DebugBuilder->createFunction(
+        unit,
+        name,
+        llvm::StringRef(),
+        file, 0,
+        subroutineType, 0, llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagDefinition
+    );
+}
+
+DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location)
+    : SubprogramAnnotator(nullptr)
+    , Scope(nullptr)
+{
+    Y_ENSURE(subprogramAnnotator != nullptr);
+    SubprogramAnnotator = subprogramAnnotator;
+    Scope = SubprogramAnnotator->DebugBuilder->createLexicalBlock(SubprogramAnnotator->Subprogram, SubprogramAnnotator->MakeDIFile(location), location.line(), location.column());
+}
+
+Instruction* DIScopeAnnotator::operator()(Instruction* inst, const TSrcLocation& location) const {
+    inst->setDebugLoc(DILocation::get(SubprogramAnnotator->Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
+    return inst;
 }
 
 }

@@ -1,27 +1,27 @@
 # Hyperscan
 
-[Hyperscan](https://www.hyperscan.io) является opensource библиотекой для поиска по регулярным выражениям, разработанной компанией Intel. 
+[Hyperscan](https://www.hyperscan.io) является opensource библиотекой для поиска по регулярным выражениям, разработанной компанией Intel.
 
 Библиотека имеет 4 реализации с использованием разных наборов процессорных инструкций (SSE3, SSE4.2, AVX2 и AVX512), среди которых автоматически выбирается нужная в соответствии с текущим процессором.
 
 По умолчанию все функции работают в однобайтовом режиме, но если регулярное выражение является валидной UTF-8 строкой, но не является валидной ASCII строкой, — автоматически включается режим UTF-8.
 
-**Список функций**
+## Список функций
 
-* ```Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::Match(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::Capture(pattern:String) -> (string:String?) -> String?```
-* ```Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
+* `Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::Match(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Hyperscan::Capture(pattern:String) -> (string:String?) -> String?`
+* `Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?`
 
 ## Синтаксис вызова {#syntax}
 
 При вызове напрямую, чтобы избежать компиляции регулярного выражения на каждой строке таблицы, необходимо обернуть вызов функции в [именованное выражение](../../syntax/expressions.md#named-nodes):
 
-``` sql
+```yql
 $re = Hyperscan::Grep("\\d+");      -- создаем вызываемое значение для проверки конкретного регулярного выражения
 SELECT * FROM table WHERE $re(key); -- используем его для фильтрации таблицы
 ```
@@ -29,7 +29,6 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 **Обратите внимание** на экранирование спецсимволов в регулярном выражении. Второй слеш нужен, так как все стандартные строковые литералы в SQL могут принимать С-escaped строки, а последовательность `\d` не является валидной последовательностью, и даже если бы являлась — не приводила бы к ожидаемому эффекту поиска чисел.
 
 Есть возможность отключить чувствительность к регистру (то есть включить case-insensitive режим), указав в начале регулярного выражения флаг `(?i)`.
-
 
 ## Grep {#grep}
 
@@ -53,9 +52,9 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 
 При вызове функций `MultiGrep`/`MultiMatch` регулярные выражения передаются по одному на строку с использованием [многострочных строковых литералов](../../syntax/expressions.md#named-nodes):
 
-**Пример**
+### Пример
 
-```sql
+```yql
 $multi_match = Hyperscan::MultiMatch(@@a.*
 .*x.*
 .*axa.*@@);
@@ -75,9 +74,9 @@ SELECT
 * [Re2::Replace](re2.md#replace).
 
 
-## Пример использования.
+## Пример использования
 
-```sql
+```yql
 $value = "xaaxaaXaa";
 
 $match = Hyperscan::Match("a.*");

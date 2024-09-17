@@ -1,10 +1,15 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include "openid_connect.h"
+#include "oidc_settings.h"
+
+namespace NMVP {
+namespace NOIDC {
 
 namespace {
 
@@ -15,55 +20,6 @@ TString GenerateState() {
         sb << RandomNumber<char>();
     }
     return Base64EncodeUrlNoPadding(sb);
-}
-
-struct TRedirectUrlParameters {
-    TStringBuf SessionServerCheckDetails;
-    TOpenIdConnectSettings OidcSettings;
-    TStringBuf CallbackUrl;
-    TStringBuf State;
-    TStringBuf Scheme;
-    TStringBuf Host;
-    NMVP::EAuthProfile AuthProfile;
-    TStringBuf AuthEndpoint;
-};
-
-bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AuthProfile != NMVP::EAuthProfile::Yandex) {
-        return false;
-    }
-    const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(parameters.AuthEndpoint);
-    if (posAuthUrl != TStringBuf::npos) {
-        size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthEndpoint;
-        return true;
-    }
-    return false;
-}
-
-TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
-    TStringBuilder locationHeaderValue;
-    if (!TryAppendAuthEndpointFromDetailsYandexProfile(parameters, locationHeaderValue)) {
-        locationHeaderValue << parameters.OidcSettings.GetAuthEndpointURL();
-    }
-    locationHeaderValue << "?response_type=code"
-                        << "&scope=openid"
-                        << "&state=" << parameters.State
-                        << "&client_id=" << parameters.OidcSettings.ClientId
-                        << "&redirect_uri=" << parameters.Scheme << parameters.Host << parameters.CallbackUrl;
-    return locationHeaderValue;
-}
-
-void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
-    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
-    if (origin.empty()) {
-        origin = "*";
-    }
-    headers->Set("Access-Control-Allow-Origin", origin);
-    headers->Set("Access-Control-Allow-Credentials", "true");
-    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
 }
 
 NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
@@ -83,6 +39,17 @@ TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool i
 }
 
 } // namespace
+
+void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
+    TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+    if (origin.empty()) {
+        origin = "*";
+    }
+    headers->Set("Access-Control-Allow-Origin", origin);
+    headers->Set("Access-Control-Allow-Credentials", "true");
+    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
+    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+}
 
 TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -116,31 +83,27 @@ TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& 
     return Base64Encode(cookieStruct);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, NHttp::THeadersBuilder& responseHeaders, bool isAjaxRequest) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
     TString state = GenerateState();
-    const TString redirectUrl = CreateRedirectUrl({.SessionServerCheckDetails = eventDetails,
-                                                    .OidcSettings = settings,
-                                                    .CallbackUrl = GetAuthCallbackUrl(),
-                                                    .State = state,
-                                                    .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
-                                                    .Host = request->Host,
-                                                    .AuthProfile = settings.AuthProfile,
-                                                    .AuthEndpoint = settings.AuthEndpoint});
+    const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
+                                                 << "?response_type=code"
+                                                 << "&scope=openid"
+                                                 << "&state=" << state
+                                                 << "&client_id=" << settings.ClientId
+                                                 << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
+                                                                     << request->Host
+                                                                     << GetAuthCallbackUrl();
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
                      << "; Path=" << GetAuthCallbackUrl() << "; Max-Age=" << cookieMaxAgeSec <<"; SameSite=None; Secure";
+    NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", setCookieBuilder);
     if (isAjaxRequest) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
     responseHeaders.Set("Location", redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);
-}
-
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
-    NHttp::THeadersBuilder responseHeaders;
-    return GetHttpOutgoingResponsePtr(eventDetails, request, settings, responseHeaders, isAjaxRequest);
 }
 
 bool DetectAjaxRequest(const NHttp::THeaders& headers) {
@@ -172,6 +135,9 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& key, const TString& value) {
     TStringBuilder cookieBuilder;
     cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
-            << "; Path=/; Secure; HttpOnly; SameSite=Lax";
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }
+
+}  // NOIDC
+}  // NMVP

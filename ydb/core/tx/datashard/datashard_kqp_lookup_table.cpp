@@ -36,7 +36,7 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
         if (NKqp::StructHoldsPgType(*rowType, i)) {
             auto pgTypeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
             MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetTypeDesc()),
+                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetPgTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetPgTypeDesc()),
                 "Key column type mismatch, column: " << name
             );
         } else {
@@ -121,7 +121,7 @@ public:
             switch (keysValues.Fetch(key)) {
                 case NUdf::EFetchStatus::Ok: {
                     TVector<TCell> keyCells(ParseResult.KeyIndices.size());
-                    FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, *ctx.TypeEnv);
+                    FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, ctx.TypeEnv);
 
                     NUdf::TUnboxedValue result;
                     TKqpTableStats stats;
@@ -203,10 +203,10 @@ public:
                         MKQL_ENSURE_S(tableInfo);
 
                         TVector<TCell> fromCells(tableInfo->KeyColumns.size());
-                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, *ctx.TypeEnv);
+                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, ctx.TypeEnv);
 
                         TVector<TCell> toCells(ParseResult.KeyIndices.size());
-                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, toCells, *ctx.TypeEnv);
+                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, toCells, ctx.TypeEnv);
 
                         auto range = TTableRange(fromCells, true, toCells, true);
 

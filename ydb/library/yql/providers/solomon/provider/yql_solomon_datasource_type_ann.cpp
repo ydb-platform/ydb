@@ -170,7 +170,7 @@ public:
                 }
                 columnOrder.push_back(ToString(col));
             }
-            return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
         }
 
         const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();

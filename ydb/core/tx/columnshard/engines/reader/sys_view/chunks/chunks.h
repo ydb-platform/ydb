@@ -28,6 +28,32 @@ public:
 
 class TStatsIterator: public NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats> {
 private:
+    class TViewContainer {
+    private:
+        TString Data;
+        std::string STLData;
+        arrow::util::string_view View;
+
+    public:
+        const arrow::util::string_view& GetView() const {
+            return View;
+        }
+
+        TViewContainer(const TString& data)
+            : Data(data)
+            , View(arrow::util::string_view(Data.data(), Data.size())) {
+        }
+
+        TViewContainer(const std::string& data)
+            : STLData(data)
+            , View(arrow::util::string_view(STLData.data(), STLData.size())) {
+        }
+    };
+
+    mutable THashMap<ui32, TViewContainer> ColumnNamesById;
+    mutable THashMap<NPortion::EProduced, TViewContainer> PortionType;
+    mutable THashMap<TString, THashMap<ui32, TViewContainer>> EntityStorageNames;
+
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
     virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;

@@ -87,22 +87,22 @@ void TYPathRequest::RequireServerFeature(int featureId)
     Header_.add_required_server_feature_ids(featureId);
 }
 
-const TString& TYPathRequest::GetUser() const
+const std::string& TYPathRequest::GetUser() const
 {
     YT_ABORT();
 }
 
-void TYPathRequest::SetUser(const TString& /*user*/)
+void TYPathRequest::SetUser(const std::string& /*user*/)
 {
     YT_ABORT();
 }
 
-const TString& TYPathRequest::GetUserTag() const
+const std::string& TYPathRequest::GetUserTag() const
 {
     YT_ABORT();
 }
 
-void TYPathRequest::SetUserTag(const TString& /*tag*/)
+void TYPathRequest::SetUserTag(const std::string& /*tag*/)
 {
     YT_ABORT();
 }
@@ -285,7 +285,10 @@ void ResolveYPath(
 
     auto currentService = rootService;
 
-    const auto& originalPath = GetOriginalRequestTargetYPath(context->RequestHeader());
+    // NB: of course, we could use reference here. But Resolve() can change
+    // request header due to master compat.
+    // COMPAT(kvk1920): use const reference.
+    auto originalPath = GetOriginalRequestTargetYPath(context->RequestHeader());
     auto currentPath = GetRequestTargetYPath(context->RequestHeader());
 
     int iteration = 0;
@@ -343,7 +346,7 @@ TFuture<TSharedRefArray> ExecuteVerb(
     }
 
     NRpc::NProto::TRequestHeader requestHeader;
-    YT_VERIFY(ParseRequestHeader(requestMessage, &requestHeader));
+    YT_VERIFY(TryParseRequestHeader(requestMessage, &requestHeader));
     SetRequestTargetYPath(&requestHeader, suffixPath);
 
     auto updatedRequestMessage = SetRequestHeader(requestMessage, requestHeader);
@@ -385,7 +388,7 @@ void ExecuteVerb(
 
     auto requestMessage = context->GetRequestMessage();
     auto requestHeader = std::make_unique<NRpc::NProto::TRequestHeader>();
-    YT_VERIFY(ParseRequestHeader(requestMessage, requestHeader.get()));
+    YT_VERIFY(TryParseRequestHeader(requestMessage, requestHeader.get()));
     SetRequestTargetYPath(requestHeader.get(), suffixPath);
     context->SetRequestHeader(std::move(requestHeader));
 

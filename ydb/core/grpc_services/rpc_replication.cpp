@@ -11,6 +11,8 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NGRpcService {
 
 using namespace Ydb;
@@ -138,9 +140,18 @@ private:
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
     }
 
+    static TString BuildConnectionString(const NKikimrReplication::TConnectionParams& params) {
+        return TStringBuilder()
+            << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
+            << params.GetEndpoint()
+            << "/?database=" << params.GetDatabase();
+    }
+
     static void ConvertConnectionParams(const NKikimrReplication::TConnectionParams& from, Ydb::Replication::ConnectionParams& to) {
         to.set_endpoint(from.GetEndpoint());
         to.set_database(from.GetDatabase());
+        to.set_enable_ssl(from.GetEnableSsl());
+        to.set_connection_string(BuildConnectionString(from));
 
         switch (from.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:

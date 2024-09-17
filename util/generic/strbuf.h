@@ -5,6 +5,8 @@
 #include "utility.h"
 #include "typetraits.h"
 
+#include <util/system/compiler.h>
+
 #include <string_view>
 
 using namespace std::string_view_literals;
@@ -21,8 +23,8 @@ public:
     using char_type = TCharType; // TODO: DROP
     using traits_type = TTraits;
 
-    //Resolving some ambiguity between TStringBase and std::basic_string_view
-    //for typenames
+    // Resolving some ambiguity between TStringBase and std::basic_string_view
+    // for typenames
     using typename TStringView::const_iterator;
     using typename TStringView::const_reference;
     using typename TStringView::const_reverse_iterator;
@@ -32,10 +34,10 @@ public:
     using typename TStringView::size_type;
     using typename TStringView::value_type;
 
-    //for constants
+    // for constants
     using TStringView::npos;
 
-    //for methods and operators
+    // for methods and operators
     using TStringView::begin;
     using TStringView::cbegin;
     using TStringView::cend;
@@ -97,12 +99,12 @@ public:
      */
     constexpr inline TBasicStringBuf(std::nullptr_t begin, size_t size) = delete;
 
-    constexpr inline TBasicStringBuf(const TCharType* data, size_t size) noexcept
+    constexpr inline TBasicStringBuf(const TCharType* data Y_LIFETIME_BOUND, size_t size) noexcept
         : TStringView(data, size)
     {
     }
 
-    constexpr TBasicStringBuf(const TCharType* data) noexcept
+    constexpr TBasicStringBuf(const TCharType* data Y_LIFETIME_BOUND) noexcept
         /*
          * WARN: TBase::StrLen properly handles nullptr,
          * while std::string_view (using std::char_traits) will abort in such case
@@ -111,7 +113,7 @@ public:
     {
     }
 
-    constexpr inline TBasicStringBuf(const TCharType* beg, const TCharType* end) noexcept
+    constexpr inline TBasicStringBuf(const TCharType* beg Y_LIFETIME_BOUND, const TCharType* end Y_LIFETIME_BOUND) noexcept
         : TStringView(beg, end - beg)
     {
     }
@@ -122,20 +124,26 @@ public:
     {
     }
 
+    template <typename T>
+    inline TBasicStringBuf(const TBasicString<TCharType, T>& str Y_STRING_LIFETIME_BOUND) noexcept
+        : TStringView(str.data(), str.size())
+    {
+    }
+
     template <typename T, typename A>
-    inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str) noexcept
+    inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str Y_LIFETIME_BOUND) noexcept
         : TStringView(str)
     {
     }
 
     template <typename TCharTraits>
-    constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view) noexcept
+    constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view Y_LIFETIME_BOUND) noexcept
         : TStringView(view)
     {
     }
 
     template <typename TCharTraits>
-    constexpr TBasicStringBuf(TBasicStringBuf<TCharType, TCharTraits> sb) noexcept
+    constexpr TBasicStringBuf(TBasicStringBuf<TCharType, TCharTraits> sb Y_LIFETIME_BOUND) noexcept
         : TStringView(sb)
     {
     }
@@ -151,13 +159,13 @@ public:
          */
     }
 
-    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept
+    inline TBasicStringBuf(const TBasicStringBuf src Y_LIFETIME_BOUND, size_t pos, size_t n) noexcept
         : TBasicStringBuf(src)
     {
         Skip(pos).Trunc(n);
     }
 
-    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
+    inline TBasicStringBuf(const TBasicStringBuf src Y_LIFETIME_BOUND, size_t pos) noexcept
         : TBasicStringBuf(src, pos, TBase::npos)
     {
     }
@@ -455,7 +463,7 @@ public: // string subsequences
     /// Sets the start pointer to a position relative to the end
     inline TdSelf& RSeek(size_t tailSize) noexcept {
         if (size() > tailSize) {
-            //WARN: removing TStringView:: will lead to an infinite recursion
+            // WARN: removing TStringView:: will lead to an infinite recursion
             *this = TStringView::substr(size() - tailSize, tailSize);
         }
 
@@ -468,7 +476,7 @@ public: // string subsequences
         // exn_spec_violation: An exception of type "std::out_of_range" is thrown but the exception specification "noexcept" doesn't allow it to be thrown. This will result in a call to terminate().
         // fun_call_w_exception: Called function TStringView::substr throws an exception of type "std::out_of_range".
         // Suppress this issue because we pass argument pos=0 and string_view can't throw std::out_of_range.
-        *this = TStringView::substr(0, targetSize); //WARN: removing TStringView:: will lead to an infinite recursion
+        *this = TStringView::substr(0, targetSize); // WARN: removing TStringView:: will lead to an infinite recursion
         return *this;
     }
 

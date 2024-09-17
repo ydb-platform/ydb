@@ -152,14 +152,12 @@ namespace NActors {
         struct TEvResolveNode;
         struct TEvNodeAddress;
 
-        struct TEvConnectNode: public TEventBase<TEvConnectNode, EvConnectNode> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvConnectNode, "TEvInterconnect::TEvConnectNode")
+        struct TEvConnectNode: public TEventLocal<TEvConnectNode, EvConnectNode> {
         };
 
         struct TEvAcceptIncoming;
 
         struct TEvNodeConnected: public TEventLocal<TEvNodeConnected, EvNodeConnected> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeConnected, "TEvInterconnect::TEvNodeConnected")
             TEvNodeConnected(ui32 node) noexcept
                 : NodeId(node)
             {
@@ -168,7 +166,6 @@ namespace NActors {
         };
 
         struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeDisconnected, "TEvInterconnect::TEvNodeDisconnected")
             TEvNodeDisconnected(ui32 node) noexcept
                 : NodeId(node)
             {

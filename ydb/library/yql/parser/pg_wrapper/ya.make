@@ -33,6 +33,7 @@ SRCS(
     comp_factory.cpp
     type_cache.cpp
     pg_aggs.cpp
+    read_table.cpp
     recovery.cpp
     superuser.cpp
     config.cpp
@@ -87,6 +88,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/public/decimal
+    ydb/library/yql/public/result_format
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/uuid
@@ -99,6 +101,13 @@ PEERDIR(
 )
 
 INCLUDE(cflags.inc)
+
+IF (OS_LINUX)
+    SRCS(
+        postgresql/src/port/strlcat.c
+        postgresql/src/port/strlcpy.c
+    )
+ENDIF()
 
 IF (OS_LINUX OR OS_DARWIN)
     SRCS(

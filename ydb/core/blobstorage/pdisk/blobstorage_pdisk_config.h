@@ -130,8 +130,12 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 ExpectedSlotCount = 0;
 
+    // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    ui32 ChunkBaseLimit = 130;
+
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
+    TControlWrapper MaxCommonLogChunks = 200;
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
 
     // Common multiplier and divisor
@@ -148,7 +152,11 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 WarningLogChunksMultiplier = 4;
     ui64 YellowLogChunksMultiplier = 4;
 
+    ui32 MaxMetadataMegabytes = 32; // maximum size of raw metadata (in megabytes)
+
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+    bool MetadataOnly = false;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -254,6 +262,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " PDiskGuid# " << PDiskGuid << x;
         str << " PDiskId# " << PDiskId << x;
         str << " PDiskCategory# " << PDiskCategory.ToString() << x;
+        str << " MetadataOnly# " << MetadataOnly << x;
         for (ui32 i = 0; i < HashedMainKey.size(); ++i) {
             str << " HashedMainKey[" << i << "]# " << HashedMainKey[i] << x;
         }
@@ -295,6 +304,8 @@ struct TPDiskConfig : public TThrRefBase {
         str << " OrangeLogChunksMultiplier# " << OrangeLogChunksMultiplier << x;
         str << " WarningLogChunksMultiplier# " << WarningLogChunksMultiplier << x;
         str << " YellowLogChunksMultiplier# " << YellowLogChunksMultiplier << x;
+        str << " MaxMetadataMegabytes# " << MaxMetadataMegabytes << x;
+        str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << "}";
         return str.Str();
     }
@@ -371,6 +382,13 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasChunkBaseLimit()) {
+            ui32 limit = cfg->GetChunkBaseLimit();
+            limit = Min<ui32>(130, limit);
+            limit = Max<ui32>(13, limit);
+            ChunkBaseLimit = limit;
         }
     }
 };

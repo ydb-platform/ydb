@@ -58,7 +58,10 @@
 extern __thread PGDLLIMPORT MemoryContext TopMemoryContext;
 extern __thread PGDLLIMPORT MemoryContext ErrorContext;
 extern __thread PGDLLIMPORT MemoryContext PostmasterContext;
-extern __thread PGDLLIMPORT MemoryContext CacheMemoryContext;
+DECLARE_THREAD_VAR(MemoryContext, CacheMemoryContext);
+#ifdef BUILD_PG_EXTENSION
+#define CacheMemoryContext (*PtrCacheMemoryContext())
+#endif
 extern __thread PGDLLIMPORT MemoryContext MessageContext;
 extern __thread PGDLLIMPORT MemoryContext TopTransactionContext;
 extern __thread PGDLLIMPORT MemoryContext CurTransactionContext;

@@ -117,6 +117,7 @@ def validate_cfg(result):
             "canonize_peephole",
             "canonize_lineage",
             "peephole_use_blocks",
+            "with_final_result_issues",
             "xfail",
             "pragma",
             "canonize_yt",

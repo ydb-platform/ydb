@@ -7,8 +7,26 @@
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
+
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
+
+namespace {
+
+Aws::SDKOptions Options;
+
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    Aws::InitAPI(Options);
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    Aws::ShutdownAPI(Options);
+}
+
+}
 
 Y_UNIT_TEST_SUITE(TBackupTests) {
     using TFillFn = std::function<void(TTestBasicRuntime&)>;
@@ -144,11 +162,11 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnLargeData) {
-        ShouldSucceedOnLargeData<Codec>(0, std::make_pair(101, 2));
+        ShouldSucceedOnLargeData<Codec>(0, std::make_pair(101, 3));
     }
 
     Y_UNIT_TEST(ShouldSucceedOnLargeData_MinWriteBatch) {
-        ShouldSucceedOnLargeData<ECompressionCodec::Zstd>(1 << 20, std::make_pair(0, 3));
+        ShouldSucceedOnLargeData<ECompressionCodec::Zstd>(1 << 20, std::make_pair(0, 4));
     }
 
 } // TBackupTests

@@ -3,14 +3,12 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
-#include "shared_cache_memtable.h"
+#include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-
-#include <memory>
 
 namespace NKikimr {
 namespace NSharedCache {
@@ -27,12 +25,7 @@ namespace NSharedCache {
         EvRequest,
         EvResult,
         EvUpdated,
-        EvMem,
-        EvMemTableRegister,
-        EvMemTableRegistered,
-        EvMemTableCompact,
-        EvMemTableCompacted,
-        EvMemTableUnregister,
+        EvReplacementPolicySwitch,
 
         EvEnd
 
@@ -137,50 +130,13 @@ namespace NSharedCache {
         THashMap<TLogoBlobID, TActions> Actions;
     };
 
-    struct TEvMem : public TEventLocal<TEvMem, EvMem> {
-    };
+    struct TEvReplacementPolicySwitch : public TEventLocal<TEvReplacementPolicySwitch, EvReplacementPolicySwitch> {
+        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
-    struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {
-        const ui32 Table;
+        TReplacementPolicy ReplacementPolicy;
 
-        TEvMemTableRegister(ui32 table)
-            : Table(table)
-        {}
-    };
-
-    struct TEvMemTableRegistered : public TEventLocal<TEvMemTableRegistered, EvMemTableRegistered> {
-        const ui32 Table;
-        TIntrusivePtr<ISharedPageCacheMemTableRegistration> Registration;
-
-        TEvMemTableRegistered(ui32 table, TIntrusivePtr<ISharedPageCacheMemTableRegistration> registration)
-            : Table(table)
-            , Registration(std::move(registration))
-        {}
-    };
-
-    struct TEvMemTableCompact : public TEventLocal<TEvMemTableCompact, EvMemTableCompact> {
-        const ui32 Table;
-        const ui64 ExpectedSize;
-
-        TEvMemTableCompact(ui32 table, ui64 expectedSize)
-            : Table(table)
-            , ExpectedSize(expectedSize)
-        {}
-    };
-
-    struct TEvMemTableCompacted : public TEventLocal<TEvMemTableCompacted, EvMemTableCompacted> {
-        const TIntrusivePtr<ISharedPageCacheMemTableRegistration> Registration;
-
-        TEvMemTableCompacted(TIntrusivePtr<ISharedPageCacheMemTableRegistration> registration)
-            : Registration(registration)
-        {}
-    };
-
-    struct TEvMemTableUnregister : public TEventLocal<TEvMemTableUnregister, EvMemTableUnregister> {
-        const ui32 Table;
-
-        TEvMemTableUnregister(ui32 table)
-            : Table(table)
+        TEvReplacementPolicySwitch(TReplacementPolicy replacementPolicy)
+            : ReplacementPolicy(replacementPolicy)
         {}
     };
 }

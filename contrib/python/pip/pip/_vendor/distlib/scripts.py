@@ -62,9 +62,6 @@ if __name__ == '__main__':
 distlib_package = __name__.rsplit('.', 1)[0]
 
 WRAPPERS = {
-    r.name: r.bytes
-    for r in finder(distlib_package).iterator("")
-    if r.name.endswith(".exe")
 }
 
 

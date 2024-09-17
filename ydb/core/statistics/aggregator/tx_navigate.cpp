@@ -29,7 +29,7 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishScan(db);
+                Self->FinishTraversal(db);
             }
             return true;
         }
@@ -52,10 +52,17 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             Self->KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
         }
 
-        if (Self->StartKey.GetCells().empty()) {
+        if (Self->TraversalStartKey.GetCells().empty()) {
             TVector<TCell> minusInf(Self->KeyColumnTypes.size());
-            Self->StartKey = TSerializedCellVec(minusInf);
+            Self->TraversalStartKey = TSerializedCellVec(minusInf);
             Self->PersistStartKey(db);
+        }
+
+        if (Self->TraversalIsColumnTable) {
+            Self->HiveId = entry.DomainInfo->ExtractHive();
+            if (Self->HiveId == 0) {
+                Self->HiveId = AppData()->DomainsInfo->GetHive();
+            }
         }
 
         return true;

@@ -2,7 +2,12 @@
 
 #include "public.h"
 
+#include <yt/yt/client/hydra/public.h>
+
 #include <yt/yt/client/node_tracker_client/public.h>
+
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
 
 namespace NYT::NChunkClient {
 
@@ -88,6 +93,15 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TWrittenChunkReplicasInfo
+{
+    TChunkReplicaWithLocationList Replicas;
+    // Revision upon confirmation of the chunk. Not every writer is expected to set this field.
+    NHydra::TRevision ConfirmationRevision = NHydra::NullRevision;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TChunkReplica
 {
 public:
@@ -110,6 +124,12 @@ private:
 
     friend void ToProto(ui32* value, TChunkReplica replica);
     friend void FromProto(TChunkReplica* replica, ui32 value);
+
+    using TLoadContext = NPhoenix2::TLoadContext;
+    using TSaveContext = NPhoenix2::TSaveContext;
+    using TPersistenceContext = NPhoenix2::TPersistenceContext;
+
+    PHOENIX_DECLARE_TYPE(TChunkReplica, 0x004d1b8a);
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplica replica, TStringBuf spec);
@@ -187,6 +207,9 @@ bool IsErasureChunkType(NObjectClient::EObjectType type);
 
 //! Returns |true| iff this is an erasure chunk.
 bool IsErasureChunkId(TChunkId id);
+
+//! Returns |true| iff this is an erasure chunk part.
+bool IsErasureChunkPartType(NObjectClient::EObjectType type);
 
 //! Returns |true| iff this is an erasure chunk part.
 bool IsErasureChunkPartId(TChunkId id);

@@ -47,7 +47,7 @@ namespace NStringSplitPrivate {
         return nullptr;
     }
 
-}
+} // namespace NStringSplitPrivate
 
 template <class I, class TDelim, class TConsumer>
 std::enable_if_t<::NStringSplitPrivate::TIsConsumerV<TConsumer, I>>
@@ -262,7 +262,7 @@ struct TSetDelimiter: private TFindFirstOf<const Char> {
 
 namespace NSplitTargetHasPushBack {
     Y_HAS_MEMBER(push_back, PushBack);
-}
+} // namespace NSplitTargetHasPushBack
 
 template <class T, class = void>
 struct TConsumerBackInserter;
@@ -782,7 +782,7 @@ namespace NStringSplitPrivate {
             size_t successfullyFilled = 0;
             auto it = this->begin();
 
-            //FIXME: actually, some kind of TryApplyToMany is needed in order to stop iteration upon first failure
+            // FIXME: actually, some kind of TryApplyToMany is needed in order to stop iteration upon first failure
             ApplyToMany([&](auto&& arg) {
                 if (it != this->end()) {
                     if (TryDoFromString(it->Token(), arg)) {
@@ -1007,7 +1007,7 @@ namespace NStringSplitPrivate {
         {
         }
 
-        //does not own TDelim
+        // does not own TDelim
         template <class TDelim>
         inline TIt<TPtrPolicy<const TDelim>> Split(const TDelim& d) const noexcept {
             return {String_, &d};
@@ -1038,7 +1038,7 @@ namespace NStringSplitPrivate {
     auto MakeStringSplitter(String&& s) {
         return TStringSplitter<std::remove_reference_t<String>>(std::forward<String>(s));
     }
-}
+} // namespace NStringSplitPrivate
 
 template <class Iterator>
 auto StringSplitter(Iterator begin, Iterator end) {

@@ -10,15 +10,43 @@
 
 namespace NKikimr {
 
-class TMediatorTimecastEntry : public TThrRefBase {
-    TAtomic Step;
+class TMediatorTimecastSharedEntry : public TThrRefBase {
 public:
-    TMediatorTimecastEntry()
-        : Step(0)
-    {}
+    using TPtr = TIntrusivePtr<TMediatorTimecastSharedEntry>;
+    using TCPtr = TIntrusiveConstPtr<TMediatorTimecastSharedEntry>;
 
-    ui64 Get(ui64 tabletId) const;
-    void Update(ui64 step, ui64 *exemption, ui64 exsz);
+    TMediatorTimecastSharedEntry() noexcept = default;
+    ~TMediatorTimecastSharedEntry() noexcept = default;
+
+    ui64 Get() const noexcept;
+    void Set(ui64 step) noexcept;
+
+private:
+    std::atomic<ui64> Step{ 0 };
+};
+
+class TMediatorTimecastEntry : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<TMediatorTimecastEntry>;
+    using TCPtr = TIntrusiveConstPtr<TMediatorTimecastEntry>;
+
+    TMediatorTimecastEntry(
+        const TMediatorTimecastSharedEntry::TPtr& safeStep,
+        const TMediatorTimecastSharedEntry::TPtr& latestStep) noexcept;
+    ~TMediatorTimecastEntry() noexcept;
+
+    /**
+     * Note: tabletId argument is not used (for compatibility only)
+     */
+    ui64 Get(ui64 tabletId = 0) const noexcept;
+
+    ui64 GetFrozenStep() const noexcept;
+    void SetFrozenStep(ui64 step) noexcept;
+
+private:
+    const TMediatorTimecastSharedEntry::TCPtr SafeStep;
+    const TMediatorTimecastSharedEntry::TCPtr LatestStep;
+    std::atomic<ui64> FrozenStep{ 0 };
 };
 
 class TMediatorTimecastReadStep : public TThrRefBase {
@@ -59,8 +87,11 @@ struct TEvMediatorTimecast {
 
         // mediator part
         EvWatch = EvRegisterTablet + 2 * 512,
+        EvGranularWatch,
+        EvGranularWatchModify,
 
         EvUpdate = EvRegisterTablet + 3 * 512,
+        EvGranularUpdate,
 
         EvEnd
     };
@@ -72,7 +103,7 @@ struct TEvMediatorTimecast {
         NKikimrSubDomains::TProcessingParams ProcessingParams;
 
 
-        TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams &processing)
+        TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams& processing)
             : TabletId(tabletId)
             , ProcessingParams(processing)
         {}
@@ -91,11 +122,11 @@ struct TEvMediatorTimecast {
 
     struct TEvRegisterTabletResult : public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> {
         const ui64 TabletId;
-        const TIntrusivePtr<TMediatorTimecastEntry> Entry;
+        const TMediatorTimecastEntry::TCPtr Entry;
 
-        TEvRegisterTabletResult(ui64 tabletId, TIntrusivePtr<TMediatorTimecastEntry> &entry)
+        TEvRegisterTabletResult(ui64 tabletId, TMediatorTimecastEntry::TCPtr entry)
             : TabletId(tabletId)
-            , Entry(entry)
+            , Entry(std::move(entry))
         {}
 
         TString ToString() const {
@@ -283,6 +314,14 @@ struct TEvMediatorTimecast {
     };
 
     struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
+        TEvUpdate() = default;
+
+        TEvUpdate(ui64 mediator, ui32 bucket, ui64 timeBarrier) {
+            Record.SetMediator(mediator);
+            Record.SetBucket(bucket);
+            Record.SetTimeBarrier(timeBarrier);
+        }
+
         TString ToString() const {
             TStringStream str;
             str << "{TEvUpdate ";
@@ -295,11 +334,51 @@ struct TEvMediatorTimecast {
             if (Record.HasTimeBarrier()) {
                 str << " TimeBarrier# " << Record.GetTimeBarrier();
             }
-            for (size_t i = 0; i < Record.ExemptionSize(); ++i) {
-                str << " Exemption# " << Record.GetExemption(i);
-            }
             str << "}";
             return str.Str();
+        }
+    };
+
+    struct TEvGranularWatch
+        : public TEventPB<
+            TEvGranularWatch,
+            NKikimrTxMediatorTimecast::TEvGranularWatch,
+            EvGranularWatch>
+    {
+        TEvGranularWatch() = default;
+
+        TEvGranularWatch(ui32 bucket, ui64 subscriptionId) {
+            Record.SetBucket(bucket);
+            Record.SetSubscriptionId(subscriptionId);
+        }
+    };
+
+    struct TEvGranularWatchModify
+        : public TEventPB<
+            TEvGranularWatchModify,
+            NKikimrTxMediatorTimecast::TEvGranularWatchModify,
+            EvGranularWatchModify>
+    {
+        TEvGranularWatchModify() = default;
+
+        TEvGranularWatchModify(ui32 bucket, ui64 subscriptionId) {
+            Record.SetBucket(bucket);
+            Record.SetSubscriptionId(subscriptionId);
+        }
+    };
+
+    struct TEvGranularUpdate
+        : public TEventPB<
+            TEvGranularUpdate,
+            NKikimrTxMediatorTimecast::TEvGranularUpdate,
+            EvGranularUpdate>
+    {
+        TEvGranularUpdate() = default;
+
+        TEvGranularUpdate(ui64 mediator, ui32 bucket, ui64 subscriptionId) {
+            Record.SetMediator(mediator);
+            Record.SetBucket(bucket);
+            Record.SetSubscriptionId(subscriptionId);
         }
     };
 };

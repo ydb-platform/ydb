@@ -101,11 +101,14 @@ namespace NSQLTranslation {
         bool EnableGenericUdfs;
         ui16 SyntaxVersion;
         bool AnsiLexer;
+        bool Antlr4Parser;
         bool PgParser;
         bool InferSyntaxVersion;
         EV0Behavior V0Behavior;
         bool V0ForceDisable;
+        bool PGDisable;
         bool WarnOnV0;
+        bool TestAntlr4;
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
         ISqlFeaturePolicy::TPtr BlockDefaultAuto;

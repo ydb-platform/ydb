@@ -76,6 +76,25 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     return scheme;
 }
 
+TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+    if (!pathDesc.HasSelf()) {
+        return Nothing();
+    }
+
+    Ydb::Scheme::ModifyPermissionsRequest permissions;
+
+    const auto& selfDesc = pathDesc.GetSelf();
+    permissions.mutable_actions()->Add()->set_change_owner(selfDesc.GetOwner());
+
+    NProtoBuf::RepeatedPtrField<Ydb::Scheme::Permissions> toGrant;
+    ConvertAclToYdb(selfDesc.GetOwner(), selfDesc.GetACL(), false, &toGrant);
+    for (const auto& permission : toGrant) {
+        *permissions.mutable_actions()->Add()->mutable_grant() = permission;
+    }
+
+    return permissions;
+}
+
 TString DecimalToString(const std::pair<ui64, i64>& loHi) {
     using namespace NYql::NDecimal;
 
@@ -113,8 +132,8 @@ bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
     return true;
 }
 
-bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err) {
-    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeDesc);
+bool PgToStream(TStringBuf data, const NScheme::TTypeInfo& typeInfo, IOutputStream& out, TString& err) {
+    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
     if (pgResult.Error) {
         err = *pgResult.Error;
         return false;

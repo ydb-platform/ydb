@@ -53,13 +53,18 @@ TTextWalker& TTextWalker::Advance(char c) {
         return *this;
     }
 
+    ui32 charDistance = 1;
+    if (Utf8Aware && IsUtf8Intermediate(c)) {
+        charDistance = 0;
+    }
+
     // either not '\r' or second '\r'
     if (LfCount) {
         Position.Row += LfCount;
-        Position.Column = 1;
+        Position.Column = charDistance;
         LfCount = 0;
     } else {
-        Position.Column += 1 + (HaveCr && c != '\r');
+        Position.Column += charDistance + (HaveCr && c != '\r');
     }
     HaveCr = (c == '\r');
     return *this;

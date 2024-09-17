@@ -691,7 +691,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ClearNewConfig();
 
     for (auto& p : Partitions) { //change config for already created partitions
-        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig()));
     }
     ChangePartitionConfigInflight += Partitions.size();
 
@@ -782,7 +782,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
         NewConfigShouldBeApplied = true; //when config will be inited with old value new config will be applied
 }
 
-void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
+void TPersQueue::HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx)
 {
     bool ok =
         (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
@@ -790,16 +790,68 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
         (resp.HasSetExecutorFastLogPolicyResult()) &&
         (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
     if (!ok) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Config read error: " << resp.DebugString() << " " << ctx.SelfID);
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
+        PQ_LOG_ERROR_AND_DIE("Config read error: " << resp.ShortDebugString());
         return;
     }
 
-    ReadTxInfo(resp.GetReadResult(2), ctx);
-    ReadConfig(resp.GetReadResult(0), resp.GetReadRangeResult(0), ctx);
-    ReadTxWrites(resp.GetReadResult(2), ctx);
-    ReadState(resp.GetReadResult(1), ctx);
+    ConfigReadResponse = std::move(resp);
+
+    BeginInitTransactions();
+    SendTransactionsReadRequest(GetTxKey(Min<ui64>()), true, ctx);
+}
+
+void TPersQueue::SendTransactionsReadRequest(const TString& fromKey, bool includeFrom,
+                                             const TActorContext& ctx)
+{
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    request->Record.SetCookie(READ_TXS_COOKIE);
+
+    AddCmdReadTransactionRange(*request, fromKey, includeFrom);
+
+    request->Record.MutableCmdSetExecutorFastLogPolicy()
+                ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
+    ctx.Send(ctx.SelfID, request.Release());
+}
+
+TString GetLastKey(const NKikimrClient::TKeyValueResponse::TReadRangeResult& result)
+{
+    if (!result.PairSize()) {
+        return {};
+    }
+
+    return result.GetPair(result.PairSize() - 1).GetKey();
+}
+
+void TPersQueue::HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx)
+{
+    bool ok =
+        (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
+        (resp.ReadRangeResultSize() == 1) &&
+        (resp.HasSetExecutorFastLogPolicyResult()) &&
+        (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
+    const auto& result = resp.GetReadRangeResult(0);
+    auto status = result.GetStatus();
+    if (status != NKikimrProto::OVERRUN &&
+        status != NKikimrProto::OK &&
+        status != NKikimrProto::NODATA) {
+        ok = false;
+    }
+    if (!ok) {
+        PQ_LOG_ERROR_AND_DIE("Transactions read error: " << resp.ShortDebugString());
+        return;
+    }
+
+    TransactionsReadResults.emplace_back(std::move(result));
+
+    if (status == NKikimrProto::OVERRUN) {
+        SendTransactionsReadRequest(GetLastKey(result), false, ctx);
+        return;
+    }
+
+    ReadTxInfo(ConfigReadResponse.GetReadResult(2), ctx);
+    ReadConfig(ConfigReadResponse.GetReadResult(0), TransactionsReadResults, ctx);
+    ReadTxWrites(ConfigReadResponse.GetReadResult(2), ctx);
+    ReadState(ConfigReadResponse.GetReadResult(1), ctx);
 }
 
 void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult& read,
@@ -907,6 +959,37 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
     ++OriginalPartitionsCount;
 }
 
+void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
+                                        const TActorContext& ctx)
+{
+    std::tie(ExecStep, ExecTxId) = TxQueue.front();
+    PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
+
+    switch (tx.Kind) {
+    case NKikimrPQ::TTransaction::KIND_DATA:
+        SendEvTxCalcPredicateToPartitions(ctx, tx);
+        break;
+    case NKikimrPQ::TTransaction::KIND_CONFIG: {
+        NPersQueue::TConverterFactoryPtr converterFactory;
+        CreateTopicConverter(tx.TabletConfig,
+                             converterFactory,
+                             tx.TopicConverter,
+                             ctx);
+        CreateNewPartitions(tx.TabletConfig,
+                            tx.TopicConverter,
+                            ctx);
+        SendEvProposePartitionConfig(ctx, tx);
+        break;
+    }
+    case NKikimrPQ::TTransaction::KIND_UNKNOWN:
+        Y_ABORT_UNLESS(false);
+    }
+
+    tx.State = NKikimrPQ::TTransaction::CALCULATING;
+    PQ_LOG_D("TxId " << tx.TxId <<
+             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+}
+
 void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
 {
     Partitions.emplace(partitionId,
@@ -958,23 +1041,28 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
     for (size_t i = 0; i != info.TxWritesSize(); ++i) {
         auto& txWrite = info.GetTxWrites(i);
         const TWriteId writeId = GetWriteId(txWrite);
-        ui32 partitionId = txWrite.GetOriginalPartitionId();
-        TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetInternalPartitionId());
 
-        TxWrites[writeId].Partitions.emplace(partitionId, shadowPartitionId);
+        TTxWriteInfo& writeInfo = TxWrites[writeId];
+        if (txWrite.HasOriginalPartitionId()) {
+            ui32 partitionId = txWrite.GetOriginalPartitionId();
+            TPartitionId shadowPartitionId(partitionId, writeId, txWrite.GetInternalPartitionId());
 
-        AddSupportivePartition(shadowPartitionId);
-        CreateSupportivePartitionActor(shadowPartitionId, ctx);
+            writeInfo.Partitions.emplace(partitionId, shadowPartitionId);
+
+            AddSupportivePartition(shadowPartitionId);
+            CreateSupportivePartitionActor(shadowPartitionId, ctx);
+
+            NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
+        }
+
         SubscribeWriteId(writeId, ctx);
-
-        NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
     }
 
     NewSupportivePartitions.clear();
 }
 
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
-                            const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                            const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                             const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(read.HasStatus());
@@ -982,15 +1070,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
             "Tablet " << TabletID() << " Config read error " << ctx.SelfID <<
             " Error status code " << read.GetStatus());
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-        return;
-    }
-
-    Y_ABORT_UNLESS(readRange.HasStatus());
-    if (readRange.GetStatus() != NKikimrProto::OK && readRange.GetStatus() != NKikimrProto::NODATA) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Transactions read error " << ctx.SelfID <<
-            " Error status code " << readRange.GetStatus());
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
@@ -1033,9 +1112,43 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         return;
     }
 
-    THashMap<ui32, TVector<TTransaction>> partitionTxs;
-    InitTransactions(readRange, partitionTxs);
+    for (const auto& readRange : readRanges) {
+        Y_ABORT_UNLESS(readRange.HasStatus());
+        if (readRange.GetStatus() != NKikimrProto::OK &&
+            readRange.GetStatus() != NKikimrProto::OVERRUN &&
+            readRange.GetStatus() != NKikimrProto::NODATA) {
+            PQ_LOG_ERROR_AND_DIE("Transactions read error: " << readRange.GetStatus());
+            return;
+        }
 
+        for (size_t i = 0; i < readRange.PairSize(); ++i) {
+            const auto& pair = readRange.GetPair(i);
+
+            PQ_LOG_D("ReadRange pair." <<
+                     " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
+                     ", Status " << pair.GetStatus());
+
+            NKikimrPQ::TTransaction tx;
+            Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
+
+            PQ_LOG_D("Load tx " << tx.ShortDebugString());
+
+            Txs.emplace(tx.GetTxId(), tx);
+
+            if (tx.HasStep()) {
+                if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
+                    PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
+                }
+            }
+        }
+    }
+
+    EndInitTransactions();
+    EndReadConfig(ctx);
+}
+
+void TPersQueue::EndReadConfig(const TActorContext& ctx)
+{
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const TPartitionId partitionId(partition.GetPartitionId());
         CreateOriginalPartition(Config,
@@ -1140,7 +1253,6 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
         return result;
     };
 
-
     MeteringSink.Create(ctx.Now(), {
             .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
             .TabletId       = ToString(TabletID()),
@@ -1149,7 +1261,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
             .YdbDatabaseId  = Config.GetYdbDatabaseId(),
             .StreamName     = streamName,
             .ResourceId     = streamPath,
-            .PartitionsSize = Config.PartitionsSize(),
+            .PartitionsSize = CountActivePartitions(Config.GetPartitions()),
             .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
             .ReservedSpace  = storageLimitBytes,
             .ConsumersCount = countReadRulesWithPricing(ctx, Config),
@@ -1224,12 +1336,16 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         break;
     case READ_CONFIG_COOKIE:
         // read is only for config - is signal to create interal actors
-        HandleConfigReadResponse(resp, ctx);
+        HandleConfigReadResponse(std::move(resp), ctx);
+        break;
+    case READ_TXS_COOKIE:
+        HandleTransactionsReadResponse(std::move(resp), ctx);
         break;
     case WRITE_STATE_COOKIE:
         EndWriteTabletState(resp, ctx);
         break;
     case WRITE_TX_COOKIE:
+        PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
         EndWriteTxs(resp, ctx);
         break;
     default:
@@ -1262,6 +1378,9 @@ TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvPartitionCounters" <<
+             " PartitionId " << ev->Get()->Partition);
+
     const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
@@ -1507,10 +1626,10 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
-    auto& record = ev->Record;
+    const auto& record = ev->GetRecord();
 
-    int oldConfigVersion = Config.HasVersion() ? Config.GetVersion() : -1;
-    int newConfigVersion = NewConfig.HasVersion() ? NewConfig.GetVersion() : oldConfigVersion;
+    int oldConfigVersion = Config.HasVersion() ? static_cast<int>(Config.GetVersion()) : -1;
+    int newConfigVersion = NewConfig.HasVersion() ? static_cast<int>(NewConfig.GetVersion()) : oldConfigVersion;
 
     Y_ABORT_UNLESS(newConfigVersion >= oldConfigVersion);
 
@@ -1632,9 +1751,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                 generation = curConfigVersion;
             }
             c.SetGeneration(generation);
-            if (ReadRuleCompatible()) {
-                cfg.AddReadRuleGenerations(generation);
-            }
+            cfg.AddReadRuleGenerations(generation);
         }
     }
 
@@ -1688,7 +1805,7 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
             keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
         }
 
-        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange));
+        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange), false);
     }
 
     for (const auto& partition : cfg.GetPartitions()) {
@@ -2550,7 +2667,9 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
     const TWriteId writeId = GetWriteId(req);
     ui32 originalPartitionId = req.GetPartition();
 
-    Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId));
+    Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}, Partition %" PRIu32,
+                   TabletID(), writeId.NodeId, writeId.KeyId, originalPartitionId);
 
     const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -3068,17 +3187,26 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     request->Record.AddCmdRead()->SetKey(KeyState());
     request->Record.AddCmdRead()->SetKey(KeyTxInfo());
 
-    auto cmd = request->Record.AddCmdReadRange();
-    cmd->MutableRange()->SetFrom(GetTxKey(Min<ui64>()));
-    cmd->MutableRange()->SetIncludeFrom(true);
+    request->Record.MutableCmdSetExecutorFastLogPolicy()
+                ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
+    ctx.Send(ctx.SelfID, request.Release());
+
+    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+}
+
+void TPersQueue::AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
+                                            const TString& fromKey, bool includeFrom)
+{
+    auto cmd = request.Record.AddCmdReadRange();
+    cmd->MutableRange()->SetFrom(fromKey);
+    cmd->MutableRange()->SetIncludeFrom(includeFrom);
     cmd->MutableRange()->SetTo(GetTxKey(Max<ui64>()));
     cmd->MutableRange()->SetIncludeTo(true);
     cmd->SetIncludeData(true);
 
-    request->Record.MutableCmdSetExecutorFastLogPolicy()
-                ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
-    ctx.Send(ctx.SelfID, request.Release());
-    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+    PQ_LOG_D("Transactions request." <<
+             " From " << cmd->MutableRange()->GetFrom() <<
+             ", To " << cmd->MutableRange()->GetTo());
 }
 
 void TPersQueue::HandleWakeup(const TActorContext& ctx) {
@@ -3131,9 +3259,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << ev->Get()->Record.ShortDebugString());
+    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
+    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
 
-    NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
         HandleDataTransaction(ev->Release(), ctx);
@@ -3158,7 +3286,7 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     TPartitionId partitionId(operation.GetPartitionId(),
                              writeId,
                              operation.GetSupportivePartition());
-    PQ_LOG_D("partitionId=" << partitionId);
+    PQ_LOG_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
 }
 
@@ -3169,7 +3297,6 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     }
 
     const TWriteId writeId = GetWriteId(txBody);
-    PQ_LOG_D("writeId=" << writeId);
 
     for (auto& operation : txBody.GetOperations()) {
         auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
@@ -3189,13 +3316,13 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
-    NKikimrPQ::TEvProposeTransaction& event = ev->Record;
+    NKikimrPQ::TEvProposeTransaction& event = *ev->MutableRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
     if (TabletState != NKikimrPQ::ENormal) {
-        PQ_LOG_D("invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
+        PQ_LOG_D("TxId " << event.GetTxId() << " invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::ERROR,
@@ -3209,7 +3336,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     //
 
     if (txBody.OperationsSize() <= 0) {
-        PQ_LOG_D("empty list of operations");
+        PQ_LOG_D("TxId " << event.GetTxId() << " empty list of operations");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::BAD_REQUEST,
@@ -3219,7 +3346,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 
     if (!CheckTxWriteOperations(txBody)) {
-        PQ_LOG_D("invalid WriteId " << txBody.GetWriteId());
+        PQ_LOG_D("TxId " << event.GetTxId() << " invalid WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::BAD_REQUEST,
@@ -3228,9 +3355,36 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
+    if (txBody.HasWriteId()) {
+        const TWriteId writeId = GetWriteId(txBody);
+        if (!TxWrites.contains(writeId)) {
+            PQ_LOG_D("TxId " << event.GetTxId() << " unknown WriteId " << writeId);
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "unknown WriteId",
+                                        ctx);
+            return;
+        }
+
+        TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (writeInfo.Deleting) {
+            PQ_LOG_W("TxId " << event.GetTxId() << " WriteId " << writeId << " will be deleted");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "WriteId will be deleted",
+                                        ctx);
+            return;
+        }
+
+        writeInfo.TxId = event.GetTxId();
+        PQ_LOG_D("TxId " << event.GetTxId() << " has WriteId " << writeId);
+    }
+
     TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
     if (!partitionId.Defined()) {
-        PQ_LOG_D("unknown partition for WriteId " << txBody.GetWriteId());
+        PQ_LOG_W("TxId " << event.GetTxId() << " unknown partition for WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     NKikimrPQ::TError::INTERNAL,
@@ -3273,7 +3427,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                          const TActorContext& ctx)
 {
-    NKikimrPQ::TEvProposeTransaction& event = ev->Record;
+    const NKikimrPQ::TEvProposeTransaction& event = ev->GetRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kConfig);
     Y_ABORT_UNLESS(event.HasConfig());
 
@@ -3335,7 +3489,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorCo
     tx->OnReadSetAck(event);
     tx->UnbindMsgsFromPipe(event.GetTabletConsumer());
 
-    if (tx->State == NKikimrPQ::TTransaction::EXECUTED) {
+    if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
         CheckTxState(ctx, *tx);
 
         TryWriteTxs(ctx);
@@ -3350,12 +3504,14 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
              " Step " << event.Step <<
              ", TxId " << event.TxId <<
              ", Partition " << event.Partition <<
-             ", Predicate " << (event.Predicate ? "true" : "false"));
+             ", Predicate " << event.Predicate);
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
         return;
     }
+
+    Y_ABORT_UNLESS(tx->State == NKikimrPQ::TTransaction::CALCULATING);
 
     tx->OnTxCalcPredicateResult(event);
 
@@ -3441,6 +3597,7 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
+    PQ_LOG_D("send TEvSubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
 }
@@ -3448,6 +3605,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
+    PQ_LOG_D("send TEvUnsubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
 }
@@ -3547,7 +3705,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         const auto front = std::move(EvProposeTransactionQueue.front());
         EvProposeTransactionQueue.pop_front();
 
-        const NKikimrPQ::TEvProposeTransaction& event = front->Record;
+        const NKikimrPQ::TEvProposeTransaction& event = front->GetRecord();
         TDistributedTransaction& tx = Txs[event.GetTxId()];
 
         switch (tx.State) {
@@ -3557,7 +3715,9 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
 
             if (tx.WriteId.Defined()) {
                 const TWriteId& writeId = *tx.WriteId;
-                Y_ABORT_UNLESS(TxWrites.contains(writeId));
+                Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                               "PQ %" PRIu64 ", TxId %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                               TabletID(), tx.TxId, writeId.NodeId, writeId.KeyId);
                 TTxWriteInfo& writeInfo = TxWrites.at(writeId);
                 writeInfo.TxId = tx.TxId;
             }
@@ -3675,18 +3835,32 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
                                   NKikimrClient::TKeyValueRequest& request)
 {
-    Y_ABORT_UNLESS(!WriteTxsInProgress);
+    Y_ABORT_UNLESS(!WriteTxsInProgress,
+                   "PQ %" PRIu64,
+                   TabletID());
 
     for (ui64 txId : DeleteTxs) {
+        PQ_LOG_D("delete key for TxId " << txId);
+        AddCmdDeleteTx(request, txId);
+
         auto tx = GetTransaction(ctx, txId);
-        Y_ABORT_UNLESS(tx);
-
-        tx->AddCmdDelete(request);
-
-        ChangedTxs.insert(tx->TxId);
+        if (tx) {
+            ChangedTxs.insert(txId);
+        }
     }
 
     DeleteTxs.clear();
+}
+
+void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
+                                ui64 txId)
+{
+    TString key = GetTxKey(txId);
+    auto range = request.AddCmdDeleteRange()->MutableRange();
+    range->SetFrom(key);
+    range->SetIncludeFrom(true);
+    range->SetTo(key);
+    range->SetIncludeTo(true);
 }
 
 void TPersQueue::ProcessConfigTx(const TActorContext& ctx,
@@ -3733,11 +3907,16 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
     for (auto& [writeId, write] : TxWrites) {
-        for (auto [partitionId, shadowPartitionId] : write.Partitions) {
+        if (write.Partitions.empty()) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
-            txWrite->SetOriginalPartitionId(partitionId);
-            txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
+        } else {
+            for (auto [partitionId, shadowPartitionId] : write.Partitions) {
+                auto* txWrite = info.MutableTxWrites()->Add();
+                SetWriteId(*txWrite, writeId);
+                txWrite->SetOriginalPartitionId(partitionId);
+                txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
+            }
         }
     }
 
@@ -3810,6 +3989,7 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
 void TPersQueue::SendEvReadSetAckToSenders(const TActorContext& ctx,
                                            TDistributedTransaction& tx)
 {
+    PQ_LOG_D("TPersQueue::SendEvReadSetAckToSenders");
     for (auto& [target, event] : tx.ReadSetAcks) {
         PQ_LOG_D("Send TEvTxProcessing::TEvReadSetAck " << event->ToString());
         ctx.Send(target, event.release());
@@ -3869,7 +4049,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 
     if (tx.WriteId.Defined()) {
         const TWriteId& writeId = *tx.WriteId;
-        Y_ABORT_UNLESS(TxWrites.contains(writeId));
+        Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                       TabletID(), tx.TxId, writeId.NodeId, writeId.KeyId);
         const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
 
         for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
@@ -3906,7 +4088,9 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId);
 
         auto p = Partitions.find(TPartitionId(partitionId));
-        Y_ABORT_UNLESS(p != Partitions.end());
+        Y_ABORT_UNLESS(p != Partitions.end(),
+                       "Tablet %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
+                       TabletID(), partitionId, tx.TxId);
 
         ctx.Send(p->second.Actor, event.release());
     }
@@ -4006,7 +4190,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     switch (tx.State) {
     case NKikimrPQ::TTransaction::UNKNOWN:
-        Y_ABORT_UNLESS(tx.TxId != Max<ui64>());
+        Y_ABORT_UNLESS(tx.TxId != Max<ui64>(),
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         WriteTx(tx, NKikimrPQ::TTransaction::PREPARED);
         ScheduleProposeTransactionResult(tx);
@@ -4018,13 +4204,13 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PREPARING:
-        Y_ABORT_UNLESS(tx.WriteInProgress);
+        Y_ABORT_UNLESS(tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         tx.WriteInProgress = false;
 
-        //
-        // запланированные события будут отправлены в EndWriteTxs
-        //
+        // scheduled events will be sent to EndWriteTxs
 
         tx.State = NKikimrPQ::TTransaction::PREPARED;
         PQ_LOG_D("TxId " << tx.TxId <<
@@ -4033,7 +4219,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PREPARED:
-        Y_ABORT_UNLESS(tx.Step != Max<ui64>());
+        Y_ABORT_UNLESS(tx.Step != Max<ui64>(),
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         WriteTx(tx, NKikimrPQ::TTransaction::PLANNED);
 
@@ -4044,13 +4232,13 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PLANNING:
-        Y_ABORT_UNLESS(tx.WriteInProgress);
+        Y_ABORT_UNLESS(tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         tx.WriteInProgress = false;
 
-        //
-        // запланированные события будут отправлены в EndWriteTxs
-        //
+        // scheduled events will be sent to EndWriteTxs
 
         tx.State = NKikimrPQ::TTransaction::PLANNED;
         PQ_LOG_D("TxId " << tx.TxId <<
@@ -4062,38 +4250,16 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_D("TxQueue.size " << TxQueue.size());
 
         if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
-            std::tie(ExecStep, ExecTxId) = TxQueue.front();
-            PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
-
-            switch (tx.Kind) {
-            case NKikimrPQ::TTransaction::KIND_DATA:
-                SendEvTxCalcPredicateToPartitions(ctx, tx);
-                break;
-            case NKikimrPQ::TTransaction::KIND_CONFIG: {
-                NPersQueue::TConverterFactoryPtr converterFactory;
-                CreateTopicConverter(tx.TabletConfig,
-                                     converterFactory,
-                                     tx.TopicConverter,
-                                     ctx);
-                CreateNewPartitions(tx.TabletConfig,
-                                    tx.TopicConverter,
-                                    ctx);
-                SendEvProposePartitionConfig(ctx, tx);
-                break;
-            }
-            case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-                Y_ABORT_UNLESS(false);
-            }
-
-            tx.State = NKikimrPQ::TTransaction::CALCULATING;
-            PQ_LOG_D("TxId " << tx.TxId <<
-                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+            MoveTopTxToCalculating(tx, ctx);
         }
 
         break;
 
     case NKikimrPQ::TTransaction::CALCULATING:
-        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected);
+        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", PartitionRepliesCount %" PRISZT ", PartitionRepliesExpected %" PRISZT,
+                       TabletID(), tx.TxId,
+                       tx.PartitionRepliesCount, tx.PartitionRepliesExpected);
 
         PQ_LOG_D("Received " << tx.PartitionRepliesCount <<
                  ", Expected " << tx.PartitionRepliesExpected);
@@ -4102,7 +4268,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
             case NKikimrPQ::TTransaction::KIND_CONFIG:
-                WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
+                WriteTx(tx, NKikimrPQ::TTransaction::CALCULATED);
 
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
                 PQ_LOG_D("TxId " << tx.TxId <<
@@ -4118,27 +4284,28 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        Y_ABORT_UNLESS(tx.WriteInProgress);
-
-        tx.WriteInProgress = false;
+        Y_ABORT_UNLESS(tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
-        [[fallthrough]];
-
-    case NKikimrPQ::TTransaction::WAIT_RS:
         //
         // the number of TEvReadSetAck sent should not be greater than the number of senders
         // from TEvProposeTransaction
         //
         Y_ABORT_UNLESS(tx.ReadSetAcks.size() <= tx.PredicatesReceived.size(),
-                       "tx.ReadSetAcks.size=%" PRISZT ", tx.PredicatesReceived.size=%" PRISZT,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", ReadSetAcks.size %" PRISZT ", PredicatesReceived.size %" PRISZT,
+                       TabletID(), tx.TxId,
                        tx.ReadSetAcks.size(), tx.PredicatesReceived.size());
 
         SendEvReadSetToReceivers(ctx, tx);
 
+        [[fallthrough]];
+
+    case NKikimrPQ::TTransaction::WAIT_RS:
         PQ_LOG_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
@@ -4158,14 +4325,21 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::EXECUTING:
-        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected);
+        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", PartitionRepliesCount %" PRISZT ", PartitionRepliesExpected %" PRISZT,
+                       TabletID(), tx.TxId,
+                       tx.PartitionRepliesCount, tx.PartitionRepliesExpected);
 
         PQ_LOG_D("Received " << tx.PartitionRepliesCount <<
                  ", Expected " << tx.PartitionRepliesExpected);
 
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
-            Y_ABORT_UNLESS(!TxQueue.empty());
-            Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId);
+            Y_ABORT_UNLESS(!TxQueue.empty(),
+                           "PQ %" PRIu64 ", TxId %" PRIu64,
+                           TabletID(), tx.TxId);
+            Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId,
+                           "PQ %" PRIu64 ", TxId %" PRIu64,
+                           TabletID(), tx.TxId);
 
             SendEvProposeTransactionResult(ctx, tx);
 
@@ -4181,40 +4355,83 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                 Y_ABORT_UNLESS(false);
             }
 
+            WriteTx(tx, NKikimrPQ::TTransaction::EXECUTED);
+
+            PQ_LOG_D("delete partitions for TxId " << tx.TxId);
+            BeginDeletePartitions(tx);
+
             tx.State = NKikimrPQ::TTransaction::EXECUTED;
             PQ_LOG_D("TxId " << tx.TxId <<
                      ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
-        } else {
-            break;
         }
+
+        break;
+
+    case NKikimrPQ::TTransaction::EXECUTED:
+        SendEvReadSetAckToSenders(ctx, tx);
+
+        tx.State = NKikimrPQ::TTransaction::WAIT_RS_ACKS;
+        PQ_LOG_D("TxId " << tx.TxId <<
+                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
         [[fallthrough]];
 
-    case NKikimrPQ::TTransaction::EXECUTED:
-        PQ_LOG_D("HaveAllRecipientsReceive " << tx.HaveAllRecipientsReceive());
-        if (tx.HaveAllRecipientsReceive()) {
-            if (tx.WriteId.Defined()) {
-                BeginDeleteTx(tx);
-            } else {
-                DeleteTx(tx);
-            }
+    case NKikimrPQ::TTransaction::WAIT_RS_ACKS:
+        PQ_LOG_D("HaveAllRecipientsReceive " << tx.HaveAllRecipientsReceive() <<
+                 ", AllSupportivePartitionsHaveBeenDeleted " << AllSupportivePartitionsHaveBeenDeleted(tx.WriteId));
+        if (tx.HaveAllRecipientsReceive() && AllSupportivePartitionsHaveBeenDeleted(tx.WriteId)) {
+            DeleteTx(tx);
+            // implicitly switch to the state DELETING
         }
 
         break;
 
     case NKikimrPQ::TTransaction::DELETING:
         // The PQ tablet has persisted its state. Now she can delete the transaction and take the next one.
-        SendEvReadSetAckToSenders(ctx, tx);
         if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
             TxQueue.pop();
             TryStartTransaction(ctx);
         }
+
+        DeleteWriteId(tx.WriteId);
+        PQ_LOG_D("delete TxId " << tx.TxId);
         Txs.erase(tx.TxId);
+
         // If this was the last transaction, then you need to send responses to messages about changes
         // in the status of the PQ tablet (if they came)
         TryReturnTabletStateAll(ctx);
         break;
     }
+}
+
+bool TPersQueue::AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const
+{
+    if (!writeId.Defined()) {
+        return true;
+    }
+
+    Y_ABORT_UNLESS(TxWrites.contains(*writeId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                   TabletID(), writeId->NodeId, writeId->KeyId);
+    const TTxWriteInfo& writeInfo = TxWrites.at(*writeId);
+
+    PQ_LOG_D("WriteId " << *writeId <<
+             " Partitions.size=" << writeInfo.Partitions.size());
+    bool deleted =
+        writeInfo.Partitions.empty()
+        ;
+
+    return deleted;
+}
+
+void TPersQueue::DeleteWriteId(const TMaybe<TWriteId>& writeId)
+{
+    if (!writeId.Defined() || !TxWrites.contains(*writeId)) {
+        return;
+    }
+
+    PQ_LOG_D("delete WriteId " << *writeId);
+    TxWrites.erase(*writeId);
 }
 
 void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state)
@@ -4249,7 +4466,9 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
 {
     for (ui64 txId : ChangedTxs) {
         auto tx = GetTransaction(ctx, txId);
-        Y_ABORT_UNLESS(tx);
+        Y_ABORT_UNLESS(tx,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), txId);
 
         CheckTxState(ctx, *tx);
     }
@@ -4320,6 +4539,7 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
 
         event->TopicConverter = tx.TopicConverter;
         event->Config = tx.TabletConfig;
+        event->BootstrapConfig = tx.BootstrapConfig;
 
         ctx.Send(partition.Actor, std::move(event));
     }
@@ -4408,41 +4628,26 @@ void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig&
     }
 }
 
-void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
-                                  THashMap<ui32, TVector<TTransaction>>& partitionTxs)
+void TPersQueue::BeginInitTransactions()
 {
     Txs.clear();
     TxQueue.clear();
 
-    std::deque<std::pair<ui64, ui64>> plannedTxs;
+    PlannedTxs.clear();
+}
 
-    for (size_t i = 0; i < readRange.PairSize(); ++i) {
-        auto& pair = readRange.GetPair(i);
+void TPersQueue::EndInitTransactions()
+{
+    PQ_LOG_D("Txs.size=" << Txs.size() << ", PlannedTxs.size=" << PlannedTxs.size());
 
-        NKikimrPQ::TTransaction tx;
-        Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
-
-        PQ_LOG_D("Load tx " << tx.ShortDebugString());
-
-        Txs.emplace(tx.GetTxId(), tx);
-
-        if (tx.HasStep()) {
-            if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-                plannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-            }
-        }
-    }
-
-    std::sort(plannedTxs.begin(), plannedTxs.end());
-    for (auto& item : plannedTxs) {
+    std::sort(PlannedTxs.begin(), PlannedTxs.end());
+    for (auto& item : PlannedTxs) {
         TxQueue.push(item);
     }
 
     if (!TxQueue.empty()) {
         PQ_LOG_D("top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
     }
-
-    Y_UNUSED(partitionTxs);
 }
 
 void TPersQueue::TryStartTransaction(const TActorContext& ctx)
@@ -4456,6 +4661,8 @@ void TPersQueue::TryStartTransaction(const TActorContext& ctx)
     Y_ABORT_UNLESS(next);
 
     CheckTxState(ctx, *next);
+
+    TryWriteTxs(ctx);
 }
 
 void TPersQueue::OnInitComplete(const TActorContext& ctx)
@@ -4524,17 +4731,17 @@ void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 {
     auto& record = ev->Get()->Record;
     auto it = Partitions.find(TPartitionId(TPartitionId(record.GetPartition())));
-    if (it == Partitions.end()) {
+    if (InitCompleted && it == Partitions.end()) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
 
-        auto response = THolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
         response->Record.SetStatus(NKikimrPQ::ETopicPartitionStatus::Deleted);
         Send(ev->Sender, response.Release());
 
         return;
     }
 
-    if (it->second.InitDone) {
+    if (it != Partitions.end() && it->second.InitDone) {
         Forward(ev, it->second.Actor);
     } else {
         CheckPartitionStatusRequests[record.GetPartition()].push_back(ev);
@@ -4555,7 +4762,7 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
-void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev)
 {
     PQ_LOG_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
 
@@ -4576,22 +4783,14 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
         return;
     }
 
-    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << writeInfo.TxId);
-
-    if (!writeInfo.TxId.Defined()) {
-        PQ_LOG_D("delete write info for WriteId " << writeId);
-        // the message TEvProposeTransaction will not come anymore
-        BeginDeletePartitions(writeInfo);
+    if (writeInfo.TxId.Defined()) {
+        // the message `TEvProposeTransaction` has already arrived
+        PQ_LOG_D("there is already a transaction TxId " << writeInfo.TxId << " for WriteId " << writeId);
         return;
     }
 
-    ui64 txId = *writeInfo.TxId;
-    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << txId);
-
-    auto* tx = GetTransaction(ctx, txId);
-    if (!tx || (tx->State == NKikimrPQ::TTransaction::EXECUTED)) {
-        BeginDeletePartitions(writeInfo);
-    }
+    PQ_LOG_D("delete partitions for WriteId " << writeId);
+    BeginDeletePartitions(writeInfo);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
@@ -4608,6 +4807,19 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
     }
 }
 
+void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
+{
+    auto p = Partitions.find(partitionId);
+    if (p == Partitions.end()) {
+        return;
+    }
+
+    const TPartitionInfo& partition = p->second;
+    ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
+
+    Partitions.erase(partitionId);
+}
+
 void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
 {
     PQ_LOG_D("Handle TEvPQ::TEvDeletePartitionDone " << ev->Get()->PartitionId);
@@ -4615,7 +4827,9 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     auto* event = ev->Get();
     Y_ABORT_UNLESS(event->PartitionId.WriteId.Defined());
     const TWriteId& writeId = *event->PartitionId.WriteId;
-    Y_ABORT_UNLESS(TxWrites.contains(writeId));
+    Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                   TabletID(), writeId.NodeId, writeId.KeyId);
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.contains(event->PartitionId.OriginalPartitionId));
     const TPartitionId& partitionId = writeInfo.Partitions.at(event->PartitionId.OriginalPartitionId);
@@ -4623,18 +4837,18 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     Y_ABORT_UNLESS(partitionId.IsSupportivePartition());
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
-    Partitions.erase(partitionId);
+    DeletePartition(partitionId, ctx);
 
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {
         UnsubscribeWriteId(writeId, ctx);
         if (writeInfo.TxId.Defined()) {
             if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
-                DeleteTx(*tx);
+                if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
+                    CheckTxState(ctx, *tx);
+                }
             }
         }
-        PQ_LOG_D("delete WriteId " << writeId);
-        TxWrites.erase(writeId);
     }
     TxWritesChanged = true;
 
@@ -4643,35 +4857,20 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
 
 void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext&)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvTransactionCompleted" <<
+             " WriteId " << ev->Get()->WriteId);
+
     auto* event = ev->Get();
     if (!event->WriteId.Defined()) {
         return;
     }
 
     const TWriteId& writeId = *event->WriteId;
-    Y_ABORT_UNLESS(TxWrites.contains(writeId));
+    Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                   TabletID(), writeId.NodeId, writeId.KeyId);
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.size() == 1);
-
-    BeginDeletePartitions(writeInfo);
-}
-
-void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
-{
-    Y_ABORT_UNLESS(tx.WriteId.Defined());
-    const TWriteId& writeId = *tx.WriteId;
-    PQ_LOG_D("begin delete write info for WriteId " << writeId);
-    if (!TxWrites.contains(writeId)) {
-        // the transaction has already been completed
-        PQ_LOG_D("unknown WriteId " << writeId);
-        return;
-    }
-
-    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
-    if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
-        PQ_LOG_D("wait for WriteId subscription status");
-        return;
-    }
 
     BeginDeletePartitions(writeInfo);
 }
@@ -4689,6 +4888,16 @@ void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
         Send(partition.Actor, new TEvPQ::TEvDeletePartition);
     }
     writeInfo.Deleting = true;
+}
+
+void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)
+{
+    if (!tx.WriteId.Defined() || !TxWrites.contains(*tx.WriteId)) {
+        return;
+    }
+
+    TTxWriteInfo& writeInfo = TxWrites.at(*tx.WriteId);
+    BeginDeletePartitions(writeInfo);
 }
 
 TString TPersQueue::LogPrefix() const {
@@ -4745,7 +4954,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
-        HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
+        hFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);

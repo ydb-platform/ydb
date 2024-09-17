@@ -1207,9 +1207,9 @@ TCheckFunc HasOwner(const TString& owner) {
     };
 }
 
-void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
+void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave, bool isEffective) {
     const auto& self = record.GetPathDescription().GetSelf();
-    TSecurityObject src(self.GetOwner(), self.GetEffectiveACL(), false);
+    TSecurityObject src(self.GetOwner(), isEffective ? self.GetEffectiveACL() : self.GetACL(), false);
 
     NACLib::TSecurityObject required;
     required.FromString(right);
@@ -1231,6 +1231,22 @@ void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, c
             << ", got " << src.ShortDebugString()
             << ", required " << required.ShortDebugString());
     }
+}
+
+TCheckFunc HasRight(const TString& right) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckRight(record, right, true, true);
+    };
+}
+
+TCheckFunc HasNotRight(const TString& right) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckRight(record, right, false, true);
+    };
+}
+
+void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
+    CheckRight(record, right, mustHave, true);
 }
 
 TCheckFunc HasEffectiveRight(const TString& right) {

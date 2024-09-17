@@ -30,7 +30,7 @@ TKikimrRunner GetKikimrRunnerWithStats() {
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-    setting.SetName("OverrideStatistics");
+    setting.SetName("OptOverrideStatistics");
     setting.SetValue(STATS);
     settings.push_back(setting);
 
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto result = ExecQueryAndTestResult(session, query, NoParams, R"([[[1];["Value11"]];[[2];["Value12"]]])");
         
-        AssertTableReads(result, "/Root/FJ_Table_1", 2);
+        AssertTableReads(result, "/Root/FJ_Table_1", 3);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
         AssertTableReads(result, "/Root/FJ_Table_3", 4);
     }

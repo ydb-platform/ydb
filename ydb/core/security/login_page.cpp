@@ -6,6 +6,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <ydb/core/util/address_classifier.h>
+#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -20,6 +22,24 @@ using namespace NActors;
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NMonitoring;
+
+void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID) {
+    static const TString WebLoginComponentName = "web-login";
+    static const TString LogoutOperationName = "LOGOUT";
+    static const TString EmptyValue = "{none}";
+
+    auto remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request.Address->ToString());
+
+    // NOTE: audit field set here must be in sync with ydb/core/tx/schemeshard/schemeshard_audit_log.h, AuditLogLogin()
+    AUDIT_LOG(
+        AUDIT_PART("component", WebLoginComponentName)
+        AUDIT_PART("remote_address", (!remoteAddress.empty() ? remoteAddress : EmptyValue))
+        AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
+        //NOTE: no database specified as web logout considered cluster-wide
+        AUDIT_PART("operation", LogoutOperationName)
+        AUDIT_PART("status", TString("SUCCESS"))
+    );
+}
 
 using THttpResponsePtr = THolder<NMon::IEvHttpInfoRes>;
 
@@ -96,17 +116,7 @@ public:
             ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting LDAP provider for user " << AuthCredentials.Login);
             Send(MakeLdapAuthProviderID(), new TEvLdapAuthProvider::TEvAuthenticateRequest(AuthCredentials.Login, AuthCredentials.Password));
         } else {
-            auto *domain = AppData()->DomainsInfo->GetDomain();
-            TString rootDatabase = "/" + domain->Name;
-            ui64 rootSchemeShardTabletId = domain->SchemeRoot;
-            if (!Database.empty() && Database != rootDatabase) {
-                Database = rootDatabase;
-                ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemecache for database " << Database);
-                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(Database).Release()));
-            } else {
-                Database = rootDatabase;
-                RequestSchemeShard(rootSchemeShardTabletId);
-            }
+            RequestLoginProvider();
         }
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
@@ -123,6 +133,7 @@ public:
         PipeClient = RegisterWithSameMailbox(pipe);
         THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
         request.Get()->Record = CreateLoginRequest(AuthCredentials, AppData()->AuthConfig);
+        request.Get()->Record.SetPeerName(Request->Address->ToString());
         NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
     }
 
@@ -146,10 +157,23 @@ public:
     void Handle(TEvLdapAuthProvider::TEvAuthenticateResponse::TPtr& ev) {
         TEvLdapAuthProvider::TEvAuthenticateResponse* response = ev->Get();
         if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
+            RequestLoginProvider();
+        } else {
+            ReplyErrorAndPassAway("403", "Forbidden", response->Error.Message);
+        }
+    }
+
+    void RequestLoginProvider() {
+        auto *domain = AppData()->DomainsInfo->GetDomain();
+        TString rootDatabase = "/" + domain->Name;
+        ui64 rootSchemeShardTabletId = domain->SchemeRoot;
+        if (!Database.empty() && Database != rootDatabase) {
+            Database = rootDatabase;
             ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemecache for database " << Database);
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(Database).Release()));
         } else {
-            ReplyErrorAndPassAway("403", "Forbidden", response->Error.Message);
+            Database = rootDatabase;
+            RequestSchemeShard(rootSchemeShardTabletId);
         }
     }
 
@@ -247,6 +271,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
+            hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
@@ -261,11 +287,40 @@ public:
             return ReplyErrorAndPassAway("400", "Bad Request", "Invalid method");
         }
 
-        ReplyDeleteCookieAndPassAway();
+        NHttp::TCookies cookies(NHttp::THeaders(Request->Headers)["Cookie"]);
+        TStringBuf ydbSessionId = cookies["ydb_session_id"];
+        if (ydbSessionId.empty()) {
+            return ReplyErrorAndPassAway("401", "Unauthorized", "No ydb_session_id cookie");
+        }
+
+        Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+            .Database = TString(),
+            .Ticket = TString("Login ") + ydbSessionId,
+            .PeerName = Request->Address->ToString(),
+        }));
+
+        Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
+    }
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
+        const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
+        if (result.Error) {
+            return ReplyErrorAndPassAway("403", "Forbidden", result.Error.Message);
+        }
+        if (result.Token == nullptr) {
+            return ReplyErrorAndPassAway("403", "Forbidden", "Empty token");
+        }
+
+        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID());
     }
 
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&) {
         PassAway();
+    }
+
+    void HandleTimeout() {
+        ALOG_ERROR(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL << " timeout");
+        ReplyErrorAndPassAway("504", "Gateway Timeout", "Timeout");
     }
 
     void ReplyOptionsAndPassAway() {
@@ -287,12 +342,15 @@ public:
         headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
     }
 
-    void ReplyDeleteCookieAndPassAway() {
+    void ReplyDeleteCookieAndPassAway(const TString& userSID) {
         ALOG_DEBUG(NActorsServices::HTTP, "Logout success");
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Set-Cookie", "ydb_session_id=; Max-Age=0");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("200", "OK", headers)));
+
+        AuditLogWebUILogout(*Request, userSID);
+
         PassAway();
     }
 
@@ -310,6 +368,7 @@ public:
 protected:
     TActorId Sender;
     NHttp::THttpIncomingRequestPtr Request;
+    TDuration Timeout = TDuration::Seconds(5);
 };
 
 class TLoginService : public TActor<TLoginService> {

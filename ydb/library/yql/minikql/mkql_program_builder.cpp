@@ -237,40 +237,34 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
-std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> streamItems;
-    streamItems.reserve(wideComponents.size());
+    std::vector<TType*> items;
+    items.reserve(wideComponents.size());
+    // XXX: Declare these variables outside the loop body to use for the last
+    // item (i.e. block length column) in the assertions below.
     bool isScalar;
-    for (size_t i = 0; i < wideComponents.size(); ++i) {
-        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
+    TType* itemType;
+    for (const auto& wideComponent : wideComponents) {
+        auto blockType = AS_TYPE(TBlockType, wideComponent);
         isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        auto withoutBlock = blockType->GetItemType();
-        streamItems.push_back(withoutBlock);
+        itemType = blockType->GetItemType();
+        items.push_back(unwrap ? itemType : blockType);
     }
 
     MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, streamItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return streamItems;
+    MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    return items;
 }
 
-std::vector<TType*> ValidateBlockFlowType(const TType* flowType) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> flowItems;
-    flowItems.reserve(wideComponents.size());
-    bool isScalar;
-    for (size_t i = 0; i < wideComponents.size(); ++i) {
-        auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
-        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        auto withoutBlock = blockType->GetItemType();
-        flowItems.push_back(withoutBlock);
-    }
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+    return ValidateBlockItems(wideComponents, unwrap);
+}
 
-    MKQL_ENSURE(isScalar, "Last column should be scalar");
-    MKQL_ENSURE(AS_TYPE(TDataType, flowItems.back())->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return flowItems;
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flowType));
+    return ValidateBlockItems(wideComponents, unwrap);
 }
 
 } // namespace
@@ -1759,6 +1753,18 @@ TRuntimeNode TProgramBuilder::BlockXor(TRuntimeNode first, TRuntimeNode second) 
     return BuildBlockLogical(__func__, first, second);
 }
 
+TRuntimeNode TProgramBuilder::BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMod(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
@@ -2760,6 +2766,32 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
 
     const auto itemType = NewDataType(NUdf::TDataType<bool>::Id, isOpt1 || isOpt2);
     auto outputType = NewBlockType(itemType, GetResultShape({firstType, secondType}));
+
+    TCallableBuilder callableBuilder(Env, callableName, outputType);
+    callableBuilder.Add(first);
+    callableBuilder.Add(second);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    bool isOpt1, isOpt2;
+    auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
+    UnpackOptionalData(secondType->GetItemType(), isOpt2);
+
+    MKQL_ENSURE(leftDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id, "Requires decimal args.");
+
+    const auto& lParams = static_cast<TDataDecimalType*>(leftDataType)->GetParams();
+
+    auto [precision, scale] = lParams;
+
+    TType* outputType = TDataDecimalType::Create(precision, scale, Env);
+    if (isOpt1 || isOpt2) {
+        outputType = TOptionalType::Create(outputType, Env);
+    }
+    outputType = NewBlockType(outputType, TBlockType::EShape::Many);
 
     TCallableBuilder callableBuilder(Env, callableName, outputType);
     callableBuilder.Add(first);
@@ -5858,6 +5890,86 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
 
     builder.Add(ret);
     return TRuntimeNode(builder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+    const TArrayRef<const ui32>& leftKeyDrops
+) {
+    if constexpr (RuntimeVersion < 51U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
+                joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
+                "Unsupported join kind");
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
+    for (const auto& drop : leftKeyDrops) {
+        MKQL_ENSURE(leftKeySet.contains(drop),
+                    "Only key columns has to be specified in drop column set");
+    }
+
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
+    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(),
+        std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TRuntimeNode::TList leftKeyDropsNodes;
+    leftKeyDropsNodes.reserve(leftKeyDrops.size());
+    std::transform(leftKeyDrops.cbegin(), leftKeyDrops.cend(),
+        std::back_inserter(leftKeyDropsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    const auto leftFlowItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    TVector<TType*> returnJoinItems;
+    for (size_t i = 0; i < leftFlowItems.size(); i++) {
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        returnJoinItems.push_back(leftFlowItems[i]);
+    }
+
+    const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
+    const auto payloadItemType = payloadType->IsList()
+                               ? AS_TYPE(TListType, payloadType)->GetItemType()
+                               : payloadType;
+    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers to ease the processing of the dict payload in wide context.
+        MKQL_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
+        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
+        TVector<TType*> dictBlockItems;
+        dictBlockItems.reserve(payloadItems.size());
+        for (const auto& payloadItem : payloadItems) {
+            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
+            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
+                                : NewOptionalType(payloadItem);
+            dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
+        }
+        // Block length column has to be the last column in wide block flow item,
+        // so all contents of the dict payload should be appended to the resulting
+        // wide type before the block size column.
+        const auto blockLenPos = std::prev(returnJoinItems.end());
+        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
+    } else {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers for join types that don't require the right (i.e. dict) part.
+        MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
+    }
+    TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
+
+    TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
+    callableBuilder.Add(flow);
+    callableBuilder.Add(dict);
+    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(leftKeyDropsNodes));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 namespace {

@@ -167,7 +167,8 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     return true;
 }
 
-bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
+bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
     const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
@@ -188,7 +189,7 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     const auto OpType = *ops.begin();
 
     try {
-        pathPair = SplitPathIntoWorkingDirAndName(req->path());
+        pathPair = SplitPathIntoWorkingDirAndName(path);
     } catch (const std::exception&) {
         code = Ydb::StatusIds::BAD_REQUEST;
         return false;
@@ -231,7 +232,7 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     for(const auto& rename: req->rename_indexes()) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
         auto& alter = *modifyScheme->MutableMoveIndex();
-        alter.SetTablePath(req->path());
+        alter.SetTablePath(path);
         alter.SetSrcPath(rename.source_name());
         alter.SetDstPath(rename.destination_name());
         alter.SetAllowOverwrite(rename.replace_destination());
@@ -376,13 +377,18 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     return true;
 }
 
+bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableModifyScheme(req->path(), req, modifyScheme, profiles, resolvedPathId, code, error);
+}
 
 template <typename TColumn>
 static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& column) {
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
         columnType = newColumn->mutable_type();
         auto* pg = columnType->mutable_pg_type();
@@ -423,7 +429,7 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto* typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
+    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
     if (typeDesc) {
         columnType = newColumn->mutable_type();
         auto* pg = columnType->mutable_pg_type();
@@ -623,7 +629,7 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
         case Ydb::Type::kPgType: {
             const auto& pgType = itemType.pg_type();
             const auto& typeName = pgType.type_name();
-            auto* desc = NPg::TypeDescFromPgTypeName(typeName);
+            auto desc = NPg::TypeDescFromPgTypeName(typeName);
             if (!desc) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Invalid PG type name: " << typeName;
@@ -846,8 +852,8 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
         NKikimrMiniKQL::TType splitKeyType;
         Ydb::Table::DescribeTableResult unused;
         FillColumnDescription(unused, splitKeyType, indexImplTableDescription);
-        FillTableBoundaryImpl(
-            *settings.mutable_partition_at_keys(),
+        FillTableBoundaryImpl<Ydb::Table::GlobalIndexSettings>(
+            settings,
             indexImplTableDescription,
             splitKeyType
         );
@@ -1499,7 +1505,7 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                 }
                 if (sequenceDescription.HasDataType()) {
                     auto* dataType = fromSequence->mutable_data_type();
-                    auto* typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
+                    auto typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
                     if (typeDesc) {
                         auto* pg = dataType->mutable_pg_type();
                         auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
@@ -1600,7 +1606,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                 break;
             }
             case NScheme::NTypeIds::Pg: {
-                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                     case INT2OID:
                     case INT4OID:
                     case INT8OID: {
@@ -1608,7 +1614,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
                         break;
                     }
                     default: {
-                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
                         status = Ydb::StatusIds::BAD_REQUEST;
                         error = Sprintf(
                             "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()

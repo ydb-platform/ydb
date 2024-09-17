@@ -4,7 +4,7 @@
 #include "datashard_impl.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
@@ -24,11 +24,11 @@ namespace NKikimr::NDataShard {
 using namespace NTable;
 using ESenderType = TEvChangeExchange::ESenderType;
 
-class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeSenderShard> {
+class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
-                << "[AsyncIndexChangeSenderShard]"
+                << "[BaseChangeSenderShard]"
                 << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
                 << "[" << ShardId << "]"
                 << SelfId() /* contains brackets */ << " ";
@@ -121,6 +121,20 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         }
     }
 
+    class TSerializer: public NChangeExchange::TBaseVisitor {
+        NKikimrChangeExchange::TChangeRecord& Record;
+
+    public:
+        explicit TSerializer(NKikimrChangeExchange::TChangeRecord& record)
+            : Record(record)
+        {
+        }
+
+        void Visit(const TChangeRecord& record) override {
+            record.Serialize(Record);
+        }
+    };
+
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -128,9 +142,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
-        auto& evRecords = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-
-        for (auto& recordPtr : evRecords) {
+        for (auto recordPtr : ev->Get()->Records) {
             const auto& record = *recordPtr;
 
             if (record.GetOrder() <= LastRecordOrder) {
@@ -138,7 +150,8 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
             }
 
             auto& proto = *records->Record.AddRecords();
-            record.Serialize(proto);
+            TSerializer serializer(proto);
+            record.Accept(serializer);
             Adjust(proto);
         }
 
@@ -151,8 +164,8 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     }
 
     void Adjust(NKikimrChangeExchange::TChangeRecord& record) const {
-        record.SetPathOwnerId(IndexTablePathId.OwnerId);
-        record.SetLocalPathId(IndexTablePathId.LocalPathId);
+        record.SetPathOwnerId(TargetTablePathId.OwnerId);
+        record.SetLocalPathId(TargetTablePathId.LocalPathId);
 
         Y_ABORT_UNLESS(record.HasAsyncIndex());
         AdjustTags(*record.MutableAsyncIndex());
@@ -247,13 +260,13 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         TStringStream html;
 
         HTML(html) {
-            Header(html, "AsyncIndex partition change sender", DataShard.TabletId);
+            Header(html, "Base partition change sender", DataShard.TabletId);
 
             SimplePanel(html, "Info", [this](IOutputStream& html) {
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
                         TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
-                        TermDesc(html, "IndexTablePathId", IndexTablePathId);
+                        TermDesc(html, "TargetTablePathId", TargetTablePathId);
                         TermDesc(html, "LeaderPipeCache", LeaderPipeCache);
                         TermDesc(html, "LastRecordOrder", LastRecordOrder);
                     }
@@ -285,12 +298,12 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_PARTITION;
     }
 
-    TAsyncIndexChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
+    TBaseChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
             const TPathId& indexTablePathId, const TMap<TTag, TTag>& tagMap)
         : Parent(parent)
         , DataShard(dataShard)
         , ShardId(shardId)
-        , IndexTablePathId(indexTablePathId)
+        , TargetTablePathId(indexTablePathId)
         , TagMap(tagMap)
         , LeaseConfirmationCookie(0)
         , LastRecordOrder(0)
@@ -314,7 +327,7 @@ private:
     const TActorId Parent;
     const TDataShardId DataShard;
     const ui64 ShardId;
-    const TPathId IndexTablePathId;
+    const TPathId TargetTablePathId;
     const TMap<TTag, TTag> TagMap; // from main to index
     mutable TMaybe<TString> LogPrefix;
 
@@ -328,15 +341,396 @@ private:
     ui32 Attempt = 0;
     TDuration Delay = TDuration::MilliSeconds(10);
 
-}; // TAsyncIndexChangeSenderShard
+}; // TBaseChangeSenderShard
+
+#define DEFINE_STATE_INTRO \
+    public: \
+        struct TStateTag {}; \
+    private: \
+        const TDerived* AsDerived() const { \
+            return static_cast<const TDerived*>(this); \
+        } \
+        TDerived* AsDerived() { \
+            return static_cast<TDerived*>(this); \
+        } \
+        TStringBuf GetLogPrefix() const { \
+            return AsDerived()->GetLogPrefix(); \
+        }
+
+#define USE_STATE(STATE) \
+    friend class T ## STATE ## State; \
+    STATEFN(State ## STATE) { \
+        return T ## STATE ## State::State(ev); \
+    } \
+    bool Is ## STATE ## State() const { \
+        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::State ## STATE); \
+    }
+
+template <typename TDerived>
+class TResolveIndexState
+    : virtual public NSchemeCache::TSchemeCacheHelpers
+{
+    DEFINE_STATE_INTRO;
+
+public:
+    void ResolveIndex() {
+        auto request = MakeHolder<TNavigate>();
+        request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->IndexPathId, TNavigate::OpList));
+
+        AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        AsDerived()->Become(&TDerived::StateResolveIndex);
+    }
+
+    STATEFN(State) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            sFunc(TEvents::TEvWakeup, ResolveIndex);
+        default:
+            return AsDerived()->StateBase(ev);
+        }
+    }
+
+private:
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& result = ev->Get()->Request;
+
+        LOG_D("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+
+        if (!AsDerived()->CheckNotEmpty(result)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntriesCount(result, 1)) {
+            return;
+        }
+
+        const auto& entry = result->ResultSet.at(0);
+
+        if (!AsDerived()->CheckTableId(entry, AsDerived()->IndexPathId)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntrySucceeded(entry)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntryKind(entry, TNavigate::KindIndex)) {
+            return;
+        }
+
+        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
+            LOG_D("Index is planned to drop, waiting for the EvRemoveSender command");
+
+            return AsDerived()->OnIndexUnderRemove();
+        }
+
+        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+        const auto& indexTable = entry.ListNodeEntry->Children.at(0);
+
+        Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
+        AsDerived()->TargetTablePathId = indexTable.PathId;
+
+        AsDerived()->NextState(TStateTag{});
+    }
+};
+
+template <typename TDerived>
+class TResolveUserTableState
+    : virtual public NSchemeCache::TSchemeCacheHelpers
+{
+    DEFINE_STATE_INTRO;
+
+public:
+    void ResolveUserTable() {
+        auto request = MakeHolder<TNavigate>();
+        request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->UserTableId, TNavigate::OpTable));
+
+        AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        AsDerived()->Become(&TDerived::StateResolveUserTable);
+    }
+
+    STATEFN(State) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            sFunc(TEvents::TEvWakeup, ResolveUserTable);
+        default:
+            return AsDerived()->StateBase(ev);
+        }
+    }
+
+private:
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& result = ev->Get()->Request;
+
+        LOG_D("HandleUserTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+
+        if (!AsDerived()->CheckNotEmpty(result)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntriesCount(result, 1)) {
+            return;
+        }
+
+        const auto& entry = result->ResultSet.at(0);
+
+        if (!AsDerived()->CheckTableId(entry, AsDerived()->UserTableId)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntrySucceeded(entry)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntryKind(entry, TNavigate::KindTable)) {
+            return;
+        }
+
+        for (const auto& [tag, column] : entry.Columns) {
+            Y_DEBUG_ABORT_UNLESS(!AsDerived()->MainColumnToTag.contains(column.Name));
+            AsDerived()->MainColumnToTag.emplace(column.Name, tag);
+        }
+
+        AsDerived()->NextState(TStateTag{});
+    }
+};
+
+template <typename TDerived>
+class TResolveTargetTableState
+    : virtual public NSchemeCache::TSchemeCacheHelpers
+{
+    DEFINE_STATE_INTRO;
+
+public:
+    void ResolveTargetTable() {
+        auto request = MakeHolder<TNavigate>();
+        request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->TargetTablePathId, TNavigate::OpTable));
+
+        AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        AsDerived()->Become(&TDerived::StateResolveTargetTable);
+    }
+
+    STATEFN(State) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            sFunc(TEvents::TEvWakeup, OnRetry);
+        default:
+            return AsDerived()->StateBase(ev);
+        }
+    }
+
+private:
+    void OnRetry() {
+        AsDerived()->OnRetry(TStateTag{});
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& result = ev->Get()->Request;
+
+        LOG_D("HandleTargetTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+
+        if (!AsDerived()->CheckNotEmpty(result)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntriesCount(result, 1)) {
+            return;
+        }
+
+        const auto& entry = result->ResultSet.at(0);
+
+        if (!AsDerived()->CheckTableId(entry, AsDerived()->TargetTablePathId)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntrySucceeded(entry)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntryKind(entry, TNavigate::KindTable)) {
+            return;
+        }
+
+        AsDerived()->TagMap.clear();
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
+
+        for (const auto& [tag, column] : entry.Columns) {
+            auto it = AsDerived()->MainColumnToTag.find(column.Name);
+            Y_ABORT_UNLESS(it != AsDerived()->MainColumnToTag.end());
+
+            Y_DEBUG_ABORT_UNLESS(!AsDerived()->TagMap.contains(it->second));
+            AsDerived()->TagMap.emplace(it->second, tag);
+
+            if (column.KeyOrder < 0) {
+                continue;
+            }
+
+            if (keyColumnTypes.size() <= static_cast<ui32>(column.KeyOrder)) {
+                keyColumnTypes.resize(column.KeyOrder + 1);
+            }
+
+            keyColumnTypes[column.KeyOrder] = column.PType;
+        }
+
+        AsDerived()->KeyDesc = MakeHolder<TKeyDesc>(
+            entry.TableId,
+            AsDerived()->GetFullRange(keyColumnTypes.size()).ToTableRange(),
+            TKeyDesc::ERowOperation::Update,
+            keyColumnTypes,
+            TVector<TKeyDesc::TColumnOp>()
+        );
+
+        AsDerived()->SetPartitionResolver(CreateDefaultPartitionResolver(*AsDerived()->KeyDesc.Get()));
+
+        AsDerived()->NextState(TStateTag{});
+    }
+};
+
+template <typename TDerived>
+class TResolveKeysState
+    : virtual public NSchemeCache::TSchemeCacheHelpers
+{
+    DEFINE_STATE_INTRO;
+
+public:
+    void ResolveKeys() {
+        auto request = MakeHolder<TResolve>();
+        request->ResultSet.emplace_back(std::move(AsDerived()->KeyDesc));
+
+        AsDerived()->Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
+        AsDerived()->Become(&TDerived::StateResolveKeys);
+    }
+
+    STATEFN(State) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+            sFunc(TEvents::TEvWakeup, OnRetry);
+        default:
+            return AsDerived()->StateBase(ev);
+        }
+    }
+
+private:
+    void OnRetry() {
+        AsDerived()->OnRetry(TStateTag{});
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        const auto& result = ev->Get()->Request;
+
+        LOG_D("HandleKeys TEvTxProxySchemeCache::TEvResolveKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+
+        if (!AsDerived()->CheckNotEmpty(result)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntriesCount(result, 1)) {
+            return;
+        }
+
+        auto& entry = result->ResultSet.at(0);
+
+        if (!AsDerived()->CheckTableId(entry, AsDerived()->TargetTablePathId)) {
+            return;
+        }
+
+        if (!AsDerived()->CheckEntrySucceeded(entry)) {
+            return;
+        }
+
+        if (!entry.KeyDescription->GetPartitions()) {
+            LOG_W("Empty partitions list"
+                << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
+            return AsDerived()->Retry();
+        }
+
+        const bool versionChanged = !AsDerived()->TargetTableVersion || AsDerived()->TargetTableVersion != entry.GeneralVersion;
+        AsDerived()->TargetTableVersion = entry.GeneralVersion;
+
+        AsDerived()->KeyDesc = std::move(entry.KeyDescription);
+        AsDerived()->CreateSenders(MakePartitionIds(AsDerived()->KeyDesc->GetPartitions()), versionChanged);
+
+        AsDerived()->NextState(TStateTag{});
+    }
+
+    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
+        TVector<ui64> result(Reserve(partitions.size()));
+
+        for (const auto& partition : partitions) {
+            result.push_back(partition.ShardId); // partition = shard
+        }
+
+        return result;
+    }
+};
+
+template <typename TDerived>
+struct TSchemeChecksMixin
+    : virtual private NSchemeCache::TSchemeCacheHelpers
+{
+    const TDerived* AsDerived() const {
+        return static_cast<const TDerived*>(this);
+    }
+
+    TDerived* AsDerived() {
+        return static_cast<TDerived*>(this);
+    }
+
+    template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
+    bool Check(CheckFunc checkFunc, FailFunc failFunc, const T& subject, Args&&... args) {
+        return checkFunc(AsDerived()->CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, AsDerived(), std::placeholders::_1));
+    }
+
+    template <typename T>
+    bool CheckNotEmpty(const TAutoPtr<T>& result) {
+        return Check(&TSchemeCacheHelpers::CheckNotEmpty<T>, &TDerived::LogCritAndRetry, result);
+    }
+
+    template <typename T>
+    bool CheckEntriesCount(const TAutoPtr<T>& result, ui32 expected) {
+        return Check(&TSchemeCacheHelpers::CheckEntriesCount<T>, &TDerived::LogCritAndRetry, result, expected);
+    }
+
+    template <typename T>
+    bool CheckTableId(const T& entry, const TTableId& expected) {
+        return Check(&TSchemeCacheHelpers::CheckTableId<T>, &TDerived::LogCritAndRetry, entry, expected);
+    }
+
+    template <typename T>
+    bool CheckEntrySucceeded(const T& entry) {
+        return Check(&TSchemeCacheHelpers::CheckEntrySucceeded<T>, &TDerived::LogWarnAndRetry, entry);
+    }
+
+    template <typename T>
+    bool CheckEntryKind(const T& entry, TNavigate::EKind expected) {
+        return Check(&TSchemeCacheHelpers::CheckEntryKind<T>, &TDerived::LogWarnAndRetry, entry, expected);
+    }
+
+};
 
 class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
-    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
-    , public NChangeExchange::IChangeSenderResolver
-    , public NChangeExchange::ISenderFactory
-    , private NSchemeCache::TSchemeCacheHelpers
+    , public NChangeExchange::TChangeSender
+    , public NChangeExchange::IChangeSenderIdentity
+    , public NChangeExchange::IChangeSenderPathResolver
+    , public NChangeExchange::IChangeSenderFactory
+    , private TSchemeChecksMixin<TAsyncIndexChangeSenderMain>
+    , private TResolveUserTableState<TAsyncIndexChangeSenderMain>
+    , private TResolveIndexState<TAsyncIndexChangeSenderMain>
+    , private TResolveTargetTableState<TAsyncIndexChangeSenderMain>
+    , private TResolveKeysState<TAsyncIndexChangeSenderMain>
 {
+    friend struct TSchemeChecksMixin;
+
+    USE_STATE(ResolveUserTable);
+    USE_STATE(ResolveIndex);
+    USE_STATE(ResolveTargetTable);
+    USE_STATE(ResolveKeys);
+
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -354,45 +748,64 @@ class TAsyncIndexChangeSenderMain
         return TSerializedTableRange(fromValues, true, toValues, false);
     }
 
-    bool IsResolvingUserTable() const {
-        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveUserTable);
-    }
-
-    bool IsResolvingIndex() const {
-        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveIndex);
-    }
-
-    bool IsResolvingIndexTable() const {
-        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveIndexTable);
-    }
-
-    bool IsResolvingKeys() const {
-        return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateResolveKeys);
-    }
-
     bool IsResolving() const override {
-        return IsResolvingUserTable()
-            || IsResolvingIndex()
-            || IsResolvingIndexTable()
-            || IsResolvingKeys();
+        return IsResolveUserTableState()
+            || IsResolveIndexState()
+            || IsResolveTargetTableState()
+            || IsResolveKeysState();
     }
 
     TStringBuf CurrentStateName() const {
-        if (IsResolvingUserTable()) {
+        if (IsResolveUserTableState()) {
             return "ResolveUserTable";
-        } else if (IsResolvingIndex()) {
+        } else if (IsResolveIndexState()) {
             return "ResolveIndex";
-        } else if (IsResolvingIndexTable()) {
-            return "ResolveIndexTable";
-        } else if (IsResolvingKeys()) {
+        } else if (IsResolveTargetTableState()) {
+            return "ResolveTargetTable";
+        } else if (IsResolveKeysState()) {
             return "ResolveKeys";
         } else {
             return "";
         }
     }
 
+    void OnRetry(TResolveTargetTableState::TStateTag) {
+        ResolveIndex();
+    }
+
+    void OnRetry(TResolveKeysState::TStateTag) {
+        ResolveIndex();
+    }
+
+    void OnIndexUnderRemove() {
+        RemoveRecords();
+        KillSenders();
+
+        Become(&TThis::StatePendingRemove);
+    }
+
+    void NextState(TResolveUserTableState::TStateTag) {
+        ResolveIndex();
+    }
+
+    void NextState(TResolveIndexState::TStateTag) {
+        ResolveTargetTable();
+    }
+
+    void NextState(TResolveTargetTableState::TStateTag) {
+        ResolveKeys();
+    }
+
+    void NextState(TResolveKeysState::TStateTag) {
+        Serve();
+    }
+
     void Retry() {
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+    }
+
+    void Serve() {
+        Become(&TThis::StateMain);
     }
 
     void LogCritAndRetry(const TString& error) {
@@ -403,302 +816,6 @@ class TAsyncIndexChangeSenderMain
     void LogWarnAndRetry(const TString& error) {
         LOG_W(error);
         Retry();
-    }
-
-    template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
-    bool Check(CheckFunc checkFunc, FailFunc failFunc, const T& subject, Args&&... args) {
-        return checkFunc(CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1));
-    }
-
-    template <typename T>
-    bool CheckNotEmpty(const TAutoPtr<T>& result) {
-        return Check(&TSchemeCacheHelpers::CheckNotEmpty<T>, &TThis::LogCritAndRetry, result);
-    }
-
-    template <typename T>
-    bool CheckEntriesCount(const TAutoPtr<T>& result, ui32 expected) {
-        return Check(&TSchemeCacheHelpers::CheckEntriesCount<T>, &TThis::LogCritAndRetry, result, expected);
-    }
-
-    template <typename T>
-    bool CheckTableId(const T& entry, const TTableId& expected) {
-        return Check(&TSchemeCacheHelpers::CheckTableId<T>, &TThis::LogCritAndRetry, entry, expected);
-    }
-
-    template <typename T>
-    bool CheckEntrySucceeded(const T& entry) {
-        return Check(&TSchemeCacheHelpers::CheckEntrySucceeded<T>, &TThis::LogWarnAndRetry, entry);
-    }
-
-    template <typename T>
-    bool CheckEntryKind(const T& entry, TNavigate::EKind expected) {
-        return Check(&TSchemeCacheHelpers::CheckEntryKind<T>, &TThis::LogWarnAndRetry, entry, expected);
-    }
-
-    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(Reserve(partitions.size()));
-
-        for (const auto& partition : partitions) {
-            result.push_back(partition.ShardId); // partition = shard
-        }
-
-        return result;
-    }
-
-    /// ResolveUserTable
-
-    void ResolveUserTable() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(UserTableId, TNavigate::OpTable));
-
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TThis::StateResolveUserTable);
-    }
-
-    STATEFN(StateResolveUserTable) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleUserTable);
-            sFunc(TEvents::TEvWakeup, ResolveUserTable);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void HandleUserTable(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const auto& result = ev->Get()->Request;
-
-        LOG_D("HandleUserTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
-
-        if (!CheckNotEmpty(result)) {
-            return;
-        }
-
-        if (!CheckEntriesCount(result, 1)) {
-            return;
-        }
-
-        const auto& entry = result->ResultSet.at(0);
-
-        if (!CheckTableId(entry, UserTableId)) {
-            return;
-        }
-
-        if (!CheckEntrySucceeded(entry)) {
-            return;
-        }
-
-        if (!CheckEntryKind(entry, TNavigate::KindTable)) {
-            return;
-        }
-
-        for (const auto& [tag, column] : entry.Columns) {
-            Y_DEBUG_ABORT_UNLESS(!MainColumnToTag.contains(column.Name));
-            MainColumnToTag.emplace(column.Name, tag);
-        }
-
-        ResolveIndex();
-    }
-
-    /// ResolveIndex
-
-    void ResolveIndex() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(PathId, TNavigate::OpList));
-
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TThis::StateResolveIndex);
-    }
-
-    STATEFN(StateResolveIndex) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndex);
-            sFunc(TEvents::TEvWakeup, ResolveIndex);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void HandleIndex(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const auto& result = ev->Get()->Request;
-
-        LOG_D("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
-
-        if (!CheckNotEmpty(result)) {
-            return;
-        }
-
-        if (!CheckEntriesCount(result, 1)) {
-            return;
-        }
-
-        const auto& entry = result->ResultSet.at(0);
-
-        if (!CheckTableId(entry, PathId)) {
-            return;
-        }
-
-        if (!CheckEntrySucceeded(entry)) {
-            return;
-        }
-
-        if (!CheckEntryKind(entry, TNavigate::KindIndex)) {
-            return;
-        }
-
-        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            LOG_D("Index is planned to drop, waiting for the EvRemoveSender command");
-
-            RemoveRecords();
-            KillSenders();
-            return Become(&TThis::StatePendingRemove);
-        }
-
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
-        const auto& indexTable = entry.ListNodeEntry->Children.at(0);
-
-        Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
-        IndexTablePathId = indexTable.PathId;
-
-        ResolveIndexTable();
-    }
-
-    /// ResolveIndexTable
-
-    void ResolveIndexTable() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(IndexTablePathId, TNavigate::OpTable));
-
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TThis::StateResolveIndexTable);
-    }
-
-    STATEFN(StateResolveIndexTable) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndexTable);
-            sFunc(TEvents::TEvWakeup, ResolveIndex);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void HandleIndexTable(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const auto& result = ev->Get()->Request;
-
-        LOG_D("HandleIndexTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
-
-        if (!CheckNotEmpty(result)) {
-            return;
-        }
-
-        if (!CheckEntriesCount(result, 1)) {
-            return;
-        }
-
-        const auto& entry = result->ResultSet.at(0);
-
-        if (!CheckTableId(entry, IndexTablePathId)) {
-            return;
-        }
-
-        if (!CheckEntrySucceeded(entry)) {
-            return;
-        }
-
-        if (!CheckEntryKind(entry, TNavigate::KindTable)) {
-            return;
-        }
-
-        TagMap.clear();
-        TVector<NScheme::TTypeInfo> keyColumnTypes;
-
-        for (const auto& [tag, column] : entry.Columns) {
-            auto it = MainColumnToTag.find(column.Name);
-            Y_ABORT_UNLESS(it != MainColumnToTag.end());
-
-            Y_DEBUG_ABORT_UNLESS(!TagMap.contains(it->second));
-            TagMap.emplace(it->second, tag);
-
-            if (column.KeyOrder < 0) {
-                continue;
-            }
-
-            if (keyColumnTypes.size() <= static_cast<ui32>(column.KeyOrder)) {
-                keyColumnTypes.resize(column.KeyOrder + 1);
-            }
-
-            keyColumnTypes[column.KeyOrder] = column.PType;
-        }
-
-        KeyDesc = MakeHolder<TKeyDesc>(
-            entry.TableId,
-            GetFullRange(keyColumnTypes.size()).ToTableRange(),
-            TKeyDesc::ERowOperation::Update,
-            keyColumnTypes,
-            TVector<TKeyDesc::TColumnOp>()
-        );
-
-        ResolveKeys();
-    }
-
-    /// ResolveKeys
-
-    void ResolveKeys() {
-        auto request = MakeHolder<TResolve>();
-        request->ResultSet.emplace_back(std::move(KeyDesc));
-
-        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
-        Become(&TThis::StateResolveKeys);
-    }
-
-    STATEFN(StateResolveKeys) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleKeys);
-            sFunc(TEvents::TEvWakeup, ResolveIndex);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void HandleKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        const auto& result = ev->Get()->Request;
-
-        LOG_D("HandleKeys TEvTxProxySchemeCache::TEvResolveKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
-
-        if (!CheckNotEmpty(result)) {
-            return;
-        }
-
-        if (!CheckEntriesCount(result, 1)) {
-            return;
-        }
-
-        auto& entry = result->ResultSet.at(0);
-
-        if (!CheckTableId(entry, IndexTablePathId)) {
-            return;
-        }
-
-        if (!CheckEntrySucceeded(entry)) {
-            return;
-        }
-
-        if (!entry.KeyDescription->GetPartitions()) {
-            LOG_W("Empty partitions list"
-                << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
-            return Retry();
-        }
-
-        const bool versionChanged = !IndexTableVersion || IndexTableVersion != entry.GeneralVersion;
-        IndexTableVersion = entry.GeneralVersion;
-
-        KeyDesc = std::move(entry.KeyDescription);
-        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
-
-        Become(&TThis::StateMain);
     }
 
     /// Main
@@ -715,12 +832,8 @@ class TAsyncIndexChangeSenderMain
         return KeyDesc && KeyDesc->GetPartitions();
     }
 
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return NKikimrSchemeOp::ECdcStreamFormatProto; }
-
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, IndexTablePathId, TagMap);
+        return new TBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -730,8 +843,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-        ProcessRecords(std::move(records));
+        ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
@@ -751,7 +863,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == PathId);
+        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();
@@ -778,10 +890,11 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, indexPathId)
+        , TChangeSender(this, this, this, this, dataShard.ActorId)
+        , IndexPathId(indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)
-        , IndexTableVersion(0)
+        , TargetTableVersion(0)
     {
     }
 
@@ -811,7 +924,12 @@ public:
         }
     }
 
+    TPathId GetChangeSenderIdentity() const override final {
+        return IndexPathId;
+    }
+
 private:
+    const TPathId IndexPathId;
     const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
@@ -819,10 +937,9 @@ private:
     THashMap<TString, TTag> MainColumnToTag;
     TMap<TTag, TTag> TagMap; // from main to index
 
-    TPathId IndexTablePathId;
-    ui64 IndexTableVersion;
+    TPathId TargetTablePathId;
+    ui64 TargetTableVersion;
     THolder<TKeyDesc> KeyDesc;
-
 }; // TAsyncIndexChangeSenderMain
 
 IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {

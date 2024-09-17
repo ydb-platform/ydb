@@ -108,6 +108,7 @@ RECURSE(
     facade
     file_storage
     issue
+    pg_ext
     peephole_opt
     qplayer
     services

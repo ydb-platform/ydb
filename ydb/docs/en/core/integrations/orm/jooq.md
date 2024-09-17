@@ -6,12 +6,12 @@ JOOQ is a Java library that allows you to create type-safe SQL queries by genera
 
 ## Generating Java Classes {#generated-java-classes}
 
-You can generate Java classes using any tools provided on the [official JOOQ website](https://www.jooq.org/doc/latest/manual/code-generation/codegen-configuration/). Two dependencies are required: {{ ydb-short-name }} JDBC driver and JOOQ extension for {{ ydb-short-name }}, as well as two parameters:
+You can generate Java classes using any of the tools provided on the [official JOOQ website](https://www.jooq.org/doc/latest/manual/code-generation/codegen-configuration/). Two dependencies are required: the [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) and the JOOQ extension for {{ ydb-short-name }}, along with two parameters:
 
 - `database.name`: `tech.ydb.jooq.codegen.YdbDatabase` (mandatory setting)
 - `strategy.name`: `tech.ydb.jooq.codegen.YdbGeneratorStrategy` (recommended setting)
 
-Let's look at an example of the `maven` plugin:
+An example using the `maven` plugin:
 
 ```xml
 <plugin>

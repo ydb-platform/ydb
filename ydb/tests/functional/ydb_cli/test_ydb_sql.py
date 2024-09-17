@@ -155,19 +155,19 @@ class TestExecuteSqlWithFormats(BaseTestSqlWithDatabase):
         output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--format", format])
         return self.canonical_result(output, self.tmp_path)
 
-    def execute_sql(self):
+    def execute_sql_pretty(self):
         return self.yql_script('pretty')
 
-    def execute_sql(self):
+    def execute_sql_json_base64(self):
         return self.yql_script('json-base64')
 
-    def execute_sql(self):
+    def execute_sql_json_base64_array(self):
         return self.yql_script('json-base64-array')
 
-    def execute_sql(self):
+    def execute_sql_json_unicode(self):
         return self.yql_script('json-unicode')
 
-    def execute_sql(self):
+    def execute_sql_json_unicode_array(self):
         return self.yql_script('json-unicode-array')
 
 

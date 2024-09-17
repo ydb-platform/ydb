@@ -371,10 +371,10 @@ namespace NActors {
                 }
 
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-6") {
+                    DIV_CLASS("col-md-8") {
                         RenderComponentPriorities(str);
                     }
-                    DIV_CLASS("col-md-6") {
+                    DIV_CLASS("col-md-4") {
                         TAG(TH4) {
                             str << "Change priority for all components";
                         }

@@ -113,6 +113,65 @@ Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
         UNIT_ASSERT(h.empty());
     }
 
+    Y_UNIT_TEST(SetGrowLessOnLowMemory) {
+        const int allowedFactorGrows = 3;
+        const ui64 initialCapacity = 2;
+
+        int growsCount = 0;
+
+        auto isLowMemoryCallback = [&growsCount]() { return allowedFactorGrows < ++growsCount; };
+        TRobinHoodHashSet<i32> rh(std::hash<i32>(), std::equal_to<i32>(), initialCapacity, isLowMemoryCallback);
+        std::unordered_set<i32> h;
+
+        std::vector<std::pair<ui64, ui64>> sizesAndCapacities;
+        for (ui64 i = 0; i < 10000; ++i) {
+            auto k = i % 1000;
+            auto[it, inserted] = h.emplace(k);
+            bool isNew;
+            auto iter = rh.Insert(k, isNew);
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+            UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
+            if (isNew) {
+                auto capacityBeforeGrow = rh.GetCapacity();
+                rh.CheckGrow();
+                auto capacityAfterGrow = rh.GetCapacity();
+
+                if (capacityBeforeGrow != capacityAfterGrow) {
+                    sizesAndCapacities.emplace_back(rh.GetSize(), capacityAfterGrow);
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
+        }
+
+        for (auto it = rh.Begin(); it != rh.End(); rh.Advance(it)) {
+            if (!rh.IsValid(it)) {
+                continue;
+            }
+
+            auto key = rh.GetKey(it);
+            auto hit = h.find(key);
+            UNIT_ASSERT(hit != h.end());
+            h.erase(key);
+        }
+
+        UNIT_ASSERT(h.empty());
+
+        auto prevCapacity = initialCapacity;
+
+        for (ui64 i = 0; i < sizesAndCapacities.size(); ++i) {
+            auto size = sizesAndCapacities[i].first;
+            auto currentCapacity = sizesAndCapacities[i].second;
+            
+            if (i < allowedFactorGrows) {
+                UNIT_ASSERT_VALUES_EQUAL(currentCapacity, prevCapacity * 8);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(currentCapacity, prevCapacity + size / 4);
+            }
+            prevCapacity = currentCapacity;
+        }
+    }
+
     Y_UNIT_TEST(MapBatch) {
         using THashTable = TRobinHoodHashMap<i32>;
         THashTable rh(sizeof(i64));

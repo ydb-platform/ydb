@@ -348,7 +348,9 @@ sudo chmod 700 /opt/ydb/certs
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb3>:2135 \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key
   ```
 
   В примере команды выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
@@ -383,7 +385,9 @@ sudo chmod 700 /opt/ydb/certs
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb3>:2135 \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720

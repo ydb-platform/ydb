@@ -539,7 +539,7 @@ runs:
       continue-on-error: true
       run: |
         git fetch --depth 10
-        python3 .github/scripts/tests/show_muted_tests.py --output_file $PUBLIC_DIR/mute_info/
+        python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
 
     - name: sync results to s3 and publish links
       if: always()

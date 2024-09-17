@@ -34,7 +34,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 * `partition_write_burst_bytes` — размер запаса квоты на запись в партицию на случай всплесков записи. При выставлении в `0` фактическое значение write_burst принимается равным значению квоты (что позволяет всплески записи длительностью до 1 секунды). Тип значения — `integer`, значение по умолчанию: `0`.
 * `partition_write_speed_bytes_per_second` — максимальная разрешенная скорость записи в 1 партицию. Если поток записи в партицию превысит это значение, запись будет квотироваться. Тип значения — `integer`, значение по умолчанию — `2097152` (2 МБ).
 * `auto_partitioning_strategy` — [режим автопартиционирования](../../../../concepts/topic#autopartitioning_modes).
-Допустимые значения: `disabled`, `paused`, `up`.
+Допустимые значения: `paused`, `up`, значение по умолчанию — `disabled`.
 * `auto_partitioning_up_utilization_percent` — определяет порог загрузки партиции в процентах от максимальной скорости записи, при достижении которого будет инициировано автоматическое **увеличение** числа партиций. Тип значения — `integer`, значение по умолчанию — `80`.
 * `auto_partitioning_stabilization_window` — определяет временной интервал, в течение которого уровень нагрузки должен оставаться выше установленного порога (`auto_partitioning_up_utilization_percent`), прежде чем будет выполнено автоматическое увеличение количества партиций. Тип значения — `Interval`, значение по умолчанию — `5m`.
 
@@ -50,6 +50,26 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 ALTER TOPIC `my_topic` SET (
     retention_period = Interval('PT36H'),
     partition_write_speed_bytes_per_second = 3000000
+);
+```
+
+### Включение и приостановка автопартицирования {#autopartitioning}
+
+Следующая команда включает [автопартицирование](../../../../concepts/topic#autopartitioning):
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    min_active_partitions = 1,
+    max_active_partitions = 5,
+    auto_partitioning_strategy = 'up'
+);
+```
+
+Следующая команда ставит [автопартицирование](../../../../concepts/topic#autopartitioning) на паузу:
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    auto_partitioning_strategy = 'paused'
 );
 ```
 
@@ -72,7 +92,7 @@ ALTER TOPIC topic_path RESET (option[, option2, ...]);
 ```yql
 ALTER TOPIC `my_topic` RESET (
     min_active_partitions,
-    partition_count_limit
+    max_active_partitions
 );
 ```
 

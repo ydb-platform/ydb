@@ -113,6 +113,7 @@ After creating datasets, you can use data from {{ ydb-short-name }} to create ch
 Let's create a sample chart using the dataset from the `episodes` table, as described in the [YQL tutorial](../../dev/yql-tutorial/index.md). Among other things, this tutorial covers how to [create](../../dev/yql-tutorial/create_demo_tables.md) this table and [populate it with data](../../dev/yql-tutorial/fill_tables_with_data.md). It will be a pie chart that demonstrates how many episodes each season of a given series contains.
 
 The table contains the following columns:
+
 * `series_id`
 * `season_id`
 * `episode_id`

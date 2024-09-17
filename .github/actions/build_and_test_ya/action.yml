@@ -57,6 +57,12 @@ defaults:
 runs:
   using: "composite"
   steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch all history for all branches and tags
+
     - name: show diff mute_ya.txt
       if: always()
       shell: bash

@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 
 template<class TTimer> 
-class TLockFreeBucket {
+class alignas(128) TLockFreeBucket {  // align to cache line size
 public:
     TLockFreeBucket(std::atomic<i64>& maxTokens, std::atomic<i64>& minTokens, std::atomic<ui64>& inflowPerSecond)
         : MaxTokens(maxTokens)
@@ -30,28 +30,35 @@ public:
 
 private:
     void FillBucket() {
-        TTime prev;
-        TTime now;
-        for (prev = LastUpdate.load(), now = TTimer::Now(); !LastUpdate.compare_exchange_strong(prev, now); ) {}
+        TTime prev = LastUpdate.load(std::memory_order_relaxed);
+        TTime now = TTimer::Now();
 
-        ui64 rawInflow = InflowPerSecond.load() * TTimer::Duration(prev, now);
-        if (rawInflow >= TTimer::Resolution) {
-            Tokens.fetch_add(rawInflow / TTimer::Resolution);
-            for (i64 tokens = Tokens.load(), maxTokens = MaxTokens.load(); tokens > maxTokens; ) {
-                if (Tokens.compare_exchange_strong(tokens, maxTokens)) {
-                    break;
-                }
+        do {
+            if (prev >= now) {
+                return;
             }
+        } while (!LastUpdate.compare_exchange_weak(prev, now,
+            std::memory_order_relaxed, std::memory_order_relaxed));
+
+        ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * TTimer::Duration(prev, now);
+        if (rawInflow >= TTimer::Resolution) {
+            for (
+                i64 tokens = Tokens.load(std::memory_order_relaxed);
+                !Tokens.compare_exchange_weak(tokens,
+                        std::min((i64)(MaxTokens.load()), (i64)(tokens + rawInflow / TTimer::Resolution)),
+                        std::memory_order_relaxed, std::memory_order_relaxed);
+            ) {}
         }
     }
 
     void TakeTokens(i64 tokens) {
-        Tokens.fetch_sub(tokens);
-        for (i64 tokens = Tokens.load(), minTokens = MinTokens.load(); tokens < minTokens; ) {
-            if (Tokens.compare_exchange_strong(tokens, minTokens)) {
-                break;
-            }
-        }
+        for (
+            i64 currentTokens = Tokens.load(std::memory_order_relaxed),
+                minTokens = MinTokens.load(std::memory_order_relaxed);
+            !Tokens.compare_exchange_weak(currentTokens,
+                    std::max(minTokens, currentTokens - tokens),
+                    std::memory_order_relaxed, std::memory_order_relaxed);
+        ) {}
     }
 
 private:
@@ -63,4 +70,9 @@ private:
 
     std::atomic<i64> Tokens;
     std::atomic<TTime> LastUpdate;
+
+    constexpr static ui32 CacheLineFillerSize = 128 - sizeof(std::atomic<i64>&) * 2 - sizeof(std::atomic<ui64>&)
+            - sizeof(std::atomic<i64>) - sizeof(std::atomic<TTime>);
+
+    std::array<char, CacheLineFillerSize> CacheLineFiller;
 };

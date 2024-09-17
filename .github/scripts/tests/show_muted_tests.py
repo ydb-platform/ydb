@@ -5,6 +5,7 @@ import configparser
 import ydb
 from git import Repo
 from mute_utils import mute_target, pattern_to_re
+from get_file_diff import extract_diff_lines
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -60,8 +61,7 @@ def save_tests_to_file(path):
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
         )
-        #os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = "put ur token path here"
-        #return 1
+        return 1
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally
@@ -188,7 +188,7 @@ def write_to_file(text, file):
 def main():
     
     s3_all_tests_url = 'https://storage.yandexcloud.net/ydb-gh-logs/ydb-platform/ydb/Tests/all_tests.txt'
-    #repo_path = os.path.expanduser('~/fork')  # путь до git репозитория
+
     path_in_repo = '.github/config/'
     muted_ya_path = path_in_repo + 'muted_ya.txt'  # имя файла, для которого нужно получить diff
     added_lines_file = path_in_repo + 'mute_info/added_muted_line.txt'
@@ -201,10 +201,10 @@ def main():
     if not is_git_repository(repo_path):
         print(f"The directory {repo_path} is not a valid Git repository.")
         return
-
-    added_texts, removed_texts = get_diff_for_file(repo_path, muted_ya_path)
-    write_to_file(added_texts, added_lines_file)
-    write_to_file(removed_texts, removed_lines_file)
+    added_texts, removed_texts = extract_diff_lines(muted_ya_path)
+    #added_texts, removed_texts = get_diff_for_file(repo_path, muted_ya_path)
+    write_to_file('\n'.join(added_texts), added_lines_file)
+    write_to_file('\n'.join(removed_texts), removed_lines_file)
 
     print(f"Added lines have been written to {added_lines_file}.")
     print(f"Removed lines have been written to {removed_lines_file}.")
@@ -221,22 +221,27 @@ def main():
     mute_check = YaMuteCheck()
     mute_check.load(os.path.join(repo_path,muted_ya_path))
     muted_tests = []
+    print("All muted tests:")
     for test in all_tests:
         testsuite = test[0]
         testcase = test[1]
         if mute_check(testsuite, testcase):
             muted_tests.append(testsuite + ' ' + testcase + '\n')
+            #print(testsuite + ' ' + testcase+ '\n')
     write_to_file(muted_tests,os.path.join(repo_path, all_muted_tests_file))
     #checking added lines
     mute_check = YaMuteCheck()
     mute_check.load(os.path.join(repo_path,added_lines_file))
     added_muted_line = read_file(os.path.join(repo_path,added_lines_file))
     added_muted_tests=[]
+    print("New muted tests:")
     for test in all_tests:
         testsuite = test[0]
         testcase = test[1]
         if mute_check(testsuite, testcase):
             added_muted_tests.append(testsuite + ' '+ testcase + '\n')
+            print(testsuite + ' ' + testcase)
+
     write_to_file(added_muted_tests,os.path.join(repo_path, added_lines_file_muted))
     #if mute_check(suite_name, test_name):
     #checking removed lines
@@ -245,13 +250,16 @@ def main():
    
     removed_muted_line = read_file(os.path.join(repo_path,removed_lines_file))
     removed_muted_tests=[]
+    print("Unmuted tests:")
     for test in all_tests:
         testsuite = test[0]
         testcase = test[1]
         if mute_check(testsuite, testcase):
             removed_muted_tests.append(testsuite + ' '+ testcase + '\n')
+            print(testsuite + ' ' + testcase)
+            
     write_to_file(removed_muted_tests,os.path.join(repo_path, removed_lines_file_muted))
-    print(1)
+
 
 if __name__ == "__main__":
     main()

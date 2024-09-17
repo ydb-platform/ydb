@@ -811,6 +811,7 @@ public:
                 TKiDataQueryBlocks dataQueryBlocks(query);
 
                 auto queryAstStr = SerializeExpr(ctx, *query);
+                TMaybe<TString> traceId = SessionCtx->GetUserRequestContext() ? SessionCtx->GetUserRequestContext()->TraceId : TMaybe<TString>{};
 
                 bool useGenericQuery = ShouldUseGenericQuery(dataQueryBlocks);
                 bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
@@ -828,7 +829,7 @@ public:
                             future = Gateway->ExplainGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText());
                         } else {
                             future = Gateway->ExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
-                                querySettings, txSettings);
+                                querySettings, txSettings, traceId);
                         }
                     } else if (useScanQuery) {
                         ui64 rowsLimit = 0;
@@ -850,7 +851,7 @@ public:
                             future = Gateway->ExplainDataQueryAst(Cluster, queryAstStr);
                         } else {
                             future = Gateway->ExecDataQueryAst(Cluster, queryAstStr, CollectParameters(query),
-                                querySettings, txSettings);
+                                querySettings, txSettings, traceId);
                         }
                     }
                     break;
@@ -860,7 +861,7 @@ public:
                         txSettings.mutable_serializable_read_write();
 
                         future = Gateway->StreamExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
-                                querySettings, txSettings, SessionCtx->Query().ReplyTarget);
+                                querySettings, txSettings, SessionCtx->Query().ReplyTarget, traceId);
                     } else if (useScanQuery) {
                         future = Gateway->StreamExecScanQueryAst(Cluster, queryAstStr, CollectParameters(query),
                             querySettings, SessionCtx->Query().ReplyTarget, SessionCtx->Query().RpcCtx);
@@ -869,7 +870,7 @@ public:
                         txSettings.mutable_serializable_read_write();
 
                         future = Gateway->StreamExecDataQueryAst(Cluster, queryAstStr, CollectParameters(query),
-                            querySettings, txSettings, SessionCtx->Query().ReplyTarget);
+                            querySettings, txSettings, SessionCtx->Query().ReplyTarget, traceId);
                     }
                     break;
 
@@ -1033,7 +1034,8 @@ public:
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
-        NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig())
+        NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(), 
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr)
         : Gateway(gateway)
         , Cluster(cluster)
         , GUCSettings(gUCSettings)
@@ -1044,7 +1046,7 @@ public:
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
         , FederatedQuerySetup(federatedQuerySetup)
-        , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken))
+        , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext))
         , Config(config)
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
@@ -1958,10 +1960,11 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx)
+    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, gUCSettings, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig);
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext);
 }
 
 } // namespace NKqp

@@ -362,7 +362,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     if (topicSessionInfo.Sessions.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
-            TActivationContext::ActorSystem(),
             source.GetTopicPath(),
             Config,
             SelfId(),

@@ -98,6 +98,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
+    TString TablePathPrefix;
     TString CoordinationNodePath;
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
@@ -180,7 +181,8 @@ TLeaderElection::TLeaderElection(
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , YdbConnection(NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
-    , CoordinationNodePath(JoinPath(config.GetCoordinationNodePath(), tenant))
+    , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
+    , CoordinationNodePath(JoinPath(TablePathPrefix, tenant))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
     , Tenant(tenant)

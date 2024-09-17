@@ -31,7 +31,7 @@ public:
         Coordinator3 = Runtime.AllocateEdgeActor();
 
         NConfig::TRowDispatcherCoordinatorConfig config;
-        config.SetCoordinationNodePath("RowDispatcher");
+        config.SetCoordinationNodePath("row_dispatcher");
         auto& database = *config.MutableDatabase();
         database.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         database.SetDatabase(GetEnv("YDB_DATABASE"));
@@ -43,7 +43,7 @@ public:
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
-            "Tenant",
+            "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
@@ -53,7 +53,7 @@ public:
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
-            "Tenant",
+            "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
@@ -63,7 +63,7 @@ public:
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
-            "Tenant",
+            "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 

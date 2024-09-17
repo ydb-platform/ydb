@@ -26,7 +26,6 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
     }
 
     NActors::TActorId RegisterTopicSession(
-        NActors::TActorSystem* /*actorSystem*/,
         const TString& /*topicPath*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,

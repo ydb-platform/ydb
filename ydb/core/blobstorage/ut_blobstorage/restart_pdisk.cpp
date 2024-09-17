@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
             TVDiskID VDiskId;
         };
 
-        std::vector<TVDisk> pdiskIds;
+        std::vector<TVDisk> vdisks;
 
         auto config = env.FetchBaseConfig();
 
@@ -77,11 +77,11 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
                 auto nodeId = slotId.GetNodeId();
                 auto pdiskId = slotId.GetPDiskId();
                 auto vdiskId = TVDiskID(group.GetGroupId(), group.GetGroupGeneration(), vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
-                pdiskIds.emplace_back(nodeId, pdiskId, slotId.GetVSlotId(), vdiskId);
+                vdisks.push_back({nodeId, pdiskId, slotId.GetVSlotId(), vdiskId});
             }
         }
 
-        return pdiskIds;
+        return vdisks;
     }
 
     Y_UNIT_TEST(RestartBrokenDiskInBrokenGroup) {
@@ -94,15 +94,15 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
         env.CreateBoxAndPool(1, 10);
         env.Sim(TDuration::Seconds(30));
 
-        auto pdiskIds = GetGroupVDisks(env);
+        auto vdisks = GetGroupVDisks(env);
 
         // Making all disks read only disintegrates the group
-        for (auto& [nodeId, pdiskId, vslotId, vdiskId] : pdiskIds) {
+        for (auto& [nodeId, pdiskId, vslotId, vdiskId] : vdisks) {
             env.SetVDiskReadOnly(nodeId, pdiskId, vslotId, vdiskId, true, true);
         }
 
         // Restarting the owner of an already broken disk in a broken group must be allowed
-        auto& [targetNodeId, targetPDiskId, unused1, unused2] = pdiskIds[0];
+        auto& [targetNodeId, targetPDiskId, unused1, unused2] = vdisks[0];
 
         NKikimrBlobStorage::TConfigRequest request;
 
@@ -125,16 +125,16 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
         env.CreateBoxAndPool(1, 10);
         env.Sim(TDuration::Seconds(30));
         
-        auto pdiskIds = GetGroupVDisks(env);
+        auto vdisks = GetGroupVDisks(env);
 
         // Making all but one disks read only disintegrates the group
-        for (size_t i = 0; i < pdiskIds.size() - 1; i++) {
-            auto& [nodeId, pdiskId, vslotId, vdiskId] = pdiskIds[i];
+        for (size_t i = 0; i < vdisks.size() - 1; i++) {
+            auto& [nodeId, pdiskId, vslotId, vdiskId] = vdisks[i];
             env.SetVDiskReadOnly(nodeId, pdiskId, vslotId, vdiskId, true, true);
         }
 
         // However restarting the owner of a single good disk must be prohibited
-        auto& [targetNodeId, targetPDiskId, unused1, unused2] = pdiskIds[pdiskIds.size() - 1];
+        auto& [targetNodeId, targetPDiskId, unused1, unused2] = vdisks[vdisks.size() - 1];
 
         NKikimrBlobStorage::TConfigRequest request;
 

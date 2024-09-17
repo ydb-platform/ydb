@@ -524,6 +524,10 @@ protected:
         Terminate(success, TIssues({TIssue(message)}));
     }
 
+    virtual TMaybe<google::protobuf::Any> ExtraData() {
+        return Nothing();
+    }
+
     void FillExtraData(NDqProto::TEvComputeActorState& state) {
         auto* extraData = state.MutableExtraData();
         for (auto& [index, input] : SourcesMap) {
@@ -552,6 +556,11 @@ protected:
                     entry->MutableData()->CopyFrom(*data);
                 }
             }
+        }
+
+        if (auto data = static_cast<TDerived*>(this)->ExtraData()) {
+            auto* entry = extraData->MutableComputeExtraData();
+            entry->MutableData()->CopyFrom(*data);
         }
     }
 

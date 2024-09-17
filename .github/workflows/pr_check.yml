@@ -218,17 +218,6 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-    - name: show diff mute_ya.txt
-      if: always()
-      shell: bash
-      continue-on-error: true
-      run: python3 .github/scripts/tests/get_file_diff.py .github/config/muted_ya.txt
-      
-    - name: show new muted and unmuted tests
-      if: always()
-      shell: bash
-      continue-on-error: true
-      run: python3 .github/scripts/tests/show_muted_tests.py
       
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya

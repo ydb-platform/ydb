@@ -1,6 +1,8 @@
 #include "columnshard.h"
-#include <ydb/core/testlib/cs_helper.h>
+
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/testlib/cs_helper.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -143,6 +145,13 @@ namespace NKqp {
         }
     }
 
+    void TTestHelper::SetCompression(
+        const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression, const NYdb::EStatus expectedStatus) {
+        auto alterQuery = columnTable.BuildAlterCompressionQuery(columnName, compression);
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+    }
+
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
@@ -180,6 +189,16 @@ namespace NKqp {
         return str;
     }
 
+    TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
+        auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
+        str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerName() << "`,";
+        str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(compression.GetType()) << "`";
+        if (compression.GetCompressionLevel() != Max<i32>()) {
+            str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel();
+        }
+        str << ");";
+        return str;
+    }
 
     std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
         std::vector<std::shared_ptr<arrow::Field>> result;

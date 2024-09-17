@@ -1,8 +1,8 @@
-# JOOQ Extension for use with {{ ydb-short-name }}
+# JOOQ extension for {{ ydb-short-name }}
 
-This guide is intended for use with [JOOQ](https://www.jooq.org/) and {{ ydb-short-name }}.
+This guide explains how to use [JOOQ](https://www.jooq.org/) with {{ ydb-short-name }}.
 
-JOOQ is a Java library that allows you to create type-safe SQL queries by generating Java classes from a database schema and using convenient query builders.
+JOOQ is a Java library that allows you to create type-safe SQL queries by generating Java classes from a database schema and providing convenient query builders.
 
 ## Generating Java Classes {#generated-java-classes}
 

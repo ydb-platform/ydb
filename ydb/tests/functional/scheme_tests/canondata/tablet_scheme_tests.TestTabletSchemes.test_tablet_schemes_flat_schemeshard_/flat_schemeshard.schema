@@ -7307,6 +7307,11 @@
                 "ColumnId": 3,
                 "ColumnName": "QueryText",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "CapturedContext",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -7315,7 +7320,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

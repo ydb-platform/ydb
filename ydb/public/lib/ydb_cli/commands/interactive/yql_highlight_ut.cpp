@@ -152,8 +152,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(Emoji) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "☺", "uuu");
-        Check(highlight, "\"☺\"", "sssuu");
-        Check(highlight, "`☺`", "qqquu");
+        Check(highlight, "\"☺\"", "sssss");
+        Check(highlight, "`☺`", "qqqqq");
     }
 
     Y_UNIT_TEST(Typing) {

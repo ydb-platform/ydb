@@ -1,16 +1,19 @@
 #include "yql_highlight.h"
 
-#include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
-#include <regex>
+#include <ydb/library/yql/parser/lexer_common/lexer.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <ydb/library/yql/sql/v1/lexer/lexer.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <regex>
 
 #define TOKEN(NAME) SQLv1Antlr4Lexer::TOKEN_##NAME
 
 namespace NYdb {
     namespace NConsoleClient {
-
-        using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
+        using NSQLTranslationV1::MakeLexer;
+        using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
+        using NYql::TIssues;
 
         constexpr const char* builtinFunctionPattern = ( //
             "^("
@@ -111,436 +114,434 @@ namespace NYdb {
             : Coloring(color)
             , BuiltinFunctionRegex(builtinFunctionPattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
             , TypeRegex(typePattern, std::regex_constants::ECMAScript | std::regex_constants::icase)
-            , Chars()
-            , Lexer(&Chars)
-            , Tokens(&Lexer)
+            , Lexer(MakeLexer(/* ansi = */ false, /* antlr4 = */ true))
         {
-            Lexer.removeErrorListeners();
         }
 
         void YQLHighlight::Apply(std::string_view query, Colors& colors) {
-            Reset(query);
+            Tokens = Tokenize(TString(query));
+            for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
+                const auto& token = Tokens.at(i);
+                const auto color = ColorOf(token, i);
 
-            for (std::size_t i = 0; i < Tokens.size(); ++i) {
-                const auto* token = Tokens.get(i);
-                const auto color = ColorOf(token);
+                const std::ptrdiff_t start = token.StartIndex;
+                const std::ptrdiff_t stop = token.StartIndex + token.Content.Size();
 
-                const std::ptrdiff_t start = token->getStartIndex();
-                const std::ptrdiff_t stop = token->getStopIndex() + 1;
+                std::cout << "Fill from " << start << " to " << stop << std::endl;
 
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);
             }
         }
 
-        void YQLHighlight::Reset(std::string_view query) {
-            Chars.load(query.data(), query.length());
-            Lexer.reset();
-            Tokens.setTokenSource(&Lexer);
-
-            Tokens.fill();
+        TParsedTokenList YQLHighlight::Tokenize(const TString& query) {
+            TParsedTokenList tokens;
+            TIssues issues;
+            NSQLTranslation::Tokenize(*Lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+            return tokens;
         }
 
-        YQLHighlight::Color YQLHighlight::ColorOf(const antlr4::Token* token) {
+        YQLHighlight::Color YQLHighlight::ColorOf(const TParsedToken& token, size_t index) {
+            std::cout << "Token " << token.Name << " (" << token.Content << ") ";
             if (IsString(token)) {
+                std::cout << "IsString" << std::endl;
                 return Coloring.string;
             }
-            if (IsFunctionIdentifier(token)) {
+            if (IsFunctionIdentifier(token, index)) {
+                std::cout << "IsFunctionIdentifier" << std::endl;
                 return Coloring.identifier.function;
             }
             if (IsTypeIdentifier(token)) {
+                std::cout << "IsTypeIdentifier" << std::endl;
                 return Coloring.identifier.type;
             }
             if (IsVariableIdentifier(token)) {
+                std::cout << "IsVariableIdentifier" << std::endl;
                 return Coloring.identifier.variable;
             }
             if (IsQuotedIdentifier(token)) {
+                std::cout << "IsQuotedIdentifier" << std::endl;
                 return Coloring.identifier.quoted;
             }
             if (IsNumber(token)) {
+                std::cout << "IsNumber" << std::endl;
                 return Coloring.number;
             }
             if (IsOperation(token)) {
+                std::cout << "IsOperation" << std::endl;
                 return Coloring.operation;
             }
             if (IsKeyword(token)) {
+                std::cout << "IsKeyword" << std::endl;
                 return Coloring.keyword;
             }
             if (IsComment(token)) {
+                std::cout << "IsComment" << std::endl;
                 return Coloring.comment;
             }
+            std::cout << "IsUnknown" << std::endl;
             return Coloring.unknown;
         }
 
-        bool YQLHighlight::IsKeyword(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case TOKEN(ABORT):
-                case TOKEN(ACTION):
-                case TOKEN(ADD):
-                case TOKEN(AFTER):
-                case TOKEN(ALL):
-                case TOKEN(ALTER):
-                case TOKEN(ANALYZE):
-                case TOKEN(AND):
-                case TOKEN(ANSI):
-                case TOKEN(ANY):
-                case TOKEN(ARRAY):
-                case TOKEN(AS):
-                case TOKEN(ASC):
-                case TOKEN(ASSUME):
-                case TOKEN(ASYMMETRIC):
-                case TOKEN(ASYNC):
-                case TOKEN(ATTACH):
-                case TOKEN(ATTRIBUTES):
-                case TOKEN(AUTOINCREMENT):
-                case TOKEN(AUTOMAP):
-                case TOKEN(BEFORE):
-                case TOKEN(BEGIN):
-                case TOKEN(BERNOULLI):
-                case TOKEN(BETWEEN):
-                case TOKEN(BITCAST):
-                case TOKEN(BY):
-                case TOKEN(CALLABLE):
-                case TOKEN(CASCADE):
-                case TOKEN(CASE):
-                case TOKEN(CAST):
-                case TOKEN(CHANGEFEED):
-                case TOKEN(CHECK):
-                case TOKEN(COLLATE):
-                case TOKEN(COLUMN):
-                case TOKEN(COLUMNS):
-                case TOKEN(COMMIT):
-                case TOKEN(COMPACT):
-                case TOKEN(CONDITIONAL):
-                case TOKEN(CONFLICT):
-                case TOKEN(CONNECT):
-                case TOKEN(CONSTRAINT):
-                case TOKEN(CONSUMER):
-                case TOKEN(COVER):
-                case TOKEN(CREATE):
-                case TOKEN(CROSS):
-                case TOKEN(CUBE):
-                case TOKEN(CURRENT):
-                case TOKEN(CURRENT_DATE):
-                case TOKEN(CURRENT_TIME):
-                case TOKEN(CURRENT_TIMESTAMP):
-                case TOKEN(DATA):
-                case TOKEN(DATABASE):
-                case TOKEN(DECIMAL):
-                case TOKEN(DECLARE):
-                case TOKEN(DEFAULT):
-                case TOKEN(DEFERRABLE):
-                case TOKEN(DEFERRED):
-                case TOKEN(DEFINE):
-                case TOKEN(DELETE):
-                case TOKEN(DESC):
-                case TOKEN(DESCRIBE):
-                case TOKEN(DETACH):
-                case TOKEN(DICT):
-                case TOKEN(DIRECTORY):
-                case TOKEN(DISABLE):
-                case TOKEN(DISCARD):
-                case TOKEN(DISTINCT):
-                case TOKEN(DO):
-                case TOKEN(DROP):
-                case TOKEN(EACH):
-                case TOKEN(ELSE):
-                case TOKEN(EMPTY):
-                case TOKEN(EMPTY_ACTION):
-                case TOKEN(ENCRYPTED):
-                case TOKEN(END):
-                case TOKEN(ENUM):
-                case TOKEN(ERASE):
-                case TOKEN(ERROR):
-                case TOKEN(ESCAPE):
-                case TOKEN(EVALUATE):
-                case TOKEN(EXCEPT):
-                case TOKEN(EXCLUDE):
-                case TOKEN(EXCLUSION):
-                case TOKEN(EXCLUSIVE):
-                case TOKEN(EXISTS):
-                case TOKEN(EXPLAIN):
-                case TOKEN(EXPORT):
-                case TOKEN(EXTERNAL):
-                case TOKEN(FAIL):
-                case TOKEN(FALSE):
-                case TOKEN(FAMILY):
-                case TOKEN(FILTER):
-                case TOKEN(FIRST):
-                case TOKEN(FLATTEN):
-                case TOKEN(FLOW):
-                case TOKEN(FOLLOWING):
-                case TOKEN(FOR):
-                case TOKEN(FOREIGN):
-                case TOKEN(FROM):
-                case TOKEN(FULL):
-                case TOKEN(FUNCTION):
-                case TOKEN(GLOB):
-                case TOKEN(GLOBAL):
-                case TOKEN(GRANT):
-                case TOKEN(GROUP):
-                case TOKEN(GROUPING):
-                case TOKEN(GROUPS):
-                case TOKEN(HASH):
-                case TOKEN(HAVING):
-                case TOKEN(HOP):
-                case TOKEN(IF):
-                case TOKEN(IGNORE):
-                case TOKEN(ILIKE):
-                case TOKEN(IMMEDIATE):
-                case TOKEN(IMPORT):
-                case TOKEN(IN):
-                case TOKEN(INDEX):
-                case TOKEN(INDEXED):
-                case TOKEN(INHERITS):
-                case TOKEN(INITIAL):
-                case TOKEN(INITIALLY):
-                case TOKEN(INNER):
-                case TOKEN(INSERT):
-                case TOKEN(INSTEAD):
-                case TOKEN(INTERSECT):
-                case TOKEN(INTO):
-                case TOKEN(IS):
-                case TOKEN(ISNULL):
-                case TOKEN(JOIN):
-                case TOKEN(JSON_EXISTS):
-                case TOKEN(JSON_QUERY):
-                case TOKEN(JSON_VALUE):
-                case TOKEN(KEY):
-                case TOKEN(LAST):
-                case TOKEN(LEFT):
-                case TOKEN(LEGACY):
-                case TOKEN(LIKE):
-                case TOKEN(LIMIT):
-                case TOKEN(LIST):
-                case TOKEN(LOCAL):
-                case TOKEN(MANAGE):
-                case TOKEN(MATCH):
-                case TOKEN(MATCHES):
-                case TOKEN(MATCH_RECOGNIZE):
-                case TOKEN(MEASURES):
-                case TOKEN(MICROSECONDS):
-                case TOKEN(MILLISECONDS):
-                case TOKEN(MODIFY):
-                case TOKEN(NANOSECONDS):
-                case TOKEN(NATURAL):
-                case TOKEN(NEXT):
-                case TOKEN(NO):
-                case TOKEN(NOT):
-                case TOKEN(NOTNULL):
-                case TOKEN(NULL):
-                case TOKEN(NULLS):
-                case TOKEN(OBJECT):
-                case TOKEN(OF):
-                case TOKEN(OFFSET):
-                case TOKEN(OMIT):
-                case TOKEN(ON):
-                case TOKEN(ONE):
-                case TOKEN(ONLY):
-                case TOKEN(OPTION):
-                case TOKEN(OPTIONAL):
-                case TOKEN(OR):
-                case TOKEN(ORDER):
-                case TOKEN(OTHERS):
-                case TOKEN(OUTER):
-                case TOKEN(OVER):
-                case TOKEN(PARALLEL):
-                case TOKEN(PARTITION):
-                case TOKEN(PASSING):
-                case TOKEN(PASSWORD):
-                case TOKEN(PAST):
-                case TOKEN(PATTERN):
-                case TOKEN(PER):
-                case TOKEN(PERMUTE):
-                case TOKEN(PLAN):
-                case TOKEN(PRAGMA):
-                case TOKEN(PRECEDING):
-                case TOKEN(PRESORT):
-                case TOKEN(PRIMARY):
-                case TOKEN(PRIVILEGES):
-                case TOKEN(PROCESS):
-                case TOKEN(QUEUE):
-                case TOKEN(RAISE):
-                case TOKEN(RANGE):
-                case TOKEN(REDUCE):
-                case TOKEN(REFERENCES):
-                case TOKEN(REGEXP):
-                case TOKEN(REINDEX):
-                case TOKEN(RELEASE):
-                case TOKEN(REMOVE):
-                case TOKEN(RENAME):
-                case TOKEN(REPEATABLE):
-                case TOKEN(REPLACE):
-                case TOKEN(REPLICATION):
-                case TOKEN(RESET):
-                case TOKEN(RESOURCE):
-                case TOKEN(RESPECT):
-                case TOKEN(RESTRICT):
-                case TOKEN(RESULT):
-                case TOKEN(RETURN):
-                case TOKEN(RETURNING):
-                case TOKEN(REVERT):
-                case TOKEN(REVOKE):
-                case TOKEN(RIGHT):
-                case TOKEN(RLIKE):
-                case TOKEN(ROLLBACK):
-                case TOKEN(ROLLUP):
-                case TOKEN(ROW):
-                case TOKEN(ROWS):
-                case TOKEN(SAMPLE):
-                case TOKEN(SAVEPOINT):
-                case TOKEN(SCHEMA):
-                case TOKEN(SECONDS):
-                case TOKEN(SEEK):
-                case TOKEN(SELECT):
-                case TOKEN(SEMI):
-                case TOKEN(SET):
-                case TOKEN(SETS):
-                case TOKEN(SHOW):
-                case TOKEN(SOURCE):
-                case TOKEN(STREAM):
-                case TOKEN(STRUCT):
-                case TOKEN(SUBQUERY):
-                case TOKEN(SUBSET):
-                case TOKEN(SYMBOLS):
-                case TOKEN(SYMMETRIC):
-                case TOKEN(SYNC):
-                case TOKEN(SYSTEM):
-                case TOKEN(TABLE):
-                case TOKEN(TABLES):
-                case TOKEN(TABLESAMPLE):
-                case TOKEN(TABLESTORE):
-                case TOKEN(TAGGED):
-                case TOKEN(TEMP):
-                case TOKEN(TEMPORARY):
-                case TOKEN(THEN):
-                case TOKEN(TIES):
-                case TOKEN(TO):
-                case TOKEN(TOPIC):
-                case TOKEN(TRANSACTION):
-                case TOKEN(TRIGGER):
-                case TOKEN(TRUE):
-                case TOKEN(TUPLE):
-                case TOKEN(TYPE):
-                case TOKEN(UNBOUNDED):
-                case TOKEN(UNCONDITIONAL):
-                case TOKEN(UNION):
-                case TOKEN(UNIQUE):
-                case TOKEN(UNKNOWN):
-                case TOKEN(UNMATCHED):
-                case TOKEN(UPDATE):
-                case TOKEN(UPSERT):
-                case TOKEN(USE):
-                case TOKEN(USER):
-                case TOKEN(USING):
-                case TOKEN(VACUUM):
-                case TOKEN(VALUES):
-                case TOKEN(VARIANT):
-                case TOKEN(VIEW):
-                case TOKEN(VIRTUAL):
-                case TOKEN(WHEN):
-                case TOKEN(WHERE):
-                case TOKEN(WINDOW):
-                case TOKEN(WITH):
-                case TOKEN(WITHOUT):
-                case TOKEN(WRAPPER):
-                case TOKEN(XOR):
-                    return true;
-                default:
-                    return false;
-            }
+        bool YQLHighlight::IsKeyword(const TParsedToken& token) const {
+            return (
+                token.Name == "ABORT" ||
+                token.Name == "ACTION" ||
+                token.Name == "ADD" ||
+                token.Name == "AFTER" ||
+                token.Name == "ALL" ||
+                token.Name == "ALTER" ||
+                token.Name == "ANALYZE" ||
+                token.Name == "AND" ||
+                token.Name == "ANSI" ||
+                token.Name == "ANY" ||
+                token.Name == "ARRAY" ||
+                token.Name == "AS" ||
+                token.Name == "ASC" ||
+                token.Name == "ASSUME" ||
+                token.Name == "ASYMMETRIC" ||
+                token.Name == "ASYNC" ||
+                token.Name == "ATTACH" ||
+                token.Name == "ATTRIBUTES" ||
+                token.Name == "AUTOINCREMENT" ||
+                token.Name == "AUTOMAP" ||
+                token.Name == "BEFORE" ||
+                token.Name == "BEGIN" ||
+                token.Name == "BERNOULLI" ||
+                token.Name == "BETWEEN" ||
+                token.Name == "BITCAST" ||
+                token.Name == "BY" ||
+                token.Name == "CALLABLE" ||
+                token.Name == "CASCADE" ||
+                token.Name == "CASE" ||
+                token.Name == "CAST" ||
+                token.Name == "CHANGEFEED" ||
+                token.Name == "CHECK" ||
+                token.Name == "COLLATE" ||
+                token.Name == "COLUMN" ||
+                token.Name == "COLUMNS" ||
+                token.Name == "COMMIT" ||
+                token.Name == "COMPACT" ||
+                token.Name == "CONDITIONAL" ||
+                token.Name == "CONFLICT" ||
+                token.Name == "CONNECT" ||
+                token.Name == "CONSTRAINT" ||
+                token.Name == "CONSUMER" ||
+                token.Name == "COVER" ||
+                token.Name == "CREATE" ||
+                token.Name == "CROSS" ||
+                token.Name == "CUBE" ||
+                token.Name == "CURRENT" ||
+                token.Name == "CURRENT_DATE" ||
+                token.Name == "CURRENT_TIME" ||
+                token.Name == "CURRENT_TIMESTAMP" ||
+                token.Name == "DATA" ||
+                token.Name == "DATABASE" ||
+                token.Name == "DECIMAL" ||
+                token.Name == "DECLARE" ||
+                token.Name == "DEFAULT" ||
+                token.Name == "DEFERRABLE" ||
+                token.Name == "DEFERRED" ||
+                token.Name == "DEFINE" ||
+                token.Name == "DELETE" ||
+                token.Name == "DESC" ||
+                token.Name == "DESCRIBE" ||
+                token.Name == "DETACH" ||
+                token.Name == "DICT" ||
+                token.Name == "DIRECTORY" ||
+                token.Name == "DISABLE" ||
+                token.Name == "DISCARD" ||
+                token.Name == "DISTINCT" ||
+                token.Name == "DO" ||
+                token.Name == "DROP" ||
+                token.Name == "EACH" ||
+                token.Name == "ELSE" ||
+                token.Name == "EMPTY" ||
+                token.Name == "EMPTY_ACTION" ||
+                token.Name == "ENCRYPTED" ||
+                token.Name == "END" ||
+                token.Name == "ENUM" ||
+                token.Name == "ERASE" ||
+                token.Name == "ERROR" ||
+                token.Name == "ESCAPE" ||
+                token.Name == "EVALUATE" ||
+                token.Name == "EXCEPT" ||
+                token.Name == "EXCLUDE" ||
+                token.Name == "EXCLUSION" ||
+                token.Name == "EXCLUSIVE" ||
+                token.Name == "EXISTS" ||
+                token.Name == "EXPLAIN" ||
+                token.Name == "EXPORT" ||
+                token.Name == "EXTERNAL" ||
+                token.Name == "FAIL" ||
+                token.Name == "FALSE" ||
+                token.Name == "FAMILY" ||
+                token.Name == "FILTER" ||
+                token.Name == "FIRST" ||
+                token.Name == "FLATTEN" ||
+                token.Name == "FLOW" ||
+                token.Name == "FOLLOWING" ||
+                token.Name == "FOR" ||
+                token.Name == "FOREIGN" ||
+                token.Name == "FROM" ||
+                token.Name == "FULL" ||
+                token.Name == "FUNCTION" ||
+                token.Name == "GLOB" ||
+                token.Name == "GLOBAL" ||
+                token.Name == "GRANT" ||
+                token.Name == "GROUP" ||
+                token.Name == "GROUPING" ||
+                token.Name == "GROUPS" ||
+                token.Name == "HASH" ||
+                token.Name == "HAVING" ||
+                token.Name == "HOP" ||
+                token.Name == "IF" ||
+                token.Name == "IGNORE" ||
+                token.Name == "ILIKE" ||
+                token.Name == "IMMEDIATE" ||
+                token.Name == "IMPORT" ||
+                token.Name == "IN" ||
+                token.Name == "INDEX" ||
+                token.Name == "INDEXED" ||
+                token.Name == "INHERITS" ||
+                token.Name == "INITIAL" ||
+                token.Name == "INITIALLY" ||
+                token.Name == "INNER" ||
+                token.Name == "INSERT" ||
+                token.Name == "INSTEAD" ||
+                token.Name == "INTERSECT" ||
+                token.Name == "INTO" ||
+                token.Name == "IS" ||
+                token.Name == "ISNULL" ||
+                token.Name == "JOIN" ||
+                token.Name == "JSON_EXISTS" ||
+                token.Name == "JSON_QUERY" ||
+                token.Name == "JSON_VALUE" ||
+                token.Name == "KEY" ||
+                token.Name == "LAST" ||
+                token.Name == "LEFT" ||
+                token.Name == "LEGACY" ||
+                token.Name == "LIKE" ||
+                token.Name == "LIMIT" ||
+                token.Name == "LIST" ||
+                token.Name == "LOCAL" ||
+                token.Name == "MANAGE" ||
+                token.Name == "MATCH" ||
+                token.Name == "MATCHES" ||
+                token.Name == "MATCH_RECOGNIZE" ||
+                token.Name == "MEASURES" ||
+                token.Name == "MICROSECONDS" ||
+                token.Name == "MILLISECONDS" ||
+                token.Name == "MODIFY" ||
+                token.Name == "NANOSECONDS" ||
+                token.Name == "NATURAL" ||
+                token.Name == "NEXT" ||
+                token.Name == "NO" ||
+                token.Name == "NOT" ||
+                token.Name == "NOTNULL" ||
+                token.Name == "NULL" ||
+                token.Name == "NULLS" ||
+                token.Name == "OBJECT" ||
+                token.Name == "OF" ||
+                token.Name == "OFFSET" ||
+                token.Name == "OMIT" ||
+                token.Name == "ON" ||
+                token.Name == "ONE" ||
+                token.Name == "ONLY" ||
+                token.Name == "OPTION" ||
+                token.Name == "OPTIONAL" ||
+                token.Name == "OR" ||
+                token.Name == "ORDER" ||
+                token.Name == "OTHERS" ||
+                token.Name == "OUTER" ||
+                token.Name == "OVER" ||
+                token.Name == "PARALLEL" ||
+                token.Name == "PARTITION" ||
+                token.Name == "PASSING" ||
+                token.Name == "PASSWORD" ||
+                token.Name == "PAST" ||
+                token.Name == "PATTERN" ||
+                token.Name == "PER" ||
+                token.Name == "PERMUTE" ||
+                token.Name == "PLAN" ||
+                token.Name == "PRAGMA" ||
+                token.Name == "PRECEDING" ||
+                token.Name == "PRESORT" ||
+                token.Name == "PRIMARY" ||
+                token.Name == "PRIVILEGES" ||
+                token.Name == "PROCESS" ||
+                token.Name == "QUEUE" ||
+                token.Name == "RAISE" ||
+                token.Name == "RANGE" ||
+                token.Name == "REDUCE" ||
+                token.Name == "REFERENCES" ||
+                token.Name == "REGEXP" ||
+                token.Name == "REINDEX" ||
+                token.Name == "RELEASE" ||
+                token.Name == "REMOVE" ||
+                token.Name == "RENAME" ||
+                token.Name == "REPEATABLE" ||
+                token.Name == "REPLACE" ||
+                token.Name == "REPLICATION" ||
+                token.Name == "RESET" ||
+                token.Name == "RESOURCE" ||
+                token.Name == "RESPECT" ||
+                token.Name == "RESTRICT" ||
+                token.Name == "RESULT" ||
+                token.Name == "RETURN" ||
+                token.Name == "RETURNING" ||
+                token.Name == "REVERT" ||
+                token.Name == "REVOKE" ||
+                token.Name == "RIGHT" ||
+                token.Name == "RLIKE" ||
+                token.Name == "ROLLBACK" ||
+                token.Name == "ROLLUP" ||
+                token.Name == "ROW" ||
+                token.Name == "ROWS" ||
+                token.Name == "SAMPLE" ||
+                token.Name == "SAVEPOINT" ||
+                token.Name == "SCHEMA" ||
+                token.Name == "SECONDS" ||
+                token.Name == "SEEK" ||
+                token.Name == "SELECT" ||
+                token.Name == "SEMI" ||
+                token.Name == "SET" ||
+                token.Name == "SETS" ||
+                token.Name == "SHOW" ||
+                token.Name == "SOURCE" ||
+                token.Name == "STREAM" ||
+                token.Name == "STRUCT" ||
+                token.Name == "SUBQUERY" ||
+                token.Name == "SUBSET" ||
+                token.Name == "SYMBOLS" ||
+                token.Name == "SYMMETRIC" ||
+                token.Name == "SYNC" ||
+                token.Name == "SYSTEM" ||
+                token.Name == "TABLE" ||
+                token.Name == "TABLES" ||
+                token.Name == "TABLESAMPLE" ||
+                token.Name == "TABLESTORE" ||
+                token.Name == "TAGGED" ||
+                token.Name == "TEMP" ||
+                token.Name == "TEMPORARY" ||
+                token.Name == "THEN" ||
+                token.Name == "TIES" ||
+                token.Name == "TO" ||
+                token.Name == "TOPIC" ||
+                token.Name == "TRANSACTION" ||
+                token.Name == "TRIGGER" ||
+                token.Name == "TRUE" ||
+                token.Name == "TUPLE" ||
+                token.Name == "TYPE" ||
+                token.Name == "UNBOUNDED" ||
+                token.Name == "UNCONDITIONAL" ||
+                token.Name == "UNION" ||
+                token.Name == "UNIQUE" ||
+                token.Name == "UNKNOWN" ||
+                token.Name == "UNMATCHED" ||
+                token.Name == "UPDATE" ||
+                token.Name == "UPSERT" ||
+                token.Name == "USE" ||
+                token.Name == "USER" ||
+                token.Name == "USING" ||
+                token.Name == "VACUUM" ||
+                token.Name == "VALUES" ||
+                token.Name == "VARIANT" ||
+                token.Name == "VIEW" ||
+                token.Name == "VIRTUAL" ||
+                token.Name == "WHEN" ||
+                token.Name == "WHERE" ||
+                token.Name == "WINDOW" ||
+                token.Name == "WITH" ||
+                token.Name == "WITHOUT" ||
+                token.Name == "WRAPPER" ||
+                token.Name == "XOR"
+            );
         }
 
-        bool YQLHighlight::IsOperation(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case TOKEN(EQUALS):
-                case TOKEN(EQUALS2):
-                case TOKEN(NOT_EQUALS):
-                case TOKEN(NOT_EQUALS2):
-                case TOKEN(LESS):
-                case TOKEN(LESS_OR_EQ):
-                case TOKEN(GREATER):
-                case TOKEN(GREATER_OR_EQ):
-                case TOKEN(SHIFT_LEFT):
-                case TOKEN(ROT_LEFT):
-                case TOKEN(AMPERSAND):
-                case TOKEN(PIPE):
-                case TOKEN(DOUBLE_PIPE):
-                case TOKEN(STRUCT_OPEN):
-                case TOKEN(STRUCT_CLOSE):
-                case TOKEN(PLUS):
-                case TOKEN(MINUS):
-                case TOKEN(TILDA):
-                case TOKEN(ASTERISK):
-                case TOKEN(SLASH):
-                case TOKEN(BACKSLASH):
-                case TOKEN(PERCENT):
-                case TOKEN(SEMICOLON):
-                case TOKEN(DOT):
-                case TOKEN(COMMA):
-                case TOKEN(LPAREN):
-                case TOKEN(RPAREN):
-                case TOKEN(QUESTION):
-                case TOKEN(COLON):
-                case TOKEN(AT):
-                case TOKEN(DOUBLE_AT):
-                case TOKEN(DOLLAR):
-                case TOKEN(QUOTE_DOUBLE):
-                case TOKEN(QUOTE_SINGLE):
-                case TOKEN(BACKTICK):
-                case TOKEN(LBRACE_CURLY):
-                case TOKEN(RBRACE_CURLY):
-                case TOKEN(CARET):
-                case TOKEN(NAMESPACE):
-                case TOKEN(ARROW):
-                case TOKEN(RBRACE_SQUARE):
-                case TOKEN(LBRACE_SQUARE):
-                    return true;
-                default:
-                    return false;
-            }
+        bool YQLHighlight::IsOperation(const TParsedToken& token) const {
+            return (
+                token.Name == "EQUALS" ||
+                token.Name == "EQUALS2" ||
+                token.Name == "NOT_EQUALS" ||
+                token.Name == "NOT_EQUALS2" ||
+                token.Name == "LESS" ||
+                token.Name == "LESS_OR_EQ" ||
+                token.Name == "GREATER" ||
+                token.Name == "GREATER_OR_EQ" ||
+                token.Name == "SHIFT_LEFT" ||
+                token.Name == "ROT_LEFT" ||
+                token.Name == "AMPERSAND" ||
+                token.Name == "PIPE" ||
+                token.Name == "DOUBLE_PIPE" ||
+                token.Name == "STRUCT_OPEN" ||
+                token.Name == "STRUCT_CLOSE" ||
+                token.Name == "PLUS" ||
+                token.Name == "MINUS" ||
+                token.Name == "TILDA" ||
+                token.Name == "ASTERISK" ||
+                token.Name == "SLASH" ||
+                token.Name == "BACKSLASH" ||
+                token.Name == "PERCENT" ||
+                token.Name == "SEMICOLON" ||
+                token.Name == "DOT" ||
+                token.Name == "COMMA" ||
+                token.Name == "LPAREN" ||
+                token.Name == "RPAREN" ||
+                token.Name == "QUESTION" ||
+                token.Name == "COLON" ||
+                token.Name == "AT" ||
+                token.Name == "DOUBLE_AT" ||
+                token.Name == "DOLLAR" ||
+                token.Name == "QUOTE_DOUBLE" ||
+                token.Name == "QUOTE_SINGLE" ||
+                token.Name == "BACKTICK" ||
+                token.Name == "LBRACE_CURLY" ||
+                token.Name == "RBRACE_CURLY" ||
+                token.Name == "CARET" ||
+                token.Name == "NAMESPACE" ||
+                token.Name == "ARROW" ||
+                token.Name == "RBRACE_SQUARE" ||
+                token.Name == "LBRACE_SQUARE"
+            );
         }
 
-        bool YQLHighlight::IsFunctionIdentifier(const antlr4::Token* token) {
-            if (token->getType() != TOKEN(ID_PLAIN)) {
+        bool YQLHighlight::IsFunctionIdentifier(const TParsedToken& token, size_t index) {
+            if (token.Name != "ID_PLAIN") {
                 return false;
             }
-            const auto index = token->getTokenIndex();
-            return std::regex_search(token->getText(), BuiltinFunctionRegex) ||
-                   (2 <= index && Tokens.get(index - 1)->getType() == TOKEN(NAMESPACE) && Tokens.get(index - 2)->getType() == TOKEN(ID_PLAIN)) ||
-                   (index < Tokens.size() - 1 && Tokens.get(index + 1)->getType() == TOKEN(NAMESPACE));
+            return std::regex_search(token.Content.begin(), token.Content.end(), BuiltinFunctionRegex) ||
+                   (2 <= index && Tokens.at(index - 1).Name == "NAMESPACE" && Tokens.at(index - 2).Name == "ID_PLAIN") ||
+                   (index < Tokens.size() - 1 && Tokens.at(index + 1).Name == "NAMESPACE");
         }
 
-        bool YQLHighlight::IsTypeIdentifier(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(ID_PLAIN) && std::regex_search(token->getText(), TypeRegex);
+        bool YQLHighlight::IsTypeIdentifier(const TParsedToken& token) const {
+            return token.Name == "ID_PLAIN" && std::regex_search(token.Content.begin(), token.Content.end(), TypeRegex);
         }
 
-        bool YQLHighlight::IsVariableIdentifier(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(ID_PLAIN);
+        bool YQLHighlight::IsVariableIdentifier(const TParsedToken& token) const {
+            return token.Name == "ID_PLAIN";
         }
 
-        bool YQLHighlight::IsQuotedIdentifier(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(ID_QUOTED);
+        bool YQLHighlight::IsQuotedIdentifier(const TParsedToken& token) const {
+            return token.Name == "ID_QUOTED";
         }
 
-        bool YQLHighlight::IsString(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(STRING_VALUE);
+        bool YQLHighlight::IsString(const TParsedToken& token) const {
+            return token.Name == "STRING_VALUE";
         }
 
-        bool YQLHighlight::IsNumber(const antlr4::Token* token) const {
-            switch (token->getType()) {
-                case TOKEN(DIGITS):
-                case TOKEN(INTEGER_VALUE):
-                case TOKEN(REAL):
-                case TOKEN(BLOB):
-                    return true;
-                default:
-                    return false;
-            }
+        bool YQLHighlight::IsNumber(const TParsedToken& token) const {
+            return (
+                token.Name == "DIGITS" ||
+                token.Name == "INTEGER_VALUE" ||
+                token.Name == "REAL" ||
+                token.Name == "BLOB"
+            );
         }
 
-        bool YQLHighlight::IsComment(const antlr4::Token* token) const {
-            return token->getType() == TOKEN(COMMENT);
+        bool YQLHighlight::IsComment(const TParsedToken& token) const {
+            return token.Name == "COMMENT";
         }
 
     } // namespace NConsoleClient

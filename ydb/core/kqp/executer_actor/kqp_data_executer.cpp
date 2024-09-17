@@ -133,7 +133,6 @@ public:
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
-        , HtapTx(tableServiceConfig.GetEnableHtapTx())
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
@@ -2353,6 +2352,7 @@ private:
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
+            absl::flat_hash_set<ui64> sendingColumnShardsSet;
             absl::flat_hash_set<ui64> receivingColumnShardsSet;
             ui64 arbiter = 0;
             std::optional<ui64> columnShardArbiter;
@@ -2378,6 +2378,10 @@ private:
                     if (tx->HasLocks()) {
                         // Locks may be broken so shards with locks need to send readsets
                         sendingShardsSet.insert(shardId);
+
+                        if (ShardIdToTableInfo->Get(shardId).IsOlap) {
+                            sendingColumnShardsSet.insert(shardId);
+                        }
                     }
                     if (ShardsWithEffects.contains(shardId)) {
                         // Volatile transactions may abort effects, so they send readsets
@@ -2387,7 +2391,7 @@ private:
                         // Effects are only applied when all locks are valid
                         receivingShardsSet.insert(shardId);
 
-                        if (HtapTx && ShardIdToTableInfo->Get(shardId).IsOlap) {
+                        if (ShardIdToTableInfo->Get(shardId).IsOlap) {
                             receivingColumnShardsSet.insert(shardId);
                         }
                     }
@@ -2445,10 +2449,13 @@ private:
                     }
                 }
 
-                if (!receivingColumnShardsSet.empty()) {
-                    AFL_ENSURE(HtapTx);
-                    const ui32 index = RandomNumber<ui32>(receivingColumnShardsSet.size());
-                    auto arbiterIterator = std::begin(receivingColumnShardsSet);
+                if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
+                    const auto& shards = receivingColumnShardsSet.empty()
+                        ? sendingColumnShardsSet
+                        : receivingColumnShardsSet;
+
+                    const ui32 index = RandomNumber<ui32>(shards.size());
+                    auto arbiterIterator = std::begin(shards);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
                 }
@@ -2688,7 +2695,7 @@ private:
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
+            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
             if (t.hasWrite && writeId.Defined()) {
                 auto* w = transaction.MutableWriteId();
@@ -2857,7 +2864,6 @@ private:
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const bool UseEvWriteForOltp = false;
-    const bool HtapTx = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;

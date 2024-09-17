@@ -47,6 +47,7 @@ FROM `/domain/database/path/to/underlying_table`;
 
 SELECT * FROM view_with_an_asterisk;
 ```
+
 will change if the list of columns of the `underlying_table` is altered.
 
 ## Examples {#examples}

@@ -300,4 +300,10 @@ void* GetAlignedPage(ui64 size);
 template<typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
 
+template<typename TMmap = TSystemMmap>
+i64 GetTotalMmapedBytes();
+template<typename TMmap = TSystemMmap>
+i64 GetTotalFreeListBytes();
+
+
 } // NKikimr

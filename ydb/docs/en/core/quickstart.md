@@ -276,11 +276,13 @@ Stop the local {{ ydb-short-name }} cluster after you have finished experimentin
    ```bash
    kubectl delete database.ydb.tech database-minikube-sample
    ```
+
    To delete the {{ ydb-short-name }} cluster, execute the following commands (all data will be lost):
 
    ```bash
    kubectl delete storage.ydb.tech storage-minikube-sample
    ```
+
    To remove the {{ ydb-short-name }} controller from the Kubernetes cluster, delete the release created by Helm:
 
    ```bash

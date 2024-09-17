@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
@@ -80,6 +81,9 @@ public:
         }
         if (config.HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
+        }
+        if (config.HasWriteActorSettings()) {
+            SetWriteActorSettings(config.GetWriteActorSettings());
         }
 
         SchedulerOptions = {
@@ -428,6 +432,24 @@ private:
         }
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
         SetReadIteratorBackoffSettings(ptr);
+    }
+
+    void SetWriteActorSettings(const NKikimrConfig::TTableServiceConfig::TWriteActorSettings& settings) {
+        auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
+
+        ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+        ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
+        ptr->MaxBatchesPerMessage = settings.GetMaxBatchesPerMessage();
+
+        ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
+        ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());
+        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->Multiplier = settings.GetMultiplier();
+
+        ptr->MaxWriteAttempts = settings.GetMaxWriteAttempts();
+        ptr->MaxResolveAttempts = settings.GetMaxResolveAttempts();
+
+        NKikimr::NKqp::SetWriteActorSettings(ptr);
     }
 
     void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {

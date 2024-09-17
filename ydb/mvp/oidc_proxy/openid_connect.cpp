@@ -22,27 +22,6 @@ TString GenerateState() {
     return Base64EncodeUrlNoPadding(sb);
 }
 
-struct TRedirectUrlParameters {
-    TOpenIdConnectSettings OidcSettings;
-    TStringBuf CallbackUrl;
-    TStringBuf State;
-    TStringBuf Scheme;
-    TStringBuf Host;
-    NMvp::EAccessServiceType AccessServiceType;
-    TStringBuf AuthUrlPath;
-};
-
-TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
-    TStringBuilder locationHeaderValue;
-    locationHeaderValue << parameters.OidcSettings.GetAuthEndpointURL();
-    locationHeaderValue << "?response_type=code"
-                        << "&scope=openid"
-                        << "&state=" << parameters.State
-                        << "&client_id=" << parameters.OidcSettings.ClientId
-                        << "&redirect_uri=" << parameters.Scheme << parameters.Host << parameters.CallbackUrl;
-    return locationHeaderValue;
-}
-
 NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
     headers.Set("Content-Type", "application/json; charset=utf-8");
     SetCORS(request, &headers);
@@ -104,30 +83,27 @@ TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& 
     return Base64Encode(cookieStruct);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, NHttp::THeadersBuilder& responseHeaders, bool isAjaxRequest) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
     TString state = GenerateState();
-    const TString redirectUrl = CreateRedirectUrl({.OidcSettings = settings,
-                                                    .CallbackUrl = GetAuthCallbackUrl(),
-                                                    .State = state,
-                                                    .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
-                                                    .Host = request->Host,
-                                                    .AccessServiceType = settings.AccessServiceType,
-                                                    .AuthUrlPath = settings.AuthUrlPath});
+    const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
+                                                 << "?response_type=code"
+                                                 << "&scope=openid"
+                                                 << "&state=" << state
+                                                 << "&client_id=" << settings.ClientId
+                                                 << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
+                                                                     << request->Host
+                                                                     << GetAuthCallbackUrl();
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
                      << "; Path=" << GetAuthCallbackUrl() << "; Max-Age=" << cookieMaxAgeSec <<"; SameSite=None; Secure";
+    NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", setCookieBuilder);
     if (isAjaxRequest) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
     responseHeaders.Set("Location", redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);
-}
-
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest) {
-    NHttp::THeadersBuilder responseHeaders;
-    return GetHttpOutgoingResponsePtr(request, settings, responseHeaders, isAjaxRequest);
 }
 
 bool DetectAjaxRequest(const NHttp::THeaders& headers) {

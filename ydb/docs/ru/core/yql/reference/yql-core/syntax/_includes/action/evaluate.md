@@ -18,7 +18,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 DEFINE ACTION $hello() AS
     SELECT "Hello!";
 END DEFINE;
@@ -41,7 +41,7 @@ EVALUATE FOR $i IN AsList(1, 2, 3) DO BEGIN
 END DO;
 ```
 
-``` yql
+```yql
 -- скопировать таблицу $input в $count новых таблиц
 $count = 3;
 $input = "my_input";

@@ -25,9 +25,9 @@
 
 `EMPTY_ACTION` — действие, которое ничего не выполняет.
 
-{% if feature_mapreduce %} <!-- In fact, if user file system integration is supported in the product. YQL service over YDB may also be here. -->
+{% if feature_mapreduce %}
 
-{% note info "Примечание" %}
+{% note info %}
 
 В больших запросах объявление действий можно выносить в отдельные файлы и подключать их в основной запрос с помощью [EXPORT](../../export_import.md#export) + [IMPORT](../../export_import.md#import), чтобы вместо одного длинного текста получилось несколько логических частей, в которых проще ориентироваться. Важный нюанс: директива `USE my_cluster;` в импортирующем запросе не влияет на поведение объявленных в других файлах действий.
 

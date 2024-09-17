@@ -66,7 +66,7 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
         });
     } else {
         YQL_ENSURE(Rows.RowCount() == 1, "Actual buffer size: " << Rows.RowCount());
-        ExportTypeToProto(MkqlItemType, *mkqlResult->MutableType());
+        ExportTypeToProto(MkqlItemType, *mkqlResult->MutableType(), ColumnOrder);
         ExportValueToProto(MkqlItemType, *Rows.Head(), *mkqlResult->MutableValue());
     }
 }
@@ -97,7 +97,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = ydbResult->add_columns();
         ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
-        column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        column->set_name(ColumnHints && ColumnHints->size() ? ColumnHints->at(idx) : TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
         ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
 

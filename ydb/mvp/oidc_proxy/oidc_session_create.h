@@ -22,7 +22,6 @@ protected:
     const TOpenIdConnectSettings Settings;
     TString RedirectUrl;
     bool IsAjaxRequest = false;
-    NHttp::THeadersBuilder ResponseHeaders;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
@@ -37,7 +36,6 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
 protected:
-    void RemoveAppliedCookie(const TString& cookieName);
     bool IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx);
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
 };

@@ -29,7 +29,7 @@ To add the downloaded JDBC driver to DataGrip, follow these steps:
 
 1. In the **Class** drop-down list, select `tech.ydb.jdbc.YdbDriver`.
 
-    ![](./_assets/datagrip-ydb-driver.png)
+    ![driver](./_assets/datagrip-ydb-driver.png)
 
 1. Click **OK**.
 
@@ -49,31 +49,32 @@ To establish a connection, perform the following steps:
 
 1. On the **General** tab, in the **URL** field, specify the following connection string:
 
-    ```
+    ```text
     jdbc:ydb:<ydb_endpoint>/<ydb_database>?useQueryService=true
     ```
 
     Where:
+
     - `ydb_endpoint` — the [endpoint](../../concepts/connect.md#endpoint) of the {{ydb-name}} cluster.
     - `ydb_database` — the path to the [database](../../concepts/glossary.md#database) in the {{ydb-name}} cluster.
 
     A complete list of authentication methods and connection strings for {{ ydb-name }} is provided in the [JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) description.
 
-    ![](./_assets/datagrip-ydb-connection.png)
+    ![connection](./_assets/datagrip-ydb-connection.png)
 
-1. Click **Test Connection** to verify the settings.
+2. Click **Test Connection** to verify the settings.
 
    If all the settings are correct, a message appears indicating a successful connection test.
 
-1. Click **OK** to save the connection.
+3. Click **OK** to save the connection.
 
 
 ## Working with {{ ydb-name }} {#datagrip_ydb_connection}
 
 With DataGrip you can view the list and structure of tables.
 
-![](./_assets/datagrip-list-tables.png)
+![tables](./_assets/datagrip-list-tables.png)
 
 You can also execute queries on the data.
 
-![](./_assets/datagrip-run-sql.png)
+![run SQL](./_assets/datagrip-run-sql.png)

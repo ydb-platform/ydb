@@ -4,11 +4,11 @@
 
 ## Примеры
 
-``` yql
+```yql
 SELECT 1 INTO RESULT foo;
 ```
 
-``` yql
+```yql
 SELECT * FROM
 my_table
 WHERE value % 2 == 0

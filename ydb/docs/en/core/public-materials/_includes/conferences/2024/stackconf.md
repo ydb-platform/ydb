@@ -14,4 +14,4 @@ People need databases to store their data and persistent queues to transfer thei
 
 [{{ team.kalinina.name }}]({{ team.kalinina.profile }}) ({{ team.kalinina.position }}) tell you about an open-source platform called YDB which allows you to work with tables and queues within a single transaction. Elena walk you through architecture decisions, possible scenarios, and performance aspects of this approach.
 
-[Slides](https://presentations.ydb.tech/2024/en/stackconf/tables-and-persistent/presentation.pdf)
+[Slides](https://presentations.ydb.tech/2024/en/stackconf/tables-and-queues/presentation.pdf)

@@ -43,9 +43,9 @@ public:
     TCSUploadCounters()
         : TBase("CSUpload")
         , RequestsCount(TBase::GetDeriviative("Requests"))
-        , CSReplyDuration(TBase::GetHistogram("Replies/Shard/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
-        , SucceedFullReplyDuration(TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
-        , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 1)))
+        , CSReplyDuration(TBase::GetHistogram("Replies/Shard/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
+        , SucceedFullReplyDuration(TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
+        , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , BytesDistribution(TBase::GetHistogram("Requests/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024)))
         , RowsDistribution(TBase::GetHistogram("Requests/Rows", NMonitoring::ExponentialHistogram(15, 2, 16)))
         , RowsCount(TBase::GetDeriviative("Rows"))
@@ -181,6 +181,6 @@ public:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void HandleTimeout(const TActorContext& ctx);
 private:
-    bool RetryWriteRequest(bool delayed = true);
+    bool RetryWriteRequest(const bool delayed = true);
 };
 }

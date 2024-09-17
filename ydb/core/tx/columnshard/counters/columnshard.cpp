@@ -8,6 +8,7 @@ namespace NKikimr::NColumnShard {
 
 TCSCounters::TCSCounters()
     : TBase("CS")
+    , WritingCounters(std::make_shared<TWriteCounters>(*this))
     , Initialization(*this)
     , TxProgress(*this) {
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");

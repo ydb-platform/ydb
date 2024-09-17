@@ -26,6 +26,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
             "cannot extract incoming batch: " + batchConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("cannot extract incoming batch: " + batchConclusion.GetErrorMessage());
     }
+    WritingCounters->OnIncomingData(NArrow::GetBatchDataSize(*batchConclusion));
 
     auto preparedConclusion =
         ActualSchema->PrepareForModification(batchConclusion.DetachResult(), WriteData.GetWriteMeta().GetModificationType());

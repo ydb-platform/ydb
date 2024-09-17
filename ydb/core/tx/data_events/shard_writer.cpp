@@ -66,7 +66,7 @@ namespace NKikimr::NEvWrite {
 
         const auto ydbStatus = msg->GetYdbStatus();
         if (ydbStatus == Ydb::StatusIds::OVERLOADED) {
-            if (RetryWriteRequest()) {
+            if (RetryWriteRequest(true)) {
                 return;
             }
         }
@@ -87,7 +87,7 @@ namespace NKikimr::NEvWrite {
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->TabletId == ShardId);
 
-        if (RetryWriteRequest()) {
+        if (RetryWriteRequest(true)) {
             return;
         }
 
@@ -105,7 +105,7 @@ namespace NKikimr::NEvWrite {
         RetryWriteRequest(false);
     }
 
-    bool TShardWriter::RetryWriteRequest(bool delayed) {
+    bool TShardWriter::RetryWriteRequest(const bool delayed) {
         if (NumRetries >= MaxRetriesPerShard) {
             return false;
         }

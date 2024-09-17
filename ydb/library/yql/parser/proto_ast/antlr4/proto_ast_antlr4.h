@@ -85,6 +85,7 @@ namespace NProtoAST {
             , InputStream(std::string(data))
             , Lexer(&InputStream)
         {
+            Lexer.removeErrorListeners(); // supress stderr messages
         }
 
         void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {

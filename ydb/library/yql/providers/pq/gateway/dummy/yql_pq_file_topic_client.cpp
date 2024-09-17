@@ -128,7 +128,7 @@ public:
     }
 
     TString GetSessionId() const override {
-        return "uniqueId";
+        return ToString(Session_->GetPartitionSessionId());
     }
 
     ~TFileTopicReadSession() {

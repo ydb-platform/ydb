@@ -2370,7 +2370,7 @@ private:
                 }
 
                 for (auto& [shardId, tx] : evWriteTxs) {
-                    if (ShardIdToTableInfo->at(shardId).IsOlap && HtapTx) {
+                    if (ShardIdToTableInfo->Get(shardId).IsOlap && HtapTx) {
                         if (tx->HasLocks()) {
                             // Locks may be broken so shards with locks need to send readsets
                             sendingColumnShardsSet.insert(shardId);

@@ -12,9 +12,6 @@ config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 repo_path = f"{dir}/../../../"
 config.read(config_file_path)
 
-build_preset = os.environ.get("build_preset")
-branch = os.environ.get("branch_to_compare")
-
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
@@ -120,14 +117,6 @@ def read_file(path):
             
         return line_list
         
-        
-
-def is_git_repository(path):
-    try:
-        _ = Repo(path).git_dir
-        return True
-    except:
-        return False
 
 def download_file(url, local_filename):
     """
@@ -175,9 +164,6 @@ def main():
     all_tests_file =  path_in_repo + 'mute_info/all_tests.txt'
     all_muted_tests_file =  path_in_repo + 'mute_info/all_muted_tests.txt'
     
-    if not is_git_repository(repo_path):
-        print(f"The directory {repo_path} is not a valid Git repository.")
-        return
     added_texts, removed_texts = extract_diff_lines(muted_ya_path)
     write_to_file('\n'.join(added_texts), added_lines_file)
     write_to_file('\n'.join(removed_texts), removed_lines_file)

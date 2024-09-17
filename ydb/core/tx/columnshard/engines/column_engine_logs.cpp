@@ -343,7 +343,6 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
-    THashSet<TPortionAddress> uniquePortions;
     for (ui64 pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
@@ -351,6 +350,9 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         }
 
         for (auto& [portion, info] : g->GetPortions()) {
+            if (info->CheckForCleanup()) {
+                continue;
+            }
             if (dataLocksManager->IsLocked(*info)) {
                 ++skipLocked;
                 continue;
@@ -361,7 +363,6 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            AFL_VERIFY(uniquePortions.emplace(info->GetAddress()).second);
             changes->PortionsToDrop.push_back(*info);
             ++portionsFromDrop;
         }
@@ -380,16 +381,14 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            if (uniquePortions.emplace(it->second[i].GetAddress()).second) {
-                AFL_VERIFY(it->second[i].CheckForCleanup(snapshot))("p_snapshot", it->second[i].GetRemoveSnapshotOptional())("snapshot", snapshot);
-                if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                    txSize += it->second[i].GetTxVolume();
-                } else {
-                    limitExceeded = true;
-                    break;
-                }
-                changes->PortionsToDrop.push_back(std::move(it->second[i]));
+            AFL_VERIFY(it->second[i].CheckForCleanup(snapshot))("p_snapshot", it->second[i].GetRemoveSnapshotOptional())("snapshot", snapshot);
+            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                txSize += it->second[i].GetTxVolume();
+            } else {
+                limitExceeded = true;
+                break;
             }
+            changes->PortionsToDrop.push_back(std::move(it->second[i]));
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }

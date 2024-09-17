@@ -533,10 +533,12 @@ runs:
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
     
-    - name: Checkout code
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0  # Fetch all history for all branches and tags
+    - name: Fetch SHAs
+      run: |
+        echo "BASE_SHA=$(jq -r .pull_request.base.sha $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
+        echo "HEAD_SHA=$(jq -r .pull_request.head.sha $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
+        git fetch origin ${{ env.BASE_SHA }} ${{ env.HEAD_SHA }}
+
 
     - name: show diff mute_ya.txt
       if: inputs.build_preset == 'relwithdebinfo'

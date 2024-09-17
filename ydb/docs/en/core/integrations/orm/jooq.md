@@ -116,7 +116,7 @@ Examples for different build systems:
 
 {% endlist %}
 
-To obtain a `YdbDSLContext` (an extension of `org.jooq.DSLContext`), use the `tech.ydb.jooq.YDB` class. For example:
+To obtain a `YdbDSLContext` class instance (an extension of `org.jooq.DSLContext`), use the `tech.ydb.jooq.YDB` class. For example:
 
 ```java
 String url = "jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]";

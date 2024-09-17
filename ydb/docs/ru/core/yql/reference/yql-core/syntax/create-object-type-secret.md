@@ -6,13 +6,14 @@
 
 {% endnote %}
 
-
 Для создания [секрета](../../../concepts/datamodel/secrets.md) используется следующий SQL-запрос:
 
 ```yql
 CREATE OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 ```
+
 Где:
+
 * `secret_name` - имя секрета.
 * `secret_value` - содержимое секрета.
 

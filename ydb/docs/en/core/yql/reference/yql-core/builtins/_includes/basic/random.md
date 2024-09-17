@@ -8,7 +8,7 @@ Generates a pseudorandom number:
 
 ### Signatures
 
-```
+```yql
 Random(T1[, T2, ...])->Double
 RandomNumber(T1[, T2, ...])->Uint64
 RandomUuid(T1[, T2, ...])->Uuid
@@ -25,6 +25,7 @@ No arguments are used for random number generation: they are only needed to cont
 * If Random is called again within a **same query** and with a same set of arguments, the same set of random numbers is returned. Keep in mind that we mean the arguments themselves (i.e., the text between parentheses) rather than their values.
 
 {% endif %}
+
 * Calling of Random with the same set of arguments in **different queries** returns different sets of random numbers.
 
 {% note warning %}

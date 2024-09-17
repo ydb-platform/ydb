@@ -54,6 +54,7 @@
   В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
 
   Фрагмент кода приложения для создания клиента:
+
   ```cpp
   TTopicClient topicClient(driver);
   ```
@@ -226,7 +227,6 @@
 
   Полный список настроек можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
 
-
   ```java
   topicClient.alterTopic(topicPath, AlterTopicSettings.newBuilder()
                   .addAddConsumer(Consumer.newBuilder()
@@ -287,7 +287,6 @@
   Для получения информации о топике используется метод `describeTopic`.
 
   Полный список полей описания можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
-
 
   ```java
   Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
@@ -376,6 +375,7 @@
 - Java (sync)
 
   Инициализация настроек писателя:
+
   ```java
   String producerAndGroupID = "group-id";
   WriterSettings settings = WriterSettings.newBuilder()
@@ -386,6 +386,7 @@
   ```
 
   Создание синхронного писателя:
+
   ```java
   SyncWriter writer = topicClient.createSyncWriter(settings);
   ```
@@ -526,7 +527,6 @@
     ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
     ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
     ])
-
   ```
 
 - Java (sync)
@@ -802,7 +802,6 @@
   if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
       session->Write(std::move(event.ContinuationToken), std::move(message));
   }
-
   ```
 
 - Java
@@ -1063,6 +1062,7 @@
 - Java (async)
 
   Инициализация настроек читателя
+
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
@@ -1106,6 +1106,7 @@
   ```
 
   Создание и инициализация асинхронного читателя:
+
   ```java
   AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
   // Init in background
@@ -1449,6 +1450,7 @@
 - Java (async)
 
   В обработчике `onMessage` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
+
   ```java
   @Override
   public void onMessages(DataReceivedEvent event) {
@@ -1666,6 +1668,7 @@
           .setTransaction(transaction)
           .build());
   ```
+
   Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
   Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
@@ -1681,7 +1684,7 @@
 
   ```java
   @Override
-  public void onMessages(DataReceivedEvent event) {
+    public void onMessages(DataReceivedEvent event) {
       for (Message message : event.getMessages()) {
           // creating a session in the table service
           Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
@@ -1714,7 +1717,7 @@
   }
   ```
 
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 

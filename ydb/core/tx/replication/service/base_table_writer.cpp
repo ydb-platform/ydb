@@ -1,13 +1,9 @@
-#pragma once
-
+#include "base_table_writer.h"
 #include "logging.h"
 #include "worker.h"
-#include "lightweight_schema.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/change_exchange/change_sender.h>
-#include <ydb/core/change_exchange/resolve_partition.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
@@ -23,32 +19,22 @@
 
 namespace NKikimr::NReplication::NService {
 
-template <typename TChangeRecord>
-using TSerializationContext = typename TChangeRecord::TSerializationContext;
-
-template <typename TChangeRecord>
-using TBuilder = typename TChangeRecord::TBuilder;
-
-template <typename TChangeRecord>
-class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TChangeRecord>> {
-    using TBase = TActorBootstrapped<TTablePartitionWriter<TChangeRecord>>;
-    using TThis = TTablePartitionWriter;
-
+class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[TablePartitionWriter]"
                 << TableId
                 << "[" << TabletId << "]"
-                << TBase::SelfId() << " ";
+                << SelfId() << " ";
         }
 
         return LogPrefix.GetRef();
     }
 
     void GetProxyServices() {
-        this->Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest());
-        this->Become(&TThis::StateGetProxyServices);
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest());
+        Become(&TThis::StateGetProxyServices);
     }
 
     STATEFN(StateGetProxyServices) {
@@ -67,8 +53,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
     }
 
     void Ready() {
-        this->Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvReady(TabletId));
-        this->Become(&TThis::StateWaitingRecords);
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvReady(TabletId));
+        Become(&TThis::StateWaitingRecords);
     }
 
     STATEFN(StateWaitingRecords) {
@@ -78,22 +64,6 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
             return StateBase(ev);
         }
     }
-
-    class TSerializer: public NChangeExchange::TBaseVisitor {
-        TSerializationContext<TChangeRecord>& Context;
-        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& Record;
-
-    public:
-        explicit TSerializer(TSerializationContext<TChangeRecord>& ctx, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record)
-            : Context(ctx)
-            , Record(record)
-        {
-        }
-
-        void Visit(const TChangeRecord& record) override {
-            record.Serialize(Record, Context);
-        }
-    };
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
@@ -106,16 +76,13 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
 
         TString source;
 
-        for (auto recordPtr : ev->Get()->Records) {
-            const auto& record = *recordPtr;
-
-            TSerializer serializer(SerializationContext, *event->Record.AddChanges());
-            record.Accept(serializer);
+        for (auto record : ev->Get()->Records) {
+            Serializer->Serialize(record, *event->Record.AddChanges());
 
             if (!source) {
-                source = record.GetSourceId();
+                source = record->GetSourceId();
             } else {
-                Y_ABORT_UNLESS(source == record.GetSourceId());
+                Y_ABORT_UNLESS(source == record->GetSourceId());
             }
         }
 
@@ -123,8 +90,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
             event->Record.SetSource(source);
         }
 
-        this->Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, true, ++SubscribeCookie));
-        this->Become(&TThis::StateWaitingStatus);
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, true, ++SubscribeCookie));
+        Become(&TThis::StateWaitingStatus);
     }
 
     STATEFN(StateWaitingStatus) {
@@ -174,26 +141,26 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
 
     void DelayedLeave() {
         static constexpr TDuration delay = TDuration::MilliSeconds(50);
-        this->Schedule(delay, new TEvents::TEvWakeup());
+        Schedule(delay, new TEvents::TEvWakeup());
     }
 
     void Leave(bool hardError = false) {
         LOG_I("Leave"
             << ": hard error# " << hardError);
 
-        this->Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
-        this->PassAway();
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
+        PassAway();
     }
 
     void Unlink() {
         if (LeaderPipeCache) {
-            this->Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(TabletId));
+            Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(TabletId));
         }
     }
 
     void PassAway() override {
         Unlink();
-        TBase::PassAway();
+        TActorBootstrapped::PassAway();
     }
 
 public:
@@ -205,11 +172,11 @@ public:
             const TActorId& parent,
             ui64 tabletId,
             const TTableId& tableId,
-            const TSerializationContext<TChangeRecord>& ctx)
+            THolder<IChangeRecordSerializer>&& serializer)
         : Parent(parent)
         , TabletId(tabletId)
         , TableId(tableId)
-        , SerializationContext(ctx)
+        , Serializer(std::move(serializer))
     {}
 
     void Bootstrap() {
@@ -232,43 +199,24 @@ private:
 
     TActorId LeaderPipeCache;
     ui64 SubscribeCookie = 0;
-    TSerializationContext<TChangeRecord> SerializationContext;
+    THolder<IChangeRecordSerializer> Serializer;
 
 }; // TTablePartitionWriter
 
-template <typename TChangeRecord>
 class TLocalTableWriter
-    : public TActor<TLocalTableWriter<TChangeRecord>>
+    : public TActor<TLocalTableWriter>
     , public NChangeExchange::TChangeSender
     , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderPathResolver
     , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    using TBase = TActor<TLocalTableWriter<TChangeRecord>>;
-    using TThis = TLocalTableWriter;
-
-    class TPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
-    public:
-        TPartitionResolver(const NKikimr::TKeyDesc& keyDesc)
-            : KeyDesc(keyDesc)
-        {
-        }
-
-        void Visit(const TChangeRecord& record) override {
-            SetPartitionId(NChangeExchange::ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey()));
-        }
-
-    private:
-        const NKikimr::TKeyDesc& KeyDesc;
-    };
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[LocalTableWriter]"
                 << TablePathId
-                << TBase::SelfId() << " ";
+                << SelfId() << " ";
         }
 
         return LogPrefix.GetRef();
@@ -287,7 +235,7 @@ class TLocalTableWriter
 
     void LogWarnAndRetry(const TString& error) {
         LOG_W(error);
-        this->Retry();
+        Retry();
     }
 
     template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
@@ -331,7 +279,7 @@ class TLocalTableWriter
     }
 
     void Registered(TActorSystem*, const TActorId&) override {
-        this->ChangeServer = this->SelfId();
+        ChangeServer = SelfId();
     }
 
     void Resolve() override {
@@ -359,7 +307,7 @@ class TLocalTableWriter
 
         auto request = MakeHolder<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
-        this->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -382,11 +330,11 @@ class TLocalTableWriter
             return;
         }
 
-        if (!this->CheckEntrySucceeded(entry)) {
+        if (!CheckEntrySucceeded(entry)) {
             return;
         }
 
-        if (!this->CheckEntryKind(entry, TNavigate::KindTable)) {
+        if (!CheckEntryKind(entry, TNavigate::KindTable)) {
             return;
         }
 
@@ -412,6 +360,7 @@ class TLocalTableWriter
         }
 
         Schema = schema;
+        Parser->SetSchema(Schema);
         KeyDesc = MakeHolder<TKeyDesc>(
             entry.TableId,
             GetFullRange(schema->KeyColumns.size()).ToTableRange(),
@@ -420,7 +369,7 @@ class TLocalTableWriter
             TVector<TKeyDesc::TColumnOp>()
         );
 
-        TChangeSender::SetPartitionResolver(new TPartitionResolver(*KeyDesc.Get()));
+        TChangeSender::SetPartitionResolver(CreateResolverFn(*KeyDesc.Get()));
 
         ResolveKeys();
     }
@@ -428,7 +377,7 @@ class TLocalTableWriter
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
         request->ResultSet.emplace_back(std::move(KeyDesc));
-        this->Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -463,10 +412,10 @@ class TLocalTableWriter
         TableVersion = entry.GeneralVersion;
 
         KeyDesc = std::move(entry.KeyDescription);
-        this->CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
+        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
 
         if (!Initialized) {
-            this->Send(Worker, new TEvWorker::TEvHandshake());
+            Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
         }
 
@@ -475,7 +424,7 @@ class TLocalTableWriter
 
     IActor* CreateSender(ui64 partitionId) const override {
         const auto tableId = TTableId(TablePathId, Schema->Version);
-        return new TTablePartitionWriter<TChangeRecord>(this->SelfId(), partitionId, tableId, SerializationContext);
+        return new TTablePartitionWriter(SelfId(), partitionId, tableId, Serializer->Clone());
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
@@ -486,17 +435,13 @@ class TLocalTableWriter
 
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, TablePathId, record.Data.size());
-            auto res = PendingRecords.emplace(record.Offset, TBuilder<TChangeRecord>()
-                .WithSourceId(ev->Get()->Source)
-                .WithOrder(record.Offset)
-                .WithBody(std::move(record.Data))
-                .WithSchema(Schema)
-                .Build()
+            auto res = PendingRecords.emplace(
+                record.Offset, Parser->Parse(ev->Get()->Source, record.Offset, std::move(record.Data))
             );
             Y_ABORT_UNLESS(res.second);
         }
 
-        this->EnqueueRecords(std::move(records));
+        EnqueueRecords(std::move(records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
@@ -510,7 +455,7 @@ class TLocalTableWriter
             records.emplace_back(it->second);
         }
 
-        this->ProcessRecords(std::move(records));
+        ProcessRecords(std::move(records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
@@ -521,13 +466,13 @@ class TLocalTableWriter
         }
 
         if (PendingRecords.empty()) {
-            this->Send(Worker, new TEvWorker::TEvPoll());
+            Send(Worker, new TEvWorker::TEvPoll());
         }
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        this->OnReady(ev->Get()->PartitionId);
+        OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
@@ -536,25 +481,25 @@ class TLocalTableWriter
         if (ev->Get()->HardError) {
             Leave(TEvWorker::TEvGone::SCHEME_ERROR, "Cannot apply changes");
         } else {
-            this->OnGone(ev->Get()->PartitionId);
+            OnGone(ev->Get()->PartitionId);
         }
     }
 
     void Retry() {
-        this->Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
     }
 
     template <typename... Args>
     void Leave(Args&&... args) {
         LOG_I("Leave");
 
-        this->Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
-        this->PassAway();
+        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
+        PassAway();
     }
 
     void PassAway() override {
-        this->KillSenders();
-        TBase::PassAway();
+        KillSenders();
+        TActor::PassAway();
     }
 
 public:
@@ -562,12 +507,17 @@ public:
         return NKikimrServices::TActivity::REPLICATION_LOCAL_TABLE_WRITER;
     }
 
-    template <class... TArgs>
-    explicit TLocalTableWriter(const TPathId& tablePathId, TArgs&&... args)
-        : TBase(&TThis::StateWork)
+    explicit TLocalTableWriter(
+            const TPathId& tablePathId,
+            THolder<IChangeRecordParser>&& parser,
+            THolder<IChangeRecordSerializer>&& serializer,
+            std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+        : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
         , TablePathId(tablePathId)
-        , SerializationContext(std::forward<TArgs>(args)...)
+        , Parser(std::move(parser))
+        , Serializer(std::move(serializer))
+        , CreateResolverFn(std::move(createResolverFn))
     {
     }
 
@@ -593,7 +543,9 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
     const TPathId TablePathId;
-    TSerializationContext<TChangeRecord> SerializationContext;
+    THolder<IChangeRecordParser> Parser;
+    THolder<IChangeRecordSerializer> Serializer;
+    std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)> CreateResolverFn;
 
     TActorId Worker;
     ui64 TableVersion = 0;
@@ -605,5 +557,14 @@ private:
     TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
 
 }; // TLocalTableWriter
+
+IActor* CreateLocalTableWriter(
+        const TPathId& tablePathId,
+        THolder<IChangeRecordParser>&& parser,
+        THolder<IChangeRecordSerializer>&& serializer,
+        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+{
+    return new TLocalTableWriter(tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+}
 
 } // namespace NKikimr::NReplication::NService

@@ -1,6 +1,7 @@
 # DROP ASYNC REPLICATION
 
 Вызов `DROP ASYNC REPLICATION` удаляет экземпляр [асинхронной репликации](../../../concepts/async-replication.md). Вместе с экземпляром асинхронной репликации [удаляются](../../../concepts/async-replication.md#drop):
+
 * автоматически созданные [потоки изменений](../../../concepts/glossary.md#changefeed);
 * [объекты-реплики](../../../concepts/glossary.md#replica-object) (опционально).
 
@@ -11,6 +12,7 @@ DROP ASYNC REPLICATION <name> [CASCADE]
 ```
 
 где:
+
 * `name` — имя экземпляра асинхронной репликации.
 * `CASCADE` — каскадное удаление объектов-реплик, созданных в рамках данного экземпляра асинхронной репликации.
 

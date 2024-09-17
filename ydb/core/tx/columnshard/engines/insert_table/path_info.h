@@ -57,8 +57,6 @@ public:
         return Committed.empty() && !InsertedSize;
     }
 
-    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const;
-
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 
     explicit TPathInfo(TInsertionSummary& summary, const ui64 pathId);

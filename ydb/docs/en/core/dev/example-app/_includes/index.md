@@ -5,7 +5,9 @@ This section outlines the implementation of example applications, all designed t
 {% if oss %}
 
 - [C++](../example-cpp.md)
+
 {% endif %}
+
 - [C# (.NET)](../example-dotnet.md)
 - [Go](../go/index.md)
 - [Java](../java/index.md)

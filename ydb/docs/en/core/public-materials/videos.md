@@ -13,6 +13,10 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
   {% include [COSCUP](./_includes/conferences/2024/coscup.md) %}
 
+  {% include [Qcon](./_includes/conferences/2024/Qcon.md) %}
+
+  {% include [stackconf](./_includes/conferences/2024/stackconf.md) %}
+
   {% include [TechInternals](./_includes/conferences/2024/TechInternals.md) %}
 
   {% include [Conf42](./_includes/conferences/2024/Conf42.md) %}

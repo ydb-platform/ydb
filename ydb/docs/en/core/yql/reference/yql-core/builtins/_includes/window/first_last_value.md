@@ -6,7 +6,7 @@ Optionally, `OVER` can be preceded by the additional modifier `IGNORE NULLS`. It
 
 ### Signature
 
-```
+```yql
 FIRST_VALUE(T)->T?
 LAST_VALUE(T)->T?
 ```

@@ -42,10 +42,46 @@
 
 
 Создаются 3 строковые таблицы со следующими DDL:
-```sql
-CREATE TABLE `stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>);
-CREATE TABLE `orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created)) WITH (READ_REPLICAS_SETTINGS = "per_az:1", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
-CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
+
+```yql
+CREATE TABLE `stock`(
+    product Utf8,
+    quantity Int64,
+    PRIMARY KEY(product)
+    )
+    WITH (
+        AUTO_PARTITIONING_BY_LOAD = ENABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>
+        );
+
+CREATE TABLE `orders`(
+    id Uint64,
+    customer Utf8,
+    created Datetime,
+    processed Datetime,
+    PRIMARY KEY(id),
+    INDEX ix_cust GLOBAL ON (customer, created)
+    )
+    WITH (
+        READ_REPLICAS_SETTINGS = "per_az:1",
+        AUTO_PARTITIONING_BY_LOAD = ENABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>,
+        UNIFORM_PARTITIONS = <min-partitions>,
+        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+        );
+
+CREATE TABLE `orderLines`(
+    id_order Uint64,
+    product Utf8,
+    quantity Int64,
+    PRIMARY KEY(id_order, product)
+    )
+    WITH (
+        AUTO_PARTITIONING_BY_LOAD = ENABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>,
+        UNIFORM_PARTITIONS = <min-partitions>,
+        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+        );
 ```
 
 ### Примеры инициализации нагрузки {#init-stock-examples}

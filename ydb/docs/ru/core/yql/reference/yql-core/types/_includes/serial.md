@@ -6,7 +6,7 @@
 
 ``` yql
 CREATE TABLE users (
-    user_id SERIAL,
+    user_id Serial,
     name Utf8,
     email Utf8,
     PRIMARY KEY (user_id)

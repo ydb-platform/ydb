@@ -124,6 +124,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     SubscribeToTempTableOwners();
 
+    InitializeObjects(ctx);
+
     Become(&TThis::StateWork);
 }
 
@@ -4754,6 +4756,12 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
+
+        // namespace NObjectModification {
+        HFuncTraced(TEvSchemeShard::TEvModifyObject, Handle);
+        HFuncTraced(TEvPrivate::TEvCommitObjectModification, Handle);
+        HFuncTraced(TEvPrivate::TEvObjectModificationResult, Handle);
+        // } // NObjectModification
 
         // for subscriptions on owners
         HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);

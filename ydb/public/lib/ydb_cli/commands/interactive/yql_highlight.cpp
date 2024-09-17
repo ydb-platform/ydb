@@ -127,8 +127,6 @@ namespace NYdb {
                 const std::ptrdiff_t start = token.StartIndex;
                 const std::ptrdiff_t stop = token.StartIndex + token.Content.Size();
 
-                std::cout << "Fill from " << start << " to " << stop << std::endl;
-
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);
             }
@@ -142,44 +140,33 @@ namespace NYdb {
         }
 
         YQLHighlight::Color YQLHighlight::ColorOf(const TParsedToken& token, size_t index) {
-            std::cout << "Token " << token.Name << " (" << token.Content << ") ";
             if (IsString(token)) {
-                std::cout << "IsString" << std::endl;
                 return Coloring.string;
             }
             if (IsFunctionIdentifier(token, index)) {
-                std::cout << "IsFunctionIdentifier" << std::endl;
                 return Coloring.identifier.function;
             }
             if (IsTypeIdentifier(token)) {
-                std::cout << "IsTypeIdentifier" << std::endl;
                 return Coloring.identifier.type;
             }
             if (IsVariableIdentifier(token)) {
-                std::cout << "IsVariableIdentifier" << std::endl;
                 return Coloring.identifier.variable;
             }
             if (IsQuotedIdentifier(token)) {
-                std::cout << "IsQuotedIdentifier" << std::endl;
                 return Coloring.identifier.quoted;
             }
             if (IsNumber(token)) {
-                std::cout << "IsNumber" << std::endl;
                 return Coloring.number;
             }
             if (IsOperation(token)) {
-                std::cout << "IsOperation" << std::endl;
                 return Coloring.operation;
             }
             if (IsKeyword(token)) {
-                std::cout << "IsKeyword" << std::endl;
                 return Coloring.keyword;
             }
             if (IsComment(token)) {
-                std::cout << "IsComment" << std::endl;
                 return Coloring.comment;
             }
-            std::cout << "IsUnknown" << std::endl;
             return Coloring.unknown;
         }
 

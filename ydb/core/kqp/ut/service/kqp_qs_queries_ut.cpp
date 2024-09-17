@@ -3283,9 +3283,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto result = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/ColumnSrc` (Col1, Col2, Col3) VALUES
-                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, "test", 13);
+                    (1u, "test1", 10), (2u, "test2", 11);
+                REPLACE INTO `/Root/ColumnSrc` (Col1, Col2, Col3) VALUES
+                    (3u, "test3", 12), (4u, "test", 13);
                 UPSERT INTO `/Root/RowSrc` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
+                    (10u, "test1", 10), (20u, "test2", 11);
+                REPLACE INTO `/Root/RowSrc` (Col1, Col2, Col3) VALUES
+                    (30u, "test3", 12), (40u, "test", 13);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }

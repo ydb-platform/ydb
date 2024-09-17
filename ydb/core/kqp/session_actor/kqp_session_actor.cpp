@@ -664,6 +664,8 @@ public:
             return;
         }
 
+        Cerr << "COMPILED " << QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst() << Endl;
+
         Become(&TKqpSessionActor::ExecuteState);
 
         QueryState->TxCtx->OnBeginQuery();

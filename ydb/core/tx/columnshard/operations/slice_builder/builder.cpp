@@ -57,7 +57,8 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
         AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
                                                       "index", indexSchema->num_fields());
-        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard()) {
+        if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableOptionalColumnsInColumnShard() &&
+            WriteData.GetWriteMeta().GetModificationType() != NEvWrite::EModificationType::Delete) {
             subset = NArrow::TSchemaSubset::AllFieldsAccepted();
             const std::vector<ui32>& columnIdsVector = ActualSchema->GetIndexInfo().GetColumnIds(false);
             const std::set<ui32> columnIdsSet(columnIdsVector.begin(), columnIdsVector.end());
@@ -72,7 +73,11 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     if (batches) {
         auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
         writeDataPtr->SetSchemaSubset(std::move(subset));
-        auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches), OriginalBatch);
+        std::shared_ptr<arrow::RecordBatch> pkBatch;
+        if (!writeDataPtr->GetWriteMeta().HasLongTxId()) {
+            pkBatch = NArrow::TColumnOperator().Extract(OriginalBatch, ActualSchema->GetIndexInfo().GetPrimaryKey()->fields());
+        }
+        auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches), pkBatch);
         TActorContext::AsActorContext().Send(BufferActorId, result.release());
     } else {
         ReplyError("Cannot slice input to batches", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);

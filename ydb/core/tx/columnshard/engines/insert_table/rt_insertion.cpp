@@ -89,37 +89,8 @@ void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
 }
 
-THashSet<TInsertWriteId> TInsertionSummary::GetInsertedByPathId(const ui64 pathId) const {
-    THashSet<TInsertWriteId> result;
-    for (auto& [writeId, data] : Inserted) {
-        if (data.GetPathId() == pathId) {
-            result.insert(writeId);
-        }
-    }
-
-    return result;
-}
-
 THashSet<TInsertWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const {
-    if (timeBorder < MinInsertedTs) {
-        return {};
-    }
-
-    THashSet<TInsertWriteId> toAbort;
-    TInstant newMin = TInstant::Max();
-    for (auto& [writeId, data] : Inserted) {
-        const TInstant dataInsertTs = data.GetMeta().GetDirtyWriteTime();
-        if (data.IsNotAbortable()) {
-            continue;
-        }
-        if (dataInsertTs < timeBorder && toAbort.size() < limit) {
-            toAbort.insert(writeId);
-        } else {
-            newMin = Min(newMin, dataInsertTs);
-        }
-    }
-    MinInsertedTs = (toAbort.size() == Inserted.size()) ? TInstant::Zero() : newMin;
-    return toAbort;
+    return Inserted.GetExpired(timeBorder, limit);
 }
 
 bool TInsertionSummary::EraseAborted(const TInsertWriteId writeId) {
@@ -173,33 +144,21 @@ const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData
 }
 
 std::optional<NKikimr::NOlap::TInsertedData> TInsertionSummary::ExtractInserted(const TInsertWriteId id) {
-    auto it = Inserted.find(id);
-    if (it == Inserted.end()) {
-        return {};
-    } else {
-        auto pathInfo = GetPathInfoOptional(it->second.GetPathId());
+    auto result = Inserted.ExtractOptional(id);
+    if (result) {
+        auto pathInfo = GetPathInfoOptional(result->GetPathId());
         if (pathInfo) {
-            OnEraseInserted(*pathInfo, it->second.BlobSize());
+            OnEraseInserted(*pathInfo, result->BlobSize());
         }
-        std::optional<TInsertedData> result = std::move(it->second);
-        Inserted.erase(it);
-        return result;
     }
+    return result;
 }
 
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddInserted(TInsertedData&& data, const bool load /*= false*/) {
-    const TInsertWriteId writeId = data.GetInsertWriteId();
-    const ui32 dataSize = data.BlobSize();
-    const ui64 pathId = data.GetPathId();
-    auto insertInfo = Inserted.emplace(writeId, std::move(data));
-    AFL_VERIFY_DEBUG(!Aborted.contains(writeId));
-    if (insertInfo.second) {
-        OnNewInserted(GetPathInfo(pathId), dataSize, load);
-        return &insertInfo.first->second;
-    } else {
-        Counters.Inserted.SkipAdd(dataSize);
-        return nullptr;
-    }
+    auto* insertInfo = Inserted.AddVerified(std::move(data));
+    AFL_VERIFY_DEBUG(!Aborted.contains(insertInfo->GetInsertWriteId()));
+    OnNewInserted(GetPathInfo(insertInfo->GetPathId()), insertInfo->BlobSize(), load);
+    return insertInfo;
 }
 
 }

@@ -247,7 +247,7 @@ struct TKiExploreTxResults {
         }
     }
 
-    void AddResult(const TExprBase& result) {
+    void PrepareForResult() {
         if (QueryBlocks.empty()) {
             AddQueryBlock();
         }
@@ -255,6 +255,10 @@ struct TKiExploreTxResults {
         if (!ConcurrentResults && QueryBlocks.back().Results.size() > 0) {
             AddQueryBlock();
         }
+    }
+
+    void AddResult(const TExprBase& result) {
+        PrepareForResult();
 
         auto& curBlock = QueryBlocks.back();
         curBlock.Results.push_back(result);
@@ -422,6 +426,10 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
 
+        if (!write.ReturningColumns().Empty()) {
+            txRes.PrepareForResult();
+        }
+
         if (tableOp == TYdbOperation::UpdateOn) {
             auto inputColumnsSetting = GetSetting(write.Settings().Ref(), "input_columns");
             YQL_ENSURE(inputColumnsSetting);
@@ -445,7 +453,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(write.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(write.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -480,6 +490,11 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         for (const auto& item : updateStructType->GetItems()) {
             updateColumns.emplace(item->GetName());
         }
+
+        if (!update.ReturningColumns().Empty()) {
+            txRes.PrepareForResult();
+        }
+
         txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata, updateColumns);
         if (!update.ReturningColumns().Empty()) {
             txRes.AddResult(
@@ -491,7 +506,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(update.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(update.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -513,6 +530,10 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
+        if (!del.ReturningColumns().Empty()) {
+            txRes.PrepareForResult();
+        }
+
         txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
         if (!del.ReturningColumns().Empty()) {
             txRes.AddResult(
@@ -524,7 +545,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(del.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(del.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 

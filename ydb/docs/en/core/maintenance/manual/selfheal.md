@@ -35,7 +35,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 
 You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.
 
-To create the initial settings, click **Create**. If you want to update the current settings, click ![](../../_assets/pencil.svg).
+To create the initial settings, click **Create**. If you want to update the current settings, click ![pencil](../../_assets/pencil.svg).
 
 You can use the following settings:
 

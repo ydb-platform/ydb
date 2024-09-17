@@ -6,14 +6,14 @@
 
 ### Сигнатура
 
-```
+```yql
 StaticZip(Struct, Struct)->Struct
 StaticZip(Tuple, Tuple)->Tuple
 ```
 
 ### Примеры
 
-``` yql
+```yql
 $one = <|k1:1, k2:2.0|>;
 $two = <|k1:3.0, k2:4|>;
 

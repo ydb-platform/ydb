@@ -26,7 +26,7 @@ The following happens in this case:
 
 3. The sessions obtained in this way are the final partitions on which aggregate functions are calculated.
 
-The SessionWindow() key column (in the example, it's `session_start`) has the value "the minimum `time_expr` in the session".
+The `SessionWindow()` key column (in the example, it's `session_start`) has the value "the minimum `time_expr` in the session".
 If `GROUP BY` includes SessionWindow(), you can use a special aggregate function
 [SessionStart](../../../builtins/aggregation.md#session-start).
 

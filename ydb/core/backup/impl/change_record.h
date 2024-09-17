@@ -2,10 +2,12 @@
 
 #include "table_writer.h"
 
-#include <ydb/core/tx/replication/service/table_writer_impl.h>
-
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/change_exchange.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tx/replication/service/lightweight_schema.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NBackup::NImpl {
 
@@ -15,20 +17,6 @@ class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
-    using TPtr = TIntrusivePtr<TChangeRecord>;
-    using TBuilder = TChangeRecordBuilder;
-
-    struct TSerializationContext {
-        const NBackup::NImpl::EWriterType Type;
-
-        TSerializationContext(NBackup::NImpl::EWriterType type)
-            : Type(type)
-        {}
-
-        // just copy type
-        TSerializationContext(const TSerializationContext& other) = default;
-    };
-
     ui64 GetGroup() const override {
         return ProtoBody.GetGroup();
     }
@@ -42,8 +30,8 @@ public:
         return EKind::CdcDataChange;
     }
 
-    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TSerializationContext& ctx) const {
-        switch (ctx.Type) {
+    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, EWriterType type) const {
+        switch (type) {
             case EWriterType::Backup:
                 return SerializeBackup(record);
             case EWriterType::Restore:

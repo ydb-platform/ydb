@@ -1,7 +1,5 @@
 # Синтаксис SELECT
 
-<!-- File split by includable blocks as part of YQL docs preparation for YQL/YDB opensource -->
-
 {% include [x](_includes/select/calc.md) %}
 
 {% include [x](_includes/select/from.md) %}

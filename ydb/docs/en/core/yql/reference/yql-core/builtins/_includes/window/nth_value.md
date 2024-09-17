@@ -6,20 +6,20 @@ Optionally, the `IGNORE NULLS` modifier can be specified before `OVER`, which ca
 
 ### Signature
 
-```
+```yql
 NTH_VALUE(T,N)->T?
 ```
 
 ### Examples
 
-``` yql
+```yql
 SELECT
    NTH_VALUE(my_column, 2) OVER w
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
-``` yql
+```yql
 SELECT
    NTH_VALUE(my_column, 3) IGNORE NULLS OVER w
 FROM my_table

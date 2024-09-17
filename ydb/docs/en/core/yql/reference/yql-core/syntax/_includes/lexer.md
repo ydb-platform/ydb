@@ -30,6 +30,7 @@ SELECT 1; -- A single-line comment
    Some multi-line comment
 */
 ```
+
 In C++ syntax compatibility mode (default), a multiline comment ends with the **nearest** `*/`.
 The ANSI SQL syntax compatibility mode accounts for nesting of multiline comments:
 
@@ -54,7 +55,8 @@ An identifier can be written in the body of the program without any special form
 SELECT my_column FROM my_table; -- my_column and my_table are identifiers
 ```
 
-To include an arbitrary ID in the body of a {% if feature_mapreduce %}program{% else %}query{% endif %}, the ID is enclosed in backticks:
+To include an arbitrary ID in the body of a query, the ID is enclosed in backticks:
+
 ```yql
 SELECT `column with space` from T;
 SELECT * FROM `my_dir/my_table`
@@ -65,6 +67,7 @@ IDs in backticks are never interpreted as keywords:
 ```yql
 SELECT `select` FROM T; -- select - Column name in the T table
 ```
+
 When using backticks, you can use the standard C escaping:
 
 ```yql
@@ -126,6 +129,7 @@ Unknown SQL hint names (or syntactically incorrect hints) never result in errors
 -- due to a missing closing parenthesis in bar, is equivalent to
 --+ foo(value1)
 ```
+
 Thanks to this behavior, previous valid YQL queries with comments that look like hints remain intact.
 Syntactically correct SQL hints in a place unexpected for YQL result in a warning:
 

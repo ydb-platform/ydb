@@ -1040,11 +1040,16 @@ namespace {
             }
 
             TUserDataBlock block;
-            block.Type = EUserDataType::URL;
-            block.Data = url;
-            if (token) {
-                block.UrlToken = token;
+            if (Types.QContext.CanRead()) {
+                block.Type = EUserDataType::RAW_INLINE_DATA;
+            } else {
+                block.Type = EUserDataType::URL;
+                block.Data = url;
+                if (token) {
+                    block.UrlToken = token;
+                }
             }
+
             Types.UserDataStorage->AddUserDataBlock(key, block);
             return true;
         }

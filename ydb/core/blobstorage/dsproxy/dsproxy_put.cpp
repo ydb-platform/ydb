@@ -416,8 +416,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TryToScheduleNextAcceleration() {
-        if (!IsAccelerateScheduled && AccelerateRequestsSent < 2) {
-            if (WaitingVDiskCount > 0 && WaitingVDiskCount <= 2 && RequestsSent > 1) {
+        if (!IsAccelerateScheduled && AccelerateRequestsSent < AccelerationParams.MaxNumOfSlowDisks) {
+            if (WaitingVDiskCount > 0 && WaitingVDiskCount <= AccelerationParams.MaxNumOfSlowDisks && RequestsSent > 1) {
                 ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx) / 1000);
                 if (RequestsPendingBeforeAcceleration == 1 && AccelerateRequestsSent == 1) {
                     // if there is only one request pending, but first accelerate is unsuccessful, make a pause

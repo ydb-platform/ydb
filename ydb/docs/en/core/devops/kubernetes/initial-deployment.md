@@ -194,7 +194,7 @@ kubectl describe database.ydb.tech
 
 Result:
 
-```
+```text
 Name:         database-sample
 Namespace:    default
 Labels:       <none>
@@ -226,7 +226,7 @@ Check how {{ ydb-short-name }} works:
 
     Result:
 
-    ```
+    ```text
     NAME                READY   STATUS    RESTARTS   AGE
     database-sample-0   1/1     Running   0          1m
     database-sample-1   1/1     Running   0          1m

@@ -95,7 +95,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
     NSQLTranslation::TSQLHints hints;
     auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors)) {
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors, settings.Antlr4Parser)) {
         return res;
     }
 
@@ -188,7 +188,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
     NSQLTranslation::TSQLHints hints;
     auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, issues, settings.MaxErrors)) {
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, issues, settings.MaxErrors, settings.Antlr4Parser)) {
         return result;
     }
 

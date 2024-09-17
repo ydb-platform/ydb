@@ -65,6 +65,8 @@ private:
             ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalStartPosition();
             ChunkFinishPosition =
                 CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalFinishPosition();
+            AFL_VERIFY(position < ChunkFinishPosition)("finish", ChunkFinishPosition)("pos", position);
+            AFL_VERIFY(ChunkStartPosition <= position)("start", ChunkStartPosition)("pos", position);
         }
 
     public:
@@ -78,7 +80,8 @@ private:
         }
         bool AddIndexTo(const ui32 index, TWriter& writer);
         std::optional<ui32> MoveToSignificant(const ui32 currentGlobalPosition, const TColumnMergeContext& context) {
-            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition);
+            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition)("start", ChunkStartPosition)("pos", currentGlobalPosition)(
+                "global_start", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
             ui32 currentIndex = currentGlobalPosition;
             while (true) {
                 if (CurrentOwnedArray->GetAddress().GetGlobalFinishPosition() <= currentIndex) {
@@ -192,6 +195,7 @@ private:
                 if (FinishGlobalPosition == Array->GetRecordsCount()) {
                     return FinishGlobalPosition;
                 } else {
+                    currentPosition = FinishGlobalPosition;
                     InitArrays(FinishGlobalPosition);
                 }
             }

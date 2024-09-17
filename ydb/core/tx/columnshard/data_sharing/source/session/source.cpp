@@ -8,9 +8,8 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto, 
-    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
-    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic) {
+NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
+    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor) {
     auto parseBase = TBase::DeserializeFromProto(proto);
     if (!parseBase) {
         return parseBase;
@@ -29,9 +28,8 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
     }
     AFL_VERIFY(PathIds.size());
     Cursor = std::make_shared<TSourceCursor>(SelfTabletId, PathIds, TransferContext);
-    AFL_VERIFY(!!protoCursor == !!protoCursorStatic);
     if (protoCursor) {
-        auto parsed = Cursor->DeserializeFromProto(*protoCursor, *protoCursorStatic);
+        auto parsed = Cursor->DeserializeFromProto(*protoCursor);
         if (!parsed) {
             return parsed;
         }

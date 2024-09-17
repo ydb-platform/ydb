@@ -48,15 +48,6 @@ message TSourceSession {
         optional uint32 AckReceivedForPackIdx = 6[default = 0];
         repeated uint64 LinksModifiedTablets = 7;
     }
-
-    message TPathPortionsHash {
-        optional uint64 PathId = 1;
-        optional string Hash = 2;
-    }
-
-    message TCursorStatic {
-        repeated TPathPortionsHash PathHashes = 7;
-    }
 }
 
 message TEvProposeFromInitiator {

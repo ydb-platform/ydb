@@ -97,18 +97,7 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic TSourceCursor
     return result;
 }
 
-NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor::SerializeStaticToProto() const {
-    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic result;
-    for (auto&& i : PathPortionHashes) {
-        auto* pathHash = result.AddPathHashes();
-        pathHash->SetPathId(i.first);
-        pathHash->SetHash(i.second);
-    }
-    return result;
-}
-
-NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
-    const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic) {
+NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto) {
     StartPathId = proto.GetStartPathId();
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
@@ -129,11 +118,6 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     for (auto&& i : proto.GetLinksModifiedTablets()) {
         LinksModifiedTablets.emplace((TTabletId)i);
     }
-    for (auto&& i : protoStatic.GetPathHashes()) {
-        PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
-    }
-    AFL_VERIFY(PathPortionHashes.size());
-    IsStaticSaved = true;
     return TConclusionStatus::Success();
 }
 
@@ -147,11 +131,6 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
     using SourceSessions = NKikimr::NColumnShard::Schema::SourceSessions;
     db.Table<SourceSessions>().Key(sessionId).Update(
         NIceDb::TUpdate<SourceSessions::CursorDynamic>(SerializeDynamicToProto().SerializeAsString()));
-    if (!IsStaticSaved) {
-        db.Table<SourceSessions>().Key(sessionId).Update(
-            NIceDb::TUpdate<SourceSessions::CursorStatic>(SerializeStaticToProto().SerializeAsString()));
-        IsStaticSaved = true;
-    }
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
@@ -167,13 +146,6 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
             const ui64 portionId = p->GetPortionId();
             hashCalcer.Update((ui8*)&portionId, sizeof(portionId));
             AFL_VERIFY(portionsMap.emplace(portionId, p).second);
-        }
-        auto it = PathPortionHashes.find(i.first);
-        const ui64 hash = hashCalcer.Finish();
-        if (it == PathPortionHashes.end()) {
-            PathPortionHashes.emplace(i.first, ::ToString(hash));
-        } else {
-            AFL_VERIFY(::ToString(hash) == it->second);
         }
         local.emplace(i.first, std::move(portionsMap));
     }

@@ -32,12 +32,9 @@ private:
     THashSet<TTabletId> LinksModifiedTablets;
     ui64 AckReceivedForPackIdx = 0;
     std::set<ui64> PathIds;
-    THashMap<ui64, TString> PathPortionHashes;
     bool IsStartedFlag = false;
-    bool IsStaticSaved = false;
     void BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic SerializeDynamicToProto() const;
-    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic SerializeStaticToProto() const;
 
 public:
     bool IsAckDataReceived() const {
@@ -107,8 +104,7 @@ public:
 
     bool Start(const std::shared_ptr<IStoragesManager>& storagesManager,
         const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index);
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
-        const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto);
 };
 
 }

@@ -73,14 +73,8 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
                 AFL_VERIFY(protoSessionCursorDynamic->ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorDynamic>()));
             }
 
-            std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic> protoSessionCursorStatic;
-            if (rowset.HaveValue<Schema::SourceSessions::CursorStatic>()) {
-                protoSessionCursorStatic = NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic{};
-                AFL_VERIFY(protoSessionCursorStatic->ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorStatic>()));
-            }
-
             AFL_VERIFY(index);
-            session->DeserializeFromProto(protoSession, protoSessionCursorDynamic, protoSessionCursorStatic).Validate();
+            session->DeserializeFromProto(protoSession, protoSessionCursorDynamic).Validate();
             AFL_VERIFY(SourceSessions.emplace(session->GetSessionId(), session).second);
             if (!rowset.Next()) {
                 return false;

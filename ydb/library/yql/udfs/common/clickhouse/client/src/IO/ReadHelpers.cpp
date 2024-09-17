@@ -617,9 +617,8 @@ void readBackQuotedStringWithSQLStyle(String & s, ReadBuffer & buf)
 template <typename Vector>
 void readCSVStringInto(Vector & s, ReadBuffer & buf, const FormatSettings::CSV & settings)
 {
-    /// Empty string
     if (buf.eof())
-        return;
+        throwReadAfterEOF();
 
     const char delimiter = settings.delimiter;
     const char maybe_quote = *buf.position();

@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/events.h>
 
-#include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 
@@ -49,10 +48,6 @@ struct TEvS3Provider {
         EvCachePutRequest,
         EvCacheNotification,
         EvCacheSourceFinish,
-        // Decompressor events
-        EvDecompressDataRequest,
-        EvDecompressDataResult,
-        EvDecompressDataFinish,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
@@ -100,10 +95,9 @@ struct TEvS3Provider {
 
         TEvObjectPathReadError() = default;
 
-        TEvObjectPathReadError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode code, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvObjectPathReadError(TIssues issues, const NDqProto::TMessageTransportMeta& transportMeta) {
             NYql::IssuesToMessage(issues, Record.MutableIssues());
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
-            Record.SetFatalCode(code);
         }
     };
 
@@ -200,35 +194,6 @@ struct TEvS3Provider {
     };
 
     struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
-    };
-
-    struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
-        TEvDecompressDataRequest(TString&& data) : Data(std::move(data)) {}
-        TString Data;
-    };
-
-    struct TEvDecompressDataResult : public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
-        TEvDecompressDataResult(TString&& data, const TDuration& cpuTime) 
-            : Data(std::move(data))
-            , CpuTime(cpuTime)
-        {}
-
-        TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
-            : Exception(exception)
-            , CpuTime(cpuTime)
-        {}
-
-        TString Data;
-        std::exception_ptr Exception;
-        TDuration CpuTime;
-    };
-
-    struct TEvDecompressDataFinish : public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
-        TEvDecompressDataFinish(const TDuration& cpuTime)
-            : CpuTime(cpuTime)
-        {}
-
-        TDuration CpuTime;
     };
 
     struct TReadRange {

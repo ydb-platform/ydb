@@ -59,14 +59,7 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            auto issue = InitSplitsListing();
-            if (issue) {
-                return NotifyComputeActorWithIssue(
-                    TActivationContext::ActorSystem(),
-                    ComputeActorId_,
-                    InputIndex_,
-                    std::move(*issue));
-            };
+            InitSplitsListing();
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
@@ -86,18 +79,13 @@ namespace NYql::NDq {
 
         // ListSplits
 
-        TMaybe<TIssue> InitSplitsListing() {
+        void InitSplitsListing() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits listing";
 
             // Prepare request
             NConnector::NApi::TListSplitsRequest request;
             NConnector::NApi::TSelect select = Source_.select(); // copy TSelect from source
-
-            auto error = TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
-            if (error) {
-                return TIssue(error);
-            }
-
+            TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
             *request.mutable_selects()->Add() = std::move(select);
 
             // Initialize stream
@@ -112,8 +100,6 @@ namespace NYql::NDq {
                         TEvListSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
-
-            return Nothing();
         }
 
         void Handle(TEvListSplitsIterator::TPtr& ev) {
@@ -159,16 +145,7 @@ namespace NYql::NDq {
             // Server sent EOF, now we are ready to start splits reading
             if (NConnector::GrpcStatusEndOfStream(status)) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvListSplitsFinished :: last message was reached, start data reading";
-                auto issue = InitSplitsReading();
-                if (issue) {
-                    return NotifyComputeActorWithIssue(
-                        TActivationContext::ActorSystem(),
-                        ComputeActorId_,
-                        InputIndex_,
-                        std::move(*issue));
-                }
-
-                return;
+                return InitSplitsReading();
             }
 
             // Server temporary failure
@@ -186,14 +163,13 @@ namespace NYql::NDq {
         }
 
         // ReadSplits
-        TMaybe<TIssue> InitSplitsReading() {
+        void InitSplitsReading() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
             if (Splits_.empty()) {
                 YQL_CLOG(WARN, ProviderGeneric) << "Accumulated empty list of splits";
                 ReadSplitsFinished_ = true;
-                NotifyComputeActorWithData();
-                return Nothing();
+                return NotifyComputeActorWithData();
             }
 
             // Prepare request
@@ -201,16 +177,13 @@ namespace NYql::NDq {
             request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             request.mutable_splits()->Reserve(Splits_.size());
 
-            for (const auto& split : Splits_) {
-                NConnector::NApi::TSplit splitCopy = split;
-
-                auto error = TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
-                if (error) {
-                    return TIssue(std::move(error));
-                }
-
-                *request.mutable_splits()->Add() = std::move(splitCopy);
-            }
+            std::for_each(
+                Splits_.cbegin(), Splits_.cend(),
+                [&](const NConnector::NApi::TSplit& split) {
+                    NConnector::NApi::TSplit splitCopy = split;
+                    TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
+                    *request.mutable_splits()->Add() = std::move(split);
+                });
 
             // Start streaming
             Client_->ReadSplits(request).Subscribe(
@@ -224,8 +197,6 @@ namespace NYql::NDq {
                         TEvReadSplitsIterator>(
                         actorSystem, selfId, computeActorId, inputIndex, future);
                 });
-
-            return Nothing();
         }
 
         void Handle(TEvReadSplitsIterator::TPtr& ev) {
@@ -337,27 +308,14 @@ namespace NYql::NDq {
 
         static void NotifyComputeActorWithError(
             TActorSystem* actorSystem,
-            NActors::TActorId computeActorId,
-            ui64 inputIndex,
+            const NActors::TActorId computeActorId,
+            const ui64 inputIndex,
             const NConnector::NApi::TError& error) {
             actorSystem->Send(computeActorId,
                               new TEvAsyncInputError(
                                   inputIndex,
                                   NConnector::ErrorToIssues(error),
                                   NConnector::ErrorToDqStatus(error)));
-            return;
-        }
-
-        static void NotifyComputeActorWithIssue(
-            TActorSystem* actorSystem,
-            NActors::TActorId computeActorId,
-            ui64 inputIndex,
-            TIssue issue) {
-            actorSystem->Send(computeActorId,
-                              new TEvAsyncInputError(
-                                  inputIndex,
-                                  TIssues{std::move(issue)},
-                                  NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR));
             return;
         }
 

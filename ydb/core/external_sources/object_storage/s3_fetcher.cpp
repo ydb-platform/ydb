@@ -10,11 +10,11 @@ public:
         TString url,
         NYql::IHTTPGateway::TPtr gateway,
         NYql::IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-        const NYql::TS3Credentials& credentials)
+        NYql::TS3Credentials::TAuthInfo authInfo)
         : Url_{std::move(url)}
         , Gateway_{std::move(gateway)}
         , RetryPolicy_{std::move(retryPolicy)}
-        , Credentials_(credentials)
+        , AuthInfo_{std::move(authInfo)}
     {}
 
     void Bootstrap() {
@@ -60,13 +60,12 @@ public:
 
     void StartDownload(std::shared_ptr<TEvRequestS3Range>&& request, NActors::TActorSystem* actorSystem) {
         auto length = request->End - request->Start;
-        const auto& authInfo = Credentials_.GetAuthInfo();
         auto headers = NYql::IHTTPGateway::MakeYcHeaders(
             request->RequestId.AsGuidString(),
-            authInfo.GetToken(),
+            AuthInfo_.GetToken(),
             {},
-            authInfo.GetAwsUserPwd(),
-            authInfo.GetAwsSigV4()
+            AuthInfo_.GetAwsUserPwd(),
+            AuthInfo_.GetAwsSigV4()
         );
 
         Gateway_->Download(
@@ -80,15 +79,15 @@ private:
     TString Url_;
     NYql::IHTTPGateway::TPtr Gateway_;
     NYql::IHTTPGateway::TRetryPolicy::TPtr RetryPolicy_;
-    const NYql::TS3Credentials Credentials_;
+    NYql::TS3Credentials::TAuthInfo AuthInfo_;
 };
 
 NActors::IActor* CreateS3FetcherActor(
     TString url,
     NYql::IHTTPGateway::TPtr gateway,
     NYql::IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-    const NYql::TS3Credentials& credentials) {
+    NYql::TS3Credentials::TAuthInfo authInfo) {
 
-    return new S3Fetcher(std::move(url), std::move(gateway), std::move(retryPolicy), credentials);
+    return new S3Fetcher(std::move(url), std::move(gateway), std::move(retryPolicy), std::move(authInfo));
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage

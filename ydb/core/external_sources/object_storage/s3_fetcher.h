@@ -13,5 +13,5 @@ NActors::IActor* CreateS3FetcherActor(
     TString url,
     NYql::IHTTPGateway::TPtr gateway,
     NYql::IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-    const NYql::TS3Credentials& credentials);
+    NYql::TS3Credentials::TAuthInfo authInfo);
 } // namespace NKikimr::NExternalSource::NObjectStorage

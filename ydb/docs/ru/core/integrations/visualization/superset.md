@@ -1,11 +1,10 @@
 # Apache Superset
 
-{% include [../../postgresql/_includes/alert_preview.md](../../postgresql/_includes/alert_preview.md) %}
-
 Apache Superset — это современная платформа для анализа и визуализации данных.
 
 [Режим совместимости с PostgreSQL в {{ ydb-short-name }}](../../postgresql/intro.md) позволяет использовать [Apache Superset](https://superset.apache.org/) для выполнения запросов и визуализации данных из {{ ydb-short-name }}. В этом случае Apache Superset работает с {{ ydb-short-name }} как с PostgreSQL.
 
+{% include [../../postgresql/_includes/alert_preview.md](../../postgresql/_includes/alert_preview.md) %}
 
 ## Создание подключения к {{ ydb-short-name }} {#add-database-connection}
 

@@ -533,6 +533,14 @@ runs:
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
 
+    - name: show diff mute_ya.txt
+      if: inputs.build_preset == 'relwithdebinfo'
+      shell: bash
+      continue-on-error: true
+      run: |
+        git fetch --depth 10
+        python3 .github/scripts/tests/show_muted_tests.py --output_file $PUBLIC_DIR/mute_info/
+
     - name: sync results to s3 and publish links
       if: always()
       shell: bash
@@ -549,14 +557,6 @@ runs:
       if: always()
       shell: bash
       run: df -h
-
-    - name: show diff mute_ya.txt
-      if: inputs.build_preset == 'relwithdebinfo'
-      shell: bash
-      continue-on-error: true
-      run: |
-        git fetch --depth 10
-        python3 .github/scripts/tests/show_muted_tests.py --output_file $PUBLIC_DIR/mute_info/
 
     - name: build_stats
       shell: bash

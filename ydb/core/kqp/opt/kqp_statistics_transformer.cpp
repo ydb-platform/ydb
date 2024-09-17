@@ -457,8 +457,6 @@ void InferStatisticsForOlapRead(const TExprNode::TPtr& input, TTypeAnnotationCon
 }
 
 double EstimateRowSize(const TStructExprType& rowType, const TString& format, const TString& compression, bool decoded) {
-    Y_UNUSED(format);
-    Y_UNUSED(compression);
     double result = 0.0;
     for (auto item : rowType.GetItems()) {
         auto itemType = item->GetItemType();
@@ -547,7 +545,34 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
     }
 
     if (result == 0.0) {
-        result = 1.0;
+        result = 1000.0;
+    }
+
+    if (format != "parquet" && !decoded) {
+        double compressionRatio = 1.0;
+        if (format == "csv_with_names" || format == "tsv_with_names") {
+            result *= 5.0;
+            compressionRatio = 4.5;   // gzip
+        } else if (format != "raw") { // json's
+            result *= 12.0;
+            compressionRatio = 14.0;   // gzip
+        }
+        if (compression) {
+            if (compression == "gzip") {
+                // 1.00
+            } else if (compression == "zstd") {
+                compressionRatio *= 1.05;
+            } else if (compression == "lz4") {
+                compressionRatio *= 1.43;
+            } else if (compression == "brotli") {
+                compressionRatio *= 1.20;
+            } else if (compression == "bzip2") {
+                compressionRatio *= 1.24;
+            } else if (compression == "xz") {
+                compressionRatio *= 1.45;
+            }
+            result /= compressionRatio; 
+        }
     }
 
     return result;
@@ -607,7 +632,7 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                     stats = wrapStats;
                 }
 
-                if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize()) || stats->Nrows == 0 || stats->ByteSize == 0.0) {
+                if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize()) || stats->Nrows == 0 || stats->ByteSize == 0.0 || stats->Cost == 0.0) {
                     auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
                     stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
 
@@ -622,6 +647,18 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                     }
                     if (stats->ByteSize == 0.0) {
                         stats->ByteSize = stats->Nrows * newSpecific->PrunedDecodedRowAvgSize;
+                    }
+                    double rowSize = 0.0;
+                    if (stats->Cost == 0.0) {
+                        if (newSpecific->Format == "parquet") {
+                            rowSize = newSpecific->PrunedRawRowAvgSize;
+                        } else {
+                            rowSize = newSpecific->FullRawRowAvgSize;
+                        }
+                        stats->Cost = rowSize * stats->Nrows;
+                        if (newSpecific->Compression) {
+                            stats->Cost *= 1.5;
+                        }
                     }
                     typeCtx->SetStats(input.Get(), stats);
                 }

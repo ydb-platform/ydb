@@ -4,6 +4,7 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
@@ -19,6 +20,7 @@
 namespace NYdb {
 namespace NDump {
 
+using namespace NConsoleClient;
 using namespace NImport;
 using namespace NOperation;
 using namespace NScheme;
@@ -43,60 +45,37 @@ TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest
     return TProtoAccessor::FromProto(proto);
 }
 
-bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
-    const ui64 pageSize = 100;
-    TString pageToken;
+TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
+    proto.clear_indexes();
+    return TableDescriptionFromProto(proto);
+}
 
-    do {
-        const ui32 maxRetries = 8;
-        TDuration retrySleep = TDuration::MilliSeconds(100);
+Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath) {
+    Ydb::Scheme::ModifyPermissionsRequest proto;
+    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
+    return proto;
+}
 
-        for (ui32 retryNumber = 0; retryNumber <= maxRetries; ++retryNumber) {
-            auto operations = client.List<TBuildIndexOperation>(pageSize, pageToken).GetValueSync();
-
-            if (!operations.IsSuccess()) {
-                if (retryNumber == maxRetries) {
-                    Y_ENSURE(false, "Cannot list operations");
-                }
-
-                switch (operations.GetStatus()) {
-                case EStatus::ABORTED:
-                    break;
+TStatus WaitForIndexBuild(TOperationClient& client, const TOperation::TOperationId& id) {
+    TDuration retrySleep = TDuration::MilliSeconds(100);
+    while (true) {
+        auto operation = client.Get<TBuildIndexOperation>(id).GetValueSync();
+        if (!operation.Status().IsTransportError()) {
+            switch (operation.Status().GetStatus()) {
                 case EStatus::OVERLOADED:
-                case EStatus::CLIENT_RESOURCE_EXHAUSTED:
                 case EStatus::UNAVAILABLE:
-                case EStatus::TRANSPORT_UNAVAILABLE:
-                    NConsoleClient::ExponentialBackoff(retrySleep);
-                    break;
+                case EStatus::STATUS_UNDEFINED:
+                    break; // retry
                 default:
-                    Y_ENSURE(false, "Unexpected status while trying to list operations: " << operations.GetStatus());
-                }
-
-                continue;
-            }
-
-            for (const auto& operation : operations.GetList()) {
-                if (operation.Metadata().Path != dbPath) {
-                    continue;
-                }
-
-                switch (operation.Metadata().State) {
-                case EBuildIndexState::Preparing:
-                case EBuildIndexState::TransferData:
-                case EBuildIndexState::Applying:
-                case EBuildIndexState::Cancellation:
-                case EBuildIndexState::Rejection:
-                    return true;
-                default:
-                    break;
-                }
-            }
-
-            pageToken = operations.NextPageToken();
+                    return operation.Status();
+            }         
         }
-    } while (pageToken != "0");
+        NConsoleClient::ExponentialBackoff(retrySleep, TDuration::Minutes(1));
+    }
+}
 
-    return false;
+bool IsOperationStarted(TStatus operationStatus) {
+    return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
 }
 
 } // anonymous
@@ -131,34 +110,34 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         dbBasePath = dbBasePath.Parent();
     }
 
-    auto oldDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync();
-    if (!oldDirectoryList.IsSuccess()) {
+    auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath);
+    if (!oldDirectoryList.Status.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not list existing directory");
     }
 
     THashSet<TString> oldEntries;
-    for (const auto& entry : oldDirectoryList.GetChildren()) {
+    for (const auto& entry : oldDirectoryList.Entries) {
         oldEntries.insert(entry.Name);
     }
 
     // restore
-    auto restoreResult = RestoreFolder(fsPath, dbPath, settings);
+    auto restoreResult = RestoreFolder(fsPath, dbPath, settings, oldEntries);
     if (restoreResult.IsSuccess() || settings.SavePartialResult_) {
         return restoreResult;
     }
 
     // cleanup
-    auto newDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync();
-    if (!newDirectoryList.IsSuccess()) {
+    auto newDirectoryList = RecursiveList(SchemeClient, dbBasePath);
+    if (!newDirectoryList.Status.IsSuccess()) {
         return restoreResult;
     }
 
-    for (const auto& entry : newDirectoryList.GetChildren()) {
+    for (const auto& entry : newDirectoryList.Entries) {
         if (oldEntries.contains(entry.Name)) {
             continue;
         }
 
-        auto fullPath = dbBasePath.Child(entry.Name);
+        const auto& fullPath = entry.Name; // RecursiveList returns full path instead of entry's name
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
@@ -185,7 +164,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     return restoreResult;
 }
 
-TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{   
     if (!fsPath) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST, "Folder is not specified");
     }
@@ -206,11 +187,11 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
 
     if (IsFileExists(fsPath.Child(SCHEME_FILE_NAME))) {
-        return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings);
+        return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
     if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
-        return MakeDirectory(SchemeClient, Join('/', dbPath, fsPath.GetName()));
+        return RestoreEmptyDir(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
     TMaybe<TRestoreResult> result;
@@ -219,26 +200,24 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     fsPath.List(children);
     for (const auto& child : children) {
         if (IsFileExists(child.Child(SCHEME_FILE_NAME))) {
-            result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings);
+            result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
-            result = MakeDirectory(SchemeClient, Join('/', dbPath, child.GetName()));
-        } else {
-            result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings);
+            result = RestoreEmptyDir(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
+        } else if (child.IsDirectory()) {
+            result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         }
 
-        if (!result->IsSuccess()) {
+        if (result.Defined() && !result->IsSuccess()) {
             return *result;
         }
     }
-
-    if (!result) {
-        return Result<TRestoreResult>();
-    }
-
-    return *result;
+   
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
-TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{
     if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST,
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
@@ -247,15 +226,25 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
     auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME));
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
+    if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
+        return Result<TRestoreResult>();
+    }
+
     if (settings.DryRun_) {
         return CheckSchema(dbPath, dumpedDesc);
     }
 
-    if (settings.RestoreData_) {
-        auto woIndexes = scheme;
-        woIndexes.clear_indexes();
+    auto withoutIndexesDesc = TableDescriptionWithoutIndexesFromProto(scheme);
+    auto createResult = TableClient.RetryOperationSync([&dbPath, &withoutIndexesDesc](TSession session) {
+        return session.CreateTable(dbPath, TTableDescription(withoutIndexesDesc),
+            TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
+    });
+    if (!createResult.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(createResult));
+    }
 
-        auto result = RestoreData(fsPath, dbPath, settings, TableDescriptionFromProto(woIndexes));
+    if (settings.RestoreData_) {
+        auto result = RestoreData(fsPath, dbPath, settings, withoutIndexesDesc);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -268,7 +257,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         }
     }
 
-    return Result<TRestoreResult>();
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDescription& desc) {
@@ -329,18 +318,6 @@ struct TWriterWaiter {
 };
 
 TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
-    if (desc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
-        return Result<TRestoreResult>();
-    }
-
-    auto createResult = TableClient.RetryOperationSync([&dbPath, &desc](TSession session) {
-        return session.CreateTable(dbPath, TTableDescription(desc),
-            TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
-    });
-    if (!createResult.IsSuccess()) {
-        return Result<TRestoreResult>(dbPath, std::move(createResult));
-    }
-
     THolder<NPrivate::IDataAccumulator> accumulator;
     THolder<NPrivate::IDataWriter> writer;
 
@@ -408,40 +385,84 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
 
 TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTableDescription& desc) {
     TMaybe<TTableDescription> actualDesc;
+    auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
+    if (!descResult.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(descResult));
+    }
 
     for (const auto& index : desc.GetIndexDescriptions()) {
-        // check (and wait) for unuexpected index buils
-        while (HasRunningIndexBuilds(OperationClient, dbPath)) {
-            actualDesc.Clear();
-            Sleep(TDuration::Minutes(1));
-        }
-
-        if (!actualDesc) {
-            auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
-            if (!descResult.IsSuccess()) {
-                return Result<TRestoreResult>(dbPath, std::move(descResult));
-            }
-        }
-
         if (FindPtr(actualDesc->GetIndexDescriptions(), index)) {
             continue;
         }
 
-        auto status = TableClient.RetryOperationSync([&dbPath, &index](TSession session) {
+        TOperation::TOperationId buildIndexId;
+        auto buildIndexStatus = TableClient.RetryOperationSync([&, &outId = buildIndexId](TSession session) {
             auto settings = TAlterTableSettings().AppendAddIndexes(index);
-            return session.AlterTableLong(dbPath, settings).GetValueSync().Status();
+            auto result = session.AlterTableLong(dbPath, settings).GetValueSync();
+            if (IsOperationStarted(result.Status())) {
+                outId = result.Id();
+            }
+            return result.Status();
         });
-        if (!status.IsSuccess() && status.GetStatus() != EStatus::STATUS_UNDEFINED) {
-            return Result<TRestoreResult>(dbPath, std::move(status));
+
+        if (!IsOperationStarted(buildIndexStatus)) {
+            return Result<TRestoreResult>(dbPath, std::move(buildIndexStatus));
         }
 
-        // wait for expected index build
-        while (HasRunningIndexBuilds(OperationClient, dbPath)) {
-            Sleep(TDuration::Minutes(1));
+        auto waitForIndexBuildStatus = WaitForIndexBuild(OperationClient, buildIndexId);
+        if (!waitForIndexBuildStatus.IsSuccess()) {
+            return Result<TRestoreResult>(dbPath, std::move(waitForIndexBuildStatus));
+        }
+
+        auto forgetStatus = NConsoleClient::RetryFunction([&]() {
+            return OperationClient.Forget(buildIndexId).GetValueSync();
+        });
+        if (!forgetStatus.IsSuccess()) {
+            return Result<TRestoreResult>(dbPath, std::move(forgetStatus));
         }
     }
 
     return Result<TRestoreResult>();
+}
+
+TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{   
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    if (!settings.RestoreACL_) {
+        return Result<TRestoreResult>();
+    }
+
+    if (oldEntries.contains(dbPath)) {
+        return Result<TRestoreResult>();
+    }
+
+    if (!fsPath.Child(PERMISSIONS_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>();
+    }
+
+    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME));
+    return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
+}
+
+TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TString &dbPath,
+    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+{
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    }
+
+    auto result = MakeDirectory(SchemeClient, dbPath);
+    if (!result.IsSuccess()) {
+        return result;
+    }
+
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 } // NDump

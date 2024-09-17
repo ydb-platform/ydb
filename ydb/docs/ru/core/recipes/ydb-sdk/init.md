@@ -1,8 +1,3 @@
----
-title: "Инструкция по инициализации драйвера в {{ ydb-short-name }}"
-description: "В статье приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK."
----
-
 # Инициализация драйвера
 
 {% include [work in progress message](_includes/addition.md) %}
@@ -83,6 +78,7 @@ description: "В статье приведены примеры кода под�
   {% cut "С помощью строки подключения" %}
 
     Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивавния:
+
     ```golang
     package main
 
@@ -167,7 +163,7 @@ description: "В статье приведены примеры кода под�
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new \YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 

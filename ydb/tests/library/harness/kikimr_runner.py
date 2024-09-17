@@ -115,10 +115,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def command(self):
         return self.__make_run_command()
 
-    def set_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        return self.__binary_path
-
     def format_pdisk(self, pdisk_path, disk_size, **kwargs):
         logger.debug("Formatting pdisk %s on node %s, disk_size %s" % (pdisk_path, self, disk_size))
         if pdisk_path.startswith('SectorMap'):
@@ -218,10 +214,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def host(self):
         return 'localhost'
-
-    @property
-    def hostname(self):
-        return kikimr_config.get_fqdn()
 
     @property
     def port(self):
@@ -384,19 +376,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._nodes[node_index]
 
-    def register_slots(self, database, count=1, encryption_key=None):
-        return [self.register_slot(database, encryption_key) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None):
+        return [self.__register_slot(database, encryption_key) for _ in range(count)]
 
     def register_and_start_slots(self, database, count=1, encryption_key=None):
-        slots = self.register_slots(database, count, encryption_key)
+        slots = self.__register_slots(database, count, encryption_key)
         for slot in slots:
             slot.start()
         return slots
 
-    def register_slot(self, tenant_affiliation=None, encryption_key=None):
-        return self._register_slot(tenant_affiliation, encryption_key)
-
-    def _register_slot(self, tenant_affiliation=None, encryption_key=None):
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -416,12 +405,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._slots[slot_index]
 
-    def unregister_slots(self, slots):
+    def __unregister_slots(self, slots):
         for i in slots:
             del self._slots[i.node_id]
 
     def unregister_and_stop_slots(self, slots):
-        self.unregister_slots(slots)
+        self.__unregister_slots(slots)
         for i in slots:
             i.stop()
 

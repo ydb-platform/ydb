@@ -7,6 +7,7 @@
 #include "source.h"
 
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 
 #include <util/generic/scope.h>
@@ -85,6 +86,7 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
+using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
@@ -1612,15 +1614,15 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         }
 
                         auto& token = spec.GetBlock2().GetToken1();
-                        switch (token.GetId()) {
-                            case SQLv1LexerTokens::TOKEN_ASC:
-                                return true;
-                            case SQLv1LexerTokens::TOKEN_DESC:
-                                desc = true;
-                                return true;
-                            default:
-                                Ctx.Error() << "Unsupported direction token: " << token.GetId();
-                                return false;
+                        auto tokenId = token.GetId();
+                        if (IS_TOKEN(tokenId, ASC)) {
+                            return true;
+                        } else if (IS_TOKEN(tokenId, DESC)) {
+                            desc = true;
+                            return true;
+                        } else {
+                            Ctx.Error() << "Unsupported direction token: " << token.GetId();
+                            return false;
                         }
                     };
 
@@ -2038,6 +2040,17 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
     return true;
 }
 
+bool TSqlTranslation::ValidateTableSettings(const TTableSettings& settings) {
+    if (settings.PartitionCount) {
+        if (!settings.StoreType || to_lower(settings.StoreType->Name) != "column") {
+            Ctx.Error() << " PARTITION_COUNT can be used only with STORE=COLUMN";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
@@ -2093,6 +2106,16 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             return false;
         }
         if (!StoreInt(*value, settings.MaxPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "partition_count") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+
+        if (!StoreInt(*value, settings.PartitionCount, Ctx)) {
             Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
@@ -2186,7 +2209,8 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
     }
-    return true;
+
+    return ValidateTableSettings(settings);
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
@@ -3606,18 +3630,16 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
-        switch (token.GetId()) {
-            case SQLv1LexerTokens::TOKEN_ASC:
-                Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-                break;
-            case SQLv1LexerTokens::TOKEN_DESC:
-                asc = false;
-                Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
-                break;
-            default:
-                Ctx.IncrementMonCounter("sql_errors", "UnknownOrderBy");
-                Error() << "Unsupported direction token: " << token.GetId();
-                return false;
+        auto tokenId = token.GetId();
+        if (IS_TOKEN(tokenId, ASC)) {
+            Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
+        } else if (IS_TOKEN(tokenId, DESC)) {
+            asc = false;
+            Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
+        } else {
+            Ctx.IncrementMonCounter("sql_errors", "UnknownOrderBy");
+            Error() << "Unsupported direction token: " << token.GetId();
+            return false;
         }
     } else {
         Ctx.IncrementMonCounter("sql_features", "OrderByDefault");
@@ -3641,11 +3663,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT;
+    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_DISTINCT) {
+    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }

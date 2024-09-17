@@ -9,4 +9,4 @@ namespace NYql {
 
     void RegisterDqGenericMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TGenericState::TPtr& state);
 
-}
+} // namespace NYql

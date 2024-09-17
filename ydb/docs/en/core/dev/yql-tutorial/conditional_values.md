@@ -4,7 +4,7 @@ Select all the episode names of the first season of each series and sort them by
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     series_title,               -- series_title is defined below in GROUP BY
 

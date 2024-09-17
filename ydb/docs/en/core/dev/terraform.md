@@ -51,7 +51,7 @@ The provider will be installed in the Terraform plugins folder - `~/.terraform.d
       }
       required_version = ">= 0.13"
     }
-    
+
     provider "ydb" {
       token = "<TOKEN>"
       //OR for static credentials
@@ -244,7 +244,6 @@ The following arguments are supported:
 
 * `path` - (required) is the path of the table relative to the root of the database (example - `/path/to/table`).
 * `connection_string` — (required) [connection string](#connection_string).
-
 * `column` — (required) column properties (see the [column](#column) argument).
 * `family` - (optional) is a column group (see the [family](#family) argument).
 * `primary_key` — (required) [primary key](../yql/reference/syntax/create_table/index.md) of the table that contains an ordered list of column names of the primary key.
@@ -339,6 +338,7 @@ ttl {
 * `column_name` - (required) is the column name for TTL.
 * `expire_interval` — (required) interval in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format (for example, `P1D` is an interval of 1 day, that is, 24 hours).
 * `unit` — (optional) is set if the column with ttl has a [numeric type](../yql/reference/types/primitive.md#numeric). Supported values:
+
   * `seconds`
   * `milliseconds`
   * `microseconds`
@@ -366,7 +366,6 @@ The following arguments are supported:
 * `table_path` - is the path of the table. Specified if `table_id` is not specified.
 * `connection_string` — [connection string](#connection_string). Specified if `table_id` is not specified.
 * `table_id` - terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
-
 * `name` - (required) is the name of the index.
 * `type` - (required) is the index type [global_sync | global_async](../yql/reference/syntax/create_table/secondary_index.md).
 * `columns` - (required) is an ordered list of column names participating in the index.
@@ -392,7 +391,6 @@ The following arguments are supported:
 * `table_path` - is the path of the table. Specified if `table_id` is not specified.
 * `connection_string` — [connection string](#connection_string). Specified if `table_id` is not specified.
 * `table_id` — terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
-
 * `name` - (required) is the name of the change stream.
 * `mode` - (required) is the mode of operation of the [change data capture](../yql/reference/syntax/alter_table#changefeed-options).
 * `format` - (required) is the format of the [change data capture](../yql/reference/syntax/alter_table#changefeed-options).
@@ -459,7 +457,7 @@ resource "ydb_table" "ydb_table" {
 resource "ydb_table" "ydb_table" {
   # Path to the table
   path = "path/to/table" # path relative to the base root
-  
+
   # ConnectionString to the database.
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #DB connection example
 

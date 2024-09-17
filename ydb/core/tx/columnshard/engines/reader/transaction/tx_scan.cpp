@@ -1,10 +1,12 @@
 #include "tx_scan.h"
-#include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
+
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -32,7 +34,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
-    const TSnapshot snapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
+    TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
+    if (snapshot.IsZero()) {
+        snapshot = Self->GetLastTxSnapshot();
+    }
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
@@ -42,16 +47,18 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()
-        ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
+        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
 
     TReadMetadataPtr readMetadataRange;
     {
-
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
         TReadDescription read(snapshot, request.GetReverse());
         read.TxId = txId;
+        if (request.HasLockTxId()) {
+            read.LockId = request.GetLockTxId();
+        }
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
@@ -89,7 +96,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 if (filterConclusion.IsFail()) {
                     return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
                 }
-                read.PKRangesFilter = filterConclusion.DetachResult();
+                read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
             }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (!newRange) {
@@ -99,10 +106,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
     }
     AFL_VERIFY(readMetadataRange);
+    readMetadataRange->OnBeforeStartReading(*Self);
 
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << *readMetadataRange << ")" << " req: " << request;
+        detailedInfo << " read metadata: (" << *readMetadataRange << ")"
+                     << " req: " << request;
     }
 
     const TVersionedIndex* index = nullptr;
@@ -116,10 +125,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
+    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), shardingPolicy, scanId,
+        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader

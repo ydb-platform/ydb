@@ -2,9 +2,10 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/common/vector_operations.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow {
 
@@ -57,6 +58,11 @@ TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field
 
 TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data) {
     return AddField(f, std::make_shared<NAccessor::TTrivialArray>(data));
+}
+
+void TGeneralContainer::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
+    Schema->DeleteFieldsByIndex(idxs);
+    NUtil::EraseItems(Columns, idxs);
 }
 
 void TGeneralContainer::Initialize() {

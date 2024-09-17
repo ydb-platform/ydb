@@ -2,7 +2,7 @@
 
 Checking whether a value is in a range. It's equivalent to two conditions with `>=` and `<=` (range boundaries are included). Can be used with the `NOT` prefix to support inversion.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT * FROM my_table

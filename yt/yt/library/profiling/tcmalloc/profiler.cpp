@@ -30,7 +30,7 @@ public:
     }
 
 private:
-    std::vector<TString> TCMallocStats_ = {
+    std::vector<std::string> TCMallocStats_ = {
         "tcmalloc.per_cpu_caches_active",
         "generic.virtual_memory_used",
         "generic.physical_memory_used",
@@ -50,7 +50,7 @@ private:
         "tcmalloc.transfer_cache_free",
         "tcmalloc.hard_usage_limit_bytes",
         "tcmalloc.desired_usage_limit_bytes",
-        "tcmalloc.required_bytes"
+        "tcmalloc.required_bytes",
     };
 };
 

@@ -2,20 +2,39 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+namespace NKikimr::NPg {
+
+struct ITypeDesc;
+
+}
+
 namespace NKikimr::NScheme {
+
+struct ITypeDesc;
 
 class TTypeInfo {
 public:
     constexpr TTypeInfo()
     {}
 
-    explicit constexpr TTypeInfo(TTypeId typeId, void* typeDesc = {})
+    constexpr TTypeInfo(TTypeId typeId)
+        : TypeId(typeId)
+    { }
+
+    constexpr TTypeInfo(TTypeId typeId, const ITypeDesc* typeDesc)
         : TypeId(typeId)
         , TypeDesc(typeDesc)
     {
         if (TypeId != NTypeIds::Pg) {
             Y_ABORT_UNLESS(!TypeDesc);
         }
+    }
+
+    TTypeInfo(TTypeId typeId, const NPg::ITypeDesc* typeDesc)
+        : TypeId(typeId)
+        , TypeDesc(reinterpret_cast<const ITypeDesc *>(typeDesc))
+    {
+        Y_ABORT_UNLESS (TypeId == NTypeIds::Pg);
     }
 
     bool operator==(const TTypeInfo& other) const {
@@ -30,13 +49,17 @@ public:
         return TypeId;
     }
 
-    void* GetTypeDesc() const {
+    const ITypeDesc* GetTypeDesc() const {
         return TypeDesc;
+    }
+
+    const NPg::ITypeDesc* GetPgTypeDesc() const {
+        return reinterpret_cast<const NPg::ITypeDesc*>(TypeDesc);
     }
 
 private:
     TTypeId TypeId = 0;
-    void* TypeDesc = {};
+    const ITypeDesc* TypeDesc = nullptr;
 };
 
 } // namespace NKikimr::NScheme

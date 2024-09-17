@@ -40,7 +40,6 @@ class TJsonTenantInfo : public TViewerPipeClient {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString User;
-    TString Database;
     TString DomainPath;
     bool Tablets = false;
     bool SystemTablets = false;
@@ -49,7 +48,6 @@ class TJsonTenantInfo : public TViewerPipeClient {
     bool Users = false;
     bool OffloadMerge = false;
     bool MetadataCache = true;
-    bool Direct = false;
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
     TTabletId RootHiveId = 0;
     TString RootId; // id of root domain (tenant)
@@ -63,7 +61,12 @@ class TJsonTenantInfo : public TViewerPipeClient {
 public:
     TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
-    {}
+    {
+        const auto& params(Event->Get()->Request.GetParams());
+        if (Database.empty()) {
+            Database = params.Get("path");
+        }
+    }
 
     TString GetLogPrefix() {
         static TString prefix = "json/tenantinfo ";
@@ -93,12 +96,14 @@ public:
     }
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Followers = false;
         Metrics = true;
-        InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
@@ -106,49 +111,39 @@ public:
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
         Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
-        Database = params.Get("database");
-        if (Database.empty()) {
-            Database = params.Get("path");
-        }
-        Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(params.Get("metadata_cache"), MetadataCache);
-        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName); // we're already on the right node
-        if (Database && !Direct) {
-            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        auto* domain = domains->GetDomain();
+        DomainPath = "/" + domain->Name;
+        TPathId rootPathId(domain->SchemeRoot, 1);
+        RootId = GetDomainId(rootPathId);
+        RootHiveId = domains->GetHive();
+
+        if (Database.empty()) {
+            ListTenantsResponse = MakeRequestConsoleListTenants();
         } else {
-            TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-            auto* domain = domains->GetDomain();
-            DomainPath = "/" + domain->Name;
-            TPathId rootPathId(domain->SchemeRoot, 1);
-            RootId = GetDomainId(rootPathId);
-            RootHiveId = domains->GetHive();
-
-            if (Database.empty()) {
-                ListTenantsResponse = MakeRequestConsoleListTenants();
-            } else {
-                TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
-                NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
-            }
-
-            if (Database.empty() || Database == DomainPath) {
-                NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
-                tenant.SetId(RootId);
-                tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
-                tenant.SetType(NKikimrViewer::Domain);
-                tenant.SetName(DomainPath);
-                NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
-                RequestMetadataCacheHealthCheck(DomainPath);
-            }
-
-            HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
-            if (Storage) {
-                HiveStorageStats[RootHiveId] = MakeRequestHiveStorageStats(RootHiveId);
-            }
-
-            Become(&TThis::StateCollectingInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+            TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
+            NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
         }
+
+        if (Database.empty() || Database == DomainPath) {
+            NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[rootPathId];
+            tenant.SetId(RootId);
+            tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+            tenant.SetType(NKikimrViewer::Domain);
+            tenant.SetName(DomainPath);
+            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
+            RequestMetadataCacheHealthCheck(DomainPath);
+        }
+
+        HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
+        if (Storage) {
+            HiveStorageStats[RootHiveId] = MakeRequestHiveStorageStats(RootHiveId);
+        }
+
+        Become(&TThis::StateCollectingInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
     void PassAway() override {
@@ -379,7 +374,7 @@ public:
         TString path = GetPath(ev);
         auto& result(NavigateKeySetResult[path]);
         result.Set(std::move(ev));
-        if (result.Get()->Request->ResultSet.size() == 1 && result.Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        if (result.IsOk()) {
             auto domainInfo = result.Get()->Request->ResultSet.begin()->DomainInfo;
             TTabletId hiveId = domainInfo->Params.GetHive();
             if (hiveId) {

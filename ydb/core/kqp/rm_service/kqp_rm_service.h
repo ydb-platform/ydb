@@ -139,9 +139,9 @@ public:
     }
 
     TString ToString() const {
-        auto res = TStringBuilder() << "TxResourcesInfo{ "
+        auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
-            << "Database: " << Database;
+            << ", Database: " << Database;
 
         if (!PoolId.empty()) {
             res << ", PoolId: " << PoolId
@@ -149,7 +149,7 @@ public:
         }
 
         res << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
-            << ", extra allocations " << TxScanQueryMemory.load()
+            << ", tx total allocations " << TxScanQueryMemory.load()
             << ", execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }";
@@ -238,6 +238,7 @@ struct TKqpLocalNodeResources {
 
 struct TPlannerPlacingOptions {
     ui64 MaxNonParallelTasksExecutionLimit = 8;
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000;
     ui64 MaxNonParallelTopStageExecutionLimit = 1;
     bool PreferLocalDatacenterExecution = true;
 };

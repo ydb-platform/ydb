@@ -101,7 +101,11 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         resType.set_type_id(Ydb::Type::DATETIME64);
         return true;
     case arrow::Type::TIMESTAMP:
-        resType.set_type_id(Ydb::Type::TIMESTAMP);
+        if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
+            maybeOptionalType.set_type_id(Ydb::Type::UTF8);
+        } else {
+            resType.set_type_id(Ydb::Type::TIMESTAMP);
+        }
         return true;
     case arrow::Type::TIME32: // TODO: is there anything?
         return false;
@@ -321,6 +325,9 @@ public:
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
+            if (field->name().empty()) {
+                continue;
+            }
             ydbFields.emplace_back();
             auto& ydbField = ydbFields.back();
             if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type(), file.Config)) {

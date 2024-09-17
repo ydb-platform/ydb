@@ -57,7 +57,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                 // extra validation code for phantom logic
                 if (PhantomCheck) {
-                    TSubgroupPartLayout possiblyWritten;
+                    TSubgroupPartLayout possiblyPresent;
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
@@ -81,10 +81,13 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                             }
                             switch (disk.DiskParts[partIdx].Situation) {
                                 case TBlobState::ESituation::Unknown:
+                                    Y_DEBUG_ABORT_S("proxy didn't probe some valid parts of the blob while returning NODATA"
+                                        << " State# " << blobState.ToString());
+                                    [[fallthrough]];
                                 case TBlobState::ESituation::Error:
                                 case TBlobState::ESituation::Present:
                                 case TBlobState::ESituation::Sent:
-                                    possiblyWritten.AddItem(idxInSubgroup, partIdx, Info->Type);
+                                    possiblyPresent.AddItem(idxInSubgroup, partIdx, Info->Type);
                                     break;
 
                                 case TBlobState::ESituation::Absent:
@@ -95,32 +98,11 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                         }
                     }
 
-                    switch (Info->Type.GetErasure()) {
-                        case TBlobStorageGroupType::ErasureMirror3dc:
-                            if (possiblyWritten.GetDisksWithPart(0) || possiblyWritten.GetDisksWithPart(1) ||
-                                    possiblyWritten.GetDisksWithPart(2)) {
-                                okay = false;
-                            }
-                            break;
-
-                        case TBlobStorageGroupType::ErasureMirror3of4:
-                            if (possiblyWritten.GetDisksWithPart(0) || possiblyWritten.GetDisksWithPart(1)) {
-                                okay = false;
-                            }
-                            break;
-
-                        default: {
-                            ui32 numDistinctParts = 0;
-                            for (ui32 partIdx = 0; partIdx < Info->Type.TotalPartCount(); ++partIdx) {
-                                if (possiblyWritten.GetDisksWithPart(partIdx)) {
-                                    ++numDistinctParts;
-                                }
-                            }
-                            if (numDistinctParts >= Info->Type.MinimalRestorablePartCount()) {
-                                okay = false;
-                            }
-                            break;
-                        }
+                    const TBlobStorageGroupInfo::TSubgroupVDisks zero(&Info->GetTopology());
+                    const auto& checker = Info->GetQuorumChecker();
+                    const bool canBeRestored = checker.GetBlobState(possiblyPresent, zero) != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+                    if (canBeRestored) {
+                        okay = false; // there is a slight chance that we can restore that blob
                     }
                 }
 
@@ -164,15 +146,13 @@ ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EV
     // Find the slowest disk
     TDiskDelayPredictions worstDisks;
     if (Blackboard.BlobStates.size() == 1) {
-        Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
-                AccelerationParams.PredictedDelayMultiplier);
+        Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues,
+                queueId, &worstDisks, AccelerationParams);
     } else {
-        Blackboard.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, &worstDisks,
-                AccelerationParams.PredictedDelayMultiplier);
+        Blackboard.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, queueId, &worstDisks,
+                AccelerationParams);
     }
-    return worstDisks[std::min(3u, (ui32)worstDisks.size() - 1)].PredictedNs;
+    return worstDisks[std::min(AccelerationParams.MaxNumOfSlowDisks, (ui32)worstDisks.size() - 1)].PredictedNs;
 }
 
 ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {
@@ -294,9 +274,14 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 
     for (auto& vget : gets) {
         if (vget) {
-            DSP_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# "
-                << Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()))
-                << " vget# " << vget->ToString());
+            ui32 orderNumber = Info->GetTopology().GetOrderNumber(VDiskIDFromVDiskID(vget->Record.GetVDiskID()));
+            DSP_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << orderNumber << " vget# " << vget->ToString());
+            if (vget->Record.ExtremeQueriesSize() > 0) {
+                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(vget->Record.GetExtremeQueries(0).GetId());
+                History.AddVGetToWaitingList(blobId.PartId(), vget->Record.ExtremeQueriesSize(), orderNumber);
+            } else {
+                History.AddVGetToWaitingList(THistory::InvalidPartId, 0, orderNumber);
+            }
             outVGets.push_back(std::move(vget));
             ++RequestIndex;
         }
@@ -313,6 +298,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
         DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
+        History.AddVPutToWaitingList(put.Id.PartId(), 1, put.OrderNumber);
         outVPuts.push_back(std::move(vput));
         ++VPutRequests;
     }
@@ -389,6 +375,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
         Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
+    History.AddVPutResult(orderNumber, status, record.GetErrorReason());
 }
 
 }//NKikimr

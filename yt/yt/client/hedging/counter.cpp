@@ -28,17 +28,17 @@ TCounter::TCounter(const NProfiling::TTagSet& tagSet)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const NProfiling::TRegistry& registry, const TVector<TString>& clusters)
+TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const NProfiling::TRegistry& registry, const std::vector<TString>& clusters)
     : SuccessRequestCount(registry.Counter("/update_success"))
     , ErrorRequestCount(registry.Counter("/update_error"))
-    , TotalTabletsCount(registry.Gauge("/tablets_total"))
+    , TotalTabletCount(registry.Gauge("/tablets_total"))
 {
     for (const auto& cluster : clusters) {
-        LagTabletsCount.emplace(cluster, registry.WithTag("yt_cluster", cluster).Gauge("/tablets_with_lag"));
+        TabletWithLagCountPerReplica.emplace(cluster, registry.WithTag("yt_cluster", cluster).Gauge("/tablets_with_lag"));
     }
 }
 
-TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const TString& tablePath, const TVector<TString>& clusterNames)
+TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(const TString& tablePath, const std::vector<TString>& clusterNames)
     : TLagPenaltyProviderCounters(LagPenaltyProviderProfiler.WithTag("table", tablePath), clusterNames)
 { }
 

@@ -1,1 +1,1 @@
-## Streaming reading {#async-requests}
+## Streaming data reads {#async-requests}

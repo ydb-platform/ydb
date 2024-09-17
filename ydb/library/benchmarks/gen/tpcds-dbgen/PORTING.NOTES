@@ -1,0 +1,201 @@
+/* 
+ * Legal Notice 
+ * 
+ * This document and associated source code (the "Work") is a part of a 
+ * benchmark specification maintained by the TPC. 
+ * 
+ * The TPC reserves all right, title, and interest to the Work as provided 
+ * under U.S. and international laws, including without limitation all patent 
+ * and trademark rights therein. 
+ * 
+ * No Warranty 
+ * 
+ * 1.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION 
+ *     CONTAINED HEREIN IS PROVIDED "AS IS" AND WITH ALL FAULTS, AND THE 
+ *     AUTHORS AND DEVELOPERS OF THE WORK HEREBY DISCLAIM ALL OTHER 
+ *     WARRANTIES AND CONDITIONS, EITHER EXPRESS, IMPLIED OR STATUTORY, 
+ *     INCLUDING, BUT NOT LIMITED TO, ANY (IF ANY) IMPLIED WARRANTIES, 
+ *     DUTIES OR CONDITIONS OF MERCHANTABILITY, OF FITNESS FOR A PARTICULAR 
+ *     PURPOSE, OF ACCURACY OR COMPLETENESS OF RESPONSES, OF RESULTS, OF 
+ *     WORKMANLIKE EFFORT, OF LACK OF VIRUSES, AND OF LACK OF NEGLIGENCE. 
+ *     ALSO, THERE IS NO WARRANTY OR CONDITION OF TITLE, QUIET ENJOYMENT, 
+ *     QUIET POSSESSION, CORRESPONDENCE TO DESCRIPTION OR NON-INFRINGEMENT 
+ *     WITH REGARD TO THE WORK. 
+ * 1.2 IN NO EVENT WILL ANY AUTHOR OR DEVELOPER OF THE WORK BE LIABLE TO 
+ *     ANY OTHER PARTY FOR ANY DAMAGES, INCLUDING BUT NOT LIMITED TO THE 
+ *     COST OF PROCURING SUBSTITUTE GOODS OR SERVICES, LOST PROFITS, LOSS 
+ *     OF USE, LOSS OF DATA, OR ANY INCIDENTAL, CONSEQUENTIAL, DIRECT, 
+ *     INDIRECT, OR SPECIAL DAMAGES WHETHER UNDER CONTRACT, TORT, WARRANTY,
+ *     OR OTHERWISE, ARISING IN ANY WAY OUT OF THIS OR ANY OTHER AGREEMENT 
+ *     RELATING TO THE WORK, WHETHER OR NOT SUCH AUTHOR OR DEVELOPER HAD 
+ *     ADVANCE NOTICE OF THE POSSIBILITY OF SUCH DAMAGES. 
+ * 
+ * Contributors:
+ * Gradient Systems
+ */
+
+1. General
+    1.1 Makefile.suite
+    1.2 Executables and usage
+2. Platform-Specific Issues
+    2.1 Linux
+    2.2 AIX
+    2.3 Windows
+3. Troubleshooting
+    3.1 Manifest
+    3.1 makedepend
+4. Extensions
+
+1. General
+============
+Porting of DBGEN is intended to be very straightforward. The code is written 
+in C. Any required changes should be limited to the files outlined below. If
+you encounter any problems porting the code to a new environment (i.e., one 
+not mentioned in section 2, please contact Jack Stephens 
+(jms@gradientsystems.com).
+
+1.1 Makefile.suite
+Copy Makefile.suite to Makefile in the installation directory.
+The changes to the Makefile should be limited to the variable
+definitions in the first few lines of the file.
+    CC:    ANSI compiler
+    OS: one of LINUX, WIN32, AIX, SOLARIS, HPUX. 
+
+OS-specific changes are detailed in section 2, below. Once any required 
+changes have been made, it should be possible to create the required 
+executables by executing 'make'.
+
+1.2 Executables and usage
+The make command should result in the creation of 3 executables:
+  -- distcomp: a distribution compiler
+  -- dbgen2: the data generator
+  -- qgen2: the query generator
+
+dbgen2 is the data generator for tpcds. It will produce flat files to
+populate the data warehouse schema. See the README file for more
+information on its use.
+
+qgen2 is the query generator for tpcds. It will translate query templates
+into valid SQL. See the README file for more information on its use.
+
+distcomp compiles the ASCII distribution definitons found in the .dst
+files into a binary form, stored in tpcds.idx. Both dbgen2 and qgen2 rely
+on this binary file, and it must be distributed along with any
+executables. It is not necessary to distribute distcomp, or the dst
+files.
+
+
+2. Platform-Specific Issues
+==============================
+The code for these utilites has been structured to minimize the changes
+required to move it from one platform to the next. The following sections
+detail the environments under which it has been tested and the
+configuration changes required.
+
+2.1 Linux
+The testing was completed under RedHat 8.0 on an Intel platform. Makefile
+settings/changes were:
+OS = LINUX
+
+2.2 AIX
+The testing was completed under AIX 5.1 Makefile settings/changes were:
+OS = AIX
+
+2.3 WINDOWS
+The testing was completed under Windows 2000, Professional, using Visual
+C++ 6.0. The makefile is not used in this environment, but the
+distribution includes workspace and project files which should allow the
+executables to be built without further change. The test configuration
+stored the source files in c:\tpc\tpcds, but the internal paths appear to
+be relative, and should allow rellocation.
+
+Most windows installations do not include Lex or Yacc, the compiler-generation tools. The 
+distribution includes files that they would generate (tokenizer.c, qgen.c, y.tab.h). Should
+it be necessary to regenerate these files, build the grammar project within the DBGEN2 workspace.
+
+
+3. Troubleshooting
+==================
+The source files are detailed below. It is likely that most issues can be
+resolved with minor corrections to config.h or porting.h. Please forward
+any problem reports, and any suggested corrections, to the subcommittee
+and Jack.
+
+3.1 Manifest 
+Build files
+----------------------
+Makefile.suite: make input file
+dbgen2.dsp: Project file (windows only)
+dbgen2.dsw: Workspace file (windows only)
+qgen2.dsp: Project file (windows only)
+distcomp.dsp: Project file (windows only)
+BUGS: Docuementation
+HISTORY: Docuementation
+PORTING.NOTES: Docuementation
+README: Docuementation
+
+dbgen2/qgen2 files
+----------------------
+build.c: table population routines
+build_support.c
+build_support.h
+columns.h: schema definitions
+config.h: porting defines
+constants.h: schema definitions
+date.c: data type support
+date.h: data type support
+decimal.c: data type support
+decimal.h: data type support
+dist.c: distributtion support
+dist.h: distributtion support
+driver.c: dbgen2 main routines
+driver.h: dbgen2 main routines
+error_msg.h
+genrand.c: RNG routines
+genrand.h: RNG routines
+grammar.c: general grammar routines, used by qgen2 and distcomp
+grammar.h: general grammar routines, used by qgen2 and distcomp
+load.c: in-line load stubs
+load.h: in-line load stubs
+misc.c
+misc.h
+newqgen.c: qgen2 main routines
+newqgen.h: qgen2 main routines
+parallel.c: parallelism stubs
+parallel.h: parallelism stubs
+params.h: command line support
+porting.h: porting defines
+print.c: table print routines
+qgen_params.h: command line support
+r_params.c: command line support
+r_params.h: command line support
+tables.h: schema definitions
+tdefs.h: schema definitions
+template.c: qgen2 template parsing routines
+template.h: qgen2 template parsing routines
+text.c: data type support
+
+Distribution/distcomp files
+----------------------
+dcgram.c: grammar definition
+dcgram.h: grammar definition
+dcomp.c: distcomp main routine
+dcomp.h: distcomp main routine
+dcomp_params.h: command line options
+calendar.dst: distribution definitions; included in tpcds.dst
+cities.dst: distribution definitions; included in tpcds.dst
+english.dst: distribution definitions; included in tpcds.dst
+fips.dst: distribution definitions; included in tpcds.dst
+names.dst: distribution definitions; included in tpcds.dst
+streets.dst: distribution definitions; included in tpcds.dst
+tpcds.dst: distribution definitions
+
+3.2 Make Depend
+The dependecies in Makefile.suite have been hand coded, to aid in portability. If you have trouble compliling for 
+a  particular platform, and makedend is available, then 'make depend' should introduce any required,
+platform-specific dependencies.
+
+
+4. Extensions
+=============
+TBD

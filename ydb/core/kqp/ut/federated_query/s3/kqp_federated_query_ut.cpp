@@ -1804,13 +1804,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 5_MB, 500000);
     }
 
-    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName) {
+    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName, bool enableOltp) {
         const TString bucket = "test_bucket3";
         const TString object = "test_object";
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(enableOltp);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
@@ -1863,8 +1863,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
     }
 
-    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable) {
-        {
+    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable, bool enableOltp) {
+        if (enableOltp) {
             const TString query = TStringBuilder() << "SELECT Unwrap(key), Unwrap(value) FROM `" << oltpTable << "`;";
             ValidateResult(client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync());
         }
@@ -1875,15 +1875,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSource) {
+    void DoCreateTableAsSelectFromExternalDataSource(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner, bool enableOltp) {
         const TString externalDataSourceName = "external_data_source";
         const TString externalTableName = "test_binding_resolve";
 
-        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName, enableOltp);
         auto client = kikimr->GetQueryClient();
 
         const TString oltpTable = "DestinationOltp";
-        {
+        if (enableOltp) {
             const TString query = fmt::format(R"(
                 PRAGMA TablePathPrefix = "TestDomain";
                 CREATE TABLE `{destination}` (
@@ -1900,8 +1900,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 "destination"_a = oltpTable,
                 "external_source"_a = externalDataSourceName
             );
-            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            requestRunner(query, client, kikimr->GetDriver());
         }
 
         const TString olapTable = "DestinationOlap";
@@ -1923,22 +1922,43 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 "destination"_a = olapTable,
                 "external_source"_a = externalDataSourceName
             );
-            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            requestRunner(query, client, kikimr->GetDriver());
         }
 
-        ValidateTables(client, oltpTable, olapTable);
+        ValidateTables(client, oltpTable, olapTable, enableOltp);
     }
 
-    Y_UNIT_TEST(CreateTableAsSelectFromExternalTable) {
+    void RunGenericQuery(const TString& query, TQueryClient& client, const TDriver&) {
+        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void RunGenericScript(const TString& script, TQueryClient& client, const TDriver& driver) {
+        auto scriptExecutionOperation = client.ExecuteScript(script).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), driver);
+        UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericQuery) {
+        DoCreateTableAsSelectFromExternalDataSource(&RunGenericQuery, true);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericScript) {
+        DoCreateTableAsSelectFromExternalDataSource(&RunGenericScript, false);
+    }
+
+    void DoCreateTableAsSelectFromExternalTable(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner, bool enableOltp) {
         const TString externalDataSourceName = "external_data_source";
         const TString externalTableName = "test_binding_resolve";
 
-        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName, enableOltp);
         auto client = kikimr->GetQueryClient();
 
         const TString oltpTable = "DestinationOltp";
-        {
+        if (enableOltp) {
             const TString query = fmt::format(R"(
                 PRAGMA TablePathPrefix = "TestDomain";
                 CREATE TABLE `{destination}` (
@@ -1949,8 +1969,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 "destination"_a = oltpTable,
                 "external_table"_a = externalTableName
             );
-            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            requestRunner(query, client, kikimr->GetDriver());
         }
 
         const TString olapTable = "DestinationOlap";
@@ -1966,11 +1985,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 "destination"_a = olapTable,
                 "external_table"_a = externalTableName
             );
-            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            requestRunner(query, client, kikimr->GetDriver());
         }
 
-        ValidateTables(client, oltpTable, olapTable);
+        ValidateTables(client, oltpTable, olapTable, enableOltp);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectFromExternalTableGenericQuery) {
+        DoCreateTableAsSelectFromExternalTable(&RunGenericQuery, true);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectFromExternalTableGenericScript) {
+        DoCreateTableAsSelectFromExternalTable(&RunGenericScript, false);
     }
 
     Y_UNIT_TEST(OverridePlannerDefaults) {

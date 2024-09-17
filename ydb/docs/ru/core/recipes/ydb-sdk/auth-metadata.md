@@ -1,5 +1,7 @@
 # Аутентификация при помощи сервиса метаданных
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [work in progress message](_includes/addition.md) %}
 
 Ниже приведены примеры кода аутентификации при помощи переменных окружения в разных {{ ydb-short-name }} SDK.
@@ -146,7 +148,7 @@
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new MetadataAuthentication()
   ];
 

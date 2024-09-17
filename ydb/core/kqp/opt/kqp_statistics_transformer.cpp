@@ -336,6 +336,125 @@ void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotati
     }
 }
 
+class TKqpOlapPredicateSelectivityComputer: public TPredicateSelectivityComputer {
+public:
+    TKqpOlapPredicateSelectivityComputer(const std::shared_ptr<TOptimizerStatistics>& stats)
+        : TPredicateSelectivityComputer(stats)
+    {}
+
+    double Compute(const NNodes::TExprBase& input) {
+        std::optional<double> resSelectivity;
+
+        if (auto andNode = input.Maybe<TKqpOlapAnd>()) {
+            double tmpSelectivity = 1.0;
+            for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
+                tmpSelectivity *= Compute(andNode.Cast().Arg(i));
+            }
+            resSelectivity = tmpSelectivity;
+        } else if (auto orNode = input.Maybe<TKqpOlapOr>()) {
+            double tmpSelectivity = 0.0;
+            for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
+                tmpSelectivity += Compute(orNode.Cast().Arg(i));
+            }
+            resSelectivity = tmpSelectivity;
+        } else if (auto notNode = input.Maybe<TKqpOlapNot>()) {
+            resSelectivity = 1 - Compute(notNode.Cast().Value());
+        } else if (input.Maybe<TCoAtomList>() && input.Ptr()->ChildrenSize() >= 1) {
+            auto listPtr = input.Maybe<TCoAtomList>().Cast().Ptr()->Child(1);
+            size_t listSize = listPtr->ChildrenSize();
+
+            if (listSize == 3) {
+                TString compSign = TString(listPtr->Child(0)->Content());
+                TString attr = TString(listPtr->Child(1)->Content());
+
+                TExprContext dummyCtx;
+                TPositionHandle dummyPos;
+
+                auto rowArg = 
+                    Build<TCoArgument>(dummyCtx, dummyPos)
+                        .Name("row")
+                    .Done();
+
+                auto member = 
+                        Build<TCoMember>(dummyCtx, dummyPos)
+                            .Struct(rowArg)
+                            .Name().Build(attr)
+                        .Done();
+
+                auto value = TExprBase(listPtr->ChildPtr(2));
+                if (listPtr->ChildPtr(2)->ChildrenSize() >= 2 && listPtr->ChildPtr(2)->ChildPtr(0)->Content() == "just") {
+                    value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
+                }
+                if (OlapCompSigns.contains(compSign)) {
+                    resSelectivity = this->ComputeComparisonSelectivity(member, value);
+                } else if (compSign == "eq") {
+                    resSelectivity = this->ComputeEqualitySelectivity(member, value);
+                } else if (compSign == "neq") {
+                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
+                } else if (RegexpSigns.contains(compSign)) {
+                    return 0.5;
+                }
+            }
+        }
+
+        if (!resSelectivity.has_value()) {
+            auto dumped = input.Raw()->Dump();
+            YQL_CLOG(TRACE, ProviderKqp) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
+            return 1.0;
+        }
+
+        return std::min(1.0, resSelectivity.value());
+    }
+
+private:
+    THashSet<TString> OlapCompSigns = {
+        {"lt"},
+        {"lte"},
+        {"gt"},
+        {"gte"}
+    };
+
+    THashSet<TString> RegexpSigns = {
+        "string_contains",
+        "starts_with",
+        "ends_with"
+    };
+};
+
+void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto filter = inputNode.Cast<TKqpOlapFilter>();
+    auto filterInput = filter.Input();
+    auto inputStats = typeCtx->GetStats(filterInput.Raw());
+
+    if (!inputStats) {
+        return;
+    }
+
+    double selectivity = TKqpOlapPredicateSelectivityComputer(inputStats).Compute(filter.Condition());
+
+    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns, inputStats->ColumnStatistics );
+    outputStats.Labels = inputStats->Labels;
+    outputStats.Selectivity *= selectivity;
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for OLAP Filter: " << outputStats.ToString();
+
+
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
+}
+
+void InferStatisticsForOlapRead(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto olapRead = inputNode.Cast<TKqpReadOlapTableRangesBase>();
+
+    auto process = olapRead.Process();
+    auto lambdaStats = typeCtx->GetStats(process.Body().Raw());
+    if (lambdaStats) {
+        YQL_CLOG(TRACE, CoreDq) << "Infer statistics for OLAP table: " << lambdaStats->ToString();
+        typeCtx->SetStats(input.Get(), lambdaStats);
+    }
+}
+
 void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
     TKqpOptimizeContext& kqpCtx) {
     auto inputNode = TExprBase(input);
@@ -434,6 +553,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if(TDqSourceWrapBase::Match(input.Get())) {
         InferStatisticsForDqSourceWrap(input, TypeCtx, KqpCtx);
+    } 
+    else if (TKqpOlapFilter::Match(input.Get())) {
+        InferStatisticsForOlapFilter(input, TypeCtx);
     }
     else {
         matched = false;
@@ -447,6 +569,8 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
     bool matched = true;
     if (TKqpPhysicalTx::Match(input.Get())) {
         AppendTxStats(input, TypeCtx, TxStats);
+    } else if (TKqpReadOlapTableRangesBase::Match(input.Get())) {
+        InferStatisticsForOlapRead(input, TypeCtx);
     } else {
         matched = false;
     }

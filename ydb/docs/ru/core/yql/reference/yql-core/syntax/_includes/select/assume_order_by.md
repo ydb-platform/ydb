@@ -5,9 +5,9 @@
 
 Как и для `ORDER BY`, поддерживается задание порядка сортировки с помощью ключевых слов `ASC` (по возрастанию) и `DESC` (по убыванию). Выражения в `ASSUME ORDER BY` не поддерживается.
 
-**Примеры:**
+## Примеры
 
-``` yql
+```yql
 SELECT key || "suffix" as key, -CAST(subkey as Int32) as subkey
 FROM my_table
 ASSUME ORDER BY key, subkey DESC;

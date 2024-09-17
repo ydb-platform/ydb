@@ -1234,7 +1234,7 @@ static int test_timeout_link_cancel(void)
 			exit(1);
 		}
 
-		/* trigger full cancellation */
+		/* trigger full cancelation */
 		ret = execl(prog_path, prog_path, NULL);
 		if (ret) {
 			fprintf(stderr, "exec failed %i\n", errno);

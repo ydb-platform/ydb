@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR (
     ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+    ydb/library/yql/parser/proto_ast
 )
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -27,6 +28,10 @@ ELSE()
 ENDIF()
 
 NO_COMPILER_WARNINGS()
+
+ADDINCL(
+    GLOBAL contrib/libs/antlr4_cpp_runtime/src
+)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl)
 

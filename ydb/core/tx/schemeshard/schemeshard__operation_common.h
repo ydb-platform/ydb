@@ -454,7 +454,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+            "[" << context.SS->TabletID() << "] " << DebugHint() << " ProgressState");
         DeleteShards(context);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -473,7 +473,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+            "[" << context.SS->TabletID() << "] " << DebugHint() << " ProgressState");
         DeleteShards(context);
 
         context.OnComplete.DoneOperation(OperationId);
@@ -499,7 +499,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+            "[" << context.SS->TabletID() << "] " << DebugHint() << " ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
 
@@ -551,6 +551,54 @@ public:
 };
 
 namespace NPQState {
+
+class TBootstrapConfigWrapper: public NKikimrPQ::TBootstrapConfig {
+    struct TSerializedProposeTransaction {
+        TString Value;
+
+        static TSerializedProposeTransaction Serialize(const NKikimrPQ::TBootstrapConfig& value) {
+            NKikimrPQ::TEvProposeTransaction record;
+            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(value);
+            return {record.SerializeAsString()};
+        }
+    };
+
+    struct TSerializedUpdateConfig {
+        TString Value;
+
+        static TSerializedUpdateConfig Serialize(const NKikimrPQ::TBootstrapConfig& value) {
+            NKikimrPQ::TUpdateConfig record;
+            record.MutableBootstrapConfig()->CopyFrom(value);
+            return {record.SerializeAsString()};
+        }
+    };
+
+    mutable std::optional<std::variant<
+        TSerializedProposeTransaction,
+        TSerializedUpdateConfig
+    >> PreSerialized;
+
+    template <typename T>
+    const TString& Get() const {
+        if (!PreSerialized) {
+            PreSerialized.emplace(T::Serialize(*this));
+        }
+
+        const auto* value = std::get_if<T>(&PreSerialized.value());
+        Y_ABORT_UNLESS(value);
+
+        return value->Value;
+    }
+
+public:
+    const TString& GetPreSerializedProposeTransaction() const {
+        return Get<TSerializedProposeTransaction>();
+    }
+
+    const TString& GetPreSerializedUpdateConfig() const {
+        return Get<TSerializedUpdateConfig>();
+    }
+};
 
 class TConfigureParts: public TSubOperationState {
 private:
@@ -627,7 +675,6 @@ public:
         return false;
     }
 
-
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -669,7 +716,7 @@ public:
         TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
         auto topicPath = TPath::Init(txState->TargetPathId, context.SS);
 
-        std::optional<NKikimrPQ::TBootstrapConfig> bootstrapConfig;
+        std::optional<TBootstrapConfigWrapper> bootstrapConfig;
         if (txState->TxType == TTxState::TxCreatePQGroup && topicPath.Parent().IsCdcStream()) {
             bootstrapConfig.emplace();
 
@@ -918,7 +965,7 @@ private:
                                  const TTopicTabletInfo& pqShard,
                                  const TString& topicName,
                                  const TString& topicPath,
-                                 const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                                 const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                                  const TString& cloudId,
                                  const TString& folderId,
                                  const TString& databaseId,
@@ -931,7 +978,7 @@ private:
                            const TTopicTabletInfo& pqShard,
                            const TString& topicName,
                            const TString& topicPath,
-                           const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                           const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                            const TString& cloudId,
                            const TString& folderId,
                            const TString& databaseId,

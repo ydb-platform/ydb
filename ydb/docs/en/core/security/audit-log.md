@@ -34,7 +34,7 @@ The information about each operation is saved to the audit log as a separate eve
 | `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. |
 | `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. |
 | `remote_address` | The IP of the client that delivered the request.<br/>Optional. |
-| `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter `, `StatusNameConflict`).<br/>Optional. |
+| `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter`, `StatusNameConflict`).<br/>Optional. |
 | **Ownership and permission attributes** |
 | `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. |
 | `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. |

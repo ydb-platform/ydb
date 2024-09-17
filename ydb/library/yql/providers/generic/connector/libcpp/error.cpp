@@ -71,4 +71,4 @@ namespace NYql::NConnector {
 
         return result;
     }
-}
+} // namespace NYql::NConnector

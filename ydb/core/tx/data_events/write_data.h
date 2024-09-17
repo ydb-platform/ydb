@@ -3,7 +3,7 @@
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/modifier/subset.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <ydb/library/actors/core/monotonic.h>
@@ -46,7 +46,21 @@ private:
     YDB_ACCESSOR(TMonotonic, WriteMiddle4StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
     YDB_ACCESSOR(TMonotonic, WriteMiddle6StartInstant, TMonotonic::Now());
+    std::optional<ui64> LockId;
 public:
+    void SetLockId(const ui64 lockId) {
+        LockId = lockId;
+    }
+
+    ui64 GetLockIdVerified() const {
+        AFL_VERIFY(LockId);
+        return *LockId;
+    }
+
+    std::optional<ui64> GetLockIdOptional() const {
+        return LockId;
+    }
+
     bool IsGuaranteeWriter() const {
         switch (ModificationType) {
             case EModificationType::Delete:

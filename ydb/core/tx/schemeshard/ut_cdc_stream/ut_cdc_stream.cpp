@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -1752,6 +1753,94 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RacyAlterStreamAndRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TActorId schemeShardActorId;
+        auto findActorId = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            if (!schemeShardActorId) {
+                schemeShardActorId = ev->Sender;
+            }
+        });
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> blockedAlterStream;
+        auto blockAlterStream = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
+                txId = ev->Get()->Record.GetTxId();
+                blockedAlterStream.Reset(ev.Release());
+            }
+        });
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blockedAlterStream](IEventHandle&) {
+                return bool(blockedAlterStream);
+            });
+            runtime.DispatchEvents(opts);
+            blockAlterStream.Remove();
+        }
+
+        UNIT_ASSERT(schemeShardActorId);
+
+        THolder<IEventHandle> blockedProgress;
+        auto blockProgress = runtime.AddObserver<TEvPrivate::TEvProgressOperation>([&](auto& ev) {
+            if (schemeShardActorId == ev->Sender) {
+                blockedProgress.Reset(ev.Release());
+            }
+        });
+
+        runtime.Send(blockedAlterStream.Release(), 0, true);
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blockedProgress](IEventHandle&) {
+                return bool(blockedProgress);
+            });
+            runtime.DispatchEvents(opts);
+            blockProgress.Remove();
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathNotExist,
+        });
     }
 
     void Metering(bool serverless) {

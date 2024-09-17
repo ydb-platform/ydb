@@ -6,8 +6,6 @@
 
 {% include [no_video](../../no_video.md) %}
 
-**Outline**:
-
 This database is used for industrial operations within Yandex. Among its clients are Yandex Market, Yandex Alice, and Yandex Taxi, which are some of the largest and most demanding AI-based applications.
 
 The database offers true elastic scalability, capable of scaling up or down by several orders of magnitude.
@@ -16,7 +14,8 @@ Simultaneously, the database is fault-tolerant. It is designed to operate across
 
 Currently, work is underway to implement accurate and approximate nearest neighbor searches for machine learning purposes.
 
-**Takeaways**:
+Takeaways:
+
 * Architecture of a distributed, fault-tolerant database.
 * Approaches to implementing vector search on large datasets.
 

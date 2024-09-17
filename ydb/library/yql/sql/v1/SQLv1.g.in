@@ -66,6 +66,7 @@ sql_stmt_core:
   | create_resource_pool_stmt
   | alter_resource_pool_stmt
   | drop_resource_pool_stmt
+  | analyze_stmt
 ;
 
 expr:
@@ -980,6 +981,10 @@ named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
 commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
+
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
+analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
+analyze_stmt: ANALYZE analyze_table_list;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;

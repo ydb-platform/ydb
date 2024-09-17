@@ -103,6 +103,7 @@ namespace NActors {
                 this->DispatchEvents(options, simTimeout);
 
                 Y_ABORT_UNLESS(condition(), "Timeout while waiting for %s", description.c_str());
+                Cerr << "... waiting for " << description << " (done)" << Endl;
             }
         }
 

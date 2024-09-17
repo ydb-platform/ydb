@@ -2494,7 +2494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 725:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 726:7: local_index\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {

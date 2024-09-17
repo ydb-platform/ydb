@@ -26,7 +26,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 
     if (Tiering) {
         AFL_VERIFY(TieringColumnId);
-        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMax(*TieringColumnId);
+        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
         if (!indexMeta) {
             max = portion.MaxValue(*TieringColumnId);

@@ -1794,11 +1794,9 @@ struct Schema : NIceDb::Schema {
         struct PathId: Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion: Column<2, NScheme::NTypeIds::Uint64> {};
         struct QueryText: Column<3, NScheme::NTypeIds::String> {};
-        // CapturedContext is a serialized NYql::NProto::TTranslationSettings.
-        struct CapturedContext: Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, QueryText, CapturedContext>;
+        using TColumns = TableColumns<PathId, AlterVersion, QueryText>;
     };
 
     struct BackgroundSessions: Table<109> {

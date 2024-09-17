@@ -2235,6 +2235,9 @@ TEST(TYsonStructTest, CustomSubStruct)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// NB: Currently TYsonStructLite cannot be used as a field in another config as is.
+// Thus test below uses std::optional + MergeStrategy::Combine instead of plain struct.
+
 class TTestSubConfigLiteWithDefaults
     : public TYsonStructLite
 {

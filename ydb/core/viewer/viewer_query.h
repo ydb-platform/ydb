@@ -218,15 +218,6 @@ public:
                 Span.Attribute("database", Database);
             }
         }
-        event->Record.SetApplicationName("ydb-ui");
-        event->Record.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
-        event->Record.SetClientUserAgent(TString(Event->Get()->Request.GetHeader("User-Agent")));
-        if (Event->Get()->UserToken) {
-            NACLibProto::TUserToken userToken;
-            if (userToken.ParseFromString(Event->Get()->UserToken)) {
-                event->Record.SetUserSID(userToken.GetUserSID());
-            }
-        }
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 

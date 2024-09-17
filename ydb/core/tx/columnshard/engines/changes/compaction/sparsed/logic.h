@@ -58,15 +58,11 @@ private:
 
         void InitArrays(const ui32 position) {
             AFL_VERIFY(!ChunkAddress || ChunkFinishPosition <= position);
-            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position)("pos", position)(
-                "global", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
-            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position - CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position);
             AFL_VERIFY(ChunkAddress);
             ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalStartPosition();
             ChunkFinishPosition =
                 CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalFinishPosition();
-            AFL_VERIFY(position < ChunkFinishPosition)("finish", ChunkFinishPosition)("pos", position);
-            AFL_VERIFY(ChunkStartPosition <= position)("start", ChunkStartPosition)("pos", position);
         }
 
     public:
@@ -80,15 +76,14 @@ private:
         }
         bool AddIndexTo(const ui32 index, TWriter& writer);
         std::optional<ui32> MoveToSignificant(const ui32 currentGlobalPosition, const TColumnMergeContext& context) {
-            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition)("start", ChunkStartPosition)("pos", currentGlobalPosition)(
-                "global_start", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition);
             ui32 currentIndex = currentGlobalPosition;
             while (true) {
                 if (CurrentOwnedArray->GetAddress().GetGlobalFinishPosition() <= currentIndex) {
                     return {};
                 }
                 if (ChunkFinishPosition <= currentIndex) {
-                    InitArrays(currentIndex);
+                    InitArrays(currentGlobalPosition);
                     continue;
                 }
                 for (; currentIndex < ChunkFinishPosition; ++currentIndex) {
@@ -195,7 +190,6 @@ private:
                 if (FinishGlobalPosition == Array->GetRecordsCount()) {
                     return FinishGlobalPosition;
                 } else {
-                    currentPosition = FinishGlobalPosition;
                     InitArrays(FinishGlobalPosition);
                 }
             }

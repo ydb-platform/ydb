@@ -1871,7 +1871,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         if (info->BalancerPolicy != NKikimrHive::EBalancerPolicy::POLICY_BALANCE) {
             tabletInfo.SetBalancerPolicy(info->BalancerPolicy);
         }
-        if (!info->IsRunning() && info->Statistics.HasLastAliveTimestamp()) {
+        if (!info->IsRunning()) {
             tabletInfo.SetLastAliveTimestamp(info->Statistics.GetLastAliveTimestamp());
         }
         tabletInfo.SetRestartsPerPeriod(info->GetRestartsPerPeriod(restartsBarrierTime));

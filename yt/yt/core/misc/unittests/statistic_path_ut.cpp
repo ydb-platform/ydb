@@ -1,17 +1,13 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/misc/statistic_path.h>
-
 #include <yt/yt/core/misc/error.h>
-
-#include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/misc/statistic_path.h>
 
 namespace NYT {
 namespace {
 
 using namespace NStatisticPath;
-using namespace NYson;
-using namespace NYTree;
+using namespace NStatisticPathLiterals;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,8 +23,6 @@ TEST(TStatisticPathTest, Literal)
     EXPECT_THROW(TStatisticPathLiteral("\0"), TErrorException);
     EXPECT_THROW(TStatisticPathLiteral(TString(Delimiter)), TErrorException);
     EXPECT_THROW(TStatisticPathLiteral(""), TErrorException);
-
-    EXPECT_EQ("A"_L / "BB"_L / "CCC"_L, "/A/BB/CCC"_SP);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -214,62 +208,6 @@ TEST(TStatisticPathTest, Swap)
     a.Swap(b);
     EXPECT_EQ(a, originalA);
     EXPECT_EQ(b, originalB);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(TStatisticPath, Serialize)
-{
-    TStatisticPath path = "A"_L / "B/C"_L;
-    EXPECT_EQ(
-        ConvertTo<TString>(ConvertToYsonString(path)),
-        path.Path());
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(TStatisticPath, Deserialize)
-{
-    TStatisticPath simplePath = "/A/B/C"_SP;
-
-    TYsonString pathStr = ConvertToYsonString(simplePath.Path());
-    EXPECT_EQ(ConvertTo<TStatisticPath>(pathStr), simplePath);
-
-    TYsonString slashedPathStr = ConvertToYsonString("/A/B/C");
-    EXPECT_EQ(ConvertTo<TStatisticPath>(slashedPathStr), simplePath);
-
-    TYsonString invalidPathStr = ConvertToYsonString("abc");
-    EXPECT_THROW_WITH_SUBSTRING(
-        ConvertTo<TStatisticPath>(invalidPathStr),
-        "must start with a delimiter");
-
-    TYsonString invalidSlashedPathStr = ConvertToYsonString("/abc/");
-    EXPECT_THROW_WITH_SUBSTRING(
-        ConvertTo<TStatisticPath>(invalidSlashedPathStr),
-        "must not end with a delimiter");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(TStatisticPath, SaveLoad)
-{
-    TStringStream stream;
-    TStreamSaveContext saveContext(&stream);
-    TStreamLoadContext loadContext(&stream);
-
-    TStatisticPath simplePath1 = "A"_L / "B/C"_L / "X\02YZ"_L;
-    TStatisticPath simplePath2 = "A"_L / "BB"_L;
-    Save(saveContext, simplePath1);
-    Save(saveContext, simplePath2);
-    saveContext.Finish();
-
-    TStatisticPath loadedPath1;
-    TStatisticPath loadedPath2;
-    Load(loadContext, loadedPath1);
-    Load(loadContext, loadedPath2);
-
-    EXPECT_EQ(loadedPath1, simplePath1);
-    EXPECT_EQ(loadedPath2, simplePath2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -718,9 +718,6 @@ namespace NKikimr::NStorage {
         }
     };
 
-    bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,
-        TString *errorReason);
-
 }
 
 template<>

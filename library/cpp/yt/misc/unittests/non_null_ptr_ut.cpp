@@ -7,18 +7,16 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EFuncResult
-{
+enum EFuncResult {
     Base,
     ConstBase,
     Derived,
     ConstDerived,
 };
 
-enum class EBinaryFuncResult
-{
-    OK,
-    NotOK,
+enum EBinaryFuncResult {
+    Ok,
+    NotOk,
 };
 
 struct TBase
@@ -50,22 +48,22 @@ EFuncResult Foo(TNonNullPtr<const TDerived> /*derived*/)
 
 [[maybe_unused]] EBinaryFuncResult Foo(int* /*derived*/)
 {
-    return EBinaryFuncResult::NotOK;
+    return EBinaryFuncResult::NotOk;
 }
 
 EBinaryFuncResult Foo(TNonNullPtr<int> /*derived*/)
 {
-    return EBinaryFuncResult::OK;
+    return EBinaryFuncResult::Ok;
 }
 
 EBinaryFuncResult Bar(TNonNullPtr<const int> /*arg*/)
 {
-    return EBinaryFuncResult::OK;
+    return EBinaryFuncResult::Ok;
 }
 
 EBinaryFuncResult Baz(TNonNullPtr<int> /*arg*/)
 {
-    return EBinaryFuncResult::OK;
+    return EBinaryFuncResult::Ok;
 }
 
 TEST(TNonNullPtrTest, Simple)
@@ -81,21 +79,21 @@ TEST(TNonNullPtrTest, Simple)
     EXPECT_EQ(EFuncResult::ConstBase, Foo(GetPtr(constBase)));
 
     int i{};
-    EXPECT_EQ(EBinaryFuncResult::OK, Foo(GetPtr(i)));
+    EXPECT_EQ(EBinaryFuncResult::Ok, Foo(GetPtr(i)));
 }
 
 TEST(TNonNullPtrTest, CastToConst)
 {
     int i{};
 
-    EXPECT_EQ(EBinaryFuncResult::OK, Bar(GetPtr(i)));
+    EXPECT_EQ(EBinaryFuncResult::Ok, Bar(GetPtr(i)));
 }
 
 TEST(TNonNullPtrTest, ConstructionFromRawPointer)
 {
     int i{};
 
-    EXPECT_EQ(EBinaryFuncResult::OK, Baz(&i));
+    EXPECT_EQ(EBinaryFuncResult::Ok, Baz(&i));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -5,7 +5,6 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include "openid_connect.h"
-#include "context.h"
 #include "oidc_protected_page_nebius.h"
 
 namespace NMVP {
@@ -100,8 +99,7 @@ void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessi
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "Request authorization code");
-    TContext context(Request);
-    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, context);
+    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }

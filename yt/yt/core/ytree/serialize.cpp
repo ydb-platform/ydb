@@ -363,14 +363,7 @@ void Deserialize(TGuid& value, INodePtr node)
 // TStatisticPath.
 void Deserialize(NStatisticPath::TStatisticPath& value, INodePtr node)
 {
-    const TString& path = node->AsString()->GetValue();
-
-    // Try to parse slashed paths.
-    if (!path.empty() && path.StartsWith('/')) {
-        value = NStatisticPath::SlashedStatisticPath(path).ValueOrThrow();
-    } else {
-        value = NStatisticPath::ParseStatisticPath(path).ValueOrThrow();
-    }
+    value = NStatisticPath::ParseStatisticPath(node->AsString()->GetValue()).ValueOrThrow();
 }
 
 // Subtypes of google::protobuf::Message

@@ -155,8 +155,7 @@ void YTreeNodeToUnversionedValue(
             builder->AddValue(MakeUnversionedSentinelValue(EValueType::Null, id, flags));
             break;
         default:
-            value->MutableAttributes()->Clear();
-            builder->AddValue(MakeUnversionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
+            builder->AddValue(MakeUnversionedAnyValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
             break;
     }
 }
@@ -334,7 +333,7 @@ TVersionedRow YsonToVersionedRow(
                 break;
             default:
                 value->MutableAttributes()->Clear();
-                builder.AddValue(MakeVersionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
+                builder.AddValue(MakeVersionedAnyValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
                 break;
         }
     }

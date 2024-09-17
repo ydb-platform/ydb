@@ -1259,7 +1259,6 @@ public:
             if (SessionCtx->GetUserToken()) {
                 context.SetUserToken(*SessionCtx->GetUserToken());
             }
-            context.SetTranslationSettings(SessionCtx->Query().TranslationSettings);
 
             auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
@@ -2180,7 +2179,7 @@ public:
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
-
+            
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
             for (const auto& column: settings.Columns) {
@@ -2193,7 +2192,7 @@ public:
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
                 phyTx.MutableSchemeOperation()->MutableAnalyzeTable()->Swap(&analyzeTx);
-
+                
                 TGenericResult result;
                 result.SetSuccess();
                 return MakeFuture(result);

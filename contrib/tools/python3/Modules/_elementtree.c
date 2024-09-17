@@ -1213,8 +1213,12 @@ _elementtree_Element_extend_impl(ElementObject *self, PyTypeObject *cls,
     PyObject* seq;
     Py_ssize_t i;
 
-    seq = PySequence_Fast(elements, "'elements' must be an iterable");
+    seq = PySequence_Fast(elements, "");
     if (!seq) {
+        PyErr_Format(
+            PyExc_TypeError,
+            "expected sequence, not \"%.200s\"", Py_TYPE(elements)->tp_name
+            );
         return NULL;
     }
 
@@ -1916,8 +1920,12 @@ element_ass_subscr(PyObject* self_, PyObject* item, PyObject* value)
         }
 
         /* A new slice is actually being assigned */
-        seq = PySequence_Fast(value, "assignment expects an iterable");
+        seq = PySequence_Fast(value, "");
         if (!seq) {
+            PyErr_Format(
+                PyExc_TypeError,
+                "expected sequence, not \"%.200s\"", Py_TYPE(value)->tp_name
+                );
             return -1;
         }
         newlen = PySequence_Fast_GET_SIZE(seq);

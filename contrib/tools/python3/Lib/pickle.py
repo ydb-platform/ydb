@@ -397,8 +397,6 @@ def decode_long(data):
     return int.from_bytes(data, byteorder='little', signed=True)
 
 
-_NoValue = object()
-
 # Pickling machinery
 
 class _Pickler:
@@ -1093,16 +1091,11 @@ class _Pickler:
                     (obj, module_name, name))
 
         if self.proto >= 2:
-            code = _extension_registry.get((module_name, name), _NoValue)
-            if code is not _NoValue:
+            code = _extension_registry.get((module_name, name))
+            if code:
+                assert code > 0
                 if code <= 0xff:
-                    data = pack("<B", code)
-                    if data == b'\0':
-                        # Should never happen in normal circumstances,
-                        # since the type and the value of the code are
-                        # checked in copyreg.add_extension().
-                        raise RuntimeError("extension code 0 is out of range")
-                    write(EXT1 + data)
+                    write(EXT1 + pack("<B", code))
                 elif code <= 0xffff:
                     write(EXT2 + pack("<H", code))
                 else:
@@ -1596,8 +1589,9 @@ class _Unpickler:
     dispatch[EXT4[0]] = load_ext4
 
     def get_extension(self, code):
-        obj = _extension_cache.get(code, _NoValue)
-        if obj is not _NoValue:
+        nil = []
+        obj = _extension_cache.get(code, nil)
+        if obj is not nil:
             self.append(obj)
             return
         key = _inverted_registry.get(code)

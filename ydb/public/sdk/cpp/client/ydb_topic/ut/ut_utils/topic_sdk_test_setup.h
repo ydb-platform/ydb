@@ -21,8 +21,6 @@ public:
     void CreateTopicWithAutoscale(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      size_t maxPartitionCount = 100);
 
-    void DescribeTopic(const TString& path = TEST_TOPIC);
-
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TEST_TOPIC) const;
     TString GetTopicParent() const;

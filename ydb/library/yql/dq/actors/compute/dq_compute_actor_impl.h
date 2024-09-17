@@ -1402,20 +1402,8 @@ protected:
     }
 
     void PollAsyncInput() {
-        if (!Running) {
-            CA_LOG_T("Skip polling inputs and sources because not running");
-            return;
-        }
-
-        CA_LOG_T("Poll inputs");
-        for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
-            }
-        }
-
         // Don't produce any input from sources if we're about to save checkpoint.
-        if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
+        if (!Running || (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
             CA_LOG_T("Skip polling sources because of pending checkpoint");
             return;
         }
@@ -1423,6 +1411,13 @@ protected:
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
             if (auto resume =  source.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+                ContinueExecute(*resume);
+            }
+        }
+
+        CA_LOG_T("Poll inputs");
+        for (auto& [inputIndex, transform] : InputTransformsMap) {
+            if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
                 ContinueExecute(*resume);
             }
         }

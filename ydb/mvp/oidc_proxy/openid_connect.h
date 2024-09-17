@@ -6,7 +6,6 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
-#include "context.h"
 
 
 namespace NMVP {
@@ -14,30 +13,16 @@ namespace NOIDC {
 
 struct TOpenIdConnectSettings;
 
-struct TRestoreOidcContextResult {
-    struct TStatus {
-        bool IsSuccess = true;
-        bool IsErrorRetryable = false;
-        TString ErrorMessage;
-    };
-
-    TContext Context;
-    TStatus Status;
-
-    TRestoreOidcContextResult(const TStatus& status = {.IsSuccess = true, .IsErrorRetryable = false, .ErrorMessage = ""}, const TContext& context = TContext());
-
-    bool IsSuccess() const;
-};
-
 TString HmacSHA256(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, const TContext& context);
+TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& secret, bool isAjaxRequest);
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest = false);
+bool DetectAjaxRequest(const NHttp::THeaders& headers);
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
 TString CreateNameSessionCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
-TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state, const NHttp::TCookies& cookies, const TString& secret);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {

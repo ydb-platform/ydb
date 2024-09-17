@@ -973,20 +973,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", { clonedArg });
         }
 
-        TString key;
         NYT::TNode ysonNode;
-        if (types.QContext) {
-            key = MakeCacheKey(*clonedArg);
-            if (types.QContext.CanRead()) {
-                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
-                if (!item) {
-                    throw yexception() << "Missing replay data";
-                }
-
-                ysonNode = NYT::NodeFromYsonString(item->Value);
-            }
-        }
-
         do {
             calcProvider.Clear();
             calcWorldRoot.Drop();
@@ -1008,10 +995,6 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
-            }
-
-            if (types.QContext.CanRead()) {
-                break;
             }
 
             IDataProvider::TFillSettings fillSettings;
@@ -1048,13 +1031,29 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             delegatedNode->SetTypeAnn(atomType);
             delegatedNode->SetState(TExprNode::EState::ConstrComplete);
-            auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
-            status = SyncTransform(transformer, delegatedNode, ctx);
-            if (status.Level == IGraphTransformer::TStatus::Error) {
-                return nullptr;
+            TString yson;
+            TString key;
+            if (types.QContext) {
+                key = MakeCacheKey(*clonedArg);
             }
 
-            TString yson{delegatedNode->GetResult().Content()};
+            if (types.QContext.CanRead()) {
+                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                yson = item->Value;
+            } else {
+                auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
+                status = SyncTransform(transformer, delegatedNode, ctx);
+                if (status.Level == IGraphTransformer::TStatus::Error) {
+                    return nullptr;
+                }
+
+                yson = delegatedNode->GetResult().Content();
+            }
+
             ysonNode = NYT::NodeFromYsonString(yson);
             if (ysonNode.HasKey("FallbackProvider")) {
                 nextProvider = ysonNode["FallbackProvider"].AsString();

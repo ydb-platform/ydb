@@ -21,6 +21,7 @@ protected:
     const TOpenIdConnectSettings Settings;
     TString ProtectedPageUrl;
     TString RequestedPageScheme;
+    bool IsAjaxRequest = false;
 
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
     const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";

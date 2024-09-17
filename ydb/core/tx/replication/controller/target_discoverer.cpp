@@ -172,8 +172,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         return entry.Name.StartsWith("~")
             || entry.Name.StartsWith(".sys")
-            || entry.Name.StartsWith(".metadata")
-            || entry.Name.StartsWith("export-");
+            || entry.Name.StartsWith(".metadata");
     }
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {

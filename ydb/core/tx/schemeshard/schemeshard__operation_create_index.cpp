@@ -139,8 +139,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable()
-                .NotBackupTable();
+                .IsTable();
 
             if (!internal) {
                 checks.NotAsyncReplicaTable();

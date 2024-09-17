@@ -337,9 +337,10 @@ namespace {
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
         auto codecs = GetCodecs();
-        if (!codecs.empty()) {
-            settings.SetSupportedCodecs(codecs);
+        if (codecs.empty()) {
+            codecs.push_back(NTopic::ECodec::RAW);
         }
+        settings.SetSupportedCodecs(codecs);
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());
@@ -545,10 +546,11 @@ namespace {
             consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
         }
 
-        auto codecs = GetCodecs();
-        if (!codecs.empty()) {
-            consumerSettings.SetSupportedCodecs(codecs);
+        TVector<NTopic::ECodec> codecs = GetCodecs();
+        if (codecs.empty()) {
+            codecs.push_back(NTopic::ECodec::RAW);
         }
+        consumerSettings.SetSupportedCodecs(codecs);
         consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
@@ -895,6 +897,7 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
+            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }
@@ -907,7 +910,7 @@ namespace {
         Codec_ = ::NYdb::NConsoleClient::ParseCodec(CodecStr_, AllowedCodecs_);
     }
 
-    TMaybe<NTopic::ECodec> TCommandWithCodec::GetCodec() const {
+    NTopic::ECodec TCommandWithCodec::GetCodec() const {
         return Codec_;
     }
 
@@ -957,9 +960,7 @@ namespace {
 
     NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
         NTopic::TWriteSessionSettings settings;
-        if (auto codec = GetCodec(); codec.Defined()) {
-            settings.Codec(*codec);
-        }
+        settings.Codec(GetCodec());
         settings.Path(TopicName);
 
         if (!MessageGroupId_.Defined()) {

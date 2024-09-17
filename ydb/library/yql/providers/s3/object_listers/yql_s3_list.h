@@ -131,14 +131,12 @@ public:
             Directories.end(),
             std::make_move_iterator(other.Directories.begin()),
             std::make_move_iterator(other.Directories.end()));
-        ListedObjectSize += other.ListedObjectSize;
         return *this;
     }
 
 public:
     std::vector<TObjectListEntry> Objects;
     std::vector<TDirectoryListEntry> Directories;
-    ui64 ListedObjectSize = 0; // total size of all found object, maybe incomplete, intended for use with CBO
 };
 
 enum class EListError {
@@ -148,7 +146,6 @@ enum class EListError {
 struct TListError {
     EListError Type;
     TIssues Issues;
-    ui64 ListedObjectSize = 0;
 };
 using TListResult = std::variant<TListEntries, TListError>;
 

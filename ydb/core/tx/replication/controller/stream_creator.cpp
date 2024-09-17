@@ -28,24 +28,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
     }
 
-    void RequestPermission() {
-        Send(Parent, new TEvPrivate::TEvRequestCreateStream());
-        Become(&TThis::StateRequestPermission);
-    }
-
-    STATEFN(StateRequestPermission) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvAllowCreateStream, Handle);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void Handle(TEvPrivate::TEvAllowCreateStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
-        CreateStream();
-    }
-
     void CreateStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -121,10 +103,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         LOG_T("Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
 
-        if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
-            return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYql::TIssues()));
-        }
-
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 LOG_D("Retry CreateConsumer");
@@ -177,7 +155,7 @@ public:
     }
 
     void Bootstrap() {
-        RequestPermission();
+        CreateStream();
     }
 
     STATEFN(StateBase) {

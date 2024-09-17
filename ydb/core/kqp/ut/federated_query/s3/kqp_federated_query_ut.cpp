@@ -2065,8 +2065,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             // default planner values
 
             const TString sql = fmt::format(R"(
-                    pragma ydb.CostBasedOptimizationLevel = "1";
-
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
                 "table1"_a = root + table1,
@@ -2097,7 +2095,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             // scale down
 
             const TString sql = fmt::format(R"(
-                    pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
                         {{ "tx": 0, "stage": {source1_id}, "tasks": 1 }},
                         {{ "tx": 0, "stage": {source2_id}, "tasks": 1 }},
@@ -2134,7 +2131,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             // scale up
 
             const TString sql = fmt::format(R"(
-                    pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
                         {{ "tx": 0, "stage": {source1_id}, "tasks": 10 }},
                         {{ "tx": 0, "stage": {source2_id}, "tasks": 10 }},

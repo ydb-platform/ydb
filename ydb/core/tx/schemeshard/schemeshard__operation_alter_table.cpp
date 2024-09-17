@@ -524,10 +524,8 @@ public:
                 .IsTable()
                 .NotUnderOperation();
 
-            if (checks && !Transaction.GetInternal()) {
-                checks
-                    .NotAsyncReplicaTable()
-                    .NotBackupTable();
+            if (!Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
             }
 
             if (!context.IsAllowedPrivateTables) {
@@ -726,10 +724,6 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     if (path.IsCommonSensePath()) {
-        return {CreateAlterTable(id, tx)};
-    }
-
-    if (path.IsBackupTable()) {
         return {CreateAlterTable(id, tx)};
     }
 

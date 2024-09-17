@@ -2,7 +2,6 @@
 #include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <functional>
 
 namespace NKikimr::NArrow {
 
@@ -11,56 +10,30 @@ class TSchemaLite;
 
 class TColumnOperator {
 public:
-    enum class EAbsentFieldPolicy {
-        Error,
+    enum class EExtractProblemsPolicy {
+        Null,
         Verify,
         Skip
     };
 
-    enum class ECheckFieldTypesPolicy {
-        Ignore,
-        Error,
-        Verify
-    };
-
 private:
-    EAbsentFieldPolicy AbsentColumnPolicy = EAbsentFieldPolicy::Verify;
-    ECheckFieldTypesPolicy DifferentColumnTypesPolicy = ECheckFieldTypesPolicy::Error;
+    EExtractProblemsPolicy AbsentColumnPolicy = EExtractProblemsPolicy::Verify;
 
 public:
-    TColumnOperator& VerifyOnDifferentFieldTypes() {
-        DifferentColumnTypesPolicy = ECheckFieldTypesPolicy::Verify;
-        return *this;
-    };
-
-    TColumnOperator& ErrorOnDifferentFieldTypes() {
-        DifferentColumnTypesPolicy = ECheckFieldTypesPolicy::Error;
-        return *this;
-    };
-
-    TColumnOperator& IgnoreOnDifferentFieldTypes() {
-        DifferentColumnTypesPolicy = ECheckFieldTypesPolicy::Ignore;
-        return *this;
-    };
-
-    TColumnOperator& ErrorIfAbsent() {
-        AbsentColumnPolicy = EAbsentFieldPolicy::Error;
+    TColumnOperator& NullIfAbsent() {
+        AbsentColumnPolicy = EExtractProblemsPolicy::Null;
         return *this;
     }
 
     TColumnOperator& VerifyIfAbsent() {
-        AbsentColumnPolicy = EAbsentFieldPolicy::Verify;
+        AbsentColumnPolicy = EExtractProblemsPolicy::Verify;
         return *this;
     }
 
     TColumnOperator& SkipIfAbsent() {
-        AbsentColumnPolicy = EAbsentFieldPolicy::Skip;
+        AbsentColumnPolicy = EExtractProblemsPolicy::Skip;
         return *this;
     }
-
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> AdaptIncomingToDestinationExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
-        const std::shared_ptr<TSchemaLite>& dstSchema, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
-        const std::function<i32(const std::string&)>& nameResolver) const;
 
     std::shared_ptr<arrow::RecordBatch> Extract(
         const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames);

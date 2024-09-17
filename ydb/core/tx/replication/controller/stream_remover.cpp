@@ -10,24 +10,6 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
-    void RequestPermission() {
-        Send(Parent, new TEvPrivate::TEvRequestDropStream());
-        Become(&TThis::StateRequestPermission);
-    }
-
-    STATEFN(StateRequestPermission) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvAllowDropStream, Handle);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
-        DropStream();
-    }
-
     void DropStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -44,8 +26,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStream);
-        default:
-            return StateBase(ev);
+            sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
@@ -96,13 +77,7 @@ public:
     }
 
     void Bootstrap() {
-        RequestPermission();
-    }
-
-    STATEFN(StateBase) {
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
+        DropStream();
     }
 
 private:

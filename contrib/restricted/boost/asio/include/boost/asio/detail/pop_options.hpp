@@ -51,10 +51,6 @@
 
 # pragma GCC diagnostic pop
 
-# pragma pop_macro ("emit")
-# pragma pop_macro ("signal")
-# pragma pop_macro ("slot")
-
 #elif defined(__GNUC__)
 
 // GNU C++
@@ -80,10 +76,6 @@
 # endif // (__GNUC__ == 4 && __GNUC_MINOR__ >= 1) || (__GNUC__ > 4)
 
 # pragma GCC diagnostic pop
-
-# pragma pop_macro ("emit")
-# pragma pop_macro ("signal")
-# pragma pop_macro ("slot")
 
 #elif defined(__KCC)
 

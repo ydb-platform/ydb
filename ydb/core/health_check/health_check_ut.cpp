@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type,
-                                          const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total,
+                                          const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total, 
                                           std::string_view pool = "/Root:test") {
         int issuesCount = 0;
         for (const auto& issue_log : result.Getissue_log()) {
@@ -1816,6 +1816,111 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), "static");
+    }
+
+    void HiveSyncTest(bool syncPeriod) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        ui32 dynNodeId = runtime.GetNodeId(1);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvHive::EvResponseHiveInfo: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveInfo::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    TInstant now = TInstant::Hours(1);
+                    record.SetResponseTimestamp(now.MilliSeconds());
+                    TInstant startTime;
+                    TDuration syncPeriodDuration = TDuration::MilliSeconds(NHealthCheck::TSelfCheckRequest::HIVE_SYNCHRONIZATION_PERIOD_MS);
+                    if (syncPeriod) {
+                        startTime = now - syncPeriodDuration / 2;
+                    } else {
+                        startTime = now - syncPeriodDuration * 2;
+                    }
+                    record.SetStartTimeTimestamp(startTime.MilliSeconds());
+                    auto *tablet = record.MutableTablets()->Add();
+                    tablet->SetTabletID(1);
+                    tablet->SetNodeID(dynNodeId);
+                    tablet->SetTabletType(NKikimrTabletBase::TTabletTypes::DataShard);
+                    tablet->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_BOOTING);
+                    tablet->MutableObjectDomain()->SetSchemeShard(SUBDOMAIN_KEY.OwnerId);
+                    tablet->MutableObjectDomain()->SetPathId(SUBDOMAIN_KEY.LocalPathId);
+                    TInstant lastAliveTimestamp = now - TDuration::Minutes(6);
+                    tablet->SetLastAliveTimestamp(lastAliveTimestamp.MilliSeconds());
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    auto *nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(dynNodeId);
+                    nodeStats->MutableNodeDomain()->SetSchemeShard(SUBDOMAIN_KEY.OwnerId);
+                    nodeStats->MutableNodeDomain()->SetPathId(SUBDOMAIN_KEY.LocalPathId);
+                    break;
+                }
+                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                    ChangeGetTenantStatusResponse(x, "/Root/database");
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    TSchemeCacheNavigate::TEntry& entry((*x)->Get()->Request->ResultSet.front());
+                    entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                    entry.Path = {"Root", "database"};
+                    entry.DomainInfo = MakeIntrusive<TDomainInfo>(SUBDOMAIN_KEY, SUBDOMAIN_KEY);
+
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root/database";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Cerr << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+
+        bool deadTabletIssueFoundInResult = false;
+        for (const auto &issue_log : result.issue_log()) {
+            if (issue_log.level() == 4 && issue_log.type() == "TABLET") {
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().id().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().type(), "DataShard");
+                deadTabletIssueFoundInResult = true;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(syncPeriod, !deadTabletIssueFoundInResult);
+    }
+
+    Y_UNIT_TEST(HiveSyncPeriodIgnoresTabletsState) {
+        HiveSyncTest(true);
+    }
+
+    Y_UNIT_TEST(AfterHiveSyncPeriodReportsTabletsState) {
+        HiveSyncTest(false);
     }
 
     Y_UNIT_TEST(ShardsLimit999) {

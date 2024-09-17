@@ -134,7 +134,7 @@ bool TSparsedMerger::TPlainChunkCursor::AddIndexTo(const ui32 index, TWriter& wr
 
 bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(const ui32 index, TWriter& writer) {
     AFL_VERIFY(ChunkStartGlobalPosition <= index);
-    AFL_VERIFY(index == NextGlobalPosition)("index", index)("next", NextGlobalPosition);
+    AFL_VERIFY(index == NextGlobalPosition);
     writer.AddRealData(Chunk->GetColValue(), NextLocalPosition);
     return true;
 }
@@ -163,9 +163,7 @@ void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
         PlainCursor = make_shared<TPlainChunkCursor>(CurrentOwnedArray->GetArray(), &*CurrentOwnedArray);
         SparsedCursor = nullptr;
     }
-    AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position);
     FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + CurrentOwnedArray->GetArray()->GetRecordsCount();
-    AFL_VERIFY(position < FinishGlobalPosition);
 }
 
 }   // namespace NKikimr::NOlap::NCompaction

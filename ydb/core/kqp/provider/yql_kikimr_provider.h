@@ -125,8 +125,6 @@ struct TKikimrQueryContext : TThrRefBase {
     // we do not want add extra life time for query context here
     std::shared_ptr<NKikimr::NGRpcService::IRequestCtxMtSafe> RpcCtx;
 
-    NSQLTranslation::TTranslationSettings TranslationSettings;
-
     void Reset() {
         PrepareOnly = false;
         SuppressDdlChecks = false;
@@ -145,7 +143,6 @@ struct TKikimrQueryContext : TThrRefBase {
 
         RlPath.Clear();
         RpcCtx.reset();
-        TranslationSettings = NSQLTranslation::TTranslationSettings();
     }
 };
 
@@ -571,10 +568,3 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
 } // namespace NYql
-
-namespace NSQLTranslation {
-
-void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings);
-void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, TTranslationSettings& settings);
-
-}

@@ -7,7 +7,6 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
@@ -23,7 +22,7 @@
 
 namespace NKikimr {
 
-class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
+class TStateStorageReplica : public TActor<TStateStorageReplica> {
     TIntrusivePtr<TStateStorageInfo> Info;
     const ui32 ReplicaIndex;
 
@@ -417,17 +416,11 @@ public:
     }
 
     TStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex)
-        : Info(info)
+        : TActor(&TThis::StateInit)
+        , Info(info)
         , ReplicaIndex(replicaIndex)
     {
         Y_UNUSED(ReplicaIndex);
-    }
-
-    void Bootstrap() {
-        auto localNodeId = SelfId().NodeId();
-        auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
-        Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("StateStorage"));
-        Become(&TThis::StateInit);
     }
 
     STATEFN(StateInit) {

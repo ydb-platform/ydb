@@ -2963,9 +2963,7 @@ void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
 
     db.Table<Schema::View>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::View::AlterVersion>{viewInfo->AlterVersion},
-        NIceDb::TUpdate<Schema::View::QueryText>{viewInfo->QueryText},
-        NIceDb::TUpdate<Schema::View::CapturedContext>{viewInfo->CapturedContext.SerializeAsString()}
-    );
+        NIceDb::TUpdate<Schema::View::QueryText>{viewInfo->QueryText});
 }
 
 void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {

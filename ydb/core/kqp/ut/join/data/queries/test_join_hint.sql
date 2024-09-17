@@ -1,9 +1,5 @@
-PRAGMA ydb.OptimizerHints = 
-'
-    JoinAlgo(R S Grace) 
-    Card(R # 1) 
-    Card(R S # 10e6)
-';
+PRAGMA ydb.OptCardinalityHints = '[{"labels":["R"], "op":"#", "value":1}, {"labels":["R","S"], "op":"#", "value":10e6}]';
+PRAGMA ydb.OptJoinAlgoHints = '[{"labels":["R","S"], "algo":"GraceJoin"}]';
 
 SELECT *
 FROM `/Root/R` as R

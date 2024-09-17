@@ -152,11 +152,14 @@ Y_UNIT_TEST(RelCollector) {
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
-    typeCtx.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
+    typeCtx.StatisticsMap[tables[1].Ptr()->Child(0)] =
+        std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1);
     UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
-    typeCtx.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
-    typeCtx.SetStats(tables[2].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
+    typeCtx.StatisticsMap[tables[0].Ptr()->Child(0)] =
+        std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1);
+    typeCtx.StatisticsMap[tables[2].Ptr()->Child(0)] =
+        std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1);
 
     TVector<TString> labels;
     UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto label, auto, auto) { labels.emplace_back(label); }) == true);
@@ -204,8 +207,10 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
     joinArgs.emplace_back(joinTree);
     joinArgs.emplace_back(settings);
 
-    typeCtx.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
-    typeCtx.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
+    typeCtx.StatisticsMap[tables[0].Ptr()->Child(0)] =
+        std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1);
+    typeCtx.StatisticsMap[tables[1].Ptr()->Child(0)] =
+        std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1);
 
     TCoEquiJoin equiJoin = Build<TCoEquiJoin>(ctx, pos)
         .Add(joinArgs)

@@ -1,5 +1,4 @@
 #include "statestorage_impl.h"
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 
@@ -18,7 +17,7 @@
 
 namespace NKikimr {
 
-class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
+class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
 
     using TOwnerIndex = TMap<TActorId, ui32, TActorId::TOrderedCmp>;
     using TPathIndex = TMap<TString, TSet<ui32>>;
@@ -420,14 +419,8 @@ public:
     }
 
     TBoardReplicaActor()
+        : TActor(&TThis::StateWork)
     {}
-
-    void Bootstrap() {
-        auto localNodeId = SelfId().NodeId();
-        auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
-        Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("StateStorageBoard"));
-        Become(&TThis::StateWork);
-    }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {

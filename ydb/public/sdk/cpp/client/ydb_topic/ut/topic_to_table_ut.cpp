@@ -65,7 +65,6 @@ protected:
                      const TString& consumer = TEST_CONSUMER,
                      size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
-    void DescribeTopic(const TString& path);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -327,11 +326,6 @@ void TFixture::CreateTopic(const TString& path,
 
 {
     Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
-}
-
-void TFixture::DescribeTopic(const TString& path)
-{
-    Setup->DescribeTopic(path);
 }
 
 const TDriver& TFixture::GetDriver() const
@@ -1128,8 +1122,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_6, TFixture)
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
     }
-
-    DescribeTopic("topic_A");
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_7, TFixture)

@@ -42,7 +42,6 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/control
     ydb/library/pdisk_io
-    ydb/library/yaml_config
 )
 
 END()

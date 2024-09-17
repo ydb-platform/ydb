@@ -75,11 +75,11 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         return self
 
     def _start(self):
-        for inst_set in [self.nodes, self.slots]:
+        for inst_set in [self.nodes, self.slots, self.nbs]:
             self._run_on(inst_set, lambda x: x.start())
 
     def _stop(self):
-        for inst_set in [self.nodes, self.slots]:
+        for inst_set in [self.nodes, self.slots, self.nbs]:
             self._run_on(inst_set, lambda x: x.stop())
 
     @staticmethod
@@ -125,7 +125,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         self._deploy_secrets()
 
-        for inst_set in [self.nodes]:
+        for inst_set in [self.nodes, self.nbs]:
             self._run_on(
                 inst_set,
                 lambda x: x.prepare_artifacts(
@@ -165,7 +165,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         )
 
         if param_constants.deploy_cluster:
-            for inst_set in [self.nodes, self.slots]:
+            for inst_set in [self.nodes, self.slots, self.nbs]:
                 self._run_on(
                     inst_set,
                     lambda x: x.cleanup_logs()

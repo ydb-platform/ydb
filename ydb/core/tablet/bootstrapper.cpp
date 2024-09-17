@@ -3,7 +3,6 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -191,10 +190,6 @@ class TBootstrapper : public TActor<TBootstrapper> {
     }
 
     void BeginNewRound(const TActorContext &ctx) {
-        auto localNodeId = SelfId().NodeId();
-        auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
-        Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Bootstrapper"));
-
         if (BootstrapperInfo->OtherNodes.empty())
             return Boot(ctx);
 

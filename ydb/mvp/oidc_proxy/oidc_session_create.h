@@ -7,7 +7,6 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
-#include "context.h"
 
 namespace NMVP {
 namespace NOIDC {
@@ -21,7 +20,8 @@ protected:
     const NHttp::THttpIncomingRequestPtr Request;
     NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    TContext Context;
+    TString RedirectUrl;
+    bool IsAjaxRequest = false;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
@@ -38,9 +38,6 @@ public:
 protected:
     bool IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx);
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void TryRestoreOidcSessionFromCookie(const NActors::TActorContext& ctx);
-    void RetryRequestToProtectedResource(const NActors::TActorContext& ctx, const TString& responseMessage = "Found") const;
-    void RetryRequestToProtectedResource(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found") const;
 };
 
 }  // NOIDC

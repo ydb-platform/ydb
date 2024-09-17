@@ -23,28 +23,19 @@ TWorkerFilter::TWorkerFilter(const Yql::DqsProto::TWorkerFilter& filter)
     }
 }
 
-bool TWorkerFilter::MatchHost(const NDqs::TWorkerInfo::TPtr& workerInfo) const {
-    if (FullMatch) {
-        if (Filter.GetClusterName() && workerInfo->ClusterName != Filter.GetClusterName()) {
-            return false;
-        }
-        if (!Addresses.empty() && Addresses.find(workerInfo->Address) == Addresses.end()) {
-            return false;
-        }
-        if (!NodeIds.empty() && NodeIds.find(workerInfo->NodeId) == NodeIds.end()) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 TWorkerFilter::EMatchStatus TWorkerFilter::Match(const TWorkerInfo::TPtr& workerInfo, int taskId, TStats* stats) const {
     bool allExists = true;
     bool partial = false;
-
-    if (!MatchHost(workerInfo)) {
-        return EFAIL;
+    if (FullMatch) {
+        if (Filter.GetClusterName() && workerInfo->ClusterName != Filter.GetClusterName()) {
+            return EFAIL;
+        }
+        if (!Addresses.empty() && Addresses.find(workerInfo->Address) == Addresses.end()) {
+            return EFAIL;
+        }
+        if (!NodeIds.empty() && NodeIds.find(workerInfo->NodeId) == NodeIds.end()) {
+            return EFAIL;
+        }
     }
     if (Filter.GetClusterNameHint() && workerInfo->ClusterName != Filter.GetClusterNameHint()) {
         partial = true;
@@ -61,10 +52,7 @@ TWorkerFilter::EMatchStatus TWorkerFilter::Match(const TWorkerInfo::TPtr& worker
                 (*stats->WaitingResources)[id].insert(taskId);
             } else {
                 (*stats->WaitingResources)[id].erase(taskId);
-                auto maybeUploadedStats = stats->Uploaded->find(id);
-                if (maybeUploadedStats != stats->Uploaded->end()) {
-                    maybeUploadedStats->second.TryCount ++;
-                }
+                stats->Uploaded->find(id)->second.TryCount ++;
             }
         }
     }

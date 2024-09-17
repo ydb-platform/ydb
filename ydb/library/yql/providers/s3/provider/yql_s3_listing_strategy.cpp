@@ -31,11 +31,11 @@ using namespace NThreading;
 using namespace NS3Lister;
 
 TListError MakeLimitExceededError(
-    const TString& componentName, ui64 limit, ui64 actual, ui64 listObjectSize) {
+    const TString& componentName, ui64 limit, ui64 actual) {
     auto issue = TIssue(
         TStringBuilder{} << '[' << componentName << "] Limit exceeded. Limit: " << limit
                          << " Actual: " << actual);
-    return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}, listObjectSize};
+    return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}};
 }
 
 TListError MakeGenericError(const TString& description) {
@@ -87,7 +87,7 @@ private:
                     << stateEntries.Size() + chunkEntries.Size()
                     << " object paths which is more than limit " << limit;
                 state = MakeLimitExceededError(
-                    name, limit, stateEntries.Size() + chunkEntries.Size(), stateEntries.ListedObjectSize + chunkEntries.ListedObjectSize);
+                    name, limit, stateEntries.Size() + chunkEntries.Size());
                 return EAggregationAction::Stop;
             }
             YQL_CLOG(TRACE, ProviderS3)
@@ -209,7 +209,6 @@ public:
         TListResult Result;
         std::vector<TIntrusivePtr<TIssue>> PreviousIssues;
         bool Set = false;
-        ui64 ListedObjectSize = 0;
     };
 
     explicit TCompositeS3ListingStrategy(TStrategyContainer&& strategies)
@@ -232,14 +231,12 @@ public:
                                    << "[TCompositeS3ListingStrategy] Strategy successfully listed paths. Returning result: "
                                    << chunkEntries.Objects.size() << " objects, "
                                    << chunkEntries.Directories.size() << " path prefixes";
-                               state.ListedObjectSize = std::max(state.ListedObjectSize, chunkEntries.ListedObjectSize);
-                               std::get<TListEntries>(state.Result) = chunkEntries;
-                               std::get<TListEntries>(state.Result).ListedObjectSize = state.ListedObjectSize;
+                               std::get<TListEntries>(state.Result) =
+                                   chunkEntries;
                                state.Set = true;
                                return EAggregationAction::Stop;
                            };
                        auto errorHandler = [&state](const TListError& error) mutable {
-                           state.ListedObjectSize = std::max(state.ListedObjectSize, error.ListedObjectSize);
                            auto issue = MakeIntrusive<TIssue>("Strategy failed with issues");
                            for (auto& subIssue: error.Issues) {
                             issue->AddSubIssue(MakeIntrusive<TIssue>(subIssue));
@@ -248,7 +245,7 @@ public:
 
                            if (IsRecoverableError(error)) {
                                YQL_CLOG(INFO, ProviderS3)
-                                   << "[TCompositeS3ListingStrategy] Strategy failed"
+                                   << "[TCompositeS3ListingStrategy] Strategy failed "
                                    << " to list paths. Trying next one... ";
                                return EAggregationAction::Proceed;
                            }
@@ -357,7 +354,6 @@ public:
                             result.Objects.begin(),
                             listingResult.Objects.cbegin(),
                             listingResult.Objects.cend());
-                        result.ListedObjectSize = listingResult.ListedObjectSize;
                         for (auto& directoryPrefix : listingResult.Directories) {
                             if (directoryPrefix.MatchedGlobs.empty()) {
                                 // We need to list until extra columns are extracted
@@ -517,7 +513,6 @@ public:
             result.Objects.end(),
             std::make_move_iterator(listingResult.Objects.begin()),
             std::make_move_iterator(listingResult.Objects.end()));
-        result.ListedObjectSize += listingResult.ListedObjectSize;
         if (currentListingTotalSize < MinParallelism) {
             for (auto& directoryPrefix : listingResult.Directories) {
                 DirectoryPrefixQueue.push_back(directoryPrefix.Path);
@@ -632,7 +627,6 @@ public:
         std::vector<TObjectListEntry> Objects;
         std::vector<TDirectoryListEntry> Directories;
         std::vector<TFuture<TListResult>> NextDirectoryListeningChunk;
-        ui64 ListedObjectSize = 0;
         // CurrentListing
         TPromise<TListResult> CurrentPromise;
         bool IsListingFinished = false;
@@ -729,8 +723,7 @@ public:
                 auto error = MakeLimitExceededError(
                     "TConcurrentBFSDirectoryResolverIterator",
                     Limit,
-                    currentListingTotalSize,
-                    ListedObjectSize);
+                    currentListingTotalSize);
                 HandleLimitExceeded(sourcePath, std::move(error));
                 return;
             }
@@ -739,7 +732,6 @@ public:
                 Objects.end(),
                 std::make_move_iterator(listingResult.Objects.begin()),
                 std::make_move_iterator(listingResult.Objects.end()));
-            ListedObjectSize += listingResult.ListedObjectSize;
 
             for (auto& directoryEntry : listingResult.Directories) {
                 if (DirectoryToListMatcher(directoryEntry)) {
@@ -773,7 +765,7 @@ public:
                 res = *MaybeError;
             } else {
                 // TODO: add verification
-                auto result = TListEntries{.Objects = Objects, .ListedObjectSize = ListedObjectSize};
+                auto result = TListEntries{.Objects = Objects};
                 for (auto& directoryPrefix : DirectoryPrefixQueue) {
                     result.Directories.push_back({.Path = directoryPrefix});
                 }

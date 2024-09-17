@@ -35,7 +35,7 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
     public:
         TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, 
             const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) : 
-            TDqStatisticsTransformerBase(&typeCtx, pctx, *kqpCtx->GetOptimizerHints().CardinalityHints),
+            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetCardinalityHints()),
             Config(config),
             KqpCtx(*kqpCtx) {}
 

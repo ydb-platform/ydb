@@ -16,29 +16,22 @@
 
 class TZtStringBuf: public TStringBuf {
 public:
-    constexpr TZtStringBuf(const char* s Y_LIFETIME_BOUND) noexcept
+    constexpr TZtStringBuf(const char* s)
         : TStringBuf(s)
     {
     }
 
-    TZtStringBuf(const TString& s Y_LIFETIME_BOUND) noexcept
+    TZtStringBuf(const TString& s)
         : TStringBuf(s)
     {
     }
 
-    TZtStringBuf(const std::string& s Y_LIFETIME_BOUND) noexcept
-        : TStringBuf(s)
+    TZtStringBuf()
+        : TZtStringBuf(TString{})
     {
     }
 
-    constexpr TZtStringBuf() noexcept
-        : TZtStringBuf("")
-    {
-    }
-
-    TZtStringBuf(const TStringBuf&) = delete;
-
-    constexpr const char* c_str() const noexcept {
+    const char* c_str() const {
         return data();
     }
 };

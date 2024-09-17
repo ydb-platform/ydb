@@ -17,7 +17,6 @@
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -819,28 +818,7 @@ private:
         return path;
     }
 
-    std::shared_ptr<TOptimizerStatistics> FindWrapStats(TExprNode::TPtr node, const TExprNode* dataSourceNode) {
-        if (auto maybeWrapBase = TMaybeNode<TDqSourceWrapBase>(node)) {
-            if (maybeWrapBase.Cast().DataSource().Raw() == dataSourceNode) {
-                return SerializerCtx.TypeCtx.GetStats(node.Get());
-            }
-        }
-        for (const auto& child : node->Children()) {
-            std::shared_ptr<TOptimizerStatistics> result;
-            if (child->IsLambda()) {
-                auto lambda = TExprBase(child).Cast<TCoLambda>();
-                result = FindWrapStats(lambda.Body().Ptr(), dataSourceNode);
-            } else {
-                result = FindWrapStats(child, dataSourceNode);
-            }
-            if (result) {
-                return result;
-            }
-        }
-        return nullptr;
-    }
-
-    void Visit(const TDqSource& source, TQueryPlanNode& stagePlanNode, const TCoLambda& Lambda) {
+    void Visit(const TDqSource& source, TQueryPlanNode& stagePlanNode) {
         // YDB sources
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>(); settings.IsValid()) {
             Visit(settings.Cast(), stagePlanNode);
@@ -870,15 +848,7 @@ private:
             op.Properties["Name"] = "Read from external data source";
         }
 
-        // Actual stats must be binded with TDqSourceWrapBase
-        auto stats = FindWrapStats(Lambda.Body().Ptr(), dataSource.Raw());
-
-        if (!stats) {
-            // Fallback to TCoDataSource
-            stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw());
-        }
-
-        if (stats) {
+        if (auto stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw())) {
             op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
             op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
             op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
@@ -952,7 +922,7 @@ private:
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
                 if (auto source = input.Maybe<TDqSource>()) {
                     auto& inputSourceNode = AddPlanNode(stagePlanNode);
-                    Visit(source.Cast(), inputSourceNode, expr.Cast<TDqStageBase>().Program());
+                    Visit(source.Cast(), inputSourceNode);
                     inputIds.emplace_back(&inputSourceNode);
                 } else {
                     auto inputCn = input.Cast<TDqConnection>();

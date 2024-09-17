@@ -51,7 +51,6 @@ DECLARE_REFCOUNTED_STRUCT(IAsyncZeroCopyOutputStream)
 DECLARE_REFCOUNTED_STRUCT(IFairShareThreadPool)
 
 DECLARE_REFCOUNTED_CLASS(TAsyncStreamPipe)
-DECLARE_REFCOUNTED_CLASS(TBoundedAsyncStreamPipe)
 
 DEFINE_ENUM(EWaitForStrategy,
     (WaitFor)

@@ -2161,9 +2161,7 @@ TLogicalTypePtr NullLogicalType()
 
 } // namespace NYT::NTableClient
 
-namespace {
-
-size_t GetHash(
+static inline size_t GetHash(
     const THash<NYT::NTableClient::TLogicalType>& hasher,
     const std::vector<NYT::NTableClient::TLogicalTypePtr>& elements)
 {
@@ -2174,7 +2172,7 @@ size_t GetHash(
     return result;
 }
 
-size_t GetHash(
+static inline size_t GetHash(
     const THash<NYT::NTableClient::TLogicalType>& hasher,
     const std::vector<NYT::NTableClient::TStructField>& fields)
 {
@@ -2186,12 +2184,10 @@ size_t GetHash(
     return result;
 }
 
-} // namespace
-
 size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClient::TLogicalType& logicalType) const
 {
     using namespace NYT::NTableClient;
-    auto typeHash = static_cast<size_t>(logicalType.GetMetatype());
+    const auto typeHash = static_cast<size_t>(logicalType.GetMetatype());
     switch (logicalType.GetMetatype()) {
         case ELogicalMetatype::Simple:
             return CombineHashes(static_cast<size_t>(logicalType.AsSimpleTypeRef().GetElement()), typeHash);

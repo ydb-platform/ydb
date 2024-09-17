@@ -928,37 +928,20 @@ private:
             config.SetVersion(pqGroup.AlterData->AlterVersion);
         }
 
-        THashSet<ui32> linkedPartitions;
-
         for(const auto& pq : pqShard.Partitions) {
             config.AddPartitionIds(pq->PqId);
 
             auto& partition = *config.AddPartitions();
             FillPartition(partition, pq.Get(), 0);
-
-            linkedPartitions.insert(pq->PqId);
-            linkedPartitions.insert(pq->ParentPartitionIds.begin(), pq->ParentPartitionIds.end());
-            linkedPartitions.insert(pq->ChildPartitionIds.begin(), pq->ChildPartitionIds.end());
-            for (auto c : pq->ChildPartitionIds) {
-                auto it = pqGroup.Partitions.find(c);
-                if (it == pqGroup.Partitions.end()) {
-                    continue;
-                }
-                linkedPartitions.insert(it->second->ParentPartitionIds.begin(), it->second->ParentPartitionIds.end());
-            }
         }
 
-        for(auto lp : linkedPartitions) {
-            auto it = pqGroup.Partitions.find(lp);
-            if (it == pqGroup.Partitions.end()) {
-                continue;
+        for(const auto& p : pqGroup.Shards) {
+            const auto& pqShard = p.second;
+            const auto& tabletId = context.SS->ShardInfos[p.first].TabletID;
+            for (const auto& pq : pqShard->Partitions) {
+                auto& partition = *config.AddAllPartitions();
+                FillPartition(partition, pq.Get(), ui64(tabletId));
             }
-
-            auto* partitionInfo = it->second;
-            const auto& tabletId = context.SS->ShardInfos[partitionInfo->ShardIdx].TabletID;
-
-            auto& partition = *config.AddAllPartitions();
-            FillPartition(partition, partitionInfo, ui64(tabletId));
         }
     }
 

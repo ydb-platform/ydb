@@ -1,5 +1,4 @@
-PRAGMA ydb.OptimizerHints = 'Card(R S # 1)';
-
+PRAGMA ydb.OptCardinalityHints = '[{"labels":["R","S"], "op":"#", "value":1.0}]';
 
 SELECT *
 FROM `/Root/R` as R

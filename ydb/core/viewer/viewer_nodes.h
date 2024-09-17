@@ -2179,187 +2179,84 @@ public:
     }
 
     static YAML::Node GetSwagger() {
-        YAML::Node node = YAML::Load(R"___(
-            get:
-                tags:
-                  - viewer
-                summary: Nodes info
-                description: Information about nodes
-                parameters:
-                  - name: database
-                    in: query
-                    description: database name
-                    required: false
-                    type: string
-                  - name: path
-                    in: query
-                    description: path to schema object
-                    required: false
-                    type: string
-                  - name: node_id
-                    in: query
-                    description: node id
-                    required: false
-                    type: integer
-                  - name: group_id
-                    in: query
-                    description: group id
-                    required: false
-                    type: integer
-                  - name: pool
-                    in: query
-                    description: storage pool name
-                    required: false
-                    type: string
-                  - name: type
-                    in: query
-                    description: >
-                        return nodes of specific type:
-                          * `static`
-                          * `dynamic`
-                          * `any`
-                  - name: with
-                    in: query
-                    description: >
-                        filter groups by missing or space:
-                          * `missing`
-                          * `space`
-                  - name: storage
-                    in: query
-                    description: return storage info
-                    required: false
-                    type: boolean
-                  - name: tablets
-                    in: query
-                    description: return tablets info
-                    required: false
-                    type: boolean
-                  - name: problems_only
-                    in: query
-                    description: return only problem nodes
-                    required: false
-                    type: boolean
-                  - name: uptime
-                    in: query
-                    description: return only nodes with less uptime in sec.
-                    required: false
-                    type: integer
-                  - name: filter
-                    in: query
-                    description: filter nodes by id or host
-                    required: false
-                    type: string
-                  - name: sort
-                    in: query
-                    description: >
-                        sort by:
-                          * `NodeId`
-                          * `Host`
-                          * `NodeName`
-                          * `DC`
-                          * `Rack`
-                          * `Version`
-                          * `Uptime`
-                    required: false
-                    type: string
-                  - name: group
-                    in: query
-                    description: >
-                        group by:
-                          * `NodeId`
-                          * `Host`
-                          * `NodeName`
-                          * `Database`
-                          * `DiskSpaceUsage`
-                          * `DC`
-                          * `Rack`
-                          * `Missing`
-                          * `Uptime`
-                          * `Version`
-                    required: false
-                    type: string
-                  - name: filter_group_by
-                    in: query
-                    description: >
-                        group by:
-                          * `NodeId`
-                          * `Host`
-                          * `NodeName`
-                          * `Database`
-                          * `DiskSpaceUsage`
-                          * `DC`
-                          * `Rack`
-                          * `Missing`
-                          * `Uptime`
-                          * `Version`
-                    required: false
-                    type: string
-                  - name: filter_group
-                    in: query
-                    description: content for filter group by
-                    required: false
-                    type: string
-                  - name: fields_required
-                    in: query
-                    description: >
-                        list of fields required in response, the more - the heavier could be request. `all` for all fields:
-                          * `NodeId` (always required)
-                          * `SystemState`
-                          * `PDisks`
-                          * `VDisks`
-                          * `Tablets`
-                          * `Host`
-                          * `NodeName`
-                          * `DC`
-                          * `Rack`
-                          * `Version`
-                          * `Uptime`
-                          * `Memory`
-                          * `CPU`
-                          * `LoadAverage`
-                          * `Missing`
-                          * `DiskSpaceUsage`
-                          * `SubDomainKey`
-                          * `DisconnectTime`
-                          * `Database`
-                    required: false
-                    type: string
-                  - name: offset
-                    in: query
-                    description: skip N nodes
-                    required: false
-                    type: integer
-                  - name: limit
-                    in: query
-                    description: limit to N nodes
-                    required: false
-                    type: integer
-                  - name: timeout
-                    in: query
-                    description: timeout in ms
-                    required: false
-                    type: integer
-                  - name: direct
-                    in: query
-                    description: fulfill request on the target node without redirects
-                    required: false
-                    type: boolean
-                responses:
-                    200:
-                        description: OK
-                        content:
-                            application/json:
-                                schema:
-                                    type: object
-                    400:
-                        description: Bad Request
-                    403:
-                        description: Forbidden
-                    504:
-                        description: Gateway Timeout
-                )___");
-        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
-        return node;
+        TSimpleYamlBuilder yaml({
+            .Method = "get",
+            .Tag = "viewer",
+            .Summary = "Nodes info",
+            .Description = "Information about nodes",
+        });
+        yaml.AddParameter({
+            .Name = "path",
+            .Description = "path to schema object",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "with",
+            .Description = "filter nodes by missing disks or space",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "storage",
+            .Description = "return storage info",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "tablets",
+            .Description = "return tablets info",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "sort",
+            .Description = "sort by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "group",
+            .Description = "group by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "offset",
+            .Description = "skip N nodes",
+            .Type = "integer",
+        });
+        yaml.AddParameter({
+            .Name = "limit",
+            .Description = "limit to N nodes",
+            .Type = "integer",
+        });
+        yaml.AddParameter({
+            .Name = "timeout",
+            .Description = "timeout in ms",
+            .Type = "integer",
+        });
+        yaml.AddParameter({
+            .Name = "uptime",
+            .Description = "return only nodes with less uptime in sec.",
+            .Type = "integer",
+        });
+        yaml.AddParameter({
+            .Name = "problems_only",
+            .Description = "return only problem nodes",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "filter",
+            .Description = "filter nodes by id or host",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "filter_group_by",
+            .Description = "filter group by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "filter_group",
+            .Description = "content for filter group by",
+            .Type = "string",
+        });
+        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>());
+        return yaml;
     }
 };
 

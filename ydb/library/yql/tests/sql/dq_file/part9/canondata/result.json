@@ -87,28 +87,6 @@
         }
     ],
     "test.test[agg_phases-sum_opt-default.txt-Results]": [],
-    "test.test[agg_phases_agg_apply-avg_decimal-default.txt-Analyze]": [
-        {
-            "checksum": "01775e7c945a56ebf0edc2d478f4f68d",
-            "size": 2567,
-            "uri": "https://{canondata_backend}/1814674/77d41c903ddd926a62e64221c321109c23757fa8/resource.tar.gz#test.test_agg_phases_agg_apply-avg_decimal-default.txt-Analyze_/plan.txt"
-        }
-    ],
-    "test.test[agg_phases_agg_apply-avg_decimal-default.txt-Debug]": [
-        {
-            "checksum": "c141458b4faf20cdfa0b2581438b2060",
-            "size": 2167,
-            "uri": "https://{canondata_backend}/1814674/77d41c903ddd926a62e64221c321109c23757fa8/resource.tar.gz#test.test_agg_phases_agg_apply-avg_decimal-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[agg_phases_agg_apply-avg_decimal-default.txt-Plan]": [
-        {
-            "checksum": "01775e7c945a56ebf0edc2d478f4f68d",
-            "size": 2567,
-            "uri": "https://{canondata_backend}/1814674/77d41c903ddd926a62e64221c321109c23757fa8/resource.tar.gz#test.test_agg_phases_agg_apply-avg_decimal-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[agg_phases_agg_apply-avg_decimal-default.txt-Results]": [],
     "test.test[aggr_factory-def_value_full_table-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

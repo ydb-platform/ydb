@@ -104,13 +104,8 @@ public:
         }
 
         TString DebugString() const {
-            TStringBuilder sb;
-            sb << "start=" << GlobalStartPosition << ";finish=" << GlobalFinishPosition
-                << ";addresses_count=" << Addresses.size() << ";";
-            for (auto&& i : Addresses) {
-                sb << "addresses=" << i.DebugString() << ";";
-            }
-            return sb;
+            return TStringBuilder() << "start=" << GlobalStartPosition << ";finish=" << GlobalFinishPosition
+                                    << ";addresses_count=" << Addresses.size() << ";";
         }
     };
 

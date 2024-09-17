@@ -11,5 +11,4 @@ RECURSE(
     provider
     range_helpers
     serializations
-    statistics
 )

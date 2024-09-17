@@ -124,56 +124,19 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
   {% endif %}
 
-  Example of creating a row-oriented table using partitioning options:
-
-  ```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    PRIMARY KEY (a, b)
-  )
-  WITH (
-    AUTO_PARTITIONING_BY_SIZE = ENABLED,
-    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
-  );
-  ```
-
-  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#partitioning) section.
-
-
 - Creating a column-oriented table
 
   ```yql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Timestamp NOT NULL,
+    b Uint64 NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
-  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN
   );
   ```
-
-  Example of creating a column-oriented table with an option to specify the minimum physical number of partitions for storing data:
-
-  ```yql
-  CREATE TABLE table_name (
-    a Uint64 NOT NULL,
-    b Timestamp NOT NULL,
-    c Float,
-    PRIMARY KEY (a, b)
-  )
-  PARTITION BY HASH(b)
-  WITH (
-    STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-  );
-  ```
-
-  This code will create a columnar table with 10 partitions. The full list of column-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
 
 {% endlist %}
 
@@ -223,7 +186,6 @@ CREATE TABLE <table_name> (
   PRIMARY KEY (a, b)
 );
 ```
-
 {% endif %}
 
 {% if backend_name == "YDB" %}

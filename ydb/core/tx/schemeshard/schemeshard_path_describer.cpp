@@ -1052,7 +1052,6 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(viewInfo->AlterVersion);
     entry->SetQueryText(viewInfo->QueryText);
-    *entry->MutableCapturedContext() = viewInfo->CapturedContext;
 }
 
 void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {

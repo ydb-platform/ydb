@@ -17,9 +17,6 @@ namespace NYT::NObjectClient {
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
 
-//! Checks if the given type is a Sequoia node.
-bool IsSequoiaNode(NObjectClient::EObjectType type);
-
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
 

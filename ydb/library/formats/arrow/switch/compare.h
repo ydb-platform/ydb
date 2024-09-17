@@ -92,9 +92,7 @@ public:
 
     template <typename T>
     static std::partial_ordering CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull) {
-        if (xIsNull && yIsNull) {
-            return std::partial_ordering::equivalent;
-        }
+        // TODO: std::partial_ordering::unordered for both nulls?
         if (xIsNull) {
             return std::partial_ordering::less;
         }

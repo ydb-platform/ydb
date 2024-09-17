@@ -6,7 +6,6 @@ namespace NYql::NDq {
 class TDqAsyncInputBuffer : public TDqInputImpl<TDqAsyncInputBuffer, IDqAsyncInputBuffer> {
     using TBaseImpl = TDqInputImpl<TDqAsyncInputBuffer, IDqAsyncInputBuffer>;
     friend TBaseImpl;
-    bool Pending = false;
 public:
     TDqAsyncInputBufferStats PushStats;
     TDqInputStats PopStats;
@@ -33,7 +32,7 @@ public:
     }
 
     void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
-        Pending = space != 0;
+        Y_ABORT_UNLESS(!batch.empty() || !space);
         if (!batch.empty()) {
             AddBatch(std::move(batch), space);
         }
@@ -41,10 +40,6 @@ public:
 
     virtual void Push(TDqSerializedBatch&&, i64) override {
         YQL_ENSURE(!"Unimplemented");
-    }
-
-    bool IsPending() const override {
-        return Pending;
     }
 };
 

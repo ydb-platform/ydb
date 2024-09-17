@@ -26,6 +26,7 @@ void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
         return;
     }
     NHttp::THeaders headers(Request->Headers);
+    IsAjaxRequest = DetectAjaxRequest(headers);
     TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
     if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
         ForwardUserRequest(TString(authHeader), ctx);

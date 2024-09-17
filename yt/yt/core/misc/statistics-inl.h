@@ -4,26 +4,22 @@
 #include "statistics.h"
 #endif
 
-#include "statistic_path.h"
-
 #include <yt/yt/core/ypath/tokenizer.h>
 
 #include <yt/yt/core/ytree/fluent.h>
-
-#include <library/cpp/iterator/enumerate.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-void TStatistics::AddSample(const NStatisticPath::TStatisticPath& path, const T& sample)
+void TStatistics::AddSample(const NYPath::TYPath& path, const T& sample)
 {
     AddSample(path, NYTree::ConvertToNode(sample));
 }
 
 template <class T>
-void TStatistics::ReplacePathWithSample(const NStatisticPath::TStatisticPath& path, const T& sample)
+void TStatistics::ReplacePathWithSample(const NYPath::TYPath& path, const T& sample)
 {
     ReplacePathWithSample(path, NYTree::ConvertToNode(sample));
 }
@@ -40,22 +36,20 @@ void TStatistics::ReplacePathWithSample(const NStatisticPath::TStatisticPath& pa
 template <typename TSummaryMap>
 std::pair<EStatisticPathConflictType, typename TSummaryMap::iterator> IsCompatibleStatistic(
     TSummaryMap& existingStatistics,
-    const NStatisticPath::TStatisticPath& path)
+    const NYPath::TYPath& path)
 {
     auto it = existingStatistics.lower_bound(path);
     if (it != existingStatistics.end()) {
         if (it->first == path) {
             return {EStatisticPathConflictType::Exists, it};
         }
-        // TODO(pavook) std::ranges::starts_with(it->first, path) when C++23 arrives.
-        if (it->first.StartsWith(path)) {
+        if (NYPath::HasPrefix(it->first, path)) {
             return {EStatisticPathConflictType::IsPrefix, it};
         }
     }
     if (it != existingStatistics.begin()) {
         auto prev = std::prev(it);
-        // TODO(pavook) std::ranges::starts_with(path, prev->first) when C++23 arrives.
-        if (path.StartsWith(prev->first)) {
+        if (NYPath::HasPrefix(path, prev->first)) {
             return {EStatisticPathConflictType::HasPrefix, prev};
         }
     }
@@ -68,7 +62,7 @@ std::pair<EStatisticPathConflictType, typename TSummaryMap::iterator> IsCompatib
 template <typename TSummaryMap, typename... Ts>
 std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
     TSummaryMap& existingStatistics,
-    const NStatisticPath::TStatisticPath& path,
+    const NYPath::TYPath& path,
     Ts&&... args)
 {
     auto [conflictType, hintIt] = IsCompatibleStatistic(existingStatistics, path);
@@ -109,7 +103,7 @@ void TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics, T
 }
 
 template <class TTags>
-void TTaggedStatistics<TTags>::AppendTaggedSummary(const NStatisticPath::TStatisticPath& path, const TTaggedStatistics<TTags>::TTaggedSummaries& taggedSummaries)
+void TTaggedStatistics<TTags>::AppendTaggedSummary(const NYPath::TYPath& path, const TTaggedStatistics<TTags>::TTaggedSummaries& taggedSummaries)
 {
     auto [taggedSummariesIt, emplaceHappened] = CheckedEmplaceStatistic(Data_, path, taggedSummaries);
     if (emplaceHappened) {
@@ -127,7 +121,7 @@ void TTaggedStatistics<TTags>::AppendTaggedSummary(const NStatisticPath::TStatis
 }
 
 template <class TTags>
-const THashMap<TTags, TSummary>* TTaggedStatistics<TTags>::FindTaggedSummaries(const NStatisticPath::TStatisticPath& path) const
+const THashMap<TTags, TSummary>* TTaggedStatistics<TTags>::FindTaggedSummaries(const NYPath::TYPath& path) const
 {
     auto it = Data_.find(path);
     if (it != Data_.end()) {
@@ -155,7 +149,7 @@ void TTaggedStatistics<TTags>::Persist(const TStreamPersistenceContext& context)
 template <class TTags>
 void Serialize(const TTaggedStatistics<TTags>& statistics, NYson::IYsonConsumer* consumer)
 {
-    SerializeStatisticPathsMap<THashMap<TTags, TSummary>>(
+    SerializeYsonPathsMap<THashMap<TTags, TSummary>>(
         statistics.GetData(),
         consumer,
         [] (const THashMap<TTags, TSummary>& summaries, NYson::IYsonConsumer* consumer) {
@@ -172,50 +166,86 @@ void Serialize(const TTaggedStatistics<TTags>& statistics, NYson::IYsonConsumer*
 
 ////////////////////////////////////////////////////////////////////////////////
 
+Y_FORCE_INLINE int SkipEqualTokens(NYPath::TTokenizer& first, NYPath::TTokenizer& second)
+{
+    int commonDepth = 0;
+    while (true) {
+        first.Advance();
+        second.Advance();
+        // Note that both tokenizers can't reach EndOfStream token, because it would mean that
+        // currentKey is prefix of prefixKey or vice versa that is prohibited in TStatistics.
+        first.Expect(NYPath::ETokenType::Slash);
+        second.Expect(NYPath::ETokenType::Slash);
+
+        first.Advance();
+        second.Advance();
+        first.Expect(NYPath::ETokenType::Literal);
+        second.Expect(NYPath::ETokenType::Literal);
+        if (first.GetLiteralValue() == second.GetLiteralValue()) {
+            ++commonDepth;
+        } else {
+            break;
+        }
+    }
+
+    return commonDepth;
+}
+
 template <class TMapValue>
-void SerializeStatisticPathsMap(
-    const std::map<NStatisticPath::TStatisticPath, TMapValue>& map,
+void SerializeYsonPathsMap(
+    const std::map<NYTree::TYPath, TMapValue>& map,
     NYson::IYsonConsumer* consumer,
     const std::function<void(const TMapValue&, NYson::IYsonConsumer*)>& valueSerializer)
 {
     using NYT::Serialize;
 
-    // Global map.
     consumer->OnBeginMap();
 
     // Depth of the previous key defined as a number of nested maps before the summary itself.
-    size_t previousDepth = 0;
-    NStatisticPath::TStatisticPath previousPath;
+    int previousDepth = 0;
+    NYPath::TYPath previousPath;
     for (const auto& [currentPath, value] : map) {
-        auto enumeratedCurrent = Enumerate(currentPath);
-        auto enumeratedPrevious = Enumerate(previousPath);
-
-        auto [currentIt, previousIt] = std::ranges::mismatch(enumeratedCurrent, enumeratedPrevious);
-
-        // No statistic path should be a path-prefix of another statistic path.
-        YT_VERIFY(currentIt != enumeratedCurrent.end());
+        NYPath::TTokenizer previousTokenizer(previousPath);
+        NYPath::TTokenizer currentTokenizer(currentPath);
 
         // The depth of the common part of two keys, needed to determine the number of maps to close.
-        size_t commonDepth = std::get<0>(*currentIt);
+        int commonDepth = 0;
 
-        // Close the maps that need to be closed.
-        while (previousDepth > commonDepth) {
-            consumer->OnEndMap();
-            --previousDepth;
+        if (previousPath) {
+            // First we find the position in which current key is different from the
+            // previous one in order to close necessary number of maps.
+            commonDepth = SkipEqualTokens(currentTokenizer, previousTokenizer);
+
+            // Close all redundant maps.
+            while (previousDepth > commonDepth) {
+                consumer->OnEndMap();
+                --previousDepth;
+            }
+        } else {
+            currentTokenizer.Advance();
+            currentTokenizer.Expect(NYPath::ETokenType::Slash);
+            currentTokenizer.Advance();
+            currentTokenizer.Expect(NYPath::ETokenType::Literal);
         }
 
+        int currentDepth = commonDepth;
         // Open all newly appeared maps.
-        size_t currentDepth = commonDepth;
-        auto beginIt = currentIt;
-        auto endIt = enumeratedCurrent.end();
-        for (; currentIt != endIt; ++currentIt) {
-            if (currentIt != beginIt) {
+        while (true) {
+            consumer->OnKeyedItem(currentTokenizer.GetLiteralValue());
+            currentTokenizer.Advance();
+            if (currentTokenizer.GetType() == NYPath::ETokenType::Slash) {
                 consumer->OnBeginMap();
                 ++currentDepth;
+                currentTokenizer.Advance();
+                currentTokenizer.Expect(NYPath::ETokenType::Literal);
+            } else if (currentTokenizer.GetType() == NYPath::ETokenType::EndOfStream) {
+                break;
+            } else {
+                THROW_ERROR_EXCEPTION("Wrong token type in statistics path")
+                    << TErrorAttribute("token_type", currentTokenizer.GetType())
+                    << TErrorAttribute("statistics_path", currentPath);
             }
-            consumer->OnKeyedItem(std::get<1>(*currentIt));
         }
-
         // Serialize value.
         valueSerializer(value, consumer);
 

@@ -1,3 +1,6 @@
+#ifndef LINUX
+    #define LINUX
+#endif
 #include <stdio.h>
 
 #define DECLARER

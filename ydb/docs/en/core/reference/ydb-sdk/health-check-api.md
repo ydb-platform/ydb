@@ -16,7 +16,7 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
   Calling `SelfCheck` method:
 
-  ```c++
+  ```cpp
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();

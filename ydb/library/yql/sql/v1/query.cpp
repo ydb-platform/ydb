@@ -3290,7 +3290,7 @@ public:
 
     virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const = 0;
 
-private:
+protected:
     TString Id;
 };
 
@@ -3331,7 +3331,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TCreateBackupCollectionNode(GetPos(), Id, Params, *this);
     }
 
 private:
@@ -3385,7 +3385,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TAlterBackupCollectionNode(GetPos(), Id, Params, *this);
     }
 
 private:
@@ -3412,7 +3412,8 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        TDropBackupCollectionParameters params;
+        return new TDropBackupCollectionNode(GetPos(), Id, params, *this);
     }
 };
 

@@ -48,7 +48,7 @@ An example using the `maven` plugin:
             </strategy>
             <database>
                 <name>tech.ydb.jooq.codegen.YdbDatabase</name>
-                <!-- исключение системных таблицы -->
+                <!-- excluding system tables -->
                 <excludes>.sys.*</excludes>
             </database>
             <target>

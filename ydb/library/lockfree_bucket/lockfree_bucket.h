@@ -33,32 +33,41 @@ private:
         TTime prev = LastUpdate.load(std::memory_order_relaxed);
         TTime now = TTimer::Now();
 
-        do {
+        while (true) {
             if (prev >= now) {
                 return;
             }
-        } while (!LastUpdate.compare_exchange_weak(prev, now,
-            std::memory_order_relaxed, std::memory_order_relaxed));
+
+            if (LastUpdate.compare_exchange_weak(prev, now,
+                    std::memory_order_relaxed,
+                    std::memory_order_relaxed)) {
+                break;
+            }
+        }
 
         ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * TTimer::Duration(prev, now);
+        i64 tokens = Tokens.load(std::memory_order_relaxed);
         if (rawInflow >= TTimer::Resolution) {
-            for (
-                i64 tokens = Tokens.load(std::memory_order_relaxed);
-                !Tokens.compare_exchange_weak(tokens,
-                        std::min((i64)(MaxTokens.load()), (i64)(tokens + rawInflow / TTimer::Resolution)),
-                        std::memory_order_relaxed, std::memory_order_relaxed);
-            ) {}
+            i64 tokensPlusInflow = tokens + rawInflow / TTimer::Resolution;
+            i64 maxTokens = MaxTokens.load(std::memory_order_relaxed);
+            while (true) {
+                if (Tokens.compare_exchange_weak(tokens, std::min(maxTokens, tokensPlusInflow),
+                        std::memory_order_relaxed, std::memory_order_relaxed)) {
+                    break;
+                }
+            }
         }
     }
 
     void TakeTokens(i64 tokens) {
-        for (
-            i64 currentTokens = Tokens.load(std::memory_order_relaxed),
-                minTokens = MinTokens.load(std::memory_order_relaxed);
-            !Tokens.compare_exchange_weak(currentTokens,
-                    std::max(minTokens, currentTokens - tokens),
-                    std::memory_order_relaxed, std::memory_order_relaxed);
-        ) {}
+        i64 currentTokens = Tokens.load(std::memory_order_relaxed);
+        i64 minTokens = MinTokens.load(std::memory_order_relaxed);
+        while (true) {
+            if (Tokens.compare_exchange_weak(currentTokens, std::max(minTokens, currentTokens - tokens),
+                    std::memory_order_relaxed, std::memory_order_relaxed)) {
+                break;
+            }
+        }
     }
 
 private:

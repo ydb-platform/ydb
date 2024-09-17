@@ -568,7 +568,7 @@ public:
                     return TStatus::Error;
                 }
 
-                if (!CheckEffectsTx(tx.Cast(), query, ctx)) {
+                if (!CheckEffectsTx(tx.Cast(), effects, ctx)) {
                     return TStatus::Error;
                 }
 
@@ -663,8 +663,8 @@ private:
         return results;
     }
 
-    bool HasTableEffects(const TKqlQuery& query) const {
-        for (const TExprBase& effect : query.Effects()) {
+    bool HasTableEffects(const TExprList& effectsList, TExprContext& ctx) const {
+        for (const TExprBase& effect : effectsList) {
             if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
                 // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
                 auto sinkEffect = maybeSinkEffect.Cast();
@@ -690,7 +690,7 @@ private:
         return false;
     }
 
-    bool CheckEffectsTx(TKqpPhysicalTx tx, const TKqlQuery& query, TExprContext& ctx) const {
+    bool CheckEffectsTx(TKqpPhysicalTx tx, const TExprList& effectsList, TExprContext& ctx) const {
         TMaybeNode<TExprBase> blackistedNode;
         VisitExpr(tx.Ptr(), [&blackistedNode](const TExprNode::TPtr& exprNode) {
             if (blackistedNode) {
@@ -712,7 +712,7 @@ private:
             return true;
         });
 
-        if (blackistedNode && HasTableEffects(query)) {
+        if (blackistedNode && HasTableEffects(effectsList, ctx)) {
             ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
                 << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName()));
             return false;

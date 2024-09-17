@@ -3322,7 +3322,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = client.ExecuteQuery(R"(
                 $prepare = SELECT *
                     FROM `/Root/ColumnSrc`
-                    WHERE Col2 LIKE 'test?';
+                    WHERE Col2 LIKE '%test%test%';
                 $data = SELECT c.Col1 as Col1, c.Col2 As Col2, r.Col3 AS Col3
                     FROM `/Root/RowSrc`as c
                     LEFT OUTER JOIN $prepare as r

@@ -179,7 +179,7 @@ Let's execute the query by passing the content of this file to `stdin`, formatti
 cat par1.txt | \
 {{ ydb-cli }} -p quickstart table query execute \
   -q 'DECLARE $a AS Int64;
-      DECLARE $b aASs Int64;
+      DECLARE $b AS Int64;
       SELECT $a + $b' \
   --stdin-format newline-delimited \
   --format json-unicode

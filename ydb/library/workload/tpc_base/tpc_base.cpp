@@ -74,7 +74,7 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
     case TWorkloadParams::ECommandType::Init:
-        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_22_9. If set to 'float' - float will be used, 'decimal' means use decimal with cannonical size and 'decimal_22_9' means, that all floats will be converted to decimal(22,9)")
+        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
         break;
     default:

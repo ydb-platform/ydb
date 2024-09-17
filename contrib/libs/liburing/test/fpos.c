@@ -99,7 +99,7 @@ static int test_read(struct io_uring *ring, bool async, int blocksize)
 			if (res == 0) {
 				done = true;
 			} else if (res == -ECANCELED) {
-				/* cancelled, probably ok */
+				/* canceled, probably ok */
 			} else if (res < 0 || res > blocksize) {
 				fprintf(stderr, "bad read: %d\n", res);
 				return -1;

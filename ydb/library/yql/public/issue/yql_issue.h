@@ -55,7 +55,7 @@ struct TPosition {
 
 class TTextWalker {
 public:
-    TTextWalker(TPosition& position, bool utf8Aware = false)
+    TTextWalker(TPosition& position, bool utf8Aware)
         : Position(position)
         , Utf8Aware(utf8Aware)
         , HaveCr(false)

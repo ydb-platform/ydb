@@ -150,8 +150,6 @@ FROM my_table;
 
 При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и предиката.
 
-### Примеры
-
 ```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
 $avg_if_factory = AggregationFactory("AVG_IF");

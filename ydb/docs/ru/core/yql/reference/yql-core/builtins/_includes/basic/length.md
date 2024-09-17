@@ -4,18 +4,18 @@
 
 ### Сигнатура
 
-```
+```yql
 LENGTH(T)->Uint32
 LENGTH(T?)->Uint32?
 ```
 
 ### Примеры
 
-``` yql
+```yql
 SELECT LENGTH("foo");
 ```
 
-``` yql
+```yql
 SELECT LEN("bar");
 ```
 

@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 Find(String, String[, Uint32?])->Uint32?
 Find(String?, String[, Uint32?])->Uint32?
 Find(Utf8, Utf8[, Uint32?])->Uint32?
@@ -24,15 +24,15 @@ Find(Utf8?, Utf8[, Uint32?])->Uint32?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FIND("abcdefg_abcdefg", "abc"); -- 0
 ```
 
-``` yql
+```yql
 SELECT FIND("abcdefg_abcdefg", "abc", 1); -- 8
 ```
 
-``` yql
+```yql
 SELECT FIND("abcdefg_abcdefg", "abc", 9); -- null
 ```
 
@@ -42,7 +42,7 @@ SELECT FIND("abcdefg_abcdefg", "abc", 9); -- null
 
 ### Сигнатура
 
-```
+```yql
 RFind(String, String[, Uint32?])->Uint32?
 RFind(String?, String[, Uint32?])->Uint32?
 RFind(Utf8, Utf8[, Uint32?])->Uint32?
@@ -62,14 +62,14 @@ RFind(Utf8?, Utf8[, Uint32?])->Uint32?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT RFIND("abcdefg_abcdefg", "bcd"); -- 9
 ```
 
-``` yql
+```yql
 SELECT RFIND("abcdefg_abcdefg", "bcd", 8); -- 1
 ```
 
-``` yql
+```yql
 SELECT RFIND("abcdefg_abcdefg", "bcd", 0); -- null
 ```

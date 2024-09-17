@@ -6,9 +6,12 @@
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
-#include "oidc_protected_page.h"
 #include "oidc_protected_page_handler.h"
 #include "oidc_session_create_handler.h"
+#include "oidc_settings.h"
+#include "openid_connect.h"
+
+using namespace NMVP::NOIDC;
 
 namespace {
 
@@ -38,7 +41,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
@@ -84,7 +87,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "OPTIONS /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
@@ -137,7 +140,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -188,7 +191,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -268,7 +271,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -379,7 +382,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -439,7 +442,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsTokenAllowed = false;
@@ -584,7 +587,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -624,7 +627,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, state));
         redirectStrategy.CheckSpecificHeaders(headers);
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         incomingRequest = new NHttp::THttpIncomingRequest();
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -709,7 +712,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         const TString state = "test_state";
         const TString wrongState = "wrong_state";
         const TString hostProxy = "oidcproxy.net";
@@ -758,7 +761,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsTokenAllowed = false;
@@ -792,9 +795,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "401");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Authorization IAM token are invalid or may have expired");
-        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Set-Cookie"));
-        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Set-Cookie"), oidcCookie + "=; Path=/auth/callback; Max-Age=0");
     }
 
     void SessionServiceCreateAccessTokenInvalid(TRedirectStrategyBase& redirectStrategy) {
@@ -818,7 +818,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         const TString state = "test_state";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -884,7 +884,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsOpenIdScopeMissed = true;
@@ -918,9 +918,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "412");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Openid scope is missed for specified access_token");
-        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Set-Cookie"));
-        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Set-Cookie"), oidcCookie + "=; Path=/auth/callback; Max-Age=0");
     }
 
     void SessionServiceCreateWithSeveralCookies(TRedirectStrategyBase& redirectStrategy) {
@@ -943,7 +940,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TStringBuf firstRequestState = "first_request_state";
         TStringBuf secondRequestState = "second_request_state";
         TString firstCookie {CreateNameYdbOidcCookie(settings.ClientSecret, firstRequestState) + "=" + GenerateCookie(firstRequestState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest())};
@@ -1002,7 +999,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
@@ -1058,7 +1055,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();

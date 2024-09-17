@@ -138,7 +138,7 @@ domains_config:
   security_config: <authentication configuration>
 ```
 
-### Blob Storage configuration {#domains-blob}
+## Blob Storage configuration {#domains-blob}
 
 This section defines one or more types of storage pools available in the cluster for the data in the databases with the following configuration options:
 
@@ -174,7 +174,9 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
   ...
 ```
 
-### State Storage configuration {#domains-state}
+Each database in the cluster is assigned at least one of the available storage pools selected in the database creation operation. The names of storage pools among those assigned can be used in the `DATA` attribute when defining column groups in YQL operators [`CREATE TABLE`](../../yql/reference/syntax/create_table/family.md)/[`ALTER TABLE`](../../yql/reference/syntax/alter_table/family.md).
+
+## State Storage configuration {#domains-state}
 
 State Storage is an independent in-memory storage for variable data that supports internal {{ ydb-short-name }} processes. It stores data replicas on multiple assigned nodes.
 
@@ -206,7 +208,7 @@ Each State Storage client (for example, DataShard tablet) uses `nto_select` node
 
 Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison to the nearest smaller odd number.
 
-### Authentication configuration {#auth}
+## Authentication configuration {#auth}
 
 The [authentication mode](../../concepts/auth.md) in the {{ ydb-short-name }} cluster is created in the `domains_config.security_config` section.
 

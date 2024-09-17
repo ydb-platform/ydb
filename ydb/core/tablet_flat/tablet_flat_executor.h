@@ -210,7 +210,7 @@ class TTransactionContext : public TTxMemoryProviderBase {
 
 public:
     TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
-                        ui64 memoryLimit, ui64 taskId, NWilson::TSpan &transactionSpan, NFlatExecutorSetup::ITablet *owner)
+                        ui64 memoryLimit, ui64 taskId, NWilson::TSpan &transactionSpan)
         : TTxMemoryProviderBase(memoryLimit, taskId)
         , Tablet(tablet)
         , Generation(gen)
@@ -218,7 +218,6 @@ public:
         , Env(env)
         , DB(db)
         , TransactionSpan(transactionSpan)
-        , Owner(owner)
     {}
 
     ~TTransactionContext() {}
@@ -252,7 +251,7 @@ public:
     NTable::TDatabase &DB;
     NWilson::TSpan &TransactionSpan;
     NWilson::TSpan TransactionExecutionSpan;
-    NFlatExecutorSetup::ITablet* Owner;
+    NFlatExecutorSetup::ITablet* Owner = nullptr;
 
 private:
     bool Rescheduled_ = false;

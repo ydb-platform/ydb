@@ -204,6 +204,7 @@ public:
         }
         versions.erase(iter);
         ui32& refCount = VersionCounts[version];
+        AFL_VERIFY(refCount > 0);
         LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount << " to " << refCount - 1 << " this " << (ui64)this);
         return --refCount;
     }

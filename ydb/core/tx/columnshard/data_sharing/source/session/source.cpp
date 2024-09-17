@@ -1,8 +1,9 @@
 #include "source.h"
-#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_finish_ack_to_source.h>
-#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_data_ack_to_source.h>
-#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_write_source_cursor.h>
+
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_data_ack_to_source.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_finish_ack_to_source.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_write_source_cursor.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 namespace NKikimr::NOlap::NDataSharing {
@@ -66,6 +67,10 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
     } else {
         return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_links"));
     }
+}
+
+void TSourceSession::SaveCursorToDatabase(NIceDb::TNiceDb& db) {
+    GetCursorVerified()->SaveToDatabase(db, GetSessionId());
 }
 
 void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {

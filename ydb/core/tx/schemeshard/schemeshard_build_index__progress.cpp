@@ -372,12 +372,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTmpPropose(
         Y_ASSERT(step == 1);
     }
 
-    auto& partition = *op.MutablePartitionConfig()->MutablePartitioningPolicy();
-    partition.SetSizeToSplit(0); // disable auto split/merge
-    partition.SetMinPartitionsCount(parts);
-    partition.SetMaxPartitionsCount(parts);
-    partition.ClearFastSplitSettings();
-    partition.ClearSplitByLoadSettings();
+    auto& config = *op.MutablePartitionConfig();
+    config.Clear();
+    config.SetShadowData(true);
+
+    auto& policy = *config.MutablePartitioningPolicy();
+    policy.SetSizeToSplit(0); // disable auto split/merge
+    policy.SetMinPartitionsCount(parts);
+    policy.SetMaxPartitionsCount(parts);
+    policy.ClearFastSplitSettings();
+    policy.ClearSplitByLoadSettings();
 
     op.ClearSplitBoundary();
     if (parts <= 1) {

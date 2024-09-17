@@ -13,13 +13,14 @@
 ```bash
 {{ ydb-cli }}  workload clickbench --path clickbench/hits ...
 ```
-### Доступные параметры {#common_options}
+
+### Доступные параметры { #common_options }
 
 Имя параметра | Описание параметра
 ---|---
 `--path` или `-p` | Путь к таблице. Значение по умолчанию `clickbench/hits`
 
-## Инициализация нагрузочного теста {#init}
+## Инициализация нагрузочного теста { #init }
 
 Перед запуском теста создайте таблицу:
 
@@ -33,7 +34,7 @@
 {{ ydb-cli }} workload clickbench init --help
 ```
 
-### Доступные параметры {#init_options}
+### Доступные параметры { #init_options }
 Имя параметра | Описание параметра
 ---|---
 `--store <значение>` | Тип хранилища таблиц. Возможные значения: `row`, `column`, `external-s3`. Значение по умолчанию `row`.
@@ -43,7 +44,7 @@
 `--datetime` | Использовать для полей, связанных со временем типа `Date`, `Datetime` и `Timestamp`. По умолчанию используется `Date32`, `Datetime64` и `Timestamp64`.
 `--clear` | Если по указанному пути таблица уже была создана, она будет удалена.
 
-## Загрузка данных в таблицу {#load}
+## Загрузка данных в таблицу { #load }
 
 Загрузите данные в таблицу. Для этого скачайте архив с данными, затем загрузите данные в таблицу:
 
@@ -51,9 +52,10 @@
 wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 {{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz
 ```
+
 В качестве исходных файлов можно использовать как распакованные и запакованные csv и tsv файлы, так и директории с такими файлами.
 
-### Доступные параметры {#load_files_options}
+### Доступные параметры { #load_files_options }
 Имя параметра | Описание параметра
 ---|---
 `--input <путь>` или `-i <путь>` | Путь к исходным файлам с данными. Поддерживаются как распакованные и запакованные csv и tsv файлы, так и директории с такими файлами. Данные могут быть загружены с официального сайта ClickBench: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). Для ускорения загрузки можно разбить эти файлы на более мелкие части, в этом случае части буду загружаться параллельно.
@@ -62,9 +64,10 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
-## Запуск нагрузочного теста {#run}
+## Запуск нагрузочного теста { #run }
 
 Запустите нагрузку:
+
 ```bash
 {{ ydb-cli }} workload clickbench  --path clickbench/hits run
 ```
@@ -79,7 +82,7 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 
 {% include [run_options](./_includes/workload/run_options.md) %}
 
-### Опции, специфичные для ClickBench
+### Опции, специфичные для ClickBench { #run_clickbench_options }
 Имя параметра | Описание параметра
 ---|---
 `--ext-queries <запросы>` или `-q <запросы>` | Внешние запросы для выполнения нагрузки, разделенные точкой с запятой. По умолчанию не требуется.
@@ -88,8 +91,9 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 `--ext-results-dir <имя>` | Директория с внешними результатами запросов для сравнения. Результаты должны лежать в файлах с именами `q[0-42].sql`. Значение по умолчанию отсутствует.
 `--check-cannonical` или `-c` | Использовать специальные детерминированные внутренние запросы и сверять результаты с каноническими.
 
-## Очистка данных теста {#clean}
+## Очистка данных теста { #clean }
 Запустите очистку:
+
 ```bash
 {{ ydb-cli }} workload clickbench  --path clickbench/hits clean
 ```

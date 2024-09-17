@@ -11,7 +11,8 @@
 ```bash
 {{ ydb-cli }}  workload tpcds --path tpcds/s1 ...
 ```
-### Доступные параметры {#common_options}
+
+### Доступные параметры { #common_options }
 
 Имя параметра | Описание параметра
 ---|---
@@ -33,7 +34,7 @@
 
 {% include [init_options](./_includes/workload/init_options_tpc.md) %}
 
-## Загрузка данных в таблицу {#load}
+## Загрузка данных в таблицу { #load }
 
 Загрузите данные в таблицу. Данные будут сгенерированы непосредственно {{ ydb-cli }}:
 
@@ -59,7 +60,7 @@
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
-## Запуск нагрузочного теста {#run}
+## Запуск нагрузочного теста { #run }
 
 Запустите нагрузку:
 
@@ -77,13 +78,14 @@
 
 {% include [run_options](./_includes/workload/run_options.md) %}
 
-### Опции, специфичные для TPC-H
+### Опции, специфичные для TPC-DS { #run_tpcds_options }
 Имя параметра | Описание параметра
 ---|---
 `--ext-query-dir <имя>` | Директория с внешними запросами для выполнения нагрузки. Запросы должны лежать в файлах с именами `q[1-99].sql`. Значение по умолчанию отсутствует.
 
-## Очистка данных теста {#clean}
+## Очистка данных теста { #clean }
 Запустите очистку:
+
 ```bash
 {{ ydb-cli }} workload clickbench  --path clickbench/hits clean
 ```

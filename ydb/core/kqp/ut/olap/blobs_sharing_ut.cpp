@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
     public:
         TAsyncReshardingTest() {
-            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 24, 4);
+            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 128, 4);
         }
 
         void AddBatch(int numRows) {
@@ -472,6 +472,18 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             tester.WaitResharding();
         }
         tester.AddBatch(10000);
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(SplitEmpty) {
+        TAsyncReshardingTest tester;
+
+        tester.CheckCount();
+
+        tester.StartResharding("SPLIT");
+
+        tester.CheckCount();
+        tester.WaitResharding();
         tester.CheckCount();
     }
 

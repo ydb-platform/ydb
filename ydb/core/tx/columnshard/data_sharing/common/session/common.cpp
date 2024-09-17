@@ -22,13 +22,12 @@ bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
     THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>> portionsByPath;
     THashSet<TString> StoragesIds;
     for (auto&& i : GetPathIdsForStart()) {
-        auto& portionsVector = portionsByPath[i];
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
             if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
                 return false;
             }
-            portionsVector.emplace_back(p.second);
+            portionsByPath[i].emplace_back(p.second);
         }
     }
 
@@ -52,7 +51,7 @@ void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {
 }
 
 void TCommonSession::Finish(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
-    AFL_VERIFY(State == EState::InProgress);
+    AFL_VERIFY(State == EState::InProgress || State == EState::Prepared);
     State = EState::Finished;
     shard.GetSharingSessionsManager()->FinishSharingSession();
     AFL_VERIFY(LockGuard);

@@ -69,6 +69,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
 
     // Default pool settings

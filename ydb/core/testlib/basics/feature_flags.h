@@ -62,7 +62,6 @@ public:
     FEATURE_FLAG_SETTER(EnableTableDatetime64)
     FEATURE_FLAG_SETTER(EnableResourcePools)
     FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
-    FEATURE_FLAG_SETTER(EnablePgSyntax)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
 
     #undef FEATURE_FLAG_SETTER

@@ -58,7 +58,9 @@ private:
 
         void InitArrays(const ui32 position) {
             AFL_VERIFY(!ChunkAddress || ChunkFinishPosition <= position);
-            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position);
+            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position)("pos", position)(
+                "global", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position - CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
             AFL_VERIFY(ChunkAddress);
             ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalStartPosition();
             ChunkFinishPosition =
@@ -83,7 +85,7 @@ private:
                     return {};
                 }
                 if (ChunkFinishPosition <= currentIndex) {
-                    InitArrays(currentGlobalPosition);
+                    InitArrays(currentIndex);
                     continue;
                 }
                 for (; currentIndex < ChunkFinishPosition; ++currentIndex) {

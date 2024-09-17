@@ -65,6 +65,7 @@ void TCommandSql::Config(TConfig& config) {
 
 void TCommandSql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+    ParseInputFormats();
     ParseOutputFormats();
     if (Query && QueryFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "

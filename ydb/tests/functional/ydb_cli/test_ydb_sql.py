@@ -490,7 +490,9 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $s AS s; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--input-format", "raw", "--input-param-name", "s", "--input-framing", "newline-delimited", "--input-batch", "adaptive", "--input-batch-max-delay", "0", "--input-batch-max-rows", "3"],
+            command + ["-s", script, "--input-format", "raw", "--input-param-name", "s", "--input-framing",
+                       "newline-delimited", "--input-batch", "adaptive", "--input-batch-max-delay", "0",
+                       "--input-batch-max-rows", "3"],
             self.get_stdin()
         )
         self.close_stdin()

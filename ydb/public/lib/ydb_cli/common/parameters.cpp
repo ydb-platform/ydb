@@ -210,30 +210,8 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         case EDataFormat::Tsv:
             Delimiter = '\t';
             break;
-        case EDataFormat::Raw:
-            break;
-        // Legacy param formats:
-        case EDataFormat::JsonUnicode:
-            if (InputBinaryStringEncodingFormat != EBinaryStringEncodingFormat::Default
-                    && InputBinaryStringEncodingFormat != EBinaryStringEncodingFormat::Unicode) {
-                throw TMisuseException() << "Input format " << InputFormat
-                    << " is not compatible with binary string encoding format " << InputBinaryStringEncodingFormat;
-            }
-            InputBinaryStringEncodingFormat = EBinaryStringEncodingFormat::Unicode;
-            break;
-        case EDataFormat::JsonBase64:
-            if (InputBinaryStringEncodingFormat != EBinaryStringEncodingFormat::Default
-                    && InputBinaryStringEncodingFormat != EBinaryStringEncodingFormat::Base64) {
-                throw TMisuseException() << "Input format " << InputFormat
-                    << " is not compatible with binary string encoding " << InputBinaryStringEncodingFormat;
-            }
-            InputBinaryStringEncodingFormat = EBinaryStringEncodingFormat::Base64;
-            break;
-        case EDataFormat::Default:
-        case EDataFormat::Json:
-            break;
         default:
-            throw TMisuseException() << "Unknown input format: " << InputFormat;
+            break;
     }
 
     for (const auto& parameterOption : ParameterOptions) {

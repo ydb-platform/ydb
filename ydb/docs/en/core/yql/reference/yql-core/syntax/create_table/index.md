@@ -125,7 +125,8 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   {% endif %}
 
   Example of creating a row-oriented table using partitioning options:
-  ```sql
+
+  ```yql
   CREATE TABLE <table_name> (
     a Uint64,
     b Uint64,
@@ -157,7 +158,8 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
   ```
 
   Example of creating a column-oriented table with an option to specify the minimum physical number of partitions for storing data:
-  ```sql
+
+  ```yql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
     b Timestamp NOT NULL,
@@ -221,6 +223,7 @@ CREATE TABLE <table_name> (
   PRIMARY KEY (a, b)
 );
 ```
+
 {% endif %}
 
 {% if backend_name == "YDB" %}

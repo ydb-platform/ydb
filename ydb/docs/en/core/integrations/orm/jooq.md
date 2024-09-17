@@ -176,7 +176,7 @@ public void replace(YdbDSLContext context) {
 }
 ```
 
-To specify an index in the VIEW statement, you must use the `useIndex` method on `Table`:
+To specify a [secondary index](../../concepts/secondary_indexes.md) in the `VIEW` statement, you must use the `useIndex` method on `Table`:
 
 ```java
 var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))

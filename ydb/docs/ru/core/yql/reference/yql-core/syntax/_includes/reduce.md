@@ -4,9 +4,9 @@
 
 Указываемые следом ключевые слова:
 
-* `PRESORT` <span style="color: gray;">(опционально)</span> — указание порядка внутри каждой группы, синтаксис аналогичен [ORDER BY](../select/order_by.md);
-* `ON` <span style="color: gray;">(обязательно)</span> — указание ключевых столбцов;
-* `USING` или `USING ALL` <span style="color: gray;">(обязательно)</span> — вызов UDF, о правилах подробнее ниже.
+* `PRESORT` (опционально)— указание порядка внутри каждой группы, синтаксис аналогичен [ORDER BY](../select/order_by.md);
+* `ON` (обязательно) — указание ключевых столбцов;
+* `USING` или `USING ALL` (обязательно) — вызов UDF, о правилах подробнее ниже.
 
 Правила передачи аргументов UDF:
 
@@ -30,19 +30,19 @@
 
 ## Примеры
 
-``` yql
+```yql
 REDUCE my_table
 ON key, subkey
 USING MyUdf::MyReducer(TableRow());
 ```
 
-``` yql
+```yql
 REDUCE my_table
 ON key, subkey
 USING ALL MyUdf::MyStreamReducer(TableRow()); -- MyUdf::MyStreamReducer принимает на вход ленивый список кортежей (ключ, список записей для ключа)
 ```
 
-``` yql
+```yql
 REDUCE my_table
 PRESORT LENGTH(subkey) DESC
 ON key
@@ -51,13 +51,13 @@ USING MyUdf::MyReducer(
 );
 ```
 
-``` yql
+```yql
 REDUCE my_table
 ON key
 USING ALL MyUdf::MyFlatStreamReducer(TableRows()); -- MyUdf::MyFlatStreamReducer принимает на вход единый ленивый список записей
 ```
 
-``` yql
+```yql
 -- Функция возвращает альтернативы
 $udf = Python::MyReducer(Callable<(String, Stream<Struct<...>>) -> Variant<Struct<...>, Struct<...>>>,
     $udfScript
@@ -71,7 +71,7 @@ SELECT * FROM $j;
 ```
 
 
-``` yql
+```yql
 $script = @@
 def MyReducer(key, values):
     state = None, 0
@@ -98,7 +98,7 @@ REDUCE hahn.`home/yql/tutorial/users`
 ON region USING $udf((name, last_visit_time));
 ```
 
-``` yql
+```yql
 -- Функция принимает на вход ключ и итератор альтернатив
 $udf = Python::MyReducer(Callable<(String, Stream<Variant<Struct<...>,Struct<...>>>) -> Struct<...>>,
     $udfScript

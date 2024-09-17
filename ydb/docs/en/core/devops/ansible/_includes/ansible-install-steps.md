@@ -1,3 +1,4 @@
+
 1. [Role `packages`](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/packages/tasks/main.yaml). Tasks:
 
 * `check dpkg audit` – Verifies the [dpkg](https://en.wikipedia.org/wiki/Dpkg) state using the `dpkg --audit` command and saves the command results in the `dpkg_audit_result` variable. The task will terminate with an error if the `dpkg_audit_result.rc` command returns a value other than 0 or 1.
@@ -90,7 +91,6 @@ Links to the lists of packages that will be installed for Ubuntu 22.04 or Astra 
 * `init YDB storage if not initialized` – Initializes the storage if it has not already been created. The task calls the `init_storage` plugin, which performs the storage initialization command using a grpcs request to the static node on port 2135. The command result is stored in the `init_storage` variable.
 * `wait for ydb healthcheck switch to "GOOD" status` – Waits for the YDB healthcheck system to switch to a `GOOD` status. The task calls the `wait_healthcheck` plugin, which performs a health check command on YDB.
 * `set cluster root password` – Sets the password for the YDB root user. The task is executed by the `set_user_password` plugin, which performs a grpcs request to YDB and sets a pre-defined password for the YDB root user. The password is specified in the `ydb_password` variable in the inventory file `/examples/9-nodes-mirror-3-dc/inventory/99-inventory-vault.yaml` in an encrypted form.
-
 
 1. [Role `ydbd_dynamic`](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd_dynamic/tasks/main.yaml). Tasks:
 

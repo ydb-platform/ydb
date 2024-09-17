@@ -102,6 +102,7 @@
         ```bash
         sudo journalctl -u fq-connector-go.service
         ```
+
     {% endlist %}
 
 ### Запуск в Docker {#fq-connector-go-docker}
@@ -136,6 +137,7 @@
         cert: "/opt/ydb/certs/fq-connector-go.crt"
         key: "/opt/ydb/certs/fq-connector-go.key"
     ```
+
     При запуске контейнера примонтируйте внутрь него директорию с парой TLS-ключей так, чтобы они оказались доступны для процесса `fq-connector-go` по путям, указанным в конфигурационном файле:
 
     ```bash

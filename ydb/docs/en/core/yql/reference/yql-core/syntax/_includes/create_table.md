@@ -48,22 +48,37 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
 {% if feature_olap_tables %}#{% endif %}## Columns {#row-columns}
 
 {% if feature_column_container_type == true %}
+
 In non-key columns, you can use any data types, but for key columns, only [primitive ones](../../types/primitive.md). When specifying complex types (for example, `List<String>`), the type is enclosed in double quotes.
+
 {% else %}
+
 For the key and non-key columns, you can only use [primitive](../../types/primitive.md) data types.
+
 {% endif %}
 
 {% if feature_not_null == true %}
+
 Without additional modifiers, a column gets an [optional type](../../types/optional.md) and allows `NULL` values to be written. To create a non-optional type, use `NOT NULL`.
+
 {% else %}
+
 {% if feature_not_null_for_pk %}
+
 All columns are [optional](../../types/optional.md) by default and can be assigned NULL values. The `NOT NULL` limit can only be specified for columns that are part of the primary key..
+
 {% else %}
+
 All columns allow writing `NULL` values, that is, they are [optional](../../types/optional.md).
+
 {% endif %}
+
 {% endif %}
+
 {% if feature_map_tables %}
+
 It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
+
 {% endif %}
 
 ### Example
@@ -79,6 +94,7 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
     )
 
 {% if feature_secondary_index %}
+
 {% if feature_olap_tables %}#{% endif %}## Secondary indexes {#secondary_index}
 
 The `INDEX` clause is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
@@ -114,6 +130,7 @@ CREATE TABLE my_table (
 {% endif %}
 
 {% if feature_temp_tables %}
+
 {% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#temporary_tables}
 ```yql
 CREATE TEMPORARY TABLE table_name (
@@ -126,6 +143,7 @@ CREATE TEMPORARY TABLE table_name (
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
+
 {% if feature_olap_tables %}#{% endif %}## Additional parameters {#row-additional}
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
@@ -245,7 +263,7 @@ CREATE TABLE my_table (
 )
 PARTITION BY HASH(b)
 WITH (
-STORE = COLUMN
+    STORE = COLUMN
 )
 ```
 

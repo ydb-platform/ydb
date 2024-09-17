@@ -2,7 +2,7 @@
 
 ### Сигнатура
 
-```
+```yql
 Likely(Bool)->Bool
 Likely(Bool?)->Bool?
 ```
@@ -12,7 +12,7 @@ Likely(Bool?)->Bool?
 
 ### Пример
 
-``` yql
+```yql
 SELECT * FROM T1 AS a JOIN T2 AS b USING(key)
 WHERE Likely(a.amount > 0)  -- почти всегда верно
 ```

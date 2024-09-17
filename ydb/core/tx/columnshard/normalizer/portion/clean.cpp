@@ -28,13 +28,15 @@ public:
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
             portion->RemoveFromDatabase(db);
-            LOG_S_CRIT("Removing portion from normalizer");
             NColumnShard::TColumnShard* cs = static_cast<NColumnShard::TColumnShard*>(txc.Owner);
-            ui32 refCount = cs->VersionRemoveRef(portion->GetPortion(), portion->GetPathId(), portion->GetSchemaVersionVerified());
-            if (refCount == 0) {
-                LOG_S_CRIT("Ref count is set to 0 for version " << portion->GetSchemaVersionVerified() << " need to delete");
-                cs->RemoveUnusedSchemaVersion(&txc.DB, portion->GetSchemaVersionVerified());
-            }
+            txc.DB.OnCommit([cs, portion = portion->GetPortion(), pathId = portion->GetPathId(), schema = portion->GetSchemaVersionVerified(), db = &txc.DB]() {
+                LOG_S_CRIT("Removing portion from normalizer");
+                ui32 refCount = cs->VersionRemoveRef(portion, pathId, schema);
+                if (refCount == 0) {
+                    LOG_S_CRIT("Ref count is set to 0 for version " << schema << " need to delete");
+                    cs->RemoveUnusedSchemaVersion(db, schema);
+                }
+            });
         }
         return true;
     }

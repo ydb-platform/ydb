@@ -18,7 +18,9 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         if (self != nullptr) { // nullptr can happen in tests
-            self->VersionAddRef(portionInfo.GetPortion(), portionInfo.GetPathId(), portionInfo.GetSchemaVersionVerified());
+            context.DB->OnCommit([self, portion = portionInfo.GetPortion(), pathId = portionInfo.GetPathId(), schema = portionInfo.GetSchemaVersionVerified()]() {
+                self->VersionAddRef(portion, pathId, schema);
+            });
         }
     }
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
@@ -36,7 +38,9 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         if (self != nullptr) { // nullptr can happen in tests
-            self->VersionAddRef(portionInfo.GetPortion(), portionInfo.GetPathId(), portionInfo.GetSchemaVersionVerified());
+            context.DB->OnCommit([self, portion = portionInfo.GetPortion(), pathId = portionInfo.GetPathId(), schema = portionInfo.GetSchemaVersionVerified()]() {
+                self->VersionAddRef(portion, pathId, schema);
+            });
         }
     }
 }

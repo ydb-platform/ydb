@@ -132,12 +132,6 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
 }
 
 void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
-/*
-    ui32 refCount = cs->VersionRemoveRef(GetPortion(), GetPathId(), GetSchemaVersionVerified());
-    if (refCount == 0) {
-        LOG_S_CRIT("Ref count is set to 0 for version " << GetSchemaVersionVerified() << " need to delete");
-    }
-*/
     db.ErasePortion(*this);
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
@@ -149,11 +143,6 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
 
 void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
     FullValidation();
-/*
-    if (cs != nullptr) { // Can happen in tests
-        cs->VersionAddRef(GetPortion(), GetPathId(), GetSchemaVersionVerified());
-    }
-*/
     db.WritePortion(*this);
     if (!saveOnlyMeta) {
         for (auto& record : Records) {

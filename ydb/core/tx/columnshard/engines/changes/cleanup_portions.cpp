@@ -25,12 +25,14 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
         p.RemoveFromDatabase(context.DBWrapper);
         p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
         pathIds.emplace(p.GetPathId());
-        LOG_S_CRIT("Removing portion from cleanup");
-        ui32 refCount = self->VersionRemoveRef(p.GetPortion(), p.GetPathId(), p.GetSchemaVersionVerified());
-        if (refCount == 0) {
-            LOG_S_CRIT("Ref count is set to 0 for version " << p.GetSchemaVersionVerified() << " need to delete");
-            self->TablesManager.RemoveUnusedSchemaVersion(context.DB, p.GetSchemaVersionVerified());
-        }
+        context.DB->OnCommit([self, portion = p.GetPortion(), pathId = p.GetPathId(), schema = p.GetSchemaVersionVerified(), db = context.DB]() {
+            LOG_S_CRIT("Removing portion from cleanup");
+            ui32 refCount = self->VersionRemoveRef(portion, pathId, schema);
+            if (refCount == 0) {
+                LOG_S_CRIT("Ref count is set to 0 for version " << schema << " need to delete");
+                self->TablesManager.RemoveUnusedSchemaVersion(db, schema);
+            }
+        });
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);

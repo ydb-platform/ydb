@@ -244,7 +244,7 @@ private:
         const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
-        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx, hints);
+        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
@@ -252,7 +252,7 @@ private:
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve();
+        auto bestJoinOrder = solver.Solve(hints);
         return ConvertFromInternal(bestJoinOrder);
     }
 private:

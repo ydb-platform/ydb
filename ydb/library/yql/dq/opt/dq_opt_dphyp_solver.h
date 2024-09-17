@@ -38,26 +38,15 @@ class TDPHypSolver {
 public:
     TDPHypSolver(
         TJoinHypergraph<TNodeSet>& graph,
-        IProviderContext& ctx,
-        const TOptimizerHints& hints
+        IProviderContext& ctx
     ) 
         : Graph_(graph) 
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
-    {
-        for (auto& h : hints.CardinalityHints->Hints) {
-            TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
-            CardHintsTable_[hintSet] = &h;
-        }
-
-        for (auto& h : hints.JoinAlgoHints->Hints) {
-            TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
-            JoinAlgoHintsTable_[hintSet] = &h;
-        }
-    }
+    {}
 
     // Run DPHyp algorithm and produce the join tree in CBO's internal representation
-    std::shared_ptr<TJoinOptimizerNodeInternal> Solve();
+    std::shared_ptr<TJoinOptimizerNodeInternal> Solve(const TOptimizerHints& hints);
 
     // Calculate the size of a dynamic programming table with a budget
     ui32 CountCC(ui32 budget);
@@ -232,7 +221,17 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::NextBitset(const TN
     return res;
 }
 
-template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::Solve() {
+template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::Solve(const TOptimizerHints& hints) {
+    for (auto& h : hints.CardinalityHints->Hints) {
+        TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
+        CardHintsTable_[hintSet] = &h;
+    }
+
+    for (auto& h : hints.JoinAlgoHints->Hints) {
+        TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
+        JoinAlgoHintsTable_[hintSet] = &h;
+    }
+
     auto& nodes = Graph_.GetNodes();
 
     Y_ASSERT(nodes.size() == NNodes_);

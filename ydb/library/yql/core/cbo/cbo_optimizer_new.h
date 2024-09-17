@@ -71,7 +71,7 @@ struct TCardinalityHints {
         TVector<TString> JoinLabels;
         ECardOperation Operation;
         double Value;
-        TString String;
+        TString StringRepr;
         bool Applied = false;
 
         double ApplyHint(double originalValue) {
@@ -93,8 +93,8 @@ struct TCardinalityHints {
     };
 
     TVector<TCardinalityHint> Hints;
-    void PushBack(TVector<TString> labels, ECardOperation op, double value, TString string) {
-        Hints.push_back({.JoinLabels = std::move(labels), .Operation = op, .Value = value, .String = std::move(string)});
+    void PushBack(TVector<TString> labels, ECardOperation op, double value, TString stringRepr) {
+        Hints.push_back({.JoinLabels = std::move(labels), .Operation = op, .Value = value, .StringRepr = std::move(stringRepr)});
     }
 };
 
@@ -102,14 +102,14 @@ struct TJoinAlgoHints {
     struct TJoinAlgoHint {
         TVector<TString> JoinLabels;
         EJoinAlgoType JoinHint;
-        TString String;
+        TString StringRepr;
         bool Applied = false;
     };
 
     TVector<TJoinAlgoHint> Hints;
 
-    void PushBack(TVector<TString> labels, EJoinAlgoType joinHint, TString string) {
-        Hints.push_back({.JoinLabels = std::move(labels), .JoinHint = joinHint, .String = std::move(string)});
+    void PushBack(TVector<TString> labels, EJoinAlgoType joinHint, TString stringRepr) {
+        Hints.push_back({.JoinLabels = std::move(labels), .JoinHint = joinHint, .StringRepr = std::move(stringRepr)});
     }
 };
 
@@ -125,7 +125,6 @@ struct TJoinOrderHints {
         bool IsJoin() { return Type == Join; } 
         virtual ~ITreeNode() = default;
 
-        TString String;
         ui32 Type;
     };
 
@@ -162,14 +161,14 @@ struct TJoinOrderHints {
 
     struct TJoinOrderHint {
         std::shared_ptr<ITreeNode> Tree;
-        TString String;
+        TString StringRepr;
         bool Applied = false;
     };
 
     TVector<TJoinOrderHint> Hints;
 
-    void PushBack(std::shared_ptr<ITreeNode> hintTree, TString string) {
-        Hints.push_back({.Tree = std::move(hintTree), .String = std::move(string)});
+    void PushBack(std::shared_ptr<ITreeNode> hintTree, TString stringRepr) {
+        Hints.push_back({.Tree = std::move(hintTree), .StringRepr = std::move(stringRepr)});
     }
 };
 

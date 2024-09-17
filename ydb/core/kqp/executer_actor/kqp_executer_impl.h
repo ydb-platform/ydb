@@ -417,7 +417,10 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED:
                 // Don't finalize stats twice.
                 if (Planner->CompletedCA(taskId, computeActor)) {
-                    ExtraData[computeActor].Swap(state.MutableExtraData());
+                    auto& extraData = ExtraData[computeActor];
+                    extraData.TaskId = taskId;
+                    extraData.Data.Swap(state.MutableExtraData());
+                    
 
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
@@ -458,45 +461,13 @@ protected:
                 break;
             }
 
-            case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
-                if (Stats) {
-                    Stats->AddComputeActorStats(
-                        computeActor.NodeId(),
-                        std::move(*state.MutableStats()),
-                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                    );
-                }
-                auto& extraData = ExtraData[computeActor];
-                extraData.TaskId = taskId;
-                extraData.Data.Swap(state.MutableExtraData());
+            default:
+                ; // ignore all other states.
+        }
 
-                LastTaskId = taskId;
-                LastComputeActorId = computeActor.ToString();
-
-                if (Planner) {
-                    auto it = Planner->GetPendingComputeActors().find(computeActor);
-                    if (it == Planner->GetPendingComputeActors().end()) {
-                        LOG_W("Got execution state for compute actor: " << computeActor
-                            << ", task: " << taskId
-                            << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
-                            << ", too early (waiting reply from RM)");
-
-                        if (Planner && Planner->GetPendingComputeTasks().erase(taskId)) {
-                            LOG_E("Got execution state for compute actor: " << computeActor
-                                << ", for unknown task: " << state.GetTaskId()
-                                << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState()));
-                            return;
-                        }
-                    } else {
-                        if (state.HasStats()) {
-                            it->second.Set(state.GetStats());
-                        }
-                        LastStats.emplace_back(std::move(it->second));
-                        Planner->GetPendingComputeActors().erase(it);
-                        YQL_ENSURE(Planner->GetPendingComputeTasks().find(taskId) == Planner->GetPendingComputeTasks().end());
-                    }
-                }
-            }
+        if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {
+            ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
+            return;
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();

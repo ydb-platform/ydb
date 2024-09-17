@@ -661,15 +661,16 @@ message TKqpTableSinkSettings {
 }
 
 message TKqpStreamLookupSettings {
-     optional NKqpProto.TKqpPhyTableId Table = 1;
-     repeated TKqpColumnMetadataProto KeyColumns = 2;
-     repeated TKqpColumnMetadataProto Columns = 3;
-     optional TKqpSnapshot Snapshot = 4;
-     optional uint64 LockTxId = 5;
-     optional bool ImmediateTx = 6;
-     repeated string LookupKeyColumns = 7;
-     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
-     optional bool AllowInconsistentReads = 9 [default = false];
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    repeated TKqpColumnMetadataProto KeyColumns = 2;
+    repeated TKqpColumnMetadataProto Columns = 3;
+    optional TKqpSnapshot Snapshot = 4;
+    optional uint64 LockTxId = 5;
+    optional bool ImmediateTx = 6;
+    repeated string LookupKeyColumns = 7;
+    optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+    optional bool AllowInconsistentReads = 9 [default = false];
+    optional uint32 LockNodeId = 10;
 }
 
 message TKqpSequencerSettings {

@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <ydb/library/yql/parser/proto_ast/antlr3/proto_ast_antlr3.h>
+#include <ydb/library/yql/parser/proto_ast/antlr4/proto_ast_antlr4.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.h>
@@ -84,30 +86,30 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
 #endif
     NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
     if (ansiLexer && !anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder3<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
         auto res = builder.BuildAST(collector);
         if (testAntlr4) {
-            NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+            NProtoAST::TProtoASTBuilder4<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 = builder.BuildAST(collector);
             ValidateMessages(query, res, res2);
         }
 
         return res;
     } else if (!ansiLexer && !anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder3<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
         auto res = builder.BuildAST(collector);
         if (testAntlr4) {
-            NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+            NProtoAST::TProtoASTBuilder4<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 = builder.BuildAST(collector);
             ValidateMessages(query, res, res2);
         }
 
         return res;
     } else if (ansiLexer && anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder4<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     } else {
-        NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder4<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     }
 }
@@ -119,30 +121,30 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
     if (ansiLexer && !anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder3<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
         auto res = builder.BuildAST(err);
         if (testAntlr4) {
-            NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+            NProtoAST::TProtoASTBuilder4<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 = builder.BuildAST(err);
             ValidateMessages(query, res, res2);
         }
 
         return res;
     } else if (!ansiLexer && !anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder3<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
         auto res = builder.BuildAST(err);
         if (testAntlr4) {
-            NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+            NProtoAST::TProtoASTBuilder4<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
             auto res2 =  builder.BuildAST(err);
             ValidateMessages(query, res, res2);
         }
 
         return res;
     } else if (ansiLexer && anlr4Parser) {
-        NProtoAST::TProtoASTBuilder<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder4<NALPAnsiAntlr4::SQLv1Antlr4Parser, NALPAnsiAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     } else {
-        NProtoAST::TProtoASTBuilder<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder4<NALPDefaultAntlr4::SQLv1Antlr4Parser, NALPDefaultAntlr4::SQLv1Antlr4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     }
 }

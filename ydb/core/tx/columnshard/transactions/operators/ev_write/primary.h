@@ -141,7 +141,10 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ack_tablet")("wait", JoinSeq(",", op->WaitShardsResultAck))(
                 "receive", TabletId);
-            AFL_VERIFY(op->WaitShardsResultAck.erase(TabletId));
+            if (!op->WaitShardsResultAck.erase(TabletId)) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ack_tablet_duplication")("wait", JoinSeq(",", op->WaitShardsResultAck))(
+                    "receive", TabletId);
+            }
             op->CheckFinished(*Self);
         }
 
@@ -188,7 +191,7 @@ private:
                 if (tabletId && *tabletId != i) {
                     continue;
                 }
-                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+                owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
                     new TEvPipeCache::TEvForward(
                         new TEvTxProcessing::TEvReadSetAck(0, GetTxId(), owner.TabletID(), i, owner.TabletID(), 0), i, true),
                     IEventHandle::FlagTrackDelivery, GetTxId());
@@ -202,10 +205,10 @@ private:
         readSetData.SetDecision(*TxBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         for (auto&& i : ReceivingShards) {
             if (WaitShardsResultAck.contains(i)) {
-                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
-                    new TEvPipeCache::TEvForward(
-                        new TEvTxProcessing::TEvReadSet(0, GetTxId(), owner.TabletID(), i, owner.TabletID(), readSetData.SerializeAsString()), i,
-                        true),
+                owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+                    new TEvPipeCache::TEvForward(new TEvTxProcessing::TEvReadSet(TxInfo.PlanStep, GetTxId(), owner.TabletID(), i,
+                                                     owner.TabletID(), readSetData.SerializeAsString()),
+                        i, true),
                     IEventHandle::FlagTrackDelivery, GetTxId());
             }
         }

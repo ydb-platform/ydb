@@ -131,6 +131,7 @@ CREATE TABLE article (
 | `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Да | Да |
 
 Где `<unit>` — единица измерения, указывается только для колонок с [числовым типом](../../../concepts/ttl.md#restrictions):
+
 * `SECONDS`;
 * `MILLISECONDS`;
 * `MICROSECONDS`;

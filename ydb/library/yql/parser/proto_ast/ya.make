@@ -1,18 +1,18 @@
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/antlr3_cpp_runtime
-    contrib/libs/antlr4_cpp_runtime
     contrib/libs/protobuf
 )
 
 SRCS(
-    proto_ast.cpp
+    common.cpp
 )
 
 END()
 
 RECURSE(
+    antlr3
+    antlr4
     collect_issues
     gen
 )

@@ -2,7 +2,7 @@
 
 Проверка вхождения одного значения в набор значений. Логически эквивалентно цепочке сравнений на равенство через `OR`, но реализовано более эффективно.
 
-{% note warning "Внимание" %}
+{% note warning %}
 
 В отличие от аналогичного ключевого слова в Python, в YQL `IN` **НЕ** является поиском подстроки в строке. Для поиска подстроки можно использовать функцию [String::Contains](../../../udf/list/string.md) или описанные выше [LIKE / REGEXP](../../../syntax/expressions.md#like).
 
@@ -22,22 +22,22 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT column IN (1, 2, 3)
 FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT * FROM my_table
 WHERE string_column IN ("a", "b", "c");
 ```
 
-``` yql
+```yql
 $foo = AsList(1, 2, 3);
 SELECT 1 IN $foo;
 ```
 
-``` yql
+```yql
 $values = (SELECT column + 1 FROM table);
 SELECT * FROM my_table WHERE
     -- фильтрация по in-memory хеш-таблице на основе table

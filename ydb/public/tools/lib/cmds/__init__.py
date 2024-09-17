@@ -17,7 +17,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator, KikimrFixedNodePortAllocator
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
 
 
@@ -332,7 +332,7 @@ def deploy(arguments):
     port_allocator = None
     if getattr(arguments, 'fixed_ports', False):
         base_port_offset = getattr(arguments, 'base_port_offset', 0)
-        port_allocator = KikimrFixedPortAllocator(base_port_offset, [KikimrFixedNodePortAllocator(base_port_offset=base_port_offset)])
+        port_allocator = KikimrFixedPortAllocator(base_port_offset)
 
     optionals = {}
     if enable_tls():

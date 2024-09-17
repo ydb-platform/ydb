@@ -6,7 +6,8 @@ import time
 import os
 import random
 import string
-
+from ydb.tests.library.harness.kikimr_client import kikimr_client_factory
+from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -21,7 +22,7 @@ def table_name_with_prefix(table_prefix):
 
 def random_string(length):
     letters = string.ascii_lowercase
-    return bytes(''.join(random.choice(letters) for i in range(length)), encoding='utf8')
+    return ''.join(random.choice(letters) for i in range(length))
 
 
 def random_type():
@@ -34,13 +35,14 @@ def random_value(type):
     if type == ydb.PrimitiveType.Int64:
         return random.randint(0, 1 << 31)
     if type == ydb.PrimitiveType.String:
-        return random_string(random.randint(1, 32))
+        return bytes(random_string(random.randint(1, 32)), encoding='utf8')
 
 
 class Workload(object):
-    def __init__(self, endpoint, database, duration, batch_size, batch_count):
+    def __init__(self, host, port, database, duration, batch_size, batch_count):
         self.database = database
-        self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        self.driver = ydb.Driver(ydb.DriverConfig(f"{host}:{port}", database))
+        self.kikimr_client = kikimr_client_factory(host, port)
         self.pool = ydb.SessionPool(self.driver, size=200)
         self.duration = duration
         self.batch_size = batch_size
@@ -65,13 +67,7 @@ class Workload(object):
             data.append({c.name: random_value(c.type) for c in schema})
         return data
 
-    def get_tables(self):
-        db = self.driver.scheme_client.list_directory(self.database)
-        return [t.name for t in db.children]
-
     def create_table(self, table_name):
-        logger.info(f"create table '{table_name}'")
-
         def callee(session):
             session.execute_scheme(f"""
                 CREATE TABLE `{table_name}` (
@@ -97,50 +93,36 @@ class Workload(object):
         self.run_query_ignore_errors(callee)
 
     def drop_table(self, table_name):
-        logger.info(f'drop table {table_name}')
-
         def callee(session):
             session.drop_table(table_name)
         self.run_query_ignore_errors(callee)
 
-    def drop_all_tables_with_prefix(self, prefix):
-        for t in self.get_tables():
-            if t.startswith(prefix):
-                self.drop_table(self.database + "/" + t)
-
-    def list_columns(self, table_name):
+    def list_columns(self, table_path):
         def callee(session):
-            return session.describe_table(self.database + "/" + table_name).columns
+            return session.describe_table(table_path).columns
         return self.pool.retry_operation_sync(callee)
 
-    def add_batch(self, table_name, schema):
+    def add_data(self, table_path, trace_id):
+        logger.info(f"[{trace_id}] insert {self.batch_count} batches of {self.batch_size} bytes each")
+        schema = self.list_columns(table_path)
         column_types = ydb.BulkUpsertColumns()
+
         for c in schema:
             column_types.add_column(c.name, c.type)
-        batch = self.generate_batch(schema)
-        logger.info(f"batch size: {len(batch)}")
-        self.driver.table_client.bulk_upsert(self.database + "/" + table_name, batch, column_types)
 
-    def add_data(self, table_name):
-        schema = self.list_columns(table_name)
         for i in range(self.batch_count):
-            logger.info(f"add batch #{i}")
-            self.add_batch(table_name, schema)
-
-    def delete_from_table(self, table_name):
-        logger.info(f"delete from table '{table_name}'")
-
-        def callee(session):
-            session.transaction().execute(f"DELETE FROM `{table_name}`", commit_tx=True)
-        self.run_query_ignore_errors(callee)
+            logger.info(f"[{trace_id}] add batch #{i}")
+            batch = self.generate_batch(schema)
+            self.driver.table_client.bulk_upsert(table_path, batch, column_types)
 
     def rows_count(self, table_name):
         return self.driver.table_client.scan_query(f"SELECT count(*) FROM `{table_name}`").next().result_set.rows[0][0]
 
-    def analyze(self, table_name):
-        table_path = self.database + "/" + table_name
-        logger.info(f"analyze '{table_name}'")
+    def statistics_count(self, table_statistics, path_id):
+        query = f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id}"
+        return self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
 
+    def analyze(self, table_path):
         def callee(session):
             session.execute_scheme(f"ANALYZE `{table_path}`")
         self.run_query_ignore_errors(callee)
@@ -148,39 +130,46 @@ class Workload(object):
     def execute(self):
         table_prefix = "test_table"
         table_name = table_name_with_prefix(table_prefix)
+        table_path = self.database + "/" + table_name
         table_statistics = ".metadata/_statistics"
+        trace_id = random_string(5)
 
         try:
-            logger.info("start new round")
+            logger.info(f"[{trace_id}] start new round")
 
             self.pool.acquire()
 
-            self.delete_from_table(table_statistics)
-            if self.rows_count(table_statistics) > 0:
-                logger.error(f"table '{table_statistics}' is not empty")
-                return
-
-            self.drop_all_tables_with_prefix(table_prefix)
+            logger.info(f"[{trace_id}] create table '{table_name}'")
             self.create_table(table_name)
 
-            self.add_data(table_name)
-            count = self.rows_count(table_name)
-            logger.info(f"number of rows in table '{table_name}' {count}")
-            if count == 0:
-                logger.error(f"table {table_name} is empty")
-                return
+            scheme = self.kikimr_client.send(
+                SchemeDescribeRequest(table_path).protobuf,
+                method='SchemeDescribe'
+            )
+            path_id = scheme.PathDescription.Self.PathId
+            logger.info(f"[{trace_id}] table '{table_name}' path id: {path_id}")
 
-            logger.info("waiting to receive information about the table from scheme shard")
+            self.add_data(table_path, trace_id)
+            count = self.rows_count(table_name)
+            logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
+            if count != self.batch_count*self.batch_size:
+                raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
+
+            logger.info(f"[{trace_id}] waiting to receive information about the table '{table_name}' from scheme shard")
             time.sleep(300)
 
-            self.analyze(table_name)
+            logger.info(f"[{trace_id}] analyze '{table_name}'")
+            self.analyze(table_path)
 
-            count = self.rows_count(table_statistics)
-            logger.info(f"number of rows in table '{table_statistics}' {count}")
+            count = self.statistics_count(table_statistics, path_id)
+            logger.info(f"[{trace_id}] number of rows in statistics table '{table_statistics}' {count}")
             if count == 0:
-                logger.error(f"table '{table_statistics}' is empty")
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' is empty")
         except Exception as e:
-            logger.error(f"{type(e)}, {e}")
+            logger.error(f"[{trace_id}] {type(e)}, {e}")
+
+        logger.info(f"[{trace_id}] drop table '{table_name}'")
+        self.drop_table(table_path)
 
     def run(self):
         started_at = time.time()
@@ -193,7 +182,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="statistics stability workload", formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('--endpoint', default='localhost:2135', help="An endpoint to be used")
+    parser.add_argument('--host', default='localhost', help="An host to be used")
+    parser.add_argument('--port', default='2135', help="A port to be used")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
     parser.add_argument('--batch_size', default=1000, help='Batch size for bulk insert')
@@ -211,5 +201,5 @@ if __name__ == '__main__':
             level=logging.INFO
         )
 
-    with Workload(args.endpoint, args.database, args.duration, args.batch_size, args.batch_count) as workload:
+    with Workload(args.host, args.port, args.database, args.duration, args.batch_size, args.batch_count) as workload:
         workload.run()

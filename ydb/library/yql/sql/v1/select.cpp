@@ -2874,7 +2874,7 @@ public:
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
-        if (aggr->IsOverWindow()) {
+        if (aggr->IsOverWindow() || aggr->IsOverWindowDistinct()) {
             return Source->AddAggregationOverWindow(ctx, WindowName, aggr);
         }
         return Source->AddAggregation(ctx, aggr);

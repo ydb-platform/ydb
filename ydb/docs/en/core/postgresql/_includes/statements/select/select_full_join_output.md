@@ -1,4 +1,4 @@
-```
+```text
  name   | lastname | social_card_number
 ---------+----------+--------------------
  Liam    | Martinez |         1323456789

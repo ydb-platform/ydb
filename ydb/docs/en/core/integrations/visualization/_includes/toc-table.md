@@ -2,4 +2,6 @@
 
 | Environment | Compatibility Level  | Instruction |
 | --- | :---: | --- |
-| [Grafana](https://grafana.com) | Full| [Instruction](../grafana.md) |
+| [Apache Superset](https://superset.apache.org) | [PostgreSQL wire protocol](../../../postgresql/intro.md) | [Instruction](../superset.md) |
+| [FineBI](https://intl.finebi.com/) | [PostgreSQL wire protocol](../../../postgresql/intro.md) | [Instruction](../finebi.md) |
+| [Grafana](https://grafana.com) | Full | [Instruction](../grafana.md) |

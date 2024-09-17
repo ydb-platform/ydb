@@ -48,6 +48,7 @@ VALUES
     (2, Json('[{"name":"Peter \\\"strong cat\\\" Kourbatov"}]'))
 ;
 ```
+
 To insert a value in the first line, use `raw string` and the escape method using `\"`. To insert the second line, escaping through `\\\"` is used.
 
 We recommend using `raw string` and the escape method using `\"`, as it is more visual.

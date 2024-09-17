@@ -114,6 +114,31 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
 
     {
+        ACFL_DEBUG("step", "TTablesManager::Load_Start");
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+        {
+            TMemoryProfileGuard g("TTxInit/TTablesManager");
+            if (!tManagerLocal.InitFromDB(db)) {
+                ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
+                return false;
+            }
+        }
+        {
+            TMemoryProfileGuard g("TTxInit/LoadIndex");
+            if (!tManagerLocal.LoadIndex(dbTable)) {
+                ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
+                return false;
+            }
+        }
+        Self->TablesManager = std::move(tManagerLocal);
+
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
+        ACFL_DEBUG("step", "TTablesManager::Load_Finish");
+    }
+
+    {
         ACFL_DEBUG("step", "TTxController::Load_Start");
         TMemoryProfileGuard g("TTxInit/TTxController");
         auto localTxController = std::make_unique<TTxController>(*Self);
@@ -145,31 +170,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             return false;
         }
         ACFL_DEBUG("step", "TStoragesManager::Load_Finish");
-    }
-
-    {
-        ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
-        {
-            TMemoryProfileGuard g("TTxInit/TTablesManager");
-            if (!tManagerLocal.InitFromDB(db)) {
-                ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
-                return false;
-            }
-        }
-        {
-            TMemoryProfileGuard g("TTxInit/LoadIndex");
-            if (!tManagerLocal.LoadIndex(dbTable)) {
-                ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
-                return false;
-            }
-        }
-        Self->TablesManager = std::move(tManagerLocal);
-
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
-        ACFL_DEBUG("step", "TTablesManager::Load_Finish");
     }
 
     {

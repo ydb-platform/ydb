@@ -282,7 +282,7 @@ namespace NTabletPipe {
                 return;
             }
 
-            const auto &record = ev->Get()->Record;
+            auto &record = ev->Get()->Record;
             Y_ABORT_UNLESS(record.GetTabletId() == TabletId);
 
             ServerId = ActorIdFromProto(record.GetServerId());
@@ -299,8 +299,12 @@ namespace NTabletPipe {
 
             Become(&TThis::StateWork);
 
+            TString versionInfo;
+            if (!record.GetVersionInfo().empty()) {
+                versionInfo = std::move(*record.MutableVersionInfo());
+            }
             ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::OK, ctx.SelfID, ServerId,
-                                                                  Leader, false, Generation));
+                                                                  Leader, false, Generation, std::move(versionInfo)));
 
             BLOG_D("send queued");
             while (TAutoPtr<IEventHandle> x = PayloadQueue->Pop())

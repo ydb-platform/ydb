@@ -1,14 +1,16 @@
 # Приложение на Python
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v2), доступного в составе [Python SDK](https://github.com/ydb-platform/ydb-python-sdk) {{ ydb-short-name }}.
 
 ## Скачивание и запуск {#download}
 
-Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Python3](https://www.python.org/downloads/). Предварительно должен быть установлен [YDB Python SDK](../../../reference/ydb-sdk/install.md).
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Python3](https://www.python.org/downloads/). Предварительно должен быть установлен [{{ ydb-short-name }} Python SDK](../../../reference/ydb-sdk/install.md).
 
-Создайте рабочую директорию и выполните в ней из командной строки команды клонирования репозитория с github.com и установки необходимых пакетов Python:
+Создайте рабочую директорию и выполните в ней из командной строки команды клонирования репозитория с GitHub и установки необходимых пакетов Python:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-python-sdk.git
 python3 -m pip install iso8601
 ```
@@ -75,7 +77,7 @@ python3 -m pip install iso8601
 - Асинхронный
 
    ```python
-   async with ydb.aio.QuerySessionPoolAsync(driver) as pool:
+   async with ydb.aio.QuerySessionPool(driver) as pool:
        pass  # operations with pool here
    ```
 
@@ -87,12 +89,14 @@ python3 -m pip install iso8601
 Существует два основных метода для выполнения запросов, которые имеют различные свойства и области применения:
 
 * `pool.execute_with_retries`:
+
   * Буферизует весь результат в памяти клиента.
   * Автоматически перезапускает выполнение в случае ошибок, которые можно устранить перезапуском.
   * Не позволяет указать режим выполнения транзакции.
   * Рекомендуется для разовых запросов, которые возвращают небольшой по размеру результат.
 
 * `tx.execute`:
+
   * Возвращает итератор над результатом запроса, что позволяет обработать результат, который может не поместиться в памяти клиента.
   * Перезапуски в случае ошибок должны обрабатываться вручную с помощью `pool.retry_operation_sync`.
   * Позволяет указать режим выполнения транзакции.
@@ -153,7 +157,7 @@ python3 -m pip install iso8601
 - Асинхронный
 
    ```python
-   async def create_tables(pool: ydb.aio.QuerySessionPoolAsync):
+   async def create_tables(pool: ydb.aio.QuerySessionPool):
        print("\nCreating table series...")
        await pool.execute_with_retries(
            """
@@ -219,7 +223,7 @@ python3 -m pip install iso8601
 - Асинхронный
 
    ```python
-   async def upsert_simple(pool: ydb.aio.QuerySessionPoolAsync):
+   async def upsert_simple(pool: ydb.aio.QuerySessionPool):
        print("\nPerforming UPSERT into episodes...")
        await pool.execute_with_retries(
            """
@@ -267,7 +271,7 @@ python3 -m pip install iso8601
 - Асинхронный
 
    ```python
-   async def select_simple(pool: ydb.aio.QuerySessionPoolAsync):
+   async def select_simple(pool: ydb.aio.QuerySessionPool):
        print("\nCheck series table...")
        result_sets = await pool.execute_with_retries(
            """
@@ -365,7 +369,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 - Асинхронный
 
    ```python
-   async def select_with_parameters(pool: ydb.aio.QuerySessionPoolAsync, series_id, season_id, episode_id):
+   async def select_with_parameters(pool: ydb.aio.QuerySessionPool, series_id, season_id, episode_id):
        result_sets = await pool.execute_with_retries(
            """
            DECLARE $seriesId AS Int64;
@@ -402,12 +406,12 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ('episode title:', u'To Build a Better Beta', ', air date:', '2016-06-05')
 ```
 
-
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
 Метод `session.transaction().execute()` так же может быть использован для выполнения YQL запросов. В отличие от `pool.execute_with_retries`, данный метод позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
 
 Доступные режимы транзакции:
+
 * `ydb.QuerySerializableReadWrite()` (по умолчанию);
 * `ydb.QueryOnlineReadOnly(allow_inconsistent_reads=False)`;
 * `ydb.QuerySnapshotReadOnly()`;
@@ -443,7 +447,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
    ```python
    def explicit_transaction_control(pool: ydb.QuerySessionPool, series_id, season_id, episode_id):
-       def callee(session: ydb.QuerySessionSync):
+       def callee(session: ydb.QuerySession):
            query = """
            DECLARE $seriesId AS Int64;
            DECLARE $seasonId AS Int64;
@@ -481,9 +485,9 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
    ```python
    async def explicit_transaction_control(
-       pool: ydb.aio.QuerySessionPoolAsync, series_id, season_id, episode_id
+       pool: ydb.aio.QuerySessionPool, series_id, season_id, episode_id
    ):
-       async def callee(session: ydb.aio.QuerySessionAsync):
+       async def callee(session: ydb.aio.QuerySession):
            query = """
            DECLARE $seriesId AS Int64;
            DECLARE $seasonId AS Int64;
@@ -534,7 +538,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
    ```python
    def huge_select(pool: ydb.QuerySessionPool):
-       def callee(session: ydb.QuerySessionSync):
+       def callee(session: ydb.QuerySession):
            query = """SELECT * from episodes;"""
 
            with session.transaction(ydb.QuerySnapshotReadOnly()).execute(
@@ -552,8 +556,8 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 - Асинхронный
 
    ```python
-   async def huge_select(pool: ydb.aio.QuerySessionPoolAsync):
-       async def callee(session: ydb.aio.QuerySessionAsync):
+   async def huge_select(pool: ydb.aio.QuerySessionPool):
+       async def callee(session: ydb.aio.QuerySession):
            query = """SELECT * from episodes;"""
 
            async with await session.transaction(ydb.QuerySnapshotReadOnly()).execute(

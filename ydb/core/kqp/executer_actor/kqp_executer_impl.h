@@ -466,7 +466,9 @@ protected:
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
                 }
-                ExtraData[computeActor].Swap(state.MutableExtraData());
+                auto& extraData = ExtraData[computeActor];
+                extraData.TaskId = taskId;
+                extraData.Data.Swap(state.MutableExtraData());
 
                 LastTaskId = taskId;
                 LastComputeActorId = computeActor.ToString();

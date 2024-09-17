@@ -107,7 +107,7 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
     description << "Input format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
-        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+        "Couldn't find default input format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     auto& inputFormatDescriptions = GetInputFormatDescriptions();
     for (const auto& format : allowedFormats) {
         auto findResult = inputFormatDescriptions.find(format);
@@ -175,17 +175,37 @@ void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TCon
         .RequiredArgument("STRING").StoreResult(&InputBinaryStringEncodingFormat);
 }
 
-void TCommandWithInput::AddLegacyStdinFormats(TClientCommand::TConfig &config, const TVector<EDataFormat>& allowedStdinFormats) {
-    for (const auto& format : allowedStdinFormats) {
+void TCommandWithInput::AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
+        const TVector<TString>& newNames, const TVector<EDataFormat>& allowedFormats) {
+    for (const auto& format : allowedFormats) {
         Y_ABORT_UNLESS(!AllowedInputFormats.contains(format),
-            "%s stdin format is added twice", (TStringBuilder() << format).c_str());
+            "%s legacy input format is already added to allowed input formats", (TStringBuilder() << format).c_str());
         AllowedInputFormats.insert(format);
     }
-    config.Opts->AddLongOption("stdin-format")
-            .RequiredArgument("STRING").AppendTo(&LegacyStdinFormats)
+    config.Opts->AddLongOption(legacyName)
+            .RequiredArgument("STRING").AppendTo(&LegacyInputFormats)
             .Hidden();
+    for (const auto& newName : newNames) {
+        config.Opts->MutuallyExclusive(legacyName, newName);
+    }
     config.Opts->MutuallyExclusive("stdin-format", "input-format");
     config.Opts->MutuallyExclusive("stdin-format", "input-framing");
+}
+
+void TCommandWithInput::AddLegacyJsonInputFormats(TClientCommand::TConfig& config) {
+    AddInputBinaryStringEncodingFormats(config, {
+        EBinaryStringEncodingFormat::Unicode,
+        EBinaryStringEncodingFormat::Base64,
+    });
+    for (const auto& format : { EDataFormat::JsonUnicode, EDataFormat::JsonBase64}) {
+        Y_ABORT_UNLESS(!AllowedInputFormats.contains(format),
+            "%s legacy input format is already added to allowed input formats", (TStringBuilder() << format).c_str());
+        AllowedInputFormats.insert(format);
+    }
+    config.Opts->AddLongOption("input-format")
+        .RequiredArgument("STRING").StoreResult(&InputFormat)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-format", "input-binary-strings");
 }
 
 THashMap<EDataFormat, TString>& TCommandWithInput::GetInputFormatDescriptions() {
@@ -203,14 +223,41 @@ void TCommandWithInput::AddInputFileOption(TClientCommand::TConfig& config, bool
         .RequiredArgument("PATH").AppendTo(&InputFiles);
 }
 
+// Deprecated
+void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
+    config.Opts->AddLongOption("json", description).NoArgument()
+        .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
+        .Hidden();
+}
+
+void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config, 
+                                    const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
+    TStringStream description;
+    description << "Output format. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+        "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    for (const auto& format : allowedFormats) {
+        auto findResult = FormatDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
+            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    config.Opts->AddLongOption("format", description.Str())
+        .RequiredArgument("STRING").StoreResult(&OutputFormat);
+    AllowedFormats = allowedFormats;
+}
+
 void TCommandWithInput::ParseInputFormats() {
     if (InputFormat != EDataFormat::Default
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
         throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
     }
 
-    if (!LegacyStdinFormats.empty()) {
-        for (const auto& format : LegacyStdinFormats) {
+    if (!LegacyInputFormats.empty()) {
+        for (const auto& format : LegacyInputFormats) {
             switch (format) {
                 case EDataFormat::NoFraming:
                 case EDataFormat::NewlineDelimited:
@@ -240,36 +287,31 @@ void TCommandWithInput::ParseInputFormats() {
         }
     }
 
+    switch (InputBinaryStringEncodingFormat) {
+        case EBinaryStringEncodingFormat::Default:
+            switch(InputFormat) {
+                case EDataFormat::JsonBase64:
+                    InputBinaryStringEncoding = EBinaryStringEncoding::Base64;
+                    break;
+                case EDataFormat::JsonUnicode:
+                default:
+                    InputBinaryStringEncoding = EBinaryStringEncoding::Unicode;
+                    break;
+            }
+            break;
+        case EBinaryStringEncodingFormat::Unicode:
+            InputBinaryStringEncoding = EBinaryStringEncoding::Unicode;
+            break;
+        case EBinaryStringEncodingFormat::Base64:
+            InputBinaryStringEncoding = EBinaryStringEncoding::Base64;
+            break;
+        default:
+            throw TMisuseException() << "Unknown binary string encoding format: " << InputBinaryStringEncodingFormat;
+    }
+
     if (InputFiles.size() > 1 && !AllowMultipleInputFiles) {
         throw TMisuseException() << "Multiple input files are not allowed for this command";
     }
-}
-
-// Deprecated
-void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
-    config.Opts->AddLongOption("json", description).NoArgument()
-        .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
-        .Hidden();
-}
-
-void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config, 
-                                    const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
-    TStringStream description;
-    description << "Output format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
-        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
-    for (const auto& format : allowedFormats) {
-        auto findResult = FormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
-            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-            << "\n    " << findResult->second;
-    }
-    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&OutputFormat);
-    AllowedFormats = allowedFormats;
 }
 
 void TCommandWithOutput::ParseOutputFormats() {

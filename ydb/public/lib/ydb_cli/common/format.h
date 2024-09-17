@@ -40,7 +40,10 @@ class TCommandWithInput: virtual public TCommandWithFormat {
 protected:
     void AddInputFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedFormats,
         EDataFormat defaultFormat = EDataFormat::Json);
-    void AddLegacyStdinFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedStdinFormats);
+    void AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
+        const TVector<TString>& newNames,
+        const TVector<EDataFormat>& allowedFormats);
+    void AddLegacyJsonInputFormats(TClientCommand::TConfig& config);
     void AddInputFramingFormats(TClientCommand::TConfig &config, const TVector<EFramingFormat>& allowedFormats,
         EFramingFormat defaultFormat = EFramingFormat::NoFraming);
     void AddInputBinaryStringEncodingFormats(TClientCommand::TConfig &config,
@@ -60,10 +63,9 @@ protected:
     EFramingFormat InputFramingFormat = EFramingFormat::Default;
     EBinaryStringEncodingFormat InputBinaryStringEncodingFormat = EBinaryStringEncodingFormat::Default;
     EBinaryStringEncoding InputBinaryStringEncoding;
-    TString BinaryStringsEncoding;
 
 private:
-    TVector<EDataFormat> LegacyStdinFormats;
+    TVector<EDataFormat> LegacyInputFormats;
     TSet<EDataFormat> AllowedInputFormats;
     TSet<EFramingFormat> AllowedInputFramingFormats;
     TSet<EBinaryStringEncodingFormat> AllowedBinaryStringEncodingFormats;

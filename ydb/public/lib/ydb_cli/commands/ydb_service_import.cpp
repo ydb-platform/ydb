@@ -312,10 +312,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
 void TCommandImportFromJson::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
 
-    AddInputFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64
-    });
+    AddLegacyJsonInputFormats(config);
 }
 
 void TCommandImportFromJson::Parse(TConfig& config) {
@@ -327,7 +324,8 @@ void TCommandImportFromJson::Parse(TConfig& config) {
 int TCommandImportFromJson::Run(TConfig& config) {
     TImportFileSettings settings;
     settings.OperationTimeout(OperationTimeout);
-    settings.Format(InputFormat);
+    settings.Format(EDataFormat::Json);
+    settings.BinaryStringsEncoding(InputBinaryStringEncoding);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);

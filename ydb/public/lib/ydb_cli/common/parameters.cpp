@@ -96,11 +96,13 @@ void TCommandWithParameters::AddDefaultParamFormats(TClientCommand::TConfig& con
     });
 }
 
-void TCommandWithParameters::AddLegacyParamFormats(TClientCommand::TConfig& config) {
-    AddLegacyStdinFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64,
-    });
+void TCommandWithParameters::AddLegacyStdinFormats(TClientCommand::TConfig& config) {
+    AddLegacyInputFormats(config, "stdin-format", {"input-format", "input-framing"},
+        {
+            EDataFormat::JsonUnicode,
+            EDataFormat::JsonBase64,
+        }
+    );
 }
 
 void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString) {
@@ -232,18 +234,6 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             break;
         default:
             throw TMisuseException() << "Unknown input format: " << InputFormat;
-    }
-
-    switch (InputBinaryStringEncodingFormat) {
-        case EBinaryStringEncodingFormat::Default:
-        case EBinaryStringEncodingFormat::Unicode:
-            InputBinaryStringEncoding = EBinaryStringEncoding::Unicode;
-            break;
-        case EBinaryStringEncodingFormat::Base64:
-            InputBinaryStringEncoding = EBinaryStringEncoding::Base64;
-            break;
-        default:
-            throw TMisuseException() << "Unknown binary string encoding format: " << InputBinaryStringEncodingFormat;
     }
 
     for (const auto& parameterOption : ParameterOptions) {

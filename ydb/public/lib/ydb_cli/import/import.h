@@ -3,6 +3,7 @@
 #include <thread>
 #include <functional>
 
+#include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
@@ -41,6 +42,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(TDuration, OperationTimeout, TDuration::Seconds(5 * 60));
     FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, OperationTimeout_ + TDuration::Seconds(5));
     FLUENT_SETTING_DEFAULT(EDataFormat, Format, EDataFormat::Default);
+    FLUENT_SETTING_DEFAULT(EBinaryStringEncoding, BinaryStringsEncoding, EBinaryStringEncoding::Unicode);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);

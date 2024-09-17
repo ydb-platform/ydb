@@ -47,7 +47,7 @@ void TCommandYql::Config(TConfig& config) {
     AddLegacyParametersFileOption(config);
 
     AddDefaultParamFormats(config);
-    AddLegacyParamFormats(config);
+    AddLegacyStdinFormats(config);
 
     AddBatchParametersOptions(config, "script");
     AddLegacyBatchParametersOptions(config);

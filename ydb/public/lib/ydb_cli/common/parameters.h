@@ -30,7 +30,7 @@ protected:
     void AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString);
     void AddLegacyBatchParametersOptions(TClientCommand::TConfig& config);
     void AddDefaultParamFormats(TClientCommand::TConfig& config);
-    void AddLegacyParamFormats(TClientCommand::TConfig& config);
+    void AddLegacyStdinFormats(TClientCommand::TConfig& config);
     bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder);
     
     THashMap<EDataFormat, TString>& GetInputFormatDescriptions() override;

@@ -380,7 +380,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     AddLegacyParametersFileOption(config);
 
     AddDefaultParamFormats(config);
-    AddLegacyParamFormats(config);
+    AddLegacyStdinFormats(config);
 
     AddBatchParametersOptions(config, "query");
     AddLegacyBatchParametersOptions(config);
@@ -1037,11 +1037,8 @@ void TCommandReadTable::Config(TConfig& config) {
         .NoArgument().SetFlag(&FromExclusive);
     config.Opts->AddLongOption("to-exclusive", "Don't include the right border element into response")
         .NoArgument().SetFlag(&ToExclusive);
-
-    AddInputFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64
-    });
+    
+    AddLegacyJsonInputFormats(config);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -1060,6 +1057,7 @@ void TCommandReadTable::Config(TConfig& config) {
 
 void TCommandReadTable::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+    ParseInputFormats();
     ParseOutputFormats();
     ParsePath(config, 0);
 }
@@ -1118,28 +1116,15 @@ int TCommandReadTable::Run(TConfig& config) {
         NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(Path).GetValueSync();
         NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
 
-        EBinaryStringEncoding encoding;
-        switch (InputFormat) {
-        case EDataFormat::Default:
-        case EDataFormat::JsonUnicode:
-            encoding = EBinaryStringEncoding::Unicode;
-            break;
-        case EDataFormat::JsonBase64:
-            encoding = EBinaryStringEncoding::Base64;
-            break;
-        default:
-            throw TMisuseException() << "Unknown input format: " << InputFormat;
-        }
-
         if (From) {
-            TValue fromValue = JsonToYdbValue(From, GetKeyPrefixTypeFromJson(From, "from", tableDescription), encoding);
+            TValue fromValue = JsonToYdbValue(From, GetKeyPrefixTypeFromJson(From, "from", tableDescription), InputBinaryStringEncoding);
             readTableSettings.From(FromExclusive
                 ? NTable::TKeyBound::Exclusive(fromValue)
                 : NTable::TKeyBound::Inclusive(fromValue));
         }
 
         if (To) {
-            TValue toValue = JsonToYdbValue(To, GetKeyPrefixTypeFromJson(To, "to", tableDescription), encoding);
+            TValue toValue = JsonToYdbValue(To, GetKeyPrefixTypeFromJson(To, "to", tableDescription), InputBinaryStringEncoding);
             readTableSettings.To(ToExclusive
                 ? NTable::TKeyBound::Exclusive(toValue)
                 : NTable::TKeyBound::Inclusive(toValue));

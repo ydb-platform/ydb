@@ -813,19 +813,19 @@ int RunMain(int argc, const char* argv[])
 
     runOptions.User = user;
 
-    NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
-    NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
+    NYql::NPg::SetSqlLanguageParser(NSQLTranslationPG::CreateSqlLanguageParser());
+    NYql::NPg::LoadSystemFunctions(*NSQLTranslationPG::CreateSystemFunctionsParser());
     if (!pgExtConfig.empty()) {
         NProto::TPgExtensions config;
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
-        TVector<NPg::TExtensionDesc> extensions;
+        TVector<NYql::NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
-        NPg::RegisterExtensions(extensions, false,
+        NYql::NPg::RegisterExtensions(extensions, false,
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
 
-    NPg::GetSqlLanguageParser()->Freeze();
+    NYql::NPg::GetSqlLanguageParser()->Freeze();
 
     TUserDataTable dataTable;
     FillUsedFiles(filesMappingList, dataTable);
@@ -956,13 +956,14 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (gatewaysConfig.HasS3()) {
+        gatewaysConfig.MutableS3()->SetAllowLocalFiles(true);
         for (auto& cluster: gatewaysConfig.GetS3().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{S3ProviderName});
         }
         if (!httpGateway) {
             httpGateway = IHTTPGateway::Make(gatewaysConfig.HasHttpGateway() ? &gatewaysConfig.GetHttpGateway() : nullptr);
         }
-        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr, true, nullptr));
+        dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr));
     }
 
     if (gatewaysConfig.HasPq()) {
@@ -1021,7 +1022,7 @@ int RunMain(int argc, const char* argv[])
     }
 
     TExprContext ctx;
-    ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
+    ctx.NextUniqueId = NYql::NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     IModuleResolver::TPtr moduleResolver;
     if (!mountConfig.empty()) {
         TModulesTable modules;

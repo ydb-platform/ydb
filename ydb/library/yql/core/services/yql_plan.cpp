@@ -127,7 +127,9 @@ void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson
             writer.OnListItem();
             writer.OnBeginMap();
             writer.OnKeyedItem("Id");
-            writer.OnUint64Scalar(p.second.Pin.find(pin)->second);
+            const auto found = p.second.Pin.find(pin);
+            YQL_ENSURE(found != p.second.Pin.cend());
+            writer.OnUint64Scalar(found->second);
             p.second.Provider->GetPlanFormatter().WritePinDetails(*pin, writer);
             writer.OnEndMap();
         }
@@ -412,7 +414,9 @@ public:
         THashMap<TPinKey, ui32, TPinKey::THash> allInputs;
         THashMap<TPinKey, ui32, TPinKey::THash> allOutputs;
         for (auto node : order) {
-            auto& info = nodes.find(node.Get())->second;
+            const auto found = nodes.find(node.Get());
+            YQL_ENSURE(found != nodes.cend());
+            auto& info = found->second;
             if (!info.IsVisible) {
                 continue;
             }

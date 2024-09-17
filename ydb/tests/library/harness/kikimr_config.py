@@ -33,7 +33,7 @@ KNOWN_STATIC_YQL_UDFS = set([
 ])
 
 
-def get_fqdn():
+def _get_fqdn():
     hostname = socket.gethostname()
     addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, 0, 0, socket.AI_CANONNAME)
     for ai in addrinfo:
@@ -44,7 +44,7 @@ def get_fqdn():
 
 
 # GRPC_SERVER:DEBUG,TICKET_PARSER:WARN,KQP_COMPILE_ACTOR:DEBUG
-def get_additional_log_configs():
+def _get_additional_log_configs():
     log_configs = os.getenv('YDB_ADDITIONAL_LOG_CONFIGS', '')
     rt = {}
 
@@ -55,13 +55,13 @@ def get_additional_log_configs():
     return rt
 
 
-def get_grpc_host():
+def _get_grpc_host():
     if sys.platform == "darwin":
         return "localhost"
     return "[::]"
 
 
-def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
+def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
     data = read_binary(__name__, "resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
@@ -73,7 +73,7 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,
         ydb_static_erasure=static_erasure,
-        ydb_grpc_host=get_grpc_host(),
+        ydb_grpc_host=_get_grpc_host(),
         ydb_pq_topics_are_first_class_citizen=bool(os.getenv("YDB_PQ_TOPICS_ARE_FIRST_CLASS_CITIZEN", "true")),
         ydb_pq_cluster_table_path=str(os.getenv("YDB_PQ_CLUSTER_TABLE_PATH", "")),
         ydb_pq_version_table_path=str(os.getenv("YDB_PQ_VERSION_TABLE_PATH", "")),
@@ -97,7 +97,7 @@ def _load_yaml_config(filename):
     return yaml.safe_load(_read_file(filename))
 
 
-def use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
+def _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
     if os.getenv('YDB_USE_IN_MEMORY_PDISKS') is not None:
         return os.getenv('YDB_USE_IN_MEMORY_PDISKS') == "true"
 
@@ -115,16 +115,12 @@ class KikimrConfigGenerator(object):
             nodes=None,
             additional_log_configs=None,
             port_allocator=None,
-            has_cluster_uuid=True,
             load_udfs=False,
             udfs_path=None,
             output_path=None,
             enable_pq=True,
             pq_client_service_types=None,
-            slot_count=0,
             pdisk_store_path=None,
-            version=None,
-            enable_nbs=False,
             enable_sqs=False,
             domain_name='Root',
             suppress_version_check=True,
@@ -144,7 +140,6 @@ class KikimrConfigGenerator(object):
             fq_config_path=None,
             public_http_config_path=None,
             public_http_config=None,
-            enable_datastreams=False,
             auth_config_path=None,
             enable_public_api_external_blobs=False,
             node_kind=None,
@@ -171,7 +166,6 @@ class KikimrConfigGenerator(object):
         if extra_grpc_services is None:
             extra_grpc_services = []
 
-        self._version = version
         self.use_log_files = use_log_files
         self.suppress_version_check = suppress_version_check
         self._pdisk_store_path = pdisk_store_path
@@ -181,16 +175,13 @@ class KikimrConfigGenerator(object):
         erasure = Erasure.NONE if erasure is None else erasure
         self.__grpc_ssl_enable = grpc_ssl_enable
         self.__grpc_tls_data_path = None
-        self.__grpc_ca_file = None
-        self.__grpc_cert_file = None
-        self.__grpc_key_file = None
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
         self.__grpc_tls_cert = None
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest_common.output_path()
-            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(get_fqdn())
+            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
             self.__grpc_tls_ca = cert_pem
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
@@ -200,7 +191,6 @@ class KikimrConfigGenerator(object):
         if nodes is None:
             nodes = rings_count * erasure.min_fail_domains
         self._rings_count = rings_count
-        self._enable_nbs = enable_nbs
         self.__node_ids = list(range(1, nodes + 1))
         self.n_to_select = n_to_select
         if self.n_to_select is None:
@@ -211,20 +201,19 @@ class KikimrConfigGenerator(object):
         self.state_storage_rings = state_storage_rings
         if self.state_storage_rings is None:
             self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if erasure == Erasure.MIRROR_3_DC else 8])
-        self.__use_in_memory_pdisks = use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks)
+        self.__use_in_memory_pdisks = _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks)
         self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
         self.domain_name = domain_name
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
         self.__load_udfs = load_udfs
         self.__udfs_path = udfs_path
-        self.__slot_count = slot_count
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
             self._dcs = [1, 2, 3]
 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
-        self.__additional_log_configs.update(get_additional_log_configs())
+        self.__additional_log_configs.update(_get_additional_log_configs())
         if pg_compatible_expirement:
             self.__additional_log_configs.update({
                 'PGWIRE': LogLevels.from_string('DEBUG'),
@@ -243,7 +232,7 @@ class KikimrConfigGenerator(object):
 
         self.__bs_cache_file_path = bs_cache_file_path
 
-        self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+        self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
 
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
@@ -527,20 +516,12 @@ class KikimrConfigGenerator(object):
         return self.yaml_config.get('audit_config', {}).get('file_backend', {}).get('file_path')
 
     @property
-    def nbs_enable(self):
-        return self._enable_nbs
-
-    @property
     def sqs_service_enabled(self):
         return self.yaml_config['sqs_config']['enable_sqs']
 
     @property
     def output_path(self):
         return self.__output_path
-
-    def set_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        return self
 
     @property
     def binary_path(self):

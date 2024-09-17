@@ -2,7 +2,7 @@
 
 #include <google/protobuf/message.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include <ydb/library/yql/parser/proto_ast/common.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -36,6 +36,7 @@ namespace NSQLTranslationV1 {
         Aggregated,
         AggregationKey,
         OverWindow,
+        OverWindowDistinct,
         Failed,
         End,
     };
@@ -150,6 +151,7 @@ namespace NSQLTranslationV1 {
         bool IsAggregated() const;
         bool IsAggregationKey() const;
         bool IsOverWindow() const;
+        bool IsOverWindowDistinct() const;
         bool HasState(ENodeState state) const {
             PrecacheState();
             return State.Test(state);
@@ -882,6 +884,7 @@ namespace NSQLTranslationV1 {
         Normal,
         Distinct,
         OverWindow,
+        OverWindowDistinct,
     };
 
     class TTupleNode: public TAstListNode {
@@ -1121,7 +1124,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> AutoPartitioningByLoad;
         TNodePtr MinPartitions;
         TNodePtr MaxPartitions;
-        TNodePtr PartitionsCount;
+        TNodePtr PartitionCount;
         TNodePtr UniformPartitions;
         TVector<TVector<TNodePtr>> PartitionAtKeys;
         TMaybe<TIdentifier> KeyBloomFilter;

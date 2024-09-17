@@ -87,21 +87,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData1));
         UNIT_ASSERT(ok);
 
-        // insert the same blobId1 again
-        auto userData2 = std::make_shared<TUserData>(tableId, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData2));
-        UNIT_ASSERT(!ok);
-
-        // insert different blodId with the same writeId and dedupId
-        TUnifiedBlobId blobId2(2222, 1, 2, 100, 2, 0, 1);
-        auto userData3 = std::make_shared<TUserData>(tableId, TBlobRange(blobId2), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData3));
-        UNIT_ASSERT(!ok);
-
         // read nothing
-        auto blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), nullptr);
+        auto blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
@@ -115,15 +104,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
 //        UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
 
         // read old snapshot
-        blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
-        blobs = insertTable.Read(tableId, {}, TSnapshot(planStep, txId), nullptr);
+        blobs = insertTable.Read(tableId, {}, TSnapshot(planStep, txId), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }

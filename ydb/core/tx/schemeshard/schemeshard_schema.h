@@ -768,6 +768,7 @@ struct Schema : NIceDb::Schema {
         struct ImportsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
+        struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -801,7 +802,8 @@ struct Schema : NIceDb::Schema {
             ExportsLimit,
             ImportsLimit,
             AuditSettings,
-            ServerlessComputeResourcesMode
+            ServerlessComputeResourcesMode,
+            ColumnTableColumnsLimit
         >;
     };
 
@@ -1518,6 +1520,7 @@ struct Schema : NIceDb::Schema {
         struct DstPathOwnerId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
+        struct Permissions : Column<11, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1532,6 +1535,7 @@ struct Schema : NIceDb::Schema {
             DstPathOwnerId,
             DstPathLocalId,
             Scheme,
+            Permissions,
             State,
             WaitTxId,
             NextIndexIdx,

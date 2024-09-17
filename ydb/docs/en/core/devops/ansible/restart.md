@@ -29,6 +29,7 @@ ansible-playbook ydb_platform.ydb.restart --tags static
 ```
 
 These two commands are equivalent and will restart all database nodes:
+
 ```bash
 ansible-playbook ydb_platform.ydb.restart --tags database
 ansible-playbook ydb_platform.ydb.restart --tags dynamic
@@ -44,6 +45,7 @@ ansible-playbook ydb_platform.ydb.restart --limit='<hostname-1,hostname-2>'
 ```
 
 It can be used together with tags, too:
+
 ```bash
 ansible-playbook ydb_platform.ydb.restart --tags database --limit='<hostname>'
 ```

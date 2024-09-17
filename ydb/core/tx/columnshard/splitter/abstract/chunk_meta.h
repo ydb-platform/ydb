@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>

@@ -7,6 +7,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 ## Подключение JDBC-драйвера {{ ydb-name }} к DataGrip {#datagrip_ydb}
 
 Для подключения к {{ ydb-name }} из DataGrip понадобится JDBC-драйвер. Для загрузки JDBC-драйвера выполните следующие шаги:
+
 1. Перейдите в [репозиторий ydb-jdbc-driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases).
 1. Выберите последний релиз (отмечен тегом `Latest`) и сохраните файл `ydb-jdbc-driver-shaded-<driver-version>.jar`.
 
@@ -24,7 +25,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 1. В выпадающем списке **Class** выберите `tech.ydb.jdbc.YdbDriver`.
 
-   ![](./_assets/datagrip-ydb-driver.png)
+   ![драйвер](./_assets/datagrip-ydb-driver.png)
 
 1. Нажмите кнопку **OK**.
 
@@ -44,11 +45,12 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 1. В поле **URL**, укажите следующую строку соединения:
 
-    ```
+    ```text
     jdbc:ydb:<ydb_endpoint>/<ydb_database>?useQueryService=true
     ```
 
     Где:
+
     - `ydb_endpoint` — [эндпойнт](../../concepts/connect.md#endpoint) кластера {{ydb-name}}, к которому будут выполняться подключение.
     - `ydb_database` — путь к [базе данных](../../concepts/glossary.md#database) в кластере {{ydb-name}}, к которой будут выполняться запросы.
 
@@ -56,7 +58,7 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
     Если все настройки указаны верно, то появится сообщение об успешном тестировании соединения.
 
-    ![](./_assets/datagrip-ydb-connection.png)
+    ![соединение](./_assets/datagrip-ydb-connection.png)
 
 1. Нажмите кнопку **OK** для сохранения соединения.
 
@@ -64,8 +66,8 @@ DataGrip позволяет работать с {{ ydb-short-name }} по про
 
 С помощью DataGrip можно просматривать список и структуру таблиц:
 
-![](./_assets/datagrip-list-tables.png)
+![список таблиц](./_assets/datagrip-list-tables.png)
 
 А также выполнять запросы к данным:
 
-![](./_assets/datagrip-run-sql.png)
+![выполнение SQL](./_assets/datagrip-run-sql.png)

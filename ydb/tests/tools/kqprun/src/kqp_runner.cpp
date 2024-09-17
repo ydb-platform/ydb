@@ -9,6 +9,7 @@
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 
 
 namespace NKqpRun {
@@ -159,8 +160,12 @@ public:
 
         TYdbSetup::StopTraceOpt();
 
+        if (!meta.Plan) {
+            meta.Plan = ExecutionMeta_.Plan;
+        }
+
         PrintScriptAst(meta.Ast);
-        PrintScriptProgress(ExecutionMeta_.Plan);
+        PrintScriptProgress(meta.Plan);
         PrintScriptPlan(meta.Plan);
         PrintScriptFinish(meta, queryTypeStr);
 
@@ -262,6 +267,7 @@ private:
         }
 
         PrintScriptAst(ExecutionMeta_.Ast);
+        PrintScriptProgress(ExecutionMeta_.Plan);
         PrintScriptPlan(ExecutionMeta_.Plan);
         PrintScriptFinish(ExecutionMeta_, "Script");
 
@@ -339,7 +345,7 @@ private:
 
             try {
                 double cpuUsage = 0.0;
-                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage, nullptr);
+                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage, nullptr, 0);
                 auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
                 auto publicStat = StatProcessor_->GetPublicStat(fullStat);
 
@@ -351,6 +357,15 @@ private:
 
             outputStream << "\nPlan visualization:" << Endl;
             PrintPlan(convertedPlan, &outputStream);
+
+            outputStream.Finish();
+        }
+        if (Options_.ScriptQueryTimelineFile) {
+            TFileOutput outputStream(Options_.ScriptQueryTimelineFile);
+
+            TPlanVisualizer planVisualizer;
+            planVisualizer.LoadPlans(plan);
+            outputStream.Write(planVisualizer.PrintSvg());
 
             outputStream.Finish();
         }

@@ -28,8 +28,8 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
         if (GetReadMetadata()->IsMyUncommitted(i.GetWriteIdVerified())) {
             continue;
         }
-        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirstVerified()) ||
-            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLastVerified())) {
+        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) ||
+            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
             GetReadMetadata()->SetConflictedWriteId(i.GetWriteIdVerified());
         }
     }
@@ -39,7 +39,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             if (GetReadMetadata()->IsWriteConflictable(i.GetWriteIdVerified())) {
                 continue;
             }
-        } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirstVerified(), i.GetLastVerified()) ==
+        } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirst(), i.GetLast()) ==
                    TPKRangeFilter::EUsageClass::DontUsage) {
             continue;
         }

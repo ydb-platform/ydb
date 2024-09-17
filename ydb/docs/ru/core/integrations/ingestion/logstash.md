@@ -19,14 +19,17 @@
 {% endnote %}
 
 Установить любой собранный плагин в Logstash можно с помощью команды
+
 ```bash
 <path-to-logstash>/bin/logstash-plugin install </path/to/logstash-plugin.gem>
 ```
 
 Проверить что плагин установлен, можно командой
+
 ```bash
 <path-to-logstash>/bin/logstash-plugin list
 ```
+
 Которая выведет список всех установленных плагинов, в котором можно найти интересующие.
 
 ## Конфигурация подключения плагинов к {{ ydb-short-name }}
@@ -71,9 +74,10 @@ ydb_storage {
 ### Пример использования
 
 #### Создание колоночной таблицы для хранения записей
+
 В выбранной базе данных {{ ydb-short-name }} cоздадим новую колоночную таблицу с нужными нами колонками. В качестве первичного ключа будем использовать случайное значение, генерируемое на стороне плагина:
 
-```sql
+```yql
 CREATE TABLE `logstash_demo` (
     `uuid`     Text NOT NULL,      -- Уникальный идентификатор
     `ts`       Timestamp NOT NULL, -- Время создания сообщения
@@ -108,24 +112,32 @@ input {
   }
 }
 ```
+
 После изменения данного файла `Logstash` нужно перезапустить.
 
 #### Отправка тестовых сообщений
+
 Затем можно отправить несколько тестовых сообщений:
+
 ```bash
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "test1", "level": 1}'
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "message" : "error", "level": -3}'
 ```
+
 Все команды должны вернуть `ok` в случае успешного выполнения.
 
 #### Проверка наличия записанных сообщений в {{ ydb-short-name }}
+
 Теперь можно убедиться что все отправленные сообщения записаны в таблице. Выполним запрос (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../../reference/ydb-cli/commands/scan-query.md)):
-```sql
+
+```yql
 SELECT * FROM `logstash_demo`;
 ```
+
 и получим список записанных событий:
-```
+
+```text
 ┌───────┬────────────────┬───────────────────────────────┬─────────────┬────────────────────────────────────────┐
 │ level │ message        │ ts                            │  user       │ uuid                                   │
 ├───────┼────────────────┼───────────────────────────────┼─────────────┼────────────────────────────────────────┤
@@ -134,7 +146,6 @@ SELECT * FROM `logstash_demo`;
 │  4    │ "demo message" │ "2024-05-22T13:15:38.760000Z" │ "demo_user" │ "b7468cb1-e1e3-46fa-965d-83e604e80a31" │
 └───────┴────────────────┴───────────────────────────────┴─────────────┴────────────────────────────────────────┘
 ```
-
 
 ## Плагин {{ ydb-short-name }} Topic Input
 
@@ -151,6 +162,7 @@ SELECT * FROM `logstash_demo`;
 ### Пример использования
 
 #### Создание топика
+
 В выбранной базе данных {{ ydb-short-name }} заранее создадим топик и читателя, из которого будет производиться чтение:
 
 ```bash
@@ -178,10 +190,13 @@ output {
   }
 }
 ```
+
 После изменения данного файла `Logstash` нужно перезапустить.
 
 #### Тестовая запись сообщение в топик
+
 Затем отправим несколько тестовых сообщений:
+
 ```bash
 echo '{"message":"test"}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
 echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
@@ -190,19 +205,19 @@ echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/
 #### Проверка обработки сообщений в Logstash
 
 Благодаря включенному плагину `stdout` в логе Logstash появятся прочитанные из топика сообщения:
-```
-{
-       "message" => "test",
-    "@timestamp" => 2024-05-23T10:31:47.712896899Z,
-      "@version" => "1"
-}
-{
-          "user" => 123.0,
-    "@timestamp" => 2024-05-23T10:34:08.574599108Z,
-      "@version" => "1"
-}
-```
 
+```ruby
+{
+      "message" => "test",
+      "@timestamp" => 2024-05-23T10:31:47.712896899Z,
+      "@version" => "1"
+}
+{
+      "user" => 123.0,
+      "@timestamp" => 2024-05-23T10:34:08.574599108Z,
+      "@version" => "1"
+}
+```
 
 ## Плагин {{ ydb-short-name }} Topic Output
 
@@ -217,6 +232,7 @@ echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/
 ### Пример использования
 
 #### Создание топика
+
 В выбранной базе данных {{ ydb-short-name }} заранее создадим топик, в который будет производиться запись:
 
 ```bash
@@ -241,22 +257,30 @@ input {
   }
 }
 ```
+
 После изменения данного файла `Logstash` нужно перезапустить.
 
 #### Отправка тестового сообщения
+
 С помощью плагина `http` отправим тестовое сообщение:
+
 ```bash
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
 ```
+
 Команда вернет `ok` в случае успешного выполнения.
 
 #### Контрольное чтение сообщения из топика
+
 Для проверки успешности записи в топик создадим нового читателя и прочитаем одно сообщение из топика:
+
 ```bash
 ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
 ydb -e grpc://localhost:2136 -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
 ```
+
 Чтение вернет содержимое отправленного сообщения:
+
 ```json
 {"level":4,"message":"demo message","timestamp":1716470292640,"user":"demo_user"}
 ```

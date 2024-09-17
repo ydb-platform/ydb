@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(timestamp)
             WITH (
                 STORE = COLUMN,
-                PARTITIONS_COUNT = %d
+                PARTITION_COUNT = %d
                 )
             )",
                              storeName.data(), tableName.data(), shardsCount);
@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(num);
@@ -1454,7 +1454,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
@@ -1518,7 +1518,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
@@ -1588,7 +1588,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
@@ -1846,7 +1846,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(WatchID)
             WITH (
                 STORE = COLUMN,
-                PARTITIONS_COUNT =)" << numShards
+                PARTITION_COUNT =)" << numShards
                                       << ")";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1934,7 +1934,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    PARTITIONS_COUNT = 1
+                    PARTITION_COUNT = 1
                 );
             )");
 
@@ -1988,7 +1988,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    PARTITIONS_COUNT = 1
+                    PARTITION_COUNT = 1
                 );
             )");
 
@@ -2039,7 +2039,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                    PARTITIONS_COUNT = 8
+                    PARTITION_COUNT = 8
                 );
             )"
         );
@@ -2510,7 +2510,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 PRIMARY KEY (a)
             )
             PARTITION BY HASH(a)
-            WITH (STORE = COLUMN, PARTITIONS_COUNT = 4);
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

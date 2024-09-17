@@ -41,7 +41,7 @@ std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags();
 
 // Hooks for yt/yt/core fibers.
 void* AcquireFiberTagStorage();
-std::vector<std::pair<TString, std::variant<TString, i64>>> ReadFiberTags(void* storage);
+std::vector<std::pair<std::string, std::variant<std::string, i64>>> ReadFiberTags(void* storage);
 void ReleaseFiberTagStorage(void* storage);
 TCpuInstant GetTraceContextTimingCheckpoint();
 

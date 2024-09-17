@@ -515,10 +515,16 @@ public:
         OPTION_FIELD(TString, Cluster)
         OPTION_FIELD(TVector<TPathStatReq>, Paths)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD_DEFAULT(bool, Extended, false)
     };
 
     struct TPathStatResult: public NCommon::TOperationResult {
+        struct TExtendedResult {
+            THashMap<TString, i64> DataWeight;
+            THashMap<TString, ui64> EstimatedUniqueCounts;
+        };
         TVector<ui64> DataSize;
+        TVector<TMaybe<TExtendedResult>> Extended;
     };
 
     struct TFullResultTableOptions : public TCommonOptions {

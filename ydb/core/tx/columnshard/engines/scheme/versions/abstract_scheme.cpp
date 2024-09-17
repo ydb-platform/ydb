@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -80,7 +80,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
 
     const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
 
-    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
+    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->fields());
 
     for (auto&& i : batch->schema()->fields()) {
         const ui32 columnId = GetIndexInfo().GetColumnIdVerified(i->name());
@@ -120,16 +120,17 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         case NEvWrite::EModificationType::Upsert: {
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
-                for (auto&& f : dstSchema->fields()) {
-                    if (GetIndexInfo().IsNullableVerified(f->name())) {
+                for (ui32 idx = 0; idx < (ui32)dstSchema->num_fields(); ++idx) {
+                    if (GetIndexInfo().IsNullableVerifiedByIndex(idx)) {
                         continue;
                     }
-                    if (batch->GetColumnByName(f->name())) {
+                    if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(idx)) {
                         continue;
                     }
-                    if (!GetIndexInfo().GetColumnExternalDefaultValueVerified(f->name())) {
-                        return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
+                    if (batch->GetColumnByName(dstSchema->field(idx)->name())) {
+                        continue;
                     }
+                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema->field(idx)->name() + "'");
                 }
             }
             return batch;
@@ -206,8 +207,9 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
 
 TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
     for (auto&& i : fields) {
-        auto defaultValue = GetExternalDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+        const ui32 colId = GetColumnIdVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(colId);
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(colId)) {
             return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
         }
     }
@@ -218,8 +220,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
     const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
-        auto defaultValue = GetExternalDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+        const ui32 columnId = GetColumnIdVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(columnId);
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(columnId)) {
             if (force) {
                 defaultValue = NArrow::DefaultScalar(i->type());
             } else {

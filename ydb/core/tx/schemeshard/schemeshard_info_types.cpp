@@ -383,7 +383,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NScheme::NTypeIds::Utf8:
                         break;
                     case NScheme::NTypeIds::Pg: {
-                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc())) {
+                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetPgTypeDesc())) {
                             case INT2OID:
                             case INT4OID:
                             case INT8OID:
@@ -391,7 +391,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                             case FLOAT8OID:
                                 break;
                             default: {
-                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetTypeDesc());
+                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetPgTypeDesc());
                                 TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID));
                                 errStr = Sprintf(
                                     "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
@@ -469,7 +469,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     }
                 }
             } else {
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                     return nullptr;
@@ -2501,7 +2501,7 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
             }
         }
     } else {
-        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+        auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {
             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
             return std::nullopt;

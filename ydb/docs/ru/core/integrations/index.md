@@ -19,14 +19,9 @@
 {% include notitle [Содержание](visualization/_includes/toc-table.md) %}
 
 
-{% if ydb-airflow %}
 ## Оркестрация {#orchestration}
 
-| Среда | Инструкция |
-| --- | --- |
-| [{{ airflow-name }}](https://airflow.apache.org) | [Инструкция](airflow.md) |
-
-{% endif %}
+{% include notitle [Содержание](orchestration/_includes/toc-table.md) %}
 
 ## Поставка данных {#ingestion}
 

@@ -2,7 +2,7 @@
 #include "common.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>

@@ -430,7 +430,7 @@ TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme:
     TString res;
 
     if (typeId == NScheme::NTypeIds::Pg) {
-        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
     } else {
         NScheme::ITypeSP t = reg.GetType(typeId);
 

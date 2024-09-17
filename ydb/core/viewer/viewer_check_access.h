@@ -22,33 +22,20 @@ public:
     {}
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         ui32 timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        TString database;
-        if (params.Has("database")) {
-            database = params.Get("database");
+        if (params.Has("permissions")) {
+            Split(params.Get("permissions"), ",", Permissions);
         } else {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'database' is required"));
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'permissions' is required"));
         }
-        bool direct = false;;
-        if (params.Has("direct")) {
-            direct = FromStringWithDefault<bool>(params.Get("direct"), direct);
-        }
-        direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        direct |= (database == AppData()->TenantName); // we're already on the right node or don't use database filter
-        if (database && !direct) {
-            return RedirectToDatabase(database); // to find some dynamic node and redirect query there
+        if (params.Has("path")) {
+            RequestSchemeCacheNavigate(params.Get("path"));
         } else {
-            if (params.Has("permissions")) {
-                Split(params.Get("permissions"), ",", Permissions);
-            } else {
-                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'permissions' is required"));
-            }
-            if (params.Has("path")) {
-                RequestSchemeCacheNavigate(params.Get("path"));
-            } else {
-                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'path' is required"));
-            }
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'path' is required"));
         }
         Become(&TThis::StateRequestedNavigate, TDuration::MilliSeconds(timeout), new TEvents::TEvWakeup());
     }

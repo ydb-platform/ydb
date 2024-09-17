@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     util
+    ydb/library/aclib
 )
 
 END()

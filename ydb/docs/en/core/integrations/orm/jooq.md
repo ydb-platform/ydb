@@ -152,7 +152,9 @@ spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
-`YdbDSLContext` is ready to use. Let's look at examples of specific YQL queries:
+`YdbDSLContext` is ready to use.
+
+ ## Examples of specific YQL queries
 
 The [`UPSERT`](../../yql/reference/syntax/upsert_into.md) command:
 

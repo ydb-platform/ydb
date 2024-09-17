@@ -2,6 +2,9 @@
 
 #include <ydb/library/yql/parser/proto_ast/common.h>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
 
 namespace antlr4 {

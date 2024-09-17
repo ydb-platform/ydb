@@ -24,6 +24,7 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   {% endcut %}
 
   {% cut "Enable a third-party logger `go.uber.org/zap`" %}
+
   ```go
   package main
 
@@ -56,9 +57,11 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
     ...
   }
   ```
+
   {% endcut %}
 
   {% cut "Enable a third-party logger `github.com/rs/zerolog`" %}
+
   ```go
   package main
 
@@ -91,6 +94,7 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
     ...
   }
   ```
+
   {% endcut %}
 
   {% include [overlay](_includes/debug-logs-go-appendix.md) %}
@@ -127,6 +131,7 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
     ...
   }
   ```
+
   {% endcut %}
 
   {% cut "Implement your own logging package" %}

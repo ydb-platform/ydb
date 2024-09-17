@@ -1,6 +1,9 @@
 #include "source.h"
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 namespace NKikimr::NOlap::NDataSharing {
@@ -130,18 +133,29 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
     }
     AFL_VERIFY(PathPortionHashes.size());
-    StaticSaved = true;
+    IsStaticSaved = true;
     return TConclusionStatus::Success();
 }
 
 TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
-    , PathIds(pathIds)
-{
+    , PathIds(pathIds) {
 }
 
-bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index) {
+void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId) {
+    using SourceSessions = NKikimr::NColumnShard::Schema::SourceSessions;
+    db.Table<SourceSessions>().Key(sessionId).Update(
+        NIceDb::TUpdate<SourceSessions::CursorDynamic>(SerializeDynamicToProto().SerializeAsString()));
+    if (!IsStaticSaved) {
+        db.Table<SourceSessions>().Key(sessionId).Update(
+            NIceDb::TUpdate<SourceSessions::CursorStatic>(SerializeStaticToProto().SerializeAsString()));
+        IsStaticSaved = true;
+    }
+}
+
+bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
+    const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index) {
     AFL_VERIFY(!IsStartedFlag);
     std::map<ui64, std::map<ui32, std::shared_ptr<TPortionInfo>>> local;
     std::vector<std::shared_ptr<TPortionInfo>> portionsLock;
@@ -177,5 +191,4 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
     IsStartedFlag = true;
     return true;
 }
-
-}
+}   // namespace NKikimr::NOlap::NDataSharing

@@ -4,7 +4,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 CurrentUtcDate(...)->Date
 CurrentUtcDatetime(...)->Datetime
 CurrentUtcTimestamp(...)->Timestamp
@@ -14,9 +14,10 @@ CurrentUtcTimestamp(...)->Timestamp
 
 ### Примеры
 
-``` yql
+```yql
 SELECT CurrentUtcDate();
 ```
-``` yql
+
+```yql
 SELECT CurrentUtcTimestamp(TableRow()) FROM my_table;
 ```

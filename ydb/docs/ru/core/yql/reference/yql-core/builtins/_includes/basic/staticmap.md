@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 StaticMap(Struct<...>, lambda)->Struct<...>
 StaticMap(Tuple<...>, lambda)->Tuple<...>
 ```
@@ -18,7 +18,7 @@ StaticMap(Tuple<...>, lambda)->Tuple<...>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT *
 FROM (
     SELECT

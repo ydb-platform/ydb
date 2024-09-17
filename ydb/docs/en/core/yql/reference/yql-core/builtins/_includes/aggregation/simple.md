@@ -102,8 +102,6 @@ FROM my_table;
 
 When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a predicate is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
-### Examples
-
 ```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
 $avg_if_factory = AggregationFactory("AVG_IF");

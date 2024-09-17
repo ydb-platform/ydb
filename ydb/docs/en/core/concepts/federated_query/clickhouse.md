@@ -1,5 +1,7 @@
 # Working with ClickHouse databases
 
+<!-- markdownlint-disable blanks-around-lists -->
+
 This section describes the basic information about working with the external ClickHouse database [ClickHouse](https://clickhouse.com).
 
 To work with the external ClickHouse database, the following steps must be completed:

@@ -882,7 +882,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
                                                       bool immediate,
                                                       ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -1606,7 +1606,7 @@ ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected)
 ui64 TPartitionTxTestHelper::MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected) {
     auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, 0);
 
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();

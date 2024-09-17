@@ -335,7 +335,8 @@ namespace NKikimr::NBsController {
                     if (base && overlay->second) {
                         const bool prevIsReady = base->second->IsReady;
                         const bool curIsReady = overlay->second->IsReady;
-
+                        
+                        // Only check groups whose vdisks ready status has changed
                         if (prevIsReady && !curIsReady) {
                             groupsToCheck.emplace(overlay->second->GroupId);
                         }

@@ -32,7 +32,7 @@ docker run \
     -e YDB_USE_IN_MEMORY_PDISKS=1 \ # хранение данных только в оперативной памяти
     ydbplatform/local-ydb:latest # имя и тег образа
 ```
-    
+
 Подробнее про переменные окружения, используемые при запуске Docker контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](environment.md)
 
 При указанных в примере выше параметрах и запуске Docker локально, [Embedded UI](../embedded-ui/index.md) {{ ydb-short-name }} будет доступен по адресу [http://localhost:8765⁠](http://localhost:8765⁠).

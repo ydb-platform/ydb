@@ -7,3 +7,5 @@ items:
     href: environment.md
   - name: Остановка и очистка
     href: cleanup.md 
+  - name: Именование тегов
+    href: naming.md

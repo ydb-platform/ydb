@@ -7,3 +7,5 @@ items:
     href: environment.md
   - name: Cleanup
     href: cleanup.md 
+  - name: Tag naming
+    href: naming.md

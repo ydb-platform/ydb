@@ -35,6 +35,7 @@
 ```
 
 ### Доступные параметры { #init_options }
+
 Имя параметра | Описание параметра
 ---|---
 `--store <значение>` | Тип хранилища таблиц. Возможные значения: `row`, `column`, `external-s3`. Значение по умолчанию `row`.
@@ -56,6 +57,7 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 В качестве исходных файлов можно использовать как распакованные и запакованные csv и tsv файлы, так и директории с такими файлами.
 
 ### Доступные параметры { #load_files_options }
+
 Имя параметра | Описание параметра
 ---|---
 `--input <путь>` или `-i <путь>` | Путь к исходным файлам с данными. Поддерживаются как распакованные и запакованные csv и tsv файлы, так и директории с такими файлами. Данные могут быть загружены с официального сайта ClickBench: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). Для ускорения загрузки можно разбить эти файлы на более мелкие части, в этом случае части буду загружаться параллельно.
@@ -83,6 +85,7 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 {% include [run_options](./_includes/workload/run_options.md) %}
 
 ### Опции, специфичные для ClickBench { #run_clickbench_options }
+
 Имя параметра | Описание параметра
 ---|---
 `--ext-queries <запросы>` или `-q <запросы>` | Внешние запросы для выполнения нагрузки, разделенные точкой с запятой. По умолчанию не требуется.
@@ -92,6 +95,7 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 `--check-cannonical` или `-c` | Использовать специальные детерминированные внутренние запросы и сверять результаты с каноническими.
 
 ## Очистка данных теста { #clean }
+
 Запустите очистку:
 
 ```bash

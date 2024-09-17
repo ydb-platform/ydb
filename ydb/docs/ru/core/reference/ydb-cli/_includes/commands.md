@@ -52,8 +52,8 @@ scheme permissions revoke | Удаление разрешения
 scheme permissions set | Установка разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
 [scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
-table attribute add | Добавление атрибута для строкой и колоночной таблицы
-table attribute drop | Удаление атрибута у колоночной и строковой таблицы
+table attribute add | Добавление атрибута для строкой или колоночной таблицы
+table attribute drop | Удаление атрибута у строковой или колоночной таблицы
 [table drop](../table-drop.md) | Удаление строковой или колоночной таблицы
 [table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса для строковых таблиц
 [table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса для строковых таблиц

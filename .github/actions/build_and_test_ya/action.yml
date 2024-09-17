@@ -57,6 +57,18 @@ defaults:
 runs:
   using: "composite"
   steps:
+    - name: show diff mute_ya.txt
+      if: always()
+      shell: bash
+      continue-on-error: true
+      run: python3 .github/scripts/tests/get_file_diff.py .github/config/muted_ya.txt
+      
+    - name: show new muted and unmuted tests
+      if: always()
+      shell: bash
+      continue-on-error: true
+      run: python3 .github/scripts/tests/show_muted_tests.py
+      
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:

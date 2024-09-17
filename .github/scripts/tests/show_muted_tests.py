@@ -3,7 +3,6 @@ import re
 import requests
 import configparser
 import ydb
-from git import Repo
 from mute_utils import mute_target, pattern_to_re
 from get_file_diff import extract_diff_lines
 
@@ -154,28 +153,6 @@ def download_file(url, local_filename):
         return None
 
 
-def get_diff_for_file(repo_path, filename):
-    repo = Repo(repo_path)
-    added_texts = []
-    removed_texts = []
-
-    diffs = repo.index.diff(None)  # Получаем diff всех измененных файлов
-    
-    # Найти изменения конкретного файла
-    for diff in diffs:
-        if diff.b_path == filename:
-            if diff.change_type == 'A':  # Файл полностью новый
-                with open(diff.b_path, 'r') as f:
-                    added_texts.extend(f.readlines())
-            else:
-                # Читаем diff для данного файла
-                for line in repo.git.diff(diff.b_path).split('\n'):
-                    if line.startswith('+') and not line.startswith('+++'):
-                        added_texts.append(line[1:] + '\n')
-                    elif line.startswith('-') and not line.startswith('---'):
-                        removed_texts.append(line[1:] + '\n')
-
-    return added_texts, removed_texts
 
 def write_to_file(text, file):
     #os.remove(file)
@@ -202,7 +179,6 @@ def main():
         print(f"The directory {repo_path} is not a valid Git repository.")
         return
     added_texts, removed_texts = extract_diff_lines(muted_ya_path)
-    #added_texts, removed_texts = get_diff_for_file(repo_path, muted_ya_path)
     write_to_file('\n'.join(added_texts), added_lines_file)
     write_to_file('\n'.join(removed_texts), removed_lines_file)
 

@@ -1,4 +1,5 @@
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -1776,12 +1777,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> blockedAlterStream;
-        auto blockAlterStream = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
-            if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
-                txId = ev->Get()->Record.GetTxId();
-                blockedAlterStream.Reset(ev.Release());
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blockedAlterStream(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
+                txId = record.GetTxId();
+                return true;
             }
+            return false;
         });
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
@@ -1795,33 +1797,18 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back([&blockedAlterStream](IEventHandle&) {
-                return bool(blockedAlterStream);
-            });
-            runtime.DispatchEvents(opts);
-            blockAlterStream.Remove();
-        }
+        runtime.WaitFor("AlterCdcStream", [&]{ return blockedAlterStream.size(); });
+        blockedAlterStream.Stop();
 
         UNIT_ASSERT(schemeShardActorId);
 
-        THolder<IEventHandle> blockedProgress;
-        auto blockProgress = runtime.AddObserver<TEvPrivate::TEvProgressOperation>([&](auto& ev) {
-            if (schemeShardActorId == ev->Sender) {
-                blockedProgress.Reset(ev.Release());
-            }
+        TBlockEvents<TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](auto& ev) {
+            return schemeShardActorId == ev->Sender;
         });
 
-        runtime.Send(blockedAlterStream.Release(), 0, true);
-        {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back([&blockedProgress](IEventHandle&) {
-                return bool(blockedProgress);
-            });
-            runtime.DispatchEvents(opts);
-            blockProgress.Remove();
-        }
+        blockedAlterStream.Unblock();
+        runtime.WaitFor("Progress", [&]{ return blockedProgress.size(); });
+        blockedProgress.Stop();
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         env.TestWaitNotification(runtime, txId);

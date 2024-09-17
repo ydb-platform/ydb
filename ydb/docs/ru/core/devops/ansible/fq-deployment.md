@@ -95,6 +95,7 @@
 {% note info %}
 
 На момент написания этой инструкции версия {{ ydb-short-name }} 24.3.3 была недоступна для [загрузки в предсобранном виде](../../downloads/index.md#ydb-server). Вы можете прибегнуть к установке {{ ydb-short-name }} из исходного кода. Для этого в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
+
 * Удалите/закомментируйте строки `ydb_version`, `ydb_archive`, `ydbd_binary`, `ydb_cli_binary`
 * Используйте `ydb_git_version: 24.3.3`
 
@@ -106,6 +107,7 @@
     1. `ydb_fq_connector_multislot`: установите в `true`
 1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`:
     1. отредактируйте `query_service_config.generic.connector` по образцу:
+
     ```yaml
     query_service_config:
         generic:
@@ -115,4 +117,5 @@
                 offset_from_ic_port: 100 # если в конфигурационном файле коннектора указан порт 19102 (19102 - 19002 = 100)
                 use_ssl: false
     ```
+    
 1. Продолжите установку

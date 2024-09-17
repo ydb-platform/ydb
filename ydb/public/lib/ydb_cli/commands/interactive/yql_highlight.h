@@ -7,9 +7,9 @@
 
 namespace NYdb {
     namespace NConsoleClient {
+        using NSQLTranslation::ILexer;
         using NSQLTranslation::TParsedToken;
         using NSQLTranslation::TParsedTokenList;
-        using NSQLTranslation::ILexer;
 
         class YQLHighlight final {
         public:

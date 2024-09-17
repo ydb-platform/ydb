@@ -147,12 +147,14 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         struct TEvOnRequestTimeout: public TEventLocal<TEvOnRequestTimeout, EEv::EvOnRequestTimeout> {
             ui64 RequestId;
             TDuration Timeout;
+            TDuration InitialTimeout;
             NYql::NDqProto::StatusIds::StatusCode Status;
             int Round;
 
             TEvOnRequestTimeout(ui64 requestId, TDuration timeout, NYql::NDqProto::StatusIds::StatusCode status, int round)
                 : RequestId(requestId)
                 , Timeout(timeout)
+                , InitialTimeout(timeout)
                 , Status(status)
                 , Round(round)
             {}
@@ -1272,9 +1274,9 @@ public:
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(reqInfo->SessionId);
         if (msg->Round == 0 && info) {
-            TString message = TStringBuilder()
-                << "request's " << (msg->Status == NYql::NDqProto::StatusIds::TIMEOUT ? "timeout" : "cancelAfter")
-                << " exceeded";
+            TString message = msg->Status == NYql::NDqProto::StatusIds::TIMEOUT
+                ? (TStringBuilder() << "Request timeout " << msg->Timeout.MilliSeconds() << "ms exceeded")
+                : (TStringBuilder() << "Request canceled after " << msg->Timeout.MilliSeconds() << "ms");
 
             Send(info->WorkerId, new TEvKqp::TEvAbortExecution(msg->Status, message));
 
@@ -1286,7 +1288,7 @@ public:
             }
         } else {
             TString message = TStringBuilder()
-                << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
+                << "Query did not complete within specified timeout " << msg->InitialTimeout.MilliSeconds() << "ms, session id " << reqInfo->SessionId;
             ReplyProcessError(NYql::NDq::DqStatusToYdbStatus(msg->Status), message, requestId);
         }
     }

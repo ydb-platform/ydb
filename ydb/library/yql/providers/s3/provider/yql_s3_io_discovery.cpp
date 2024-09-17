@@ -63,10 +63,8 @@ struct TListRequest {
 };
 
 bool operator<(const TListRequest& a, const TListRequest& b) {
-    const auto& lhs = a.S3Request.AuthInfo;
-    const auto& rhs = b.S3Request.AuthInfo;
-    return std::tie(lhs.Token, lhs.AwsAccessKey, lhs.AwsAccessSecret, lhs.AwsRegion, a.S3Request.Url, a.S3Request.Pattern) <
-           std::tie(rhs.Token, rhs.AwsAccessKey, rhs.AwsAccessSecret, rhs.AwsRegion, b.S3Request.Url, b.S3Request.Pattern);
+    return std::tie(a.S3Request.Credentials, a.S3Request.Url, a.S3Request.Pattern) <
+           std::tie(b.S3Request.Credentials, b.S3Request.Url, b.S3Request.Pattern);
 }
 
 using TPendingRequests = TMap<TListRequest, NThreading::TFuture<NS3Lister::TListResult>>;
@@ -85,9 +83,11 @@ public:
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->ListingCallbackThreadCount,
               State_->Configuration->ListingCallbackPerThreadQueueSize,
-              State_->Configuration->RegexpCacheSize))
+              State_->Configuration->RegexpCacheSize,
+              State_->ActorSystem))
         , ListingStrategy_(MakeS3ListingStrategy(
               State_->Gateway,
+              State_->GatewayRetryPolicy,
               ListerFactory_,
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
@@ -587,7 +587,7 @@ private:
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
 
-        const auto authInfo = GetAuthInfo(State_->CredentialsFactory, token);
+        const auto& credentials = GetOrCreateCredentials(token);
         const TString url = connect.Url;
         auto s3ParseSettings = source.Input().Maybe<TS3ParseSettings>().Cast();
         TString filePattern;
@@ -619,7 +619,7 @@ private:
 
                 auto req = TListRequest{.S3Request{
                     .Url = url,
-                    .AuthInfo = authInfo,
+                    .Credentials = credentials,
                     .Pattern = NS3::NormalizePath(
                         TStringBuilder() << dir.Path << "/" << effectiveFilePattern),
                     .PatternType = NS3Lister::ES3PatternType::Wildcard,
@@ -733,6 +733,10 @@ private:
         if (!FindFilePattern(settings, ctx, filePattern)) {
             return false;
         }
+        if (TString errorString = NS3::ValidateWildcards(filePattern)) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "File pattern '" << filePattern << "' contains invalid wildcard: " << errorString));
+            return false;
+        }
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
         TVector<TString> paths;
@@ -743,7 +747,7 @@ private:
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
 
-        const auto authInfo = GetAuthInfo(State_->CredentialsFactory, token);
+        const auto& credentials = GetOrCreateCredentials(token);
         const TString url = connect.Url;
 
         TGeneratedColumnsConfig config;
@@ -764,6 +768,11 @@ private:
         }
 
         for (const auto& path : paths) {
+            if (TString errorString = NS3::ValidateWildcards(path)) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path '" << path << "' contains invalid wildcard: " << errorString));
+                return false;
+            }
+
             // each path in CONCAT() can generate multiple list requests for explicit partitioning
             TVector<TListRequest> reqs;
 
@@ -771,79 +780,37 @@ private:
                 State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
                     State_->Configuration->AllowConcurrentListings);
             auto req = TListRequest{
-                .S3Request{.Url = url, .AuthInfo = authInfo},
+                .S3Request{.Url = url, .Credentials = credentials},
                 .FilePattern = effectiveFilePattern,
                 .Options{
                     .IsConcurrentListing = isConcurrentListingEnabled,
                     .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery)
                 }};
 
-            if (partitionedBy.empty()) {
-                if (path.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Can not read from empty path"));
+            if (partitionedBy.empty() || !config.Generator) {
+                auto error = NS3::BuildS3FilePattern(path, filePattern, config.Columns, req.S3Request);
+                if (error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), *error));
                     return false;
                 }
-                if (path.EndsWith("/")) {
-                    req.S3Request.Pattern = path + effectiveFilePattern;
-                } else {
-                    // treat paths as regular wildcard patterns
-                    if (filePattern) {
-                        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path pattern cannot be used with file_pattern"));
-                        return false;
-                    }
-
-                    req.S3Request.Pattern = path;
-                }
-                req.S3Request.Pattern = NS3::NormalizePath(req.S3Request.Pattern);
-                req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                    0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                req.Options.IsPartitionedDataset = false;
+                req.Options.IsPartitionedDataset = !partitionedBy.empty();
                 reqs.push_back(req);
             } else {
                 if (NS3::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
-                if (!config.Generator) {
-                    // Hive-style partitioning
-                    req.S3Request.Prefix = path;
-                    if (!path.empty()) {
-                        req.S3Request.Prefix = NS3::NormalizePath(TStringBuilder() << path << "/");
-                        if (req.S3Request.Prefix == "/") {
-                            req.S3Request.Prefix = "";
-                        }
-                    }
-                    TString pp = req.S3Request.Prefix;
-                    if (!pp.empty() && pp.back() == '/') {
-                        pp.pop_back();
-                    }
 
-                    TStringBuilder generated;
-                    generated << NS3::EscapeRegex(pp);
-                    for (auto& col : config.Columns) {
-                        if (!generated.empty()) {
-                            generated << "/";
-                        }
-                        generated << NS3::EscapeRegex(col) << "=(.*?)";
-                    }
-                    generated << '/' << NS3::RegexFromWildcards(effectiveFilePattern);
-                    req.S3Request.Pattern = generated;
-                    req.S3Request.PatternType = NS3Lister::ES3PatternType::Regexp;
+                for (auto& rule : config.Generator->GetRules()) {
+                    YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
+                    req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
+                    // Pattern will be directory path
+                    req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
+                    req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
+                    req.S3Request.Prefix = req.S3Request.Pattern.substr(
+                        0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
                     req.Options.IsPartitionedDataset = true;
                     reqs.push_back(req);
-                } else {
-                    for (auto& rule : config.Generator->GetRules()) {
-                        YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
-                        req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
-                        // Pattern will be directory path
-                        req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
-                        req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                        req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                            0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
-                        req.Options.IsPartitionedDataset = true;
-                        reqs.push_back(req);
-                    }
                 }
             }
 
@@ -879,6 +846,14 @@ private:
         return true;
     }
 
+    TS3Credentials GetOrCreateCredentials(const TString& token) {
+        auto it = S3Credentials_.find(token);
+        if (it != S3Credentials_.end()) {
+            return it->second;
+        }
+        return S3Credentials_.insert({token, TS3Credentials(State_->CredentialsFactory, token)}).first->second;
+    }
+
     const TS3State::TPtr State_;
     const NS3Lister::IS3ListerFactory::TPtr ListerFactory_;
     const IS3ListingStrategy::TPtr ListingStrategy_;
@@ -886,6 +861,7 @@ private:
     TPendingRequests PendingRequests_;
     TNodeMap<TVector<TListRequest>> RequestsByNode_;
     TNodeMap<TGeneratedColumnsConfig> GenColumnsByNode_;
+    std::unordered_map<TString, TS3Credentials> S3Credentials_;
     NThreading::TFuture<void> AllFuture_;
 };
 

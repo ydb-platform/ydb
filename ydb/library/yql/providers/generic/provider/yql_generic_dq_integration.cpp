@@ -121,8 +121,6 @@ namespace NYql {
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
-                    Generic::TSource source;
-
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
                         << ": cluster: " << clusterName
@@ -137,8 +135,9 @@ namespace NYql {
                     }
 
                     // prepare select
+                    Generic::TSource source;
                     auto select = source.mutable_select();
-                    select->mutable_from()->set_table(TString(table));
+                    select->mutable_from()->set_table(table);
                     select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
 
                     auto items = select->mutable_what()->mutable_items();
@@ -254,55 +253,6 @@ namespace NYql {
             void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
                 RegisterDqGenericMkqlCompilers(compiler, State_);
             }
-
-            void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
-                const TDqLookupSourceWrap wrap(&node);
-                const auto settings = wrap.Input().Cast<TGenSourceSettings>();
-
-                const auto& clusterName = wrap.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                const auto& table = settings.Table().StringValue();
-                const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
-                const auto& endpoint = clusterConfig.endpoint();
-
-                // for backward compability full path can be used (cluster_name.`db_name.table`)
-                // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                TStringBuf db, dbTable;
-                if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                    dbTable = table;
-                }
-
-                YQL_CLOG(INFO, ProviderGeneric)
-                    << "Filling lookup source settings"
-                    << ": cluster: " << clusterName
-                    << ", table: " << table
-                    << ", endpoint: " << endpoint.ShortDebugString();
-
-                auto [tableMeta, issue] = State_->GetTable(clusterName, table);
-                if (issue.has_value()) {
-                    ythrow yexception() << "Get table metadata: " << issue.value();
-                }
-
-                Generic::TLookupSource source;
-                source.set_table(TString(dbTable));
-                *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
-
-                // Managed YDB supports access via IAM token.
-                // If exist, copy service account creds to obtain tokens during request execution phase.
-                // If exists, copy previously created token.
-                if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
-                    source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
-                    source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
-                    source.SetToken(State_->Types->Credentials->FindCredentialContent(
-                        "default_" + clusterConfig.name(),
-                        "default_generic",
-                        clusterConfig.GetToken()));
-                }
-
-                // preserve source description for read actor
-                protoSettings.PackFrom(source);
-                sourceType = GetSourceType(source.data_source_instance());
-            }
-
         private:
             const TGenericState::TPtr State_;
         };

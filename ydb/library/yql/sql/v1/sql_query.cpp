@@ -1441,14 +1441,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
-                                 BuildAlterObjectOperation(Ctx.Pos(),
-                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                           typeId,
-                                                           std::move(kv),
-                                                           std::move(toReset),
-                                                           context));
+                                 BuildAlterBackupCollection(Ctx.Pos(),
+                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            TAlterBackupCollectionParameters {
+                                                                .Settings = std::move(kv),
+                                                                .SettingsToReset = std::move(toReset),
+                                                                .Database = TAlterBackupCollectionParameters::EDatabase::Unchanged,
+                                                                .TablesToAdd = {},
+                                                                .TablesToDrop = {},
+                                                                .MissingOk = false,
+                                                            },
+                                                            context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore50: {
@@ -1465,14 +1469,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
-                                 BuildDropObjectOperation(Ctx.Pos(),
-                                                          BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                          typeId,
-                                                          false,
-                                                          {},
-                                                          context));
+                                 BuildDropBackupCollection(Ctx.Pos(),
+                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                           TDropBackupCollectionParameters {
+                                                               .MissingOk = false,
+                                                           },
+                                                           context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore51: {

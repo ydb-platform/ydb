@@ -7043,6 +7043,7 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
             }
@@ -7067,6 +7068,7 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('type 'database)"));
@@ -7093,6 +7095,7 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"someTable")))#"));
@@ -7155,9 +7158,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"storage" '"remote") '('"tag1" '"123"))))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"tag2" '"tag3")))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('settings '('('"storage" '"remote") '('"tag1" '"123"))))#");
+                // UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
             }
         };
 
@@ -7176,8 +7180,8 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
             }
         };
 

@@ -1375,7 +1375,7 @@ namespace NSQLTranslationV1 {
 
         EDatabase Database = EDatabase::Unchanged;
         TVector<TDeferredAtom> TablesToAdd;
-        TVector<TDeferredAtom> TablesToReset;
+        TVector<TDeferredAtom> TablesToDrop;
 
         bool MissingOk;
     };

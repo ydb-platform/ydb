@@ -18,7 +18,7 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
     auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
     auto result = promise.GetFuture();
 
-    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    auto* actorSystem = context.GetExternalData().GetLocalData().GetActorSystem();
     if (!actorSystem) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("This place needs an actor system. Please contact internal support"));
     }

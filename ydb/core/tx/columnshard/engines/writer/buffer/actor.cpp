@@ -1,4 +1,5 @@
 #include "actor.h"
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 

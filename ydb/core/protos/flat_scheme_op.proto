@@ -1498,6 +1498,54 @@ message TReplicationDescription {
     optional NKikimrReplication.TReplicationState State = 6;
 }
 
+// TODO: Move proto to NKikimrScheme and rename to TModifyObject
+message TModifyObjectDescription {
+    optional TModifyObjectSettings Settings = 1;     // NYql::TObjectSettingsImpl
+    optional TObjectModificationContext Context = 2; // NKikimr::NMetadata::NModifications::IOperationsManager::TInternalModificationContext
+}
+
+// TODO: Move proto to NKikimrScheme
+message TModifyObjectResult {
+    // TODO: Consider adding an error code
+    optional string Error = 1;
+}
+
+// TODO: Move proto to NKikimrScheme
+message TObjectModificationContext {
+    enum EActivityType {
+        Undefined = 1;
+        Upsert = 2;
+        Create = 3;
+        Alter = 4;
+        Drop = 5;
+    }
+
+    optional bytes UserToken = 1; // NACLibProto.TUserToken
+    optional string Database = 2;
+    optional EActivityType ActivityType = 3;
+}
+
+// TODO: Move proto to NKikimrScheme
+message TModifyObjectSettings {
+    message TFeatureValue {
+        // TODO: Consider using Ydb.TypedValue
+        oneof Value {
+            string StringValue = 1;
+        }
+    }
+
+    optional string Type = 1;
+    optional string Object = 2;
+
+    optional bool ExistingOk = 3;
+    optional bool MissingOk = 4;
+    optional bool ReplaceIfExists = 5;
+
+    // TODO: Consider using plain string instead of TFeatureValue
+    map<string, TFeatureValue> Features = 6;
+    repeated string ResetFeatures = 7;
+}
+
 message TBlobDepotDescription {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;

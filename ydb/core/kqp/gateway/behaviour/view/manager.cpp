@@ -18,7 +18,7 @@ TString GetByKeyOrDefault(const NYql::TCreateObjectSettings& container, const TS
 }
 
 TYqlConclusionStatus CheckFeatureFlag(TInternalModificationContext& context) {
-    auto* const actorSystem = context.GetExternalData().GetActorSystem();
+    auto* const actorSystem = context.GetExternalData().GetLocalData().GetActorSystem();
     if (!actorSystem) {
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
     }
@@ -101,7 +101,7 @@ NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSe
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
     FillCreateViewProposal(schemeTx, settings, context.GetExternalData().GetDatabase());
 
-    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), true);
+    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetLocalData().GetActorSystem(), true);
 }
 
 NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettings& settings,
@@ -114,7 +114,7 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
     FillDropViewProposal(schemeTx, settings);
 
-    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), false);
+    return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetLocalData().GetActorSystem(), false);
 }
 
 void PrepareCreateView(NKqpProto::TKqpSchemeOperation& schemeOperation,
@@ -206,10 +206,10 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NK
     switch (schemeOperation.GetOperationCase()) {
         case NKqpProto::TKqpSchemeOperation::kCreateView:
             schemeTx.CopyFrom(schemeOperation.GetCreateView());
-            return SendSchemeRequest(proposal.Release(), context.GetActorSystem(), true);
+            return SendSchemeRequest(proposal.Release(), context.GetLocalData().GetActorSystem(), true);
         case NKqpProto::TKqpSchemeOperation::kDropView:
             schemeTx.CopyFrom(schemeOperation.GetDropView());
-            return SendSchemeRequest(proposal.Release(), context.GetActorSystem(), false);
+            return SendSchemeRequest(proposal.Release(), context.GetLocalData().GetActorSystem(), false);
         default:
             return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
                     TStringBuilder()

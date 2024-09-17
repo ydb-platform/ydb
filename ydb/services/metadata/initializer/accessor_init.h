@@ -31,7 +31,7 @@ private:
     virtual void OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) override;
     virtual void OnPreparationProblem(const TString& errorMessage) const override;
     virtual void OnAlteringProblem(const TString& errorMessage) override;
-    virtual void OnAlteringFinished() override;
+    virtual void OnAlteringFinished(TInstant /*historyInstant*/) override;
 
     virtual void OnModificationFinished(const TString& modificationId) override;
     virtual void OnModificationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& modificationId) override;

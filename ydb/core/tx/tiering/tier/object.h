@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/services/metadata/abstract/decoder.h>
+#include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/object.h>

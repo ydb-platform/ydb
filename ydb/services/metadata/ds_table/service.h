@@ -25,6 +25,7 @@ private:
 
     void Handle(TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvAskSnapshot::TPtr& ev);
+    void Handle(TEvAskExtendedSnapshot::TPtr& ev, const TActorContext &ctx);
     void Handle(TEvPrepareManager::TPtr& ev);
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
@@ -55,6 +56,8 @@ public:
             hFunc(TEvPrepareManager, Handle);
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
+
+            HFunc(TEvAskExtendedSnapshot, Handle);
 
             default:
                 Y_ABORT_UNLESS(false);

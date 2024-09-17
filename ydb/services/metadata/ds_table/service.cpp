@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/container/ds_accessor.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
 
@@ -64,6 +65,14 @@ void TService::Handle(TEvAskSnapshot::TPtr& ev) {
     ProcessEventWithFetcher(*ev, ev->Get()->GetFetcher(), [this, senderId](const TActorId& actorId) {
         Send<TEvAsk>(actorId, senderId);
         });
+}
+
+// TODO: strongly match extended DSAccessor (TDSAccessorHistoryInstant) with extended snapshot fetcher (NContainer::TSnapshotFetcher)
+void TService::Handle(TEvAskExtendedSnapshot::TPtr& ev, const TActorContext& ctx) {
+    const TActorId senderId = ev->Sender;
+    TActorId dsAccessor = ctx.Register(new NContainer::TDSAccessorHistoryInstant(
+        Config.GetRequestConfig(), std::make_shared<TDSAccessorSimple::TEvController>(TActorIdentity(senderId)), ev->Get()->GetFetcher()));
+    Send<TEvAsk>(dsAccessor, senderId);
 }
 
 void TService::Handle(TEvObjectsOperation::TPtr& ev) {

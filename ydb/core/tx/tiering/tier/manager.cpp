@@ -5,12 +5,12 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
-    const NYql::TObjectSettingsImpl& settings,
-    TInternalModificationContext& context) const
-{
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, const NSchemeShard::TSchemeShard& ss) const {
     if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
         return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
     }
+
+    Y_UNUSED(ss);  // TODO: use
 
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
@@ -44,6 +44,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                 } else {
                     return TConclusionStatus::Fail("AccessKey not configured");
                 }
+                // TODO: substitute secrets in scheme shard, return an error to the user if they are inaccessible
 
                 if (proto.GetObjectStorage().HasSecretableSecretKey()) {
                     auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(proto.GetObjectStorage().GetSecretableSecretKey(), defaultUserId);
@@ -71,6 +72,7 @@ void TTiersManager::DoPrepareObjectsBeforeModification(std::vector<TTierConfig>&
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
     const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const
 {
+    // TODO: Probably need to return success immediately. Maybe even make it default implementation of DoPrepareObjectsBeforeModification
     TActivationContext::Register(new TTierPreparationActor(std::move(patchedObjects), controller, context));
 }
 

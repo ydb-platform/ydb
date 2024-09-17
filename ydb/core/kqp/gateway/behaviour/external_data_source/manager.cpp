@@ -21,7 +21,7 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
 }
 
 void CheckFeatureFlag(TExternalDataSourceManager::TInternalModificationContext& context) {
-    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    auto* actorSystem = context.GetExternalData().GetLocalData().GetActorSystem();
     if (!actorSystem) {
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
     }
@@ -149,7 +149,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> ValidateCr
     const auto& authDescription = externaDataSourceDesc.GetAuth();
     const auto& externalData = context.GetExternalData();
     const auto& userToken = externalData.GetUserToken();
-    auto describeFuture = DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+    auto describeFuture = DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", externalData.GetLocalData().GetActorSystem());
 
     return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) mutable {
         if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {
@@ -204,7 +204,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
 
         *ev->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
 
-        return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+        return SendSchemeRequest(ev.Release(), context.GetExternalData().GetLocalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
     });
 }
 
@@ -221,7 +221,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
     FillDropExternalDataSourceCommand(schemeTx, settings, context);
 
-    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetLocalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
 }
 
 TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
@@ -296,7 +296,7 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
 
         *ev->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
 
-        return SendSchemeRequest(ev.Release(), context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+        return SendSchemeRequest(ev.Release(), context.GetLocalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
     });
 }
 

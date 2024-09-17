@@ -10,6 +10,7 @@ void TTieringRulesManager::DoPrepareObjectsBeforeModification(std::vector<TTieri
     TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
 }
 
+// TODO: use context.SchemeOperation to validate update against table descriptions
 NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
     const NYql::TObjectSettingsImpl& settings,
     TInternalModificationContext& /*context*/) const {

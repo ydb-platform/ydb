@@ -46,7 +46,7 @@ struct TFeatureFlagCheckResult {
 };
 
 TResourcePoolManager::TAsyncStatus CheckFeatureFlag(const TResourcePoolManager::TExternalModificationContext& context, ui32 nodeId) {
-    auto* actorSystem = context.GetActorSystem();
+    auto* actorSystem = context.GetLocalData().GetActorSystem();
     if (!actorSystem) {
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
     }
@@ -87,7 +87,7 @@ TResourcePoolManager::TAsyncStatus SendSchemeRequest(const NKikimrSchemeOp::TMod
     *request->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
 
     auto promise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    context.GetActorSystem()->Register(new TSchemeOpRequestHandler(request.release(), promise, true));
+    context.GetLocalData().GetActorSystem()->Register(new TSchemeOpRequestHandler(request.release(), promise, true));
 
     return promise.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
         try {

@@ -67,6 +67,10 @@ namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
 }
 
+namespace NKikimr::NMetadata::NModifications {
+class TSchemeOperationsManagerBase;
+};
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1415,16 +1419,18 @@ public:
     void Handle(const TEvSchemeShard::TEvModifyObject::TPtr& ev, const TActorContext& ctx);
     void Handle(const TEvPrivate::TEvCommitObjectModification::TPtr& ev, const TActorContext& ctx);
     void Handle(const TEvPrivate::TEvObjectModificationResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvPrivate::TEvInitializeObjectMetadata::TPtr& ev, const TActorContext& ctx);
 
     NTabletFlatExecutor::ITransaction* CreateTxStartObjectModification(const TEvSchemeShard::TEvModifyObject::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCommitObjectModification(const TEvPrivate::TEvCommitObjectModification::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCompleteObjectModification(const TEvPrivate::TEvObjectModificationResult::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxInitializeObjectMetadata(const TEvPrivate::TEvInitializeObjectMetadata::TPtr& ev, const TActorContext& ctx);
 
-    void PersistObjectModificationStarted(NIceDb::TNiceDb& db, const TObjectId& objectId, TInstant prevHistoryInstant, const TActorId& sender) const;
-    void PersistObjectModificationFinished(NIceDb::TNiceDb& db, const TObjectId& objectId) const;
+    void PersistObjectModificationStarted(NIceDb::TNiceDb& db, const TString& typeId, const TString& objectId, TInstant prevHistoryInstant, const TActorId& sender) const;
+    void PersistObjectModificationFinished(NIceDb::TNiceDb& db, const TString& typeId, const TString& objectId) const;
 
-    void InitializeObjects(const TActorContext& ctx);
-    void InitializeObjectMetadata(TString typeId, const TActorContext& ctx);
+    void InitializeObjects(const TActorContext& ctx) const;
+    void InitializeObjectMetadata(const TString& typeId, const std::shared_ptr<NMetadata::NModifications::TSchemeOperationsManagerBase>& manager, const TActorContext& ctx) const;
     // } // NObjectModification
 
 

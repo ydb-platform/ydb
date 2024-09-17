@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <shared_mutex>
@@ -61,6 +62,16 @@ private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
 public:
     TEvUnsubscribeExternal(NFetcher::ISnapshotsFetcher::TPtr fetcher)
+        : Fetcher(fetcher) {
+        Y_ABORT_UNLESS(!!Fetcher);
+    }
+};
+
+class TEvAskExtendedSnapshot: public NActors::TEventLocal<TEvAskExtendedSnapshot, EEvents::EvAskExtendedSnapshot> {
+private:
+    YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
+public:
+    TEvAskExtendedSnapshot(const NFetcher::ISnapshotsFetcher::TPtr& fetcher)
         : Fetcher(fetcher) {
         Y_ABORT_UNLESS(!!Fetcher);
     }

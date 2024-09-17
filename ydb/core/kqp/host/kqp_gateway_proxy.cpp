@@ -1230,9 +1230,8 @@ public:
     };
 
     template <class TSettings>
-    TGenericResult PrepareObjectOperation(const TString& cluster, const TSettings& settings,
-        NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus (NMetadata::NModifications::IOperationsManager::* prepareMethod)(NKqpProto::TKqpSchemeOperation&, const TSettings&, const NMetadata::IClassBehaviour::TPtr&, const NMetadata::NModifications::IOperationsManager::TExternalModificationContext&) const)
-    {
+    TGenericResult PrepareObjectOperation(
+        const TString& cluster, const TSettings& settings, NMetadata::NModifications::IOperationsManager::EActivityType operationType) {
         TRemoveLastPhyTxHelper phyTxRemover;
         try {
             if (cluster != SessionCtx->GetCluster()) {
@@ -1255,7 +1254,7 @@ public:
 
             NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
             context.SetDatabase(SessionCtx->GetDatabase());
-            context.SetActorSystem(ActorSystem);
+            context.MutableLocalData().SetActorSystem(ActorSystem);
             if (SessionCtx->GetUserToken()) {
                 context.SetUserToken(*SessionCtx->GetUserToken());
             }
@@ -1265,8 +1264,8 @@ public:
             phyTx.MutableSchemeOperation()->SetObjectType(settings.GetTypeId());
 
             NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus prepareStatus =
-                (cBehaviour->GetOperationsManager().get()->*prepareMethod)(
-                    *phyTx.MutableSchemeOperation(), settings, cBehaviour, context);
+                cBehaviour->GetOperationsManager()->PrepareSchemeOperation(
+                    *phyTx.MutableSchemeOperation(), settings, cBehaviour, context, operationType);
 
             TGenericResult result;
             if (prepareStatus.Ok()) {
@@ -1286,7 +1285,7 @@ public:
         CHECK_PREPARED_DDL(UpsertObject);
 
         if (IsPrepare()) {
-            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareUpsertObjectSchemeOperation));
+            return MakeFuture(PrepareObjectOperation(cluster, settings, NMetadata::NModifications::IOperationsManager::EActivityType::Upsert));
         } else {
             return Gateway->UpsertObject(cluster, settings);
         }
@@ -1296,7 +1295,7 @@ public:
         CHECK_PREPARED_DDL(CreateObject);
 
         if (IsPrepare()) {
-            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareCreateObjectSchemeOperation));
+            return MakeFuture(PrepareObjectOperation(cluster, settings, NMetadata::NModifications::IOperationsManager::EActivityType::Create));
         } else {
             return Gateway->CreateObject(cluster, settings);
         }
@@ -1306,7 +1305,7 @@ public:
         CHECK_PREPARED_DDL(AlterObject);
 
         if (IsPrepare()) {
-            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareAlterObjectSchemeOperation));
+            return MakeFuture(PrepareObjectOperation(cluster, settings, NMetadata::NModifications::IOperationsManager::EActivityType::Alter));
         } else {
             return Gateway->AlterObject(cluster, settings);
         }
@@ -1316,7 +1315,7 @@ public:
         CHECK_PREPARED_DDL(DropObject);
 
         if (IsPrepare()) {
-            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareDropObjectSchemeOperation));
+            return MakeFuture(PrepareObjectOperation(cluster, settings, NMetadata::NModifications::IOperationsManager::EActivityType::Drop));
         } else {
             return Gateway->DropObject(cluster, settings);
         }

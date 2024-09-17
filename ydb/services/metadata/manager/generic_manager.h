@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/service.h>
 
@@ -17,7 +18,7 @@ public:
     virtual void OnAlteringProblem(const TString& errorMessage) override {
         Promise.SetValue(IOperationsManager::TYqlConclusionStatus::Fail(errorMessage));
     }
-    virtual void OnAlteringFinished() override {
+    virtual void OnAlteringFinished(TInstant /*historyInstant*/) override {
         Promise.SetValue(IOperationsManager::TYqlConclusionStatus::Success());
     }
 
@@ -26,12 +27,33 @@ public:
 template <class T>
 class TGenericOperationsManager: public IObjectOperationsManager<T> {
 private:
+    using TSelf = TGenericOperationsManager<T>;
     using TBase = IObjectOperationsManager<T>;
     using IOperationsManager::TYqlConclusionStatus;
+
+    class TPatchBuilder : public TPatchBuilderBase {
+    private:
+        const TSelf& Owner;
+        IOperationsManager::TInternalModificationContext& Context;
+
+    public:
+        TPatchBuilder(const TSelf& owner, IOperationsManager::TInternalModificationContext& context) : Owner(owner), Context(context) {}
+
+    protected:
+        TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings) const override {
+            return Owner.DoBuildPatchFromSettings(settings, Context);
+        }
+    };
+
 public:
     using TInternalModificationContext = typename TBase::TInternalModificationContext;
     using TExternalModificationContext = typename TBase::TExternalModificationContext;
     using EActivityType = typename IOperationsManager::EActivityType;
+
+protected:
+    virtual TOperationParsingResult DoBuildPatchFromSettings(
+        const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const = 0;
+
 protected:
     virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(
         const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
@@ -45,7 +67,8 @@ protected:
         }
         auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
         {
-            TOperationParsingResult patch(TBase::BuildPatchFromSettings(settings, context));
+            const TPatchBuilder patchBuilder(*this, context);
+            TOperationParsingResult patch = patchBuilder.BuildPatchFromSettings(settings);
             if (!patch.IsSuccess()) {
                 return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(patch.GetErrorMessage()));
             }
@@ -74,14 +97,15 @@ protected:
 
     virtual TYqlConclusionStatus DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
         const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const override {
-        if (!manager) {
+    if (!manager) {
             return TYqlConclusionStatus::Fail("modification object behaviour not initialized");
         }
         if (!manager->GetOperationsManager()) {
             return TYqlConclusionStatus::Fail("modification is unavailable for " + manager->GetTypeId());
         }
 
-        TOperationParsingResult patch(TBase::BuildPatchFromSettings(settings, context));
+        const TPatchBuilder patchBuilder(*this, context);
+        TOperationParsingResult patch = patchBuilder.BuildPatchFromSettings(settings);
         if (!patch.IsSuccess()) {
             return TYqlConclusionStatus::Fail(patch.GetErrorMessage());
         }

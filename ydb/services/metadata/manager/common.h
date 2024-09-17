@@ -35,7 +35,7 @@ public:
     virtual ~IAlterController() = default;
 
     virtual void OnAlteringProblem(const TString& errorMessage) = 0;
-    virtual void OnAlteringFinished() = 0;
+    virtual void OnAlteringFinished(TInstant historyInstant) = 0;
 
 };
 

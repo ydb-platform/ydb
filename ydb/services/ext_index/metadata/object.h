@@ -2,6 +2,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 

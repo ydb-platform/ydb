@@ -1,5 +1,7 @@
 #include "object.h"
 
+#include <ydb/services/metadata/service.h>
+
 namespace NKikimr::NMetadata::NModifications {
 
 namespace {

@@ -4,6 +4,7 @@
 
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
 

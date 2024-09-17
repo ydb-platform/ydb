@@ -9,11 +9,17 @@ public:
     using TPtr = std::shared_ptr<IModificationObjectsController>;
     virtual ~IModificationObjectsController() = default;
     virtual void OnModificationProblem(const TString& errorMessage) = 0;
-    virtual void OnModificationFinished() = 0;
+    virtual void OnModificationFinished(TInstant historyInstant) = 0;
 };
 
 class TEvModificationFinished: public TEventLocal<TEvModificationFinished, EvModificationFinished> {
+private:
+    YDB_ACCESSOR_DEF(TInstant, HistoryInstant);
+
 public:
+    TEvModificationFinished(TInstant historyInstant)
+        : HistoryInstant(historyInstant) {
+    }
 };
 
 class TEvModificationProblem: public TEventLocal<TEvModificationProblem, EvModificationProblem> {

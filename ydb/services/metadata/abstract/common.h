@@ -23,6 +23,7 @@ public:
 
     }
 
+    // TODO: Consider using alternatives from ISnapshot
     template <class TSnapshot>
     const TSnapshot* GetSnapshotAs() const {
         return dynamic_cast<const TSnapshot*>(Snapshot.get());

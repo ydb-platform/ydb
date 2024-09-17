@@ -84,6 +84,7 @@ protected:
     virtual void OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snapshot) = 0;
     virtual void OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot);
     virtual void OnConstructSnapshotError(const TString& errorMessage);
+    virtual TString GetSelectQuery(const IClassBehaviour::TPtr& manager) const;
     void StartSnapshotsFetching();
 
     void Handle(TEvRecheckExistence::TPtr& ev);

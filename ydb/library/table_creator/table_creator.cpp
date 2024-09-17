@@ -3,8 +3,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>

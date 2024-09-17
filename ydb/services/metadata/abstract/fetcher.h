@@ -1,17 +1,19 @@
 #pragma once
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/actor_virtual.h>
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/object_factory/object_factory.h>
 #include <ydb/core/base/events.h>
+
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/services/metadata/initializer/common.h>
-#include <ydb/services/metadata/manager/common.h>
-#include <ydb/services/metadata/manager/table_record.h>
-#include <ydb/services/metadata/manager/alter.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_virtual.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
+
+#include <library/cpp/object_factory/object_factory.h>
 #include <util/system/type_name.h>
 
 namespace NKikimr::NMetadata::NFetcher {
@@ -81,7 +83,7 @@ public:
         return CreateSnapshot(actuality);
     }
 
-    TString GetComponentId() const;
+    virtual TString GetComponentId() const;
     ISnapshot::TPtr ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const;
 
     virtual void EnrichSnapshotData(ISnapshot::TPtr original, ISnapshotAcceptorController::TPtr controller) const {

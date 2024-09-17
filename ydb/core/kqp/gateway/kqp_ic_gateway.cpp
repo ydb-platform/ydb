@@ -1473,7 +1473,7 @@ public:
                     context.SetUserToken(*GetUserToken());
                 }
                 context.SetDatabase(Owner.Database);
-                context.SetActorSystem(Owner.ActorSystem);
+                context.MutableLocalData().SetActorSystem(Owner.ActorSystem);
                 return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TYqlConclusionStatus>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
                         TGenericResult result;

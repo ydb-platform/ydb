@@ -93,7 +93,7 @@ void TDSAccessorInitialized::OnModificationFailed(Ydb::StatusIds::StatusCode /*s
     }, TDuration::Seconds(1));
 }
 
-void TDSAccessorInitialized::OnAlteringFinished() {
+void TDSAccessorInitialized::OnAlteringFinished(TInstant /*historyInstant*/) {
     DoNextModifier(true);
 }
 

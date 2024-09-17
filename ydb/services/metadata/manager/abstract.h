@@ -2,18 +2,19 @@
 #include "common.h"
 #include "table_record.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/conclusion/status.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/conclusion/result.h>
-
+#include <ydb/library/conclusion/status.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/abstract/parsing.h>
 
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -71,25 +72,101 @@ public:
         Drop
     };
 
+    class TLocalModificationContext {
+    public:
+        TLocalModificationContext() = default;
+        TLocalModificationContext(TActorSystem* actorSystem)
+            : ActorSystem(actorSystem) {
+        }
+
+    private:
+        using TActorSystemPtr = TActorSystem*;
+
+        YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem)
+    };
+
     class TExternalModificationContext {
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR_DEF(TString, Database);
-        using TActorSystemPtr = TActorSystem*;
-        YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
+        // TODO: Remove LocalModifictionContext entirely; replace nodeId with ActorContext or ActorSystem on all object modification path
+        YDB_ACCESSOR_DEF(TLocalModificationContext, LocalData);
+
+    public:
+        TExternalModificationContext() = default;
+
+        TExternalModificationContext(TLocalModificationContext localData)
+            : LocalData(std::move(localData)) {
+        }
     };
 
     class TInternalModificationContext {
     private:
-        YDB_READONLY_DEF(TExternalModificationContext, ExternalData);
-        YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
-    public:
-        TInternalModificationContext(const TExternalModificationContext& externalData)
-            : ExternalData(externalData)
-        {
+        using TProto = NKikimrSchemeOp::TObjectModificationContext;
 
+        YDB_ACCESSOR_DEF(TExternalModificationContext, ExternalData);
+        YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
+
+    private:
+        static NKikimrSchemeOp::TObjectModificationContext::EActivityType SerializeToProto(EActivityType activityType) {
+            switch (activityType) {
+                case EActivityType::Undefined:
+                    return NKikimrSchemeOp::TObjectModificationContext_EActivityType_Undefined;
+                case EActivityType::Upsert:
+                    return NKikimrSchemeOp::TObjectModificationContext_EActivityType_Upsert;
+                case EActivityType::Create:
+                    return NKikimrSchemeOp::TObjectModificationContext_EActivityType_Create;
+                case EActivityType::Alter:
+                    return NKikimrSchemeOp::TObjectModificationContext_EActivityType_Alter;
+                case EActivityType::Drop:
+                    return NKikimrSchemeOp::TObjectModificationContext_EActivityType_Drop;
+            }
+        }
+
+        static EActivityType DeserializeFromProto(NKikimrSchemeOp::TObjectModificationContext::EActivityType serialized) {
+            switch (serialized) {
+                case NKikimrSchemeOp::TObjectModificationContext_EActivityType_Undefined:
+                    return EActivityType::Undefined;
+                case NKikimrSchemeOp::TObjectModificationContext_EActivityType_Upsert:
+                    return EActivityType::Upsert;
+                case NKikimrSchemeOp::TObjectModificationContext_EActivityType_Create:
+                    return EActivityType::Create;
+                case NKikimrSchemeOp::TObjectModificationContext_EActivityType_Alter:
+                    return EActivityType::Alter;
+                case NKikimrSchemeOp::TObjectModificationContext_EActivityType_Drop:
+                    return EActivityType::Drop;
+            }
+        }
+
+    public:
+        TInternalModificationContext() = default;
+
+        TInternalModificationContext(TExternalModificationContext externalData)
+            : ExternalData(std::move(externalData)) {
+        }
+
+        TProto SerializeToProto() const {
+            TProto result;
+            if (ExternalData.GetUserToken()) {
+                result.SetUserToken(ExternalData.GetUserToken()->SerializeAsString());
+            }
+            result.SetDatabase(ExternalData.GetDatabase());
+            result.SetActivityType(SerializeToProto(ActivityType));
+            return result;
+        }
+
+        bool DeserializeFromProto(const TProto& serialized) {
+            if (serialized.HasUserToken()) {
+                ExternalData.SetUserToken(NACLib::TUserToken(serialized.GetUserToken()));
+            } else {
+                ExternalData.SetUserToken(std::nullopt);
+            }
+            ExternalData.SetDatabase(serialized.GetDatabase());
+            ActivityType = DeserializeFromProto(serialized.GetActivityType());
+            return true;
         }
     };
+
 private:
     YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
 protected:
@@ -113,21 +190,10 @@ public:
     NThreading::TFuture<TYqlConclusionStatus> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
         const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const;
 
-    TYqlConclusionStatus PrepareUpsertObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const NYql::TUpsertObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-        const TExternalModificationContext& context) const;
-
-    TYqlConclusionStatus PrepareCreateObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const NYql::TCreateObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-        const TExternalModificationContext& context) const;
-
-    TYqlConclusionStatus PrepareAlterObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const NYql::TAlterObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-        const TExternalModificationContext& context) const;
-
-    TYqlConclusionStatus PrepareDropObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const NYql::TDropObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-        const TExternalModificationContext& context) const;
+    // TODO: Prepare can be asynchronous
+    // TODO: Consider reverting to use separate settings for each type of operations (how it was)
+    TYqlConclusionStatus PrepareSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
+        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context, EActivityType operationType) const;
 
     virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
         const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
@@ -141,29 +207,34 @@ public:
 template <class TObject>
 class IObjectOperationsManager: public IOperationsManager {
 protected:
-    virtual TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        TInternalModificationContext& context) const = 0;
     virtual void DoPrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
-        typename IAlterPreparationController<TObject>::TPtr controller,
-        const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const = 0;
+        typename IAlterPreparationController<TObject>::TPtr controller, const TInternalModificationContext& context,
+        const TAlterOperationContext& alterContext) const = 0;
+
 public:
     using TPtr = std::shared_ptr<IObjectOperationsManager<TObject>>;
 
-    TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        IOperationsManager::TInternalModificationContext& context) const {
-        TOperationParsingResult result = DoBuildPatchFromSettings(settings, context);
+    // S: called in Metadata service, allows waiting for response from actors
+    void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
+        typename NModifications::IAlterPreparationController<TObject>::TPtr controller, const TInternalModificationContext& context,
+        const TAlterOperationContext& alterContext) const {
+        return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context, alterContext);
+        }
+};
+
+class TPatchBuilderBase {
+protected:
+    virtual TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings) const = 0;
+
+public:
+    TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings) const {
+        TOperationParsingResult result = DoBuildPatchFromSettings(settings);
         if (result.IsSuccess()) {
             if (!settings.GetFeaturesExtractor().IsFinished()) {
                 return TConclusionStatus::Fail("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
             }
         }
         return result;
-    }
-
-    void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
-        typename NModifications::IAlterPreparationController<TObject>::TPtr controller,
-        const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const {
-        return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context, alterContext);
     }
 };
 

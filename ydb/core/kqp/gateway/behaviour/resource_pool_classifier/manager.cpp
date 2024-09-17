@@ -81,7 +81,7 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
 }
 
 void TResourcePoolClassifierManager::DoPrepareObjectsBeforeModification(std::vector<TResourcePoolClassifierConfig>&& patchedObjects, NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller, const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext) const {
-    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    auto* actorSystem = context.GetExternalData().GetLocalData().GetActorSystem();
     if (!actorSystem) {
         controller->OnPreparationProblem("This place needs an actor system. Please contact internal support");
         return;

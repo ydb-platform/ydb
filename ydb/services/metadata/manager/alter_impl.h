@@ -31,8 +31,8 @@ public:
     virtual void OnRestoringProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvRestoreProblem(errorMessage));
     }
-    virtual void OnModificationFinished() override {
-        ActorId.Send(ActorId, new TEvModificationFinished());
+    virtual void OnModificationFinished(TInstant historyInstant) override {
+        ActorId.Send(ActorId, new TEvModificationFinished(historyInstant));
     }
     virtual void OnModificationProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvModificationProblem(errorMessage));
@@ -174,6 +174,7 @@ public:
         if (!PrepareRestoredObjects(objects)) {
             this->PassAway();
         } else {
+            // S: Validating anything against SS in this method will be unnecessary
             Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context, TAlterOperationContext(SessionId, TransactionId, RestoreObjectIds));
         }
     }
@@ -300,9 +301,9 @@ public:
         return true;
     }
 
-    void Handle(TEvModificationFinished::TPtr& /*ev*/) {
+    void Handle(TEvModificationFinished::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        TBase::ExternalController->OnAlteringFinished();
+        TBase::ExternalController->OnAlteringFinished(ev->Get()->GetHistoryInstant());
     }
 
     void Handle(TEvModificationProblem::TPtr& ev) {

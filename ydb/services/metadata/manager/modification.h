@@ -19,6 +19,7 @@ private:
     const TString TransactionId;
     const NACLib::TUserToken SystemUserToken;
     const std::optional<NACLib::TUserToken> UserToken;
+    const TInstant HistoryInstant;
 protected:
     std::deque<NRequest::TDialogYQLRequest::TRequest> Requests;
     NInternal::TTableRecords Objects;
@@ -39,7 +40,7 @@ protected:
         if (UserToken) {
             Objects.AddColumn(NInternal::TYDBColumn::Utf8("historyUserId"), NInternal::TYDBValue::Utf8(UserToken->GetUserSID()));
         }
-        Objects.AddColumn(NInternal::TYDBColumn::UInt64("historyInstant"), NInternal::TYDBValue::UInt64(TActivationContext::Now().MicroSeconds()));
+        Objects.AddColumn(NInternal::TYDBColumn::UInt64("historyInstant"), NInternal::TYDBValue::UInt64(HistoryInstant.MicroSeconds()));
         Objects.AddColumn(NInternal::TYDBColumn::Utf8("historyAction"), NInternal::TYDBValue::Utf8(GetModifyType()));
         Ydb::Table::ExecuteDataQueryRequest request = Objects.BuildInsertQuery(TObject::GetBehaviour()->GetStorageHistoryTablePath());
         request.set_session_id(SessionId);
@@ -53,7 +54,7 @@ protected:
                 Requests.front(), SystemUserToken, TBase::SelfId()));
             Requests.pop_front();
         } else {
-            Controller->OnModificationFinished();
+            Controller->OnModificationFinished(HistoryInstant);
             TBase::PassAway();
         }
     }
@@ -72,6 +73,7 @@ public:
         , TransactionId(transactionId)
         , SystemUserToken(systemUserToken)
         , UserToken(userToken)
+        , HistoryInstant(TActivationContext::Now())
         , Objects(std::move(objects))
 
     {

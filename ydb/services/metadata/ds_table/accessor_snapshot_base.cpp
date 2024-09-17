@@ -16,6 +16,10 @@ void TDSAccessorBase::OnConstructSnapshotError(const TString& errorMessage) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot: " << errorMessage;
 }
 
+TString TDSAccessorBase::GetSelectQuery(const IClassBehaviour::TPtr& manager) const {
+    return "SELECT * FROM `" + EscapeC(manager->GetStorageTablePath()) + "`;";
+}
+
 void TDSAccessorBase::Handle(NRequest::TEvRequestFailed::TPtr& ev) {
     OnConstructSnapshotError("on request failed: " + ev->Get()->GetErrorMessage());
 }
@@ -125,7 +129,7 @@ void TDSAccessorBase::StartSnapshotsFetchingImpl() {
         Y_ABORT_UNLESS(it != CurrentExistence.end());
         Y_ABORT_UNLESS(it->second);
         if (it->second == 1) {
-            sb << "SELECT * FROM `" + EscapeC(i->GetStorageTablePath()) + "`;" << Endl;
+            sb << GetSelectQuery(i) << Endl;
         }
     }
     NRequest::TYQLRequestExecutor::Execute(sb, NACLib::TSystemUsers::Metadata(), InternalController, true);

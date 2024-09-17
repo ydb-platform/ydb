@@ -403,7 +403,7 @@ public:
 
         NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
         context.SetDatabase(Database);
-        context.SetActorSystem(actorSystem);
+        context.MutableLocalData().SetActorSystem(actorSystem);
         if (UserToken) {
             context.SetUserToken(*UserToken);
         }

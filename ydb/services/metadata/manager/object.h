@@ -5,7 +5,6 @@
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -25,5 +24,10 @@ public:
         return TBaseObject::AddHistoryTableScheme(baseScheme, TDerived::GetBehaviour()->GetStorageHistoryTablePath());
     }
 };
+
+template <typename T>
+concept MetadataObject = requires {
+    { T::GetTypeId() } -> std::same_as<TString>;
+} && std::derived_from<T, NMetadata::NModifications::TObject<T>>;
 
 }

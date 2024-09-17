@@ -2,6 +2,7 @@
 
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata::NSecret {
 

@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Cerr << errorMessage << Endl;
             Y_ABORT_UNLESS(false);
         }
-        virtual void OnAlteringFinished() override {
+        virtual void OnAlteringFinished(TInstant /*historyInstant*/) override {
             FinishedFlag = true;
         }
     };

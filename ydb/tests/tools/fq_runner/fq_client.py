@@ -422,37 +422,6 @@ class FederatedQueryClient(object):
         return self.create_connection(request, check_issues)
 
     @retry.retry_intrusive
-    def create_clickhouse_connection(self, name, database_name, database_id, login, password,
-                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
-        request = fq.CreateConnectionRequest()
-        request.content.name = name
-        ch = request.content.setting.clickhouse_cluster
-        ch.database_name = database_name
-        ch.database_id = database_id
-        ch.secure = secure
-        ch.login = login
-        ch.password = password
-
-        ch.auth.CopyFrom(auth_method)
-        request.content.acl.visibility = visibility
-        return self.create_connection(request, check_issues)
-
-    @retry.retry_intrusive
-    def create_greenplum_connection(self, name, database_name, database_id, login, password,
-                                    secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
-        request = fq.CreateConnectionRequest()
-        request.content.name = name
-        gp = request.content.setting.greenplum_cluster
-        gp.database_name = database_name
-        gp.database_id = database_id
-        gp.login = login
-        gp.password = password
-
-        gp.auth.CopyFrom(auth_method)
-        request.content.acl.visibility = visibility
-        return self.create_connection(request, check_issues)
-
-    @retry.retry_intrusive
     def create_postgresql_connection(self, name, database_name, database_id, login, password,
                                      secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()
@@ -465,6 +434,22 @@ class FederatedQueryClient(object):
         pg.password = password
 
         pg.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_clickhouse_connection(self, name, database_name, database_id, login, password,
+                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        ch = request.content.setting.clickhouse_cluster
+        ch.database_name = database_name
+        ch.database_id = database_id
+        ch.secure = secure
+        ch.login = login
+        ch.password = password
+
+        ch.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 

@@ -123,7 +123,6 @@ public:
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NActors::TMonotonic StartedAt;
-    bool CompilationRunning = false;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;
 

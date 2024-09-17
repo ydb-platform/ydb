@@ -9,7 +9,6 @@ void TDSAccessorRefresher::OnBootstrap() {
 }
 
 void TDSAccessorRefresher::OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snapshot) {
-    FetchingRequestIsRunning = false;
     Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
     CurrentSnapshot = snapshot;
     *CurrentSelection.mutable_result_sets() = std::move(*ProposedProto.mutable_result_sets());
@@ -23,7 +22,6 @@ void TDSAccessorRefresher::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& 
         ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << ProposedProto.DebugString();
         SnapshotConstructor->EnrichSnapshotData(snapshot, InternalController);
     } else {
-        FetchingRequestIsRunning = false;
         CurrentSnapshot->SetActuality(GetRequestedActuality());
         OnSnapshotRefresh();
         Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
@@ -31,16 +29,12 @@ void TDSAccessorRefresher::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& 
 }
 
 void TDSAccessorRefresher::OnConstructSnapshotError(const TString& errorMessage) {
-    FetchingRequestIsRunning = false;
     TBase::OnConstructSnapshotError(errorMessage);
     Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
 }
 
 void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
-    if (!FetchingRequestIsRunning) {
-        FetchingRequestIsRunning = true;
-        TBase::StartSnapshotsFetching();
-    }
+    TBase::StartSnapshotsFetching();
 }
 
 }

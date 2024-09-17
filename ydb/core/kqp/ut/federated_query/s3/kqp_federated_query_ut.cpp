@@ -20,22 +20,11 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
-    TString GetSymbolsString(char start, char end, const TString& skip = "") {
-        TStringBuilder result;
-        for (char symbol = start; symbol <= end; ++symbol) {
-            if (skip.Contains(symbol)) {
-                continue;
-            }
-            result << symbol;
-        }
-        return result;
-    }
-
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = TStringBuilder() << "test_" << GetSymbolsString(' ', '~', "*?{}") << "_object";
+        const TString object = "test_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -60,7 +49,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
             "location"_a = GetBucketLocation(bucket),
-            "object"_a = EscapeC(object)
+            "object"_a = object
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -941,7 +930,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = TStringBuilder() << "year=1/month=2/test_" << GetSymbolsString(' ', '~') << "_object";
+        const TString object = "year=1/month=2/test_object";
         const TString content = "data,year,month\ntest,1,2";
 
         CreateBucketWithObject(bucket, object, content);
@@ -1804,13 +1793,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 5_MB, 500000);
     }
 
-    Y_UNIT_TEST(TestReadEmptyFileWithCsvFormat) {
-        const TString externalDataSourceName = "/Root/external_data_source";
-        const TString bucket = "test_bucket12";
+    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName) {
+        const TString bucket = "test_bucket3";
+        const TString object = "test_object";
 
-        CreateBucketWithObject(bucket, "test_object", "");
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, "TestDomain");
 
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -1819,84 +1814,152 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="{object}",
+                FORMAT="json_each_row"
             );)",
             "external_source"_a = externalDataSourceName,
-            "location"_a = GetBucketLocation(bucket)
-            );
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        const TString sql = fmt::format(R"(
-                SELECT * FROM `{external_source}`.`/`
-                WITH (
-                    SCHEMA = (
-                        data String
-                    ),
-                    FORMAT = "csv_with_names"
-                )
-            )", "external_source"_a=externalDataSourceName);
-
-        auto db = kikimr->GetQueryClient();
-        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
-
-        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(TestWildcardValidation) {
-        const TString bucket = "test_bucket13";
-
-        CreateBucket(bucket);
-
-        auto kikimr = NTestUtils::MakeKikimrRunner();
-
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-        const TString query = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="{location}",
-                AUTH_METHOD="NONE"
-            );)",
-            "location"_a = GetBucketLocation(bucket)
+            "external_table"_a = externalTableName,
+            "location"_a = GetBucketLocation(bucket),
+            "object"_a = object
         );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto db = kikimr->GetQueryClient();
+        return kikimr;
+    }
 
-        {  // path validation
-            const TString sql = R"(
-                    SELECT * FROM `/Root/external_data_source`.`/{` WITH (
-                        SCHEMA = (data String),
-                        FORMAT = "csv_with_names"
-                    ))";
+    void ValidateResult(const TExecuteQueryResult& result) {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, "Unexpected result sets count");
 
-            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        TResultSetParser resultSet(result.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
 
-            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Path '/{' contains invalid wildcard:");
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
+
+    }
+
+    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable) {
+        {
+            const TString query = TStringBuilder() << "SELECT Unwrap(key), Unwrap(value) FROM `" << oltpTable << "`;";
+            ValidateResult(client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync());
         }
 
-        {  // file pattern validation
-            const TString sql = R"(
-                    SELECT * FROM `/Root/external_data_source`.`/` WITH (
-                        SCHEMA = (data String),
-                        FORMAT = "csv_with_names",
-                        FILE_PATTERN = "{"
-                    ))";
-
-            auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-
-            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "File pattern '{' contains invalid wildcard:");
+        {
+            const TString query = TStringBuilder() << "SELECT key, value FROM `" << olapTable << "` ORDER BY key;";
+            ValidateResult(client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync());
         }
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSource) {
+        const TString externalDataSourceName = "external_data_source";
+        const TString externalTableName = "test_binding_resolve";
+
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
+        auto client = kikimr->GetQueryClient();
+
+        const TString oltpTable = "DestinationOltp";
+        {
+            const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "TestDomain";
+                CREATE TABLE `{destination}` (
+                    PRIMARY KEY (key, value)
+                )
+                AS SELECT *
+                FROM `{external_source}`.`/` WITH (
+                    format="json_each_row",
+                    schema(
+                        key Utf8 NOT NULL,
+                        value Utf8 NOT NULL
+                    )
+                );)",
+                "destination"_a = oltpTable,
+                "external_source"_a = externalDataSourceName
+            );
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString olapTable = "DestinationOlap";
+        {
+            const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "TestDomain";
+                CREATE TABLE `{destination}` (
+                    PRIMARY KEY (key, value)
+                )
+                WITH (STORE = COLUMN)
+                AS SELECT *
+                FROM `{external_source}`.`/` WITH (
+                    format="json_each_row",
+                    schema(
+                        key Utf8 NOT NULL,
+                        value Utf8 NOT NULL
+                    )
+                );)",
+                "destination"_a = olapTable,
+                "external_source"_a = externalDataSourceName
+            );
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        ValidateTables(client, oltpTable, olapTable);
+    }
+
+    Y_UNIT_TEST(CreateTableAsSelectFromExternalTable) {
+        const TString externalDataSourceName = "external_data_source";
+        const TString externalTableName = "test_binding_resolve";
+
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
+        auto client = kikimr->GetQueryClient();
+
+        const TString oltpTable = "DestinationOltp";
+        {
+            const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "TestDomain";
+                CREATE TABLE `{destination}` (
+                    PRIMARY KEY (key, value)
+                )
+                AS SELECT *
+                FROM `{external_table}`;)",
+                "destination"_a = oltpTable,
+                "external_table"_a = externalTableName
+            );
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString olapTable = "DestinationOlap";
+        {
+            const TString query = fmt::format(R"(
+                PRAGMA TablePathPrefix = "TestDomain";
+                CREATE TABLE `{destination}` (
+                    PRIMARY KEY (key, value)
+                )
+                WITH (STORE = COLUMN)
+                AS SELECT *
+                FROM `{external_table}`;)",
+                "destination"_a = olapTable,
+                "external_table"_a = externalTableName
+            );
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        ValidateTables(client, oltpTable, olapTable);
     }
 }
 

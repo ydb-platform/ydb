@@ -437,7 +437,6 @@ public:
             }
 
             srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
-            srcDesc.SetAsyncDecompressing(State_->Configuration->AsyncDecompressing.Get().GetOrElse(false));
 
 #if defined(_linux_) || defined(_darwin_)
 
@@ -479,9 +478,9 @@ public:
                 range.Save(&out);
 
                 paths.clear();
-                ReadPathsList({}, serialized, paths);
+                ReadPathsList(srcDesc, {}, serialized, paths);
 
-                const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
+                NDq::TS3ReadActorFactoryConfig readActorConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -541,13 +540,11 @@ public:
                         fileQueueBatchSizeLimit,
                         fileQueueBatchObjectCountLimit,
                         State_->Gateway,
-                        State_->GatewayRetryPolicy,
                         connect.Url,
-                        TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
-                        NS3Lister::ES3PatternType::Wildcard,
-                        State_->Configuration->AllowLocalFiles
+                        NS3Lister::ES3PatternType::Wildcard
                     ),
                     NActors::TMailboxType::HTSwap,
                     State_->ExecutorPoolId

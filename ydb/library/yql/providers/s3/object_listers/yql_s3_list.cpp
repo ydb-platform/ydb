@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -26,11 +25,13 @@
 namespace NYql::NS3Lister {
 
 IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request) {
-    return stream << "[TS3Lister] TListingRequest{.url=" << request.Url
+    return stream << "TListingRequest{.url=" << request.Url
                   << ",.Prefix=" << request.Prefix
                   << ",.Pattern=" << request.Pattern
                   << ",.PatternType=" << request.PatternType
-                  << ",.Credentials=" << request.Credentials << "}";
+                  << ",.AwsUserPwd=<some token with length" << request.AuthInfo.GetAwsUserPwd().length() << ">"
+                  << ",.AwsSigV4=" << request.AuthInfo.GetAwsSigV4().length()
+                  << ",.Token=<some token with length " << request.AuthInfo.GetToken().length() << ">}";
 }
 
 namespace {
@@ -48,11 +49,10 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex,
     } else {
         re = std::make_shared<RE2>(re2::StringPiece(regex), RE2::Options());
     }
-    Y_ENSURE(re->ok());
 
     const size_t numGroups = re->NumberOfCapturingGroups();
     YQL_CLOG(DEBUG, ProviderS3)
-        << "[TS3Lister] Got regex: '" << regex << "' with " << numGroups << " capture groups ";
+        << "Got regex: '" << regex << "' with " << numGroups << " capture groups ";
 
     auto groups = std::make_shared<std::vector<std::string>>(numGroups);
     auto reArgs = std::make_shared<std::vector<re2::RE2::Arg>>(numGroups);
@@ -102,7 +102,7 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& patt
     }
 
     const auto regex = NS3::RegexFromWildcards(pattern);
-    YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister] Got prefix: '" << regexPatternPrefix << "', regex: '"
+    YQL_CLOG(DEBUG, ProviderS3) << "Got prefix: '" << regexPatternPrefix << "', regex: '"
                                 << regex << "' from original pattern '" << pattern << "'";
 
     return MakeFilterRegexp(regex, sharedCtx);
@@ -133,15 +133,11 @@ TS3ListObjectV2Response ParseListObjectV2Response(
     if (const auto& root = xml.Root(); root.Name() == "Error") {
         const auto& code = root.Node("Code", true).Value<TString>();
         const auto& message = root.Node("Message", true).Value<TString>();
-        const auto errorMessage = TStringBuilder{} << message << ", error: code: " << code 
-            << ", request id: [" << requestId << "]";
-        YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::ParseListObjectV2Response] " << errorMessage;
-        throw yexception() << errorMessage;
+        ythrow yexception() << message << ", error: code: " << code << ", request id: ["
+                            << requestId << "]";
     } else if (root.Name() != "ListBucketResult") {
-        const auto errorMessage = TStringBuilder{} << "Unexpected response '" << root.Name()
+        ythrow yexception() << "Unexpected response '" << root.Name()
                             << "' on discovery, request id: [" << requestId << "]";
-        YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::ParseListObjectV2Response] " << errorMessage;
-        throw yexception() << errorMessage;
     } else {
         const NXml::TNamespacesForXPath nss(
             1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
@@ -243,18 +239,14 @@ public:
         const TMaybe<TString> Delimiter;
         const TMaybe<TString> ContinuationToken;
         const ui64 MaxKeys;
-        const std::pair<TString, TString> CurrentLogContextPath;
-        const NActors::TActorSystem* ActorSystem;
     };
 
     TS3Lister(
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const TListingRequest& listingRequest,
         const TMaybe<TString>& delimiter,
         size_t maxFilesPerQuery,
-        TSharedListingContextPtr sharedCtx,
-        NActors::TActorSystem* actorSystem)
+        TSharedListingContextPtr sharedCtx)
         : MaxFilesPerQuery(maxFilesPerQuery) {
         Y_ENSURE(
             listingRequest.Url.substr(0, 7) != "file://",
@@ -264,7 +256,7 @@ public:
             MakeFilter(listingRequest.Pattern, listingRequest.PatternType, sharedCtx);
 
         auto request = listingRequest;
-        request.Url = NS3Util::UrlEscapeRet(request.Url);
+        request.Url = UrlEscapeRet(request.Url, true);
         auto ctx = TListingContext{
             std::move(sharedCtx),
             std::move(filter),
@@ -273,14 +265,12 @@ public:
             NewPromise<TMaybe<TListingContext>>(),
             std::make_shared<TListEntries>(),
             IHTTPGateway::TWeakPtr(httpGateway),
-            retryPolicy,
+            GetHTTPDefaultRetryPolicy(),
             CreateGuidAsString(),
             std::move(request),
             delimiter,
             Nothing(),
-            MaxFilesPerQuery,
-            NLog::CurrentLogContextPath(),
-            actorSystem};
+            MaxFilesPerQuery};
 
         YQL_CLOG(TRACE, ProviderS3)
             << "[TS3Lister] Got URL: '" << ctx.ListingRequest.Url
@@ -296,8 +286,7 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        const auto& authInfo = ctx.ListingRequest.Credentials.GetAuthInfo();
-        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4());
+        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.AuthInfo.GetToken(), {}, ctx.ListingRequest.AuthInfo.GetAwsUserPwd(), ctx.ListingRequest.AuthInfo.GetAwsSigV4());
 
         // We have to sort the cgi parameters for the correct aws signature
         // This requirement will be fixed in the curl library
@@ -317,8 +306,7 @@ private:
 
         auto gateway = ctx.GatewayWeak.lock();
         if (!gateway) {
-            YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::SubmitRequestIntoGateway] Gateway disappeared";
-            throw yexception() << "Gateway disappeared";
+            ythrow yexception() << "Gateway disappeared";
         }
 
         auto sharedCtx = ctx.SharedCtx;
@@ -346,34 +334,23 @@ private:
             /*data=*/"",
             retryPolicy);
     }
-
     static IHTTPGateway::TOnResult CallbackFactoryMethod(TListingContext&& listingContext) {
         return [c = std::move(listingContext)](IHTTPGateway::TResult&& result) {
-            if (c.ActorSystem) {
-                NDq::TYqlLogScope logScope(c.ActorSystem, NKikimrServices::KQP_YQL, c.CurrentLogContextPath.first, c.CurrentLogContextPath.second);
-                OnDiscovery(c, std::move(result));
-            } else {
-                /*
-                If the subsystem doesn't use the actor system
-                then there is a need to use an own YqlLoggerScope on the top level
-                */
-                OnDiscovery(c, std::move(result));
-            }
+            OnDiscovery(c, std::move(result));
         };
     }
 
     static void OnDiscovery(TListingContext ctx, IHTTPGateway::TResult&& result) try {
         auto gateway = ctx.GatewayWeak.lock();
         if (!gateway) {
-            YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister::OnDiscovery] Gateway disappeared";
-            throw yexception() << "Gateway disappeared";
+            ythrow yexception() << "Gateway disappeared";
         }
         if (!result.Issues) {
             auto xmlString = result.Content.Extract();
             const NXml::TDocument xml(xmlString, NXml::TDocument::String);
             auto parsedResponse = ParseListObjectV2Response(xml, ctx.RequestId);
             YQL_CLOG(DEBUG, ProviderS3)
-                << "[TS3Lister] Listing of " << ctx.ListingRequest.Url
+                << "Listing of " << ctx.ListingRequest.Url
                 << ctx.ListingRequest.Prefix << ": have " << ctx.Output->Size()
                 << " entries, got another " << parsedResponse.KeyCount
                 << " entries, request id: [" << ctx.RequestId << "]";
@@ -402,7 +379,7 @@ private:
             }
 
             if (parsedResponse.IsTruncated && !earlyStop) {
-                YQL_CLOG(DEBUG, ProviderS3) << "[TS3Lister] Listing of " << ctx.ListingRequest.Url
+                YQL_CLOG(DEBUG, ProviderS3) << "Listing of " << ctx.ListingRequest.Url
                                             << ctx.ListingRequest.Prefix
                                             << ": got truncated flag, will continue";
 
@@ -414,7 +391,7 @@ private:
                     NewPromise<TMaybe<TListingContext>>(),
                     std::make_shared<TListEntries>(),
                     ctx.GatewayWeak,
-                    ctx.RetryPolicy,
+                    GetHTTPDefaultRetryPolicy(),
                     CreateGuidAsString(),
                     ctx.ListingRequest,
                     ctx.Delimiter,
@@ -431,14 +408,14 @@ private:
                 TStringBuilder{} << "request id: [" << ctx.RequestId << "]",
                 std::move(result.Issues));
             YQL_CLOG(INFO, ProviderS3)
-                << "[TS3Lister] Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
+                << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
                 << ": got error from http gateway: " << issues.ToString(true);
             ctx.Promise.SetValue(TListError{EListError::GENERAL, std::move(issues)});
             ctx.NextRequestPromise.SetValue(Nothing());
         }
     } catch (const std::exception& ex) {
         YQL_CLOG(INFO, ProviderS3)
-            << "[TS3Lister] Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
+            << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
             << " : got exception: " << ex.what();
         ctx.Promise.SetException(std::current_exception());
         ctx.NextRequestPromise.SetValue(Nothing());
@@ -474,23 +451,21 @@ public:
     using TPtr = std::shared_ptr<TS3ParallelLimitedListerFactory>;
 
     explicit TS3ParallelLimitedListerFactory(
-        size_t maxParallelOps, TSharedListingContextPtr sharedCtx, NActors::TActorSystem* actorSystem)
+        size_t maxParallelOps, TSharedListingContextPtr sharedCtx)
         : SharedCtx(std::move(sharedCtx))
-        , Semaphore(TAsyncSemaphore::Make(std::max<size_t>(1, maxParallelOps)))
-        , ActorSystem(actorSystem) { }
+        , Semaphore(TAsyncSemaphore::Make(std::max<size_t>(1, maxParallelOps))) { }
 
     TFuture<NS3Lister::IS3Lister::TPtr> Make(
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const NS3Lister::TListingRequest& listingRequest,
         const TMaybe<TString>& delimiter,
         bool allowLocalFiles) override {
         auto acquired = Semaphore->AcquireAsync();
         return acquired.Apply(
-            [ctx = SharedCtx, httpGateway, retryPolicy, listingRequest, delimiter, allowLocalFiles, actorSystem = ActorSystem](const auto& f) {
+            [ctx = SharedCtx, httpGateway, listingRequest, delimiter, allowLocalFiles](const auto& f) {
                 return std::shared_ptr<NS3Lister::IS3Lister>(new TListerLockReleaseWrapper{
                     NS3Lister::MakeS3Lister(
-                        httpGateway, retryPolicy, listingRequest, delimiter, allowLocalFiles, actorSystem, ctx),
+                        httpGateway, listingRequest, delimiter, allowLocalFiles, ctx),
                     std::make_unique<TAsyncSemaphore::TAutoRelease>(
                         f.GetValue()->MakeAutoRelease())});
             });
@@ -526,29 +501,24 @@ private:
 private:
     TSharedListingContextPtr SharedCtx;
     const TAsyncSemaphore::TPtr Semaphore;
-    NActors::TActorSystem* ActorSystem;
 };
 
 } // namespace
 
 IS3Lister::TPtr MakeS3Lister(
     const IHTTPGateway::TPtr& httpGateway,
-    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TListingRequest& listingRequest,
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
-    NActors::TActorSystem* actorSystem,
     TSharedListingContextPtr sharedCtx) {
     if (listingRequest.Url.substr(0, 7) != "file://") {
         return std::make_shared<TS3Lister>(
-            httpGateway, retryPolicy, listingRequest, delimiter, 1000, std::move(sharedCtx), actorSystem);
+            httpGateway, listingRequest, delimiter, 1000, std::move(sharedCtx));
     }
 
     if (!allowLocalFiles) {
-        const auto errorMessage = TStringBuilder{} << "Using local files as DataSource isn't allowed, but trying access "
+        ythrow yexception() << "Using local files as DataSource isn't allowed, but trying access "
                             << listingRequest.Url;
-        YQL_CLOG(DEBUG, ProviderS3) << "[IS3Lister::MakeS3Lister] " << errorMessage;
-        throw yexception() << errorMessage;
     }
     return std::make_shared<TLocalS3Lister>(listingRequest, delimiter);
 }
@@ -557,14 +527,13 @@ IS3ListerFactory::TPtr MakeS3ListerFactory(
     size_t maxParallelOps,
     size_t callbackThreadCount,
     size_t callbackPerThreadQueueSize,
-    size_t regexpCacheSize,
-    NActors::TActorSystem* actorSystem) {
+    size_t regexpCacheSize) {
     std::shared_ptr<TSharedListingContext> sharedCtx = nullptr;
     if (callbackThreadCount != 0 || regexpCacheSize != 0) {
         sharedCtx = std::make_shared<TSharedListingContext>(
             callbackThreadCount, callbackPerThreadQueueSize, regexpCacheSize);
     }
-    return std::make_shared<TS3ParallelLimitedListerFactory>(maxParallelOps, sharedCtx, actorSystem);
+    return std::make_shared<TS3ParallelLimitedListerFactory>(maxParallelOps, sharedCtx);
 }
 
 } // namespace NYql::NS3Lister

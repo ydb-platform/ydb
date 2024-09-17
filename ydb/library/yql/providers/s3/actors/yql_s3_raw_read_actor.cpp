@@ -42,7 +42,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials& credentials,
+        const TS3Credentials::TAuthInfo& authInfo,
         const TString& pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NYql::NS3Details::TPathList&& paths,
@@ -59,8 +59,7 @@ public:
         NActors::TActorId fileQueueActor,
         ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit,
-        ui64 fileQueueConsumersCountDelta,
-        bool allowLocalFiles)
+        ui64 fileQueueConsumersCountDelta)
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -70,14 +69,13 @@ public:
         , RetryPolicy(retryPolicy)
         , ActorSystem(NActors::TActivationContext::ActorSystem())
         , Url(url)
-        , Credentials(credentials)
+        , AuthInfo(authInfo)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
         , FileQueueActor(fileQueueActor)
         , AddPathIndex(addPathIndex)
         , SizeLimit(sizeLimit)
-        , AllowLocalFiles(allowLocalFiles)
         , Counters(counters)
         , TaskCounters(taskCounters)
         , FileSizeLimit(fileSizeLimit)
@@ -113,13 +111,11 @@ public:
                 FileQueueBatchSizeLimit,
                 FileQueueBatchObjectCountLimit,
                 Gateway,
-                RetryPolicy,
                 Url,
-                Credentials,
+                AuthInfo,
                 Pattern,
                 PatternVariant,
-                NYql::NS3Lister::ES3PatternType::Wildcard,
-                AllowLocalFiles));
+                NYql::NS3Lister::ES3PatternType::Wildcard));
         }
 
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
@@ -167,11 +163,10 @@ public:
         auto url = Url + object.GetPath();
         auto id = object.GetPathIndex();
         const TString requestId = CreateGuidAsString();
-        const auto& authInfo = Credentials.GetAuthInfo();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
-            NS3Util::UrlEscapeRet(url),
-            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
+            UrlEscapeRet(url, true),
+            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             0U,
             std::min(object.GetSize(), SizeLimit),
             std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, object.GetPath()),
@@ -284,7 +279,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, result->Get()->Record.GetFatalCode()));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
     void HandleAck(TEvS3Provider::TEvAck::TPtr& ev) {
@@ -460,7 +455,7 @@ private:
     NActors::TActorSystem* const ActorSystem;
 
     const TString Url;
-    const TS3Credentials Credentials;
+    const TS3Credentials::TAuthInfo AuthInfo;
     const TString Pattern;
     const NYql::NS3Lister::ES3PatternVariant PatternVariant;
     NYql::NS3Details::TPathList Paths;
@@ -470,7 +465,6 @@ private:
     const bool AddPathIndex;
     const ui64 SizeLimit;
     TDuration CpuTime;
-    const bool AllowLocalFiles;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 
@@ -508,7 +502,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TString& url,
-    const TS3Credentials& credentials,
+    const TS3Credentials::TAuthInfo& authInfo,
     const TString& pattern,
     NYql::NS3Lister::ES3PatternVariant patternVariant,
     NYql::NS3Details::TPathList&& paths,
@@ -525,22 +519,21 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     NActors::TActorId fileQueueActor,
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
-    ui64 fileQueueConsumersCountDelta,
-    bool allowLocalFiles
+    ui64 fileQueueConsumersCountDelta
 ) {
     const auto actor = new TS3ReadActor(
         inputIndex,
         statsLevel,
         txId,
         std::move(gateway),
-        holderFactory,
-        url,
-        credentials,
+        holderFactory, 
+        url, 
+        authInfo, 
         pattern,
         patternVariant,
         std::move(paths),
         addPathIndex,
-        computeActorId,
+        computeActorId, 
         sizeLimit,
         retryPolicy,
         readActorFactoryCfg,
@@ -552,8 +545,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         fileQueueActor,
         fileQueueBatchSizeLimit,
         fileQueueBatchObjectCountLimit,
-        fileQueueConsumersCountDelta,
-        allowLocalFiles
+        fileQueueConsumersCountDelta
     );
 
     return {actor, actor};

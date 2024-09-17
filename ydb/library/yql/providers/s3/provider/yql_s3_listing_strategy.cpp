@@ -16,7 +16,6 @@
 #include <util/generic/overloaded.h>
 #include <deque>
 #include <utility>
-#include <mutex>
 
 namespace NYql {
 IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& options) {
@@ -135,15 +134,14 @@ public:
     TFlatFileS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [allowLocalFiles, httpGateway, retryPolicy, listerFactory](
+              [allowLocalFiles, httpGateway, listerFactory](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   Y_UNUSED(options);
                   return listerFactory->Make(
-                      httpGateway, retryPolicy, listingRequest, Nothing(), allowLocalFiles);
+                      httpGateway, listingRequest, Nothing(), allowLocalFiles);
               },
               "TFlatFileS3ListingStrategy") { }
 };
@@ -153,15 +151,14 @@ public:
     TDirectoryS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [allowLocalFiles, httpGateway, retryPolicy, listerFactory](
+              [allowLocalFiles, httpGateway, listerFactory](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   Y_UNUSED(options);
                   return listerFactory->Make(
-                      httpGateway, retryPolicy, listingRequest, "/", allowLocalFiles);
+                      httpGateway, listingRequest, "/", allowLocalFiles);
               },
               "TDirectoryS3ListingStrategy") { }
 };
@@ -405,10 +402,9 @@ public:
     TPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, retryPolicy, allowLocalFiles](
+              [listerFactory, httpGateway, allowLocalFiles](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -417,7 +413,7 @@ public:
                           listingRequest.Prefix,
                           options,
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, retryPolicy, allowLocalFiles}});
+                              listerFactory, httpGateway, allowLocalFiles}});
                   return MakeFuture(std::move(ptr));
               },
               "TPartitionedDatasetS3ListingStrategy") { }
@@ -492,14 +488,8 @@ public:
                 });
         return NextDirectoryListeningChunk;
     }
-
-    static TString ParseBasePath(const TString& path) {
-        TString basePath = TString{TStringBuf{path}.RBefore('/')};
-        return basePath == path && !basePath.EndsWith('/') ? TString{} : basePath;
-    }
-
     void PerformEarlyStop(TListEntries& result, const TString& sourcePrefix) {
-        result.Directories.push_back({.Path = ParseBasePath(sourcePrefix)});
+        result.Directories.push_back({.Path = sourcePrefix});
         for (auto& directoryPrefix : DirectoryPrefixQueue) {
             result.Directories.push_back({.Path = directoryPrefix});
         }
@@ -567,11 +557,10 @@ public:
     TUnPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t minParallelism,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, retryPolicy, minParallelism, allowLocalFiles](
+              [listerFactory, httpGateway, minParallelism, allowLocalFiles](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -590,7 +579,7 @@ public:
                                   : listingRequest.Pattern.substr(
                                         0, NS3::GetFirstWildcardPos(listingRequest.Pattern))},
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, retryPolicy, allowLocalFiles},
+                              listerFactory, httpGateway, allowLocalFiles},
                           minParallelism,
                           options.MaxResultSet});
                   return MakeFuture(std::move(ptr));
@@ -904,12 +893,11 @@ public:
     TConcurrentUnPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t minParallelism,
         size_t maxParallelOps,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, retryPolicy, minParallelism, allowLocalFiles, maxParallelOps](
+              [listerFactory, httpGateway, minParallelism, allowLocalFiles, maxParallelOps](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -941,7 +929,7 @@ public:
                                   : listingRequest.Pattern.substr(
                                         0, NS3::GetFirstWildcardPos(listingRequest.Pattern))},
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, retryPolicy, allowLocalFiles},
+                              listerFactory, httpGateway, allowLocalFiles},
                           options.MaxResultSet,
                           maxParallelOps});
                   return MakeFuture(std::move(ptr));
@@ -955,11 +943,10 @@ public:
     TConcurrentPartitionedDatasetS3ListingStrategy(
         const IS3ListerFactory::TPtr& listerFactory,
         const IHTTPGateway::TPtr& httpGateway,
-        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t maxParallelOps,
         bool allowLocalFiles)
         : TCollectingS3ListingStrategy(
-              [listerFactory, httpGateway, retryPolicy, allowLocalFiles, maxParallelOps](
+              [listerFactory, httpGateway, allowLocalFiles, maxParallelOps](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
                   auto ptr = std::shared_ptr<IS3Lister>(
@@ -987,12 +974,12 @@ public:
                                   : listingRequest.Pattern.substr(
                                         0, NS3::GetFirstWildcardPos(listingRequest.Pattern))},
                           TDirectoryS3ListingStrategy{
-                              listerFactory, httpGateway, retryPolicy, allowLocalFiles},
+                              listerFactory, httpGateway, allowLocalFiles},
                           options.MaxResultSet,
                           maxParallelOps});
                   return MakeFuture(std::move(ptr));
               },
-              "TConcurrentPartitionedDatasetS3ListingStrategy") { }
+              "TConcurrentUnPartitionedDatasetS3ListingStrategy") { }
 };
 
 
@@ -1037,7 +1024,6 @@ private:
 
 IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     const IHTTPGateway::TPtr& httpGateway,
-    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const IS3ListerFactory::TPtr& listerFactory,
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     size_t maxParallelOps,
@@ -1046,7 +1032,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
         std::make_shared<TCompositeS3ListingStrategy>(
             std::vector<std::shared_ptr<IS3ListingStrategy>>{
                 std::make_shared<TFlatFileS3ListingStrategy>(
-                    listerFactory, httpGateway, retryPolicy, allowLocalFiles),
+                    listerFactory, httpGateway, allowLocalFiles),
                 std::make_shared<TConditionalS3ListingStrategy>(
                     std::initializer_list<TConditionalS3ListingStrategy::TPair>{
                         {[](const TS3ListingOptions& options) {
@@ -1056,7 +1042,6 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
-                             retryPolicy,
                              allowLocalFiles)},
                         {[](const TS3ListingOptions& options) {
                              return options.IsPartitionedDataset &&
@@ -1065,7 +1050,6 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TConcurrentPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
-                             retryPolicy,
                              maxParallelOps,
                              allowLocalFiles)},
                         {[](const TS3ListingOptions& options) {
@@ -1075,7 +1059,6 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TUnPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
-                             retryPolicy,
                              minDesiredDirectoriesOfFilesPerQuery,
                              allowLocalFiles)},
                         {[](const TS3ListingOptions& options) {
@@ -1085,7 +1068,6 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                          std::make_shared<TConcurrentUnPartitionedDatasetS3ListingStrategy>(
                              listerFactory,
                              httpGateway,
-                             retryPolicy,
                              minDesiredDirectoriesOfFilesPerQuery,
                              maxParallelOps,
                              allowLocalFiles)}})}));

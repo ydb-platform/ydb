@@ -46,10 +46,6 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                         key: "mdb_cluster_id",
                         value: "id"
                     }
-                    Properties {
-                        key: "database_name",
-                        value: "postgres"
-                    }
                 }
             )", {NKikimrScheme::StatusAccepted});
 

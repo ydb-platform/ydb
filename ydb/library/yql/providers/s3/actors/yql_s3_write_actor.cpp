@@ -578,7 +578,7 @@ private:
                 Gateway,
                 Credentials,
                 key,
-                NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
+                UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension, true),
                 Compression,
                 RetryPolicy, DirtyWrite, Token);
             keyIt->second.emplace_back(fileWrite.get());

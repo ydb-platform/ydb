@@ -41,7 +41,6 @@ class TestJoin:
             database_id=settings.ydb.dbname,
         )
 
-        # FIXME: research why test starts failing if we add Greenplum
         sql = fR'''
             SELECT pg.data AS data_pg, ch.data AS data_ch, ydb.data AS data_ydb
             FROM {pg_conn_name}.{table_name} AS pg

@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <library/cpp/json/writer/json.h>
 
 namespace NYql {
 
@@ -24,27 +23,7 @@ class TGatheringAttributesVisitor : public IAstAttributesVisitor {
         CurrentSource->second.try_emplace(key, value);
     };
 
-    void VisitNonAttribute(TExprNode::TPtr node) override {
-        if (!CurrentSource) {
-            return;
-        }
-        
-        auto nodeChildren = node->Children();
-        if (nodeChildren.size() > 2 && nodeChildren[0]->IsAtom()) {
-            TCoAtom attrName{nodeChildren[0]};
-            if (attrName.StringValue() == "partitionedby") {
-                NJson::TJsonArray values;
-
-                for (size_t i = 1; i < nodeChildren.size(); ++i) {
-                    Y_ABORT_UNLESS(nodeChildren[i]->IsAtom());
-                    TCoAtom attrValue{nodeChildren[i]};
-                    values.AppendValue(attrValue.StringValue());
-                }
-
-                CurrentSource->second.try_emplace(attrName.StringValue(), NJson::WriteJson(values));
-            }
-        }
-    }
+    void VisitNonAttribute(TExprNode::TPtr) override {}
 
 public:
     THashMap<std::pair<TString, TString>, THashMap<TString, TString>> Result;
@@ -121,11 +100,9 @@ public:
         auto nodeChildren = node->Children();
         if (!nodeChildren.empty() && nodeChildren[0]->IsAtom()) {
             TCoAtom attrName{nodeChildren[0]};
-            if (attrName.StringValue() == "userschema") {
+            if (attrName.StringValue().equal("userschema")) {
                 node = BuildSchemaFromMetadata(Read->Pos(), Ctx, Metadata->Columns);
                 ReplacedUserchema = true;
-            } else if (attrName.StringValue() == "partitionedby") {
-                NewAttributes.erase("partitionedby");
             }
         }
         Children.push_back(std::move(node));

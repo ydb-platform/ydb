@@ -24,13 +24,11 @@ NActors::IActor* CreateS3FileQueueActor(
         ui64 batchSizeLimit,
         ui64 batchObjectCountLimit,
         IHTTPGateway::TPtr gateway,
-        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        const TS3Credentials& credentials,
+        TS3Credentials::TAuthInfo authInfo,
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
-        NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles);
+        NS3Lister::ES3PatternType patternType);
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -49,7 +47,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager,
-    bool allowLocalFiles);
+    IMemoryQuotaManager::TPtr memoryQuotaManager);
 
 } // namespace NYql::NDq

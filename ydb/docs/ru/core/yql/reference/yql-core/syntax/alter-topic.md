@@ -53,7 +53,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-### Включение и приостановка автопартиционирование {#autopartitioning}
+### Включение и приостановка автопартиционирования {#autopartitioning}
 
 Следующая команда включает [автопартиционирование](../../../../concepts/topic#autopartitioning):
 

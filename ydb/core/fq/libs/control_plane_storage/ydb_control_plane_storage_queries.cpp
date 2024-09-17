@@ -594,6 +594,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
                 }
             }
         }
+
+        auto timeline = internal.timeline();
+        if (timeline) {
+            result.mutable_query()->mutable_timeline()->set_svg(timeline);
+        }
+
         if (!permissions.Check(TPermissions::VIEW_AST)) {
             result.mutable_query()->clear_ast();
         } else {

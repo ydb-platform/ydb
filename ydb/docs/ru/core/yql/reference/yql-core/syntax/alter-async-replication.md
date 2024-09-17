@@ -9,6 +9,7 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 ```
 
 где:
+
 * `name` — имя экземпляра асинхронной репликации.
 * `SET (option = value [, ...])` — [параметры](#params) асинхронной репликации.
 

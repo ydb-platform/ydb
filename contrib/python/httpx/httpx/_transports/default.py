@@ -23,6 +23,7 @@ client = httpx.Client(transport=transport)
 transport = httpx.HTTPTransport(uds="socket.uds")
 client = httpx.Client(transport=transport)
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -61,6 +62,8 @@ SOCKET_OPTION = typing.Union[
     typing.Tuple[int, int, typing.Union[bytes, bytearray]],
     typing.Tuple[int, int, None, int],
 ]
+
+__all__ = ["AsyncHTTPTransport", "HTTPTransport"]
 
 
 @contextlib.contextmanager
@@ -300,6 +303,7 @@ class AsyncHTTPTransport(AsyncBaseTransport):
                 ),
                 proxy_auth=proxy.raw_auth,
                 proxy_headers=proxy.headers.raw,
+                proxy_ssl_context=proxy.ssl_context,
                 ssl_context=ssl_context,
                 max_connections=limits.max_connections,
                 max_keepalive_connections=limits.max_keepalive_connections,

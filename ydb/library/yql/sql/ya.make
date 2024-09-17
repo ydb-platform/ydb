@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     library/cpp/deprecated/split
+    ydb/library/yql/parser/proto_ast
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/sql/settings
     ydb/library/yql/sql/v0

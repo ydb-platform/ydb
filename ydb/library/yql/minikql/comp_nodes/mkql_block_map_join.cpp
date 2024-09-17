@@ -180,10 +180,10 @@ private:
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
 };
 
-template <bool WithoutRight, bool RightRequired>
-class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired>>
+template <bool WithoutRight, bool RightRequired, bool IsTuple>
+class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired, IsTuple>>
 {
-using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired>>;
+using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired, IsTuple>>;
 using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMapJoinWrapper(TComputationMutables& mutables,
@@ -198,6 +198,7 @@ public:
         , Flow_(flow)
         , Dict_(dict)
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
+        , KeyTuple_(mutables)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -207,7 +208,7 @@ public:
 
         while (!blockState.HasBlocks()) {
             while (blockState.IsNotFull() && blockState.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, blockState, LeftKeyColumns_);
+                const auto key = MakeKeysTuple(ctx, blockState);
                 if constexpr (WithoutRight) {
                     if (key && dict.Contains(key) == RightRequired) {
                         blockState.CopyRow();
@@ -270,10 +271,18 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state, const TVector<ui32>& keyColumns) const {
-        // TODO: Handle complex key.
+    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, const TState& state) const {
         // TODO: Handle converters.
-        return state.GetValue(ctx.HolderFactory, keyColumns.front());
+        if constexpr (!IsTuple) {
+            return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
+        }
+
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto keys = KeyTuple_.NewArray(ctx, LeftKeyColumns_.size(), items);
+        for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
+            items[i] = state.GetValue(ctx.HolderFactory, LeftKeyColumns_[i]);
+        }
+        return keys;
     }
 
     const TVector<TType*> ResultJoinItems_;
@@ -283,12 +292,13 @@ private:
     IComputationWideFlowNode* const Flow_;
     IComputationNode* const Dict_;
     ui32 WideFieldsIndex_;
+    const TContainerCacheOnContext KeyTuple_;
 };
 
-template<bool RightRequired>
-class TBlockWideMultiMapJoinWrapper : public TPairStateWideFlowComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired>>
+template<bool RightRequired, bool IsTuple>
+class TBlockWideMultiMapJoinWrapper : public TPairStateWideFlowComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired, IsTuple>>
 {
-using TBaseComputation = TPairStateWideFlowComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired>>;
+using TBaseComputation = TPairStateWideFlowComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired, IsTuple>>;
 using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMultiMapJoinWrapper(TComputationMutables& mutables,
@@ -303,6 +313,7 @@ public:
         , Flow_(flow)
         , Dict_(dict)
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
+        , KeyTuple_(mutables)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& iterator, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -320,7 +331,7 @@ public:
                 }
             }
             if (blockState.IsNotFull() && blockState.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, blockState, LeftKeyColumns_);
+                const auto key = MakeKeysTuple(ctx, blockState);
                 // Lookup the item in the right dict. If the lookup succeeds,
                 // reset the iterator and proceed the execution from the
                 // beginning of the outer loop. Otherwise, the iterState is
@@ -419,10 +430,18 @@ private:
         return *static_cast<TIterator*>(iterator.AsBoxed().Get());
     }
 
-    NUdf::TUnboxedValue MakeKeysTuple(const TComputationContext& ctx, const TState& state, const TVector<ui32>& keyColumns) const {
-        // TODO: Handle complex key.
+    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, const TState& state) const {
         // TODO: Handle converters.
-        return state.GetValue(ctx.HolderFactory, keyColumns.front());
+        if constexpr (!IsTuple) {
+            return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
+        }
+
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto keys = KeyTuple_.NewArray(ctx, LeftKeyColumns_.size(), items);
+        for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
+            items[i] = state.GetValue(ctx.HolderFactory, LeftKeyColumns_[i]);
+        }
+        return keys;
     }
 
     const TVector<TType*> ResultJoinItems_;
@@ -432,6 +451,7 @@ private:
     IComputationWideFlowNode* const Flow_;
     IComputationNode* const Dict_;
     ui32 WideFieldsIndex_;
+    const TContainerCacheOnContext KeyTuple_;
 };
 
 } // namespace
@@ -483,8 +503,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
         const auto item = AS_VALUE(TDataLiteral, keyColumnsTuple->GetValue(i));
         leftKeyColumns.emplace_back(item->AsValue().Get<ui32>());
     }
-    // TODO: Handle multi keys.
-    Y_ENSURE(leftKeyColumns.size() == 1);
+    const bool isTupleKey = leftKeyColumns.size() > 1;
 
     const auto keyDropsLiteral = callable.GetInput(4);
     const auto keyDropsTuple = AS_VALUE(TTupleLiteral, keyDropsLiteral);
@@ -514,44 +533,54 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto dict = LocateNode(ctx.NodeLocator, callable, 1);
 
-    switch (joinKind) {
-    static const auto joinNames = GetEnumNames<EJoinKind>();
-    case EJoinKind::Inner:
-        if (isMulti) {
-            return new TBlockWideMultiMapJoinWrapper<true>(ctx.Mutables,
-                std::move(joinItems), std::move(leftFlowItems),
-                std::move(leftKeyColumns), std::move(leftIOMap),
-                static_cast<IComputationWideFlowNode*>(flow), dict);
-        }
-        return new TBlockWideMapJoinWrapper<false, true>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    case EJoinKind::Left:
-        if (isMulti) {
-            return new TBlockWideMultiMapJoinWrapper<false>(ctx.Mutables,
-                std::move(joinItems), std::move(leftFlowItems),
-                std::move(leftKeyColumns), std::move(leftIOMap),
-                static_cast<IComputationWideFlowNode*>(flow), dict);
-        }
-        return new TBlockWideMapJoinWrapper<false, false>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    case EJoinKind::LeftSemi:
-        return new TBlockWideMapJoinWrapper<true, true>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    case EJoinKind::LeftOnly:
-        return new TBlockWideMapJoinWrapper<true, false>(ctx.Mutables,
-            std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(leftIOMap),
-            static_cast<IComputationWideFlowNode*>(flow), dict);
-    default:
-        MKQL_ENSURE(false, "BlockMapJoinCore doesn't support %s join type"
-                    << joinNames.at(joinKind));
+#define DISPATCH_JOIN(IS_TUPLE) do {                                                \
+    switch (joinKind) {                                                             \
+    case EJoinKind::Inner:                                                          \
+        if (isMulti) {                                                              \
+            return new TBlockWideMultiMapJoinWrapper<true, IS_TUPLE>(ctx.Mutables,  \
+                std::move(joinItems), std::move(leftFlowItems),                     \
+                std::move(leftKeyColumns), std::move(leftIOMap),                    \
+                static_cast<IComputationWideFlowNode*>(flow), dict);                \
+        }                                                                           \
+        return new TBlockWideMapJoinWrapper<false, true, IS_TUPLE>(ctx.Mutables,    \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    case EJoinKind::Left:                                                           \
+        if (isMulti) {                                                              \
+            return new TBlockWideMultiMapJoinWrapper<false, IS_TUPLE>(ctx.Mutables, \
+                std::move(joinItems), std::move(leftFlowItems),                     \
+                std::move(leftKeyColumns), std::move(leftIOMap),                    \
+                static_cast<IComputationWideFlowNode*>(flow), dict);                \
+        }                                                                           \
+        return new TBlockWideMapJoinWrapper<false, false, IS_TUPLE>(ctx.Mutables,   \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    case EJoinKind::LeftSemi:                                                       \
+        return new TBlockWideMapJoinWrapper<true, true, IS_TUPLE>(ctx.Mutables,     \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    case EJoinKind::LeftOnly:                                                       \
+        return new TBlockWideMapJoinWrapper<true, false, IS_TUPLE>(ctx.Mutables,    \
+            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(leftKeyColumns), std::move(leftIOMap),                        \
+            static_cast<IComputationWideFlowNode*>(flow), dict);                    \
+    default:                                                                        \
+        /* TODO: Display the human-readable join kind name. */                      \
+        MKQL_ENSURE(false, "BlockMapJoinCore doesn't support join type #"           \
+                    << static_cast<ui32>(joinKind));                                \
+    }                                                                               \
+} while(0)
+
+    if (isTupleKey) {
+        DISPATCH_JOIN(true);
+    } else {
+        DISPATCH_JOIN(false);
     }
+
+#undef DISPATCH_JOIN
 }
 
 } // namespace NMiniKQL

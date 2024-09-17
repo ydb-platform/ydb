@@ -35,6 +35,10 @@ ELSE()
     )
 ENDIF()
 
+CFLAGS(
+    -Wno-unused-parameter
+)
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(

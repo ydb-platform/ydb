@@ -141,15 +141,20 @@
 Пример:
 
 1. Создадим таблицу {{ydb-name}} с помощью PostgreSQL-синтаксиса
+
     ```sql
     CREATE TABLE test_table_pg_ip(col text, PRIMARY KEY(col));
     ```
+
 1. Добавим туда тестовые данные
+
     ```sql
     INSERT INTO test_table_pg_ip(col) VALUES('::ffff:77.75.155.3')
     ```
+
 1. Прочитаем эти данные с помощью YQL-синтаксиса:
-    ```
+
+    ```bash
     ydb sql -s "SELECT Ip::ToString(Ip::GetSubnet(Ip::FromString(col))) AS subnet
         FROM test_table_pg_ip"
     Status: GENERIC_ERROR
@@ -159,8 +164,10 @@
             <main>:1:12: Error: At function: Apply, Callable is produced by Udf: Ip.FromString
                 <main>:1:23: Error: Mismatch type argument #1, type diff: String!=pgtext
     ```
+
 1. Для работы функции `Ip::FromString` необходимо предварительно выполнить преобразование типов данных с помощью функции `PgFrom`:
-    ```
+
+    ```bash
     ydb sql -s "SELECT Ip::ToString(Ip::GetSubnet(Ip::FromString(FromPg(col))) AS subnet
         FROM test_table_pg_ip"
     ┌────────┐

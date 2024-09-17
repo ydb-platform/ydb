@@ -18,7 +18,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 DataShardMaxOperationBytes = 8_MB;
-constexpr ui64 ColumnShardMaxOperationBytes = 8_MB;
+constexpr ui64 ColumnShardMaxOperationBytes = 64_MB;
 constexpr ui64 MaxUnshardedBatchBytes = 0_MB;
 
 class IPayloadSerializer : public TThrRefBase {

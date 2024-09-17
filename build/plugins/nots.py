@@ -20,12 +20,29 @@ from _dart_fields import create_dart_record
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
 
+COLOR_CODES = {
+    "red": "31",
+    "green": "32",
+    "yellow": "33",
+    "cyan": "36",
+    "reset": "49",
+}
+
+
+class ConsoleColors(dict):
+    def __init__(self, color_codes):
+        for k, v in color_codes.items():
+            self.__dict__[k] = f"\033[0;{v}m"
+
+
+COLORS = ConsoleColors(COLOR_CODES)
+
 
 class TsTestType(StrEnum):
-    JEST = auto()
-    HERMIONE = auto()
-    PLAYWRIGHT = auto()
     ESLINT = auto()
+    HERMIONE = auto()
+    JEST = auto()
+    PLAYWRIGHT = auto()
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
 
@@ -47,19 +64,26 @@ TS_TEST_FIELDS_BASE = (
 )
 
 TS_TEST_SPECIFIC_FIELDS = {
-    TsTestType.JEST: (
+    TsTestType.ESLINT: (
         df.Size.from_unit,
+        df.TestCwd.moddir,
         df.Tag.from_unit,
         df.Requirements.from_unit,
+        df.EslintConfigPath.value,
+    ),
+    TsTestType.HERMIONE: (
+        df.Tag.from_unit_fat_external_no_retries,
+        df.Requirements.from_unit_with_full_network,
         df.ConfigPath.value,
         df.TsTestDataDirs.value,
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
     ),
-    TsTestType.HERMIONE: (
-        df.Tag.from_unit_fat_external_no_retries,
-        df.Requirements.from_unit_with_full_network,
+    TsTestType.JEST: (
+        df.Size.from_unit,
+        df.Tag.from_unit,
+        df.Requirements.from_unit,
         df.ConfigPath.value,
         df.TsTestDataDirs.value,
         df.TsTestDataDirsRename.value,
@@ -75,13 +99,6 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
-    ),
-    TsTestType.ESLINT: (
-        df.Size.from_unit,
-        df.TestCwd.moddir,
-        df.Tag.from_unit,
-        df.Requirements.from_unit,
-        df.EslintConfigPath.value,
     ),
     TsTestType.TSC_TYPECHECK: (
         df.Size.from_unit,
@@ -118,7 +135,7 @@ class PluginLogger(object):
                 parts.append(m if isinstance(m, str) else repr(m))
 
         # cyan color (code 36) for messages
-        return "\033[0;32m{}\033[0;49m\n\033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
+        return f"{COLORS.green}{self.prefix}{COLORS.reset}\n{COLORS.cyan}{" ".join(parts)}{COLORS.reset}"
 
     def info(self, *messages):
         if self.unit:
@@ -735,7 +752,7 @@ def on_node_modules_configure(unit):
 
             # YATOOL_PREBUILDER_0_7_0_RESOURCE_GLOBAL
             prebuilder_major = unit.get("YATOOL_PREBUILDER-ROOT-VAR-NAME").split("_")[2]
-            logger.info(f"Detected prebuilder \033[0;32mv{prebuilder_major}.x.x\033[0;49m")
+            logger.info(f"Detected prebuilder {COLORS.green}{prebuilder_major}.x.x{COLORS.reset}")
 
             if prebuilder_major == "0":
                 # TODO: FBP-1408
@@ -746,7 +763,7 @@ def on_node_modules_configure(unit):
                     ymake.report_configure_error(
                         "Project is configured to use @yatool/prebuilder. \n"
                         + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix lockfile.\n"
+                        + "Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix lockfile.\n"
                         + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
                         + "Misconfigured keys: \n"
                         + "  - "
@@ -761,7 +778,7 @@ def on_node_modules_configure(unit):
                     ymake.report_configure_error(
                         "Project is configured to use @yatool/prebuilder. \n"
                         + "Some packages are misconfigured.\n"
-                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix pnpm-lock.yaml and package.json.\n"
+                        + "Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
                         + "Validation details: \n"
                         + "\n".join(validation_messages)
                     )

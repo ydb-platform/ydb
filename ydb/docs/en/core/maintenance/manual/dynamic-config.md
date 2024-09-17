@@ -7,6 +7,7 @@ Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/comm
 * The `allowed_labels` and `selector_config` fields are added for granular overrides of settings
 
 This configuration is uploaded to the cluster, where it is reliably stored and delivered to each dynamic node upon startup. [Certain settings](#dynamic-kinds) are updated on the fly without restarting nodes. Using dynamic configuration, you can centrally solve the following tasks:
+
 * Switch logging settings for components for the entire cluster or specific groups of nodes;
 * Enable experimental features (feature flags) on specific databases;
 * Change actor system settings on individual nodes or groups of nodes;

@@ -1,4 +1,4 @@
-LIBRARY()
+LIBRARY(library-formats-arrow-splitter)
 
 SRCS(
     stats.cpp

@@ -117,7 +117,7 @@ struct TTableColumn {
 
     TTableColumn() = default;
 
-    TTableColumn(TString name, TType type, TString family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription)
+    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt, std::optional<TSequenceDescription> sequenceDescription = std::nullopt)
         : Name(std::move(name))
         , Type(std::move(type))
         , Family(std::move(family))

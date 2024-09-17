@@ -308,7 +308,7 @@ class TTableDescription::TImpl {
                 }
                 default: break;
             }
-            Columns_.emplace_back(col.name(), col.type(), col.family(), not_null, sequenceDescription);
+            Columns_.emplace_back(col.name(), col.type(), col.family(), not_null, std::move(sequenceDescription));
         }
 
         // indexes
@@ -471,7 +471,7 @@ public:
     }
 
     void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
-        Columns_.emplace_back(name, type, family, notNull, sequenceDescription);
+        Columns_.emplace_back(name, type, family, notNull, std::move(sequenceDescription));
     }
 
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
@@ -755,7 +755,7 @@ const TVector<TKeyRange>& TTableDescription::GetKeyRanges() const {
 }
 
 void TTableDescription::AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
-    Impl_->AddColumn(name, type, family, notNull, sequenceDescription);
+    Impl_->AddColumn(name, type, family, notNull, std::move(sequenceDescription));
 }
 
 void TTableDescription::SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
@@ -1202,7 +1202,7 @@ TTableBuilder& TTableBuilder::AddSerialColumn(const TString& name, const EPrimit
         .Primitive(type)
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true, sequenceDescription);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true, std::move(sequenceDescription));
     return *this;
 }
 

@@ -141,7 +141,8 @@ private:
     using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
 
     TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize, const TString& messageGroupId = "") { 
-        auto now = TInstant::Now(); TMessageInformation msgInfo(
+        auto now = TInstant::Now(); 
+        TMessageInformation msgInfo(
             offset,
             ProducerId_,
             SeqNo_,

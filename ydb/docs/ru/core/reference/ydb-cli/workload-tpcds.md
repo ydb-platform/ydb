@@ -1,6 +1,6 @@
-# TPC-H нагрузка
+# TPC-DS нагрузка
 
-Нагрузка базируется на документе TPC-H [документация](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.17.1.pdf), а запросы и схемы таблиц адаптированы под {{ ydb-short-name }}.
+Нагрузка базируется на документе TPC-DS [документация](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), а запросы и схемы таблиц адаптированы под {{ ydb-short-name }}.
 
 Тест генерирует типичную рабочую нагрузку в области помощи в принятии решений.
 
@@ -9,7 +9,7 @@
 Все команды поддерживают общий параметр `--path`, который задает путь к каталогу с таблицами в базе данных:
 
 ```bash
-{{ ydb-cli }}  workload tpch --path tpch/s1 ...
+{{ ydb-cli }}  workload tpcds --path tpcds/s1 ...
 ```
 ### Доступные параметры {#common_options}
 
@@ -22,13 +22,13 @@
 Перед запуском теста создайте таблицу:
 
 ```bash
-{{ ydb-cli }} workload tpch --path tpch/s1 init
+{{ ydb-cli }} workload tpcds --path tpcds/s1 init
 ```
 
-Посмотрите описание команды для инициализации табилц:
+Посмотрите описание команды для запуска нагрузки:
 
 ```bash
-{{ ydb-cli }} workload tpch init --help
+{{ ydb-cli }} workload tpcds init --help
 ```
 
 {% include [init_options](./_includes/workload/init_options_tpc.md) %}
@@ -38,13 +38,13 @@
 Загрузите данные в таблицу. Данные будут сгенерированы непосредственно {{ ydb-cli }}:
 
 ```bash
-{{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1
+{{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
 ```
 
 Посмотрите описание команды для загрузки данных:
 
 ```bash
-{{ ydb-cli }} workload tpch import --help
+{{ ydb-cli }} workload tpcds import --help
 ```
 
 ### Доступные параметры {#load_files_options}
@@ -64,7 +64,7 @@
 Запустите нагрузку:
 
 ```bash
-{{ ydb-cli }} workload tpch --path tpch/s1 run
+{{ ydb-cli }} workload tpcds --path tpcds/s1 run
 ```
 
 В течение теста на экран выводится статистика по нагрузке для каждого запроса.
@@ -72,7 +72,7 @@
 Посмотрите описание команды для запуска нагрузки:
 
 ```bash
-{{ ydb-cli }} workload tpch run --help
+{{ ydb-cli }} workload tpcds run --help
 ```
 
 {% include [run_options](./_includes/workload/run_options.md) %}
@@ -80,7 +80,7 @@
 ### Опции, специфичные для TPC-H
 Имя параметра | Описание параметра
 ---|---
-`--ext-query-dir <имя>` | Директория с внешними запросами для выполнения нагрузки. Запросы должны лежать в файлах с именами `q[1-23].sql`. Значение по умолчанию отсутствует.
+`--ext-query-dir <имя>` | Директория с внешними запросами для выполнения нагрузки. Запросы должны лежать в файлах с именами `q[1-99].sql`. Значение по умолчанию отсутствует.
 
 ## Очистка данных теста {#clean}
 Запустите очистку:

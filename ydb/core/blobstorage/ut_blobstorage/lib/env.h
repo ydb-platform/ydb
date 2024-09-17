@@ -803,8 +803,14 @@ struct TEnvironmentSetup {
         vslot->SetVSlotId(vslotId);
     }
 
-    void SetVDiskReadOnly(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, bool value) {
+    void SetVDiskReadOnly(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, bool value, bool force = false) {
         NKikimrBlobStorage::TConfigRequest request;
+        if (force) {
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreGroupSanityChecks(true);
+        }
         auto *roCmd = request.AddCommand()->MutableSetVDiskReadOnly();
         FillVSlotId(nodeId, pdiskId, vslotId, roCmd->MutableVSlotId());
         VDiskIDFromVDiskID(vdiskId, roCmd->MutableVDiskId());

@@ -330,7 +330,21 @@ namespace NKikimr::NBsController {
 
             // check that group modification would not degrade failure model
             if (!suppressFailModelChecking) {
+                TSet<TGroupId> groupsToCheck;
+                for (auto&& [base, overlay] : state.VSlots.Diff()) {
+                    if (base && overlay->second) {
+                        const bool prevIsReady = base->second->IsReady;
+                        const bool curIsReady = overlay->second->IsReady;
+
+                        if (prevIsReady && !curIsReady) {
+                            groupsToCheck.emplace(overlay->second->GroupId);
+                        }
+                    }
+                }
                 for (TGroupId groupId : state.GroupFailureModelChanged) {
+                    if (groupsToCheck.count(groupId) == 0) {
+                        continue;
+                    }
                     if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
                         auto& topology = *group->Topology;

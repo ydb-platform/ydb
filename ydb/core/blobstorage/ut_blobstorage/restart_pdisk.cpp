@@ -57,6 +57,98 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
         }
     }
 
+    auto GetGroupVDisks(TEnvironmentSetup& env) {
+        struct TVDisk {
+            ui32 NodeId;
+            ui32 PDiskId;
+            ui32 VSlotId;
+            TVDiskID VDiskId;
+        };
+
+        std::vector<TVDisk> pdiskIds;
+
+        auto config = env.FetchBaseConfig();
+
+        auto& group = config.get_idx_group(0);
+        
+        for (auto& vslot : config.GetVSlot()) {
+            if (group.GetGroupId() == vslot.GetGroupId()) {
+                auto slotId = vslot.GetVSlotId();
+                auto nodeId = slotId.GetNodeId();
+                auto pdiskId = slotId.GetPDiskId();
+                auto vdiskId = TVDiskID(group.GetGroupId(), group.GetGroupGeneration(), vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+                pdiskIds.emplace_back(nodeId, pdiskId, slotId.GetVSlotId(), vdiskId);
+            }
+        }
+
+        return pdiskIds;
+    }
+
+    Y_UNIT_TEST(RestartBrokenDiskInBrokenGroup) {
+        TEnvironmentSetup env({
+            .NodeCount = 10,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+        });
+
+        env.UpdateSettings(false, false);
+        env.CreateBoxAndPool(1, 10);
+        env.Sim(TDuration::Seconds(30));
+
+        auto pdiskIds = GetGroupVDisks(env);
+
+        // Making all disks read only disintegrates the group
+        for (auto& [nodeId, pdiskId, vslotId, vdiskId] : pdiskIds) {
+            env.SetVDiskReadOnly(nodeId, pdiskId, vslotId, vdiskId, true, true);
+        }
+
+        // Restarting the owner of an already broken disk in a broken group must be allowed
+        auto& [targetNodeId, targetPDiskId, unused1, unused2] = pdiskIds[0];
+
+        NKikimrBlobStorage::TConfigRequest request;
+
+        NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
+        auto pdiskId = cmd->MutableTargetPDiskId();
+        pdiskId->SetNodeId(targetNodeId);
+        pdiskId->SetPDiskId(targetPDiskId);
+
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    Y_UNIT_TEST(RestartGoodDiskInBrokenGroupNotAllowed) {
+        TEnvironmentSetup env({
+            .NodeCount = 10,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+        });
+
+        env.UpdateSettings(false, false);
+        env.CreateBoxAndPool(1, 10);
+        env.Sim(TDuration::Seconds(30));
+        
+        auto pdiskIds = GetGroupVDisks(env);
+
+        // Making all but one disks read only disintegrates the group
+        for (size_t i = 0; i < pdiskIds.size() - 1; i++) {
+            auto& [nodeId, pdiskId, vslotId, vdiskId] = pdiskIds[i];
+            env.SetVDiskReadOnly(nodeId, pdiskId, vslotId, vdiskId, true, true);
+        }
+
+        // However restarting the owner of a single good disk must be prohibited
+        auto& [targetNodeId, targetPDiskId, unused1, unused2] = pdiskIds[pdiskIds.size() - 1];
+
+        NKikimrBlobStorage::TConfigRequest request;
+
+        NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
+        auto pdiskId = cmd->MutableTargetPDiskId();
+        pdiskId->SetNodeId(targetNodeId);
+        pdiskId->SetPDiskId(targetPDiskId);
+
+        auto response = env.Invoke(request);
+
+        UNIT_ASSERT_C(!response.GetSuccess(), "Restart should've been prohibited");
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Disintegrated");
+    }
+
     Y_UNIT_TEST(RestartOneByOne) {
         TEnvironmentSetup env({
             .NodeCount = 10,

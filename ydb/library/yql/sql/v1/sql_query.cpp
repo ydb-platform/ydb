@@ -1426,6 +1426,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             std::map<TString, TDeferredAtom> kv;
             std::set<TString> toReset;
 
+            bool addDatabase = false;
+            bool removeDatabase = false;
+            TVector<TDeferredAtom> addTables;
+            TVector<TDeferredAtom> removeTables;
+
             switch (node.GetBlock3().Alt_case()) {
             case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
                 if (!ParseBackupCollectionSettings(kv, toReset, node.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1())) {
@@ -1434,7 +1439,15 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 break;
             }
             case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
-                // TODO
+                if (!ParseBackupCollectionEntries(
+                        addDatabase,
+                        removeDatabase,
+                        addTables,
+                        removeTables,
+                        node.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1()))
+                {
+                    return false;
+                }
                 break;
             }
             case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET: {} // do nothing
@@ -1448,8 +1461,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                                 .Settings = std::move(kv),
                                                                 .SettingsToReset = std::move(toReset),
                                                                 .Database = TAlterBackupCollectionParameters::EDatabase::Unchanged,
-                                                                .TablesToAdd = {},
-                                                                .TablesToDrop = {},
+                                                                .TablesToAdd = addTables,
+                                                                .TablesToDrop = removeTables,
                                                                 .MissingOk = false,
                                                             },
                                                             context));

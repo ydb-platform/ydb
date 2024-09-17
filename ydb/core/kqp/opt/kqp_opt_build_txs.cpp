@@ -663,7 +663,7 @@ private:
         return results;
     }
 
-    bool HasTableEffects(const TExprList& effectsList, TExprContext& ctx) const {
+    bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
             if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
                 // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
@@ -712,7 +712,7 @@ private:
             return true;
         });
 
-        if (blackistedNode && HasTableEffects(effectsList, ctx)) {
+        if (blackistedNode && HasTableEffects(effectsList)) {
             ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
                 << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName()));
             return false;

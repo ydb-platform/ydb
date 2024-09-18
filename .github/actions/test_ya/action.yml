@@ -552,7 +552,7 @@ runs:
 
           const files = response.data.map(file => file.filename);
           console.log('Changed files:', files);
-          const file_changed = files.includes('muted_ya.txt');
+          const file_changed = files.includes('.github/config/muted_ya.txt');
           
           return { file_changed };
 

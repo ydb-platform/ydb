@@ -553,7 +553,7 @@ runs:
           const files = response.data.map(file => file.filename);
           console.log('Changed files:', files);
           const file_changed = files.includes('.github/config/muted_ya.txt');
-          core.setOutput('file_changed', fileChanged ? 'true' : 'false');
+          core.setOutput('file_changed', file_changed ? 'true' : 'false');
 
     - name: show diff mute_ya.txt
       if: inputs.build_preset == 'relwithdebinfo' && steps.check_muted_ya.outputs.file_changed == 'true'

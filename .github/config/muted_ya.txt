@@ -378,3 +378,5 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTra
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets-PQConfigTransactionsAtSchemeShard-true
 ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk
 ydb/tests/functional/serializable test.py.test_local
+ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
+ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly

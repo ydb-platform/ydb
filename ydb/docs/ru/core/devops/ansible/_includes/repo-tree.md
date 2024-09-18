@@ -6,7 +6,7 @@
 │   ├── files
 │   │   ├── config.yaml #Конфигурационный файл YDB.
 │   │   └── fq-connector-go
-            └── config.yaml #Конфигурационный файл fq-connector-go.
+│   │       └── config.yaml #Конфигурационный файл fq-connector-go.
 │   ├── inventory #Директория с инвентаризационными файлами.
 │   │   ├── 50-inventory.yaml #Основной инвентаризационный файл.
 │   │   └── 99-inventory-vault.yaml #Зашифрованный инвентаризационный файл, содержащий пароль root пользователя от YDB.

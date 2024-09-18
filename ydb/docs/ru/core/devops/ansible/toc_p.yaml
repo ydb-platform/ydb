@@ -7,7 +7,7 @@ items:
   href: restart.md
 - name: Обновление конфигурации
   href: update-config.md
-- name: Развёртывание YDB с функцией Federated Query
+- name: Развертывание коннектора fq-connector-go
   href: fq-deployment.md
 - name: Наблюдаемость
   include:

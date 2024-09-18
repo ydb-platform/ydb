@@ -1,53 +1,17 @@
-# Развертывание {{ ydb-short-name }} кластера с коннектором для функции Federated Query с помощью Ansible
+# Развертывание коннектора fq-connector-go в кластере {{ ydb-short-name }} с помощью Ansible
 
 [Федеративные запросы](../../concepts/federated_query/index.md) - это способ получать информацию из [внешних источников данных](../../concepts/datamodel/external_data_source.md) без необходимости переноса данных этих источников непосредственно в {{ ydb-full-name }}. Для работы с большинством внешних источников данных необходимо использование [коннектора](../../concepts/federated_query/architecture.md#connectors) - отдельного процесса, в котором инкапсулируется логика взаимодействия YDB с внешним источником.
 
-Эта инструкция описывает развертывание коннектора [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) в [новом](#new-cluster) или [существующем](#existing-cluster) кластере {{ ydb-short-name }} с помощью [Ansible](https://www.ansible.com)
-
-## Развертывание нового кластера {{ ydb-short-name }} с функцией Federated Query и коннектором {#new-cluster}
-
-Перед прочтением рекомендуется ознакомиться с [{#T}](./initial-deployment.md). Развертывание кластера {{ ydb-short-name }} с функцией Federated Query и коннектором [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) похоже на развертывание любого другого {{ ydb-short-name }} кластера.
-
-Шаги развертывания:
-
-1. По [инструкции](./initial-deployment.md) подготовьте сервера, Ansible окружение, загрузите [репозиторий с шаблонами конфигурации](https://github.com/ydb-platform/ydb-ansible-examples).
-1. Выполните [шаги по подготовке шаблона конфигурации](./initial-deployment.md#erasure-setup), но пока **НЕ** запускайте команду `ansible-playbook ydb_platform.ydb.initial_setup`.
-1. Внесите дополнительные изменения в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
-    1. Включите установку fq-connector-go, установив `ydb_install_fq_connector: true`
-    1. Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
-        1. `ydb_fq_connector_archive`: локальный путь к архиву с дистрибутивом fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
-        1. `ydb_fq_connector_binary`: локальный путь к исполняемому файлу fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
-    1. Если необходимо, отредактируйте конфигурационный файл fq-connector-go `files/fq-connector-go/config.yaml` ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
-        1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
-    1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
-1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`:
-    1. Раскомментируйте секцию `query_service_config.generic`. Если необходимо, отредактируйте настройки подключения к коннектору.
-    1. Раскомментируйте `feature_flags` `enable_external_data_sources` и `enable_script_execution_operations`
-1. Опционально: [включите функцию multislot развертывания](#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше).
-1. Выполните команду `ansible-playbook ydb_platform.ydb.initial_setup`, находясь в директории клонированного шаблона.
-
-В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту 8765. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765):
-
-![ydb-web-ui](../../_assets/ydb-web-console.png)
-
-К кластеру применимы инструкции:
-
-* [Мониторинг состояния кластера](./initial-deployment.md#troubleshooting)
-* [Тестирование кластера](./initial-deployment.md#testing)
-
-Также в кластере будет развернут fq-connector-go, что позволит работать с [поддерживаемыми внешними источниками данных](../../concepts/federated_query/architecture.md#supported-datasources). Примеры запросов для подключения к внешнему источнику можно найти в [инструкции](../../concepts/federated_query/index.md).
-
-## Развертывание Federated Query коннектора в существующем {{ ydb-short-name }} кластере {#existing-cluster}
-
-Предполагается, что кластер был развернут по инструкции [первоначального развёртывания](./initial-deployment.md).
+Эта инструкция описывает развертывание коннектора [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) в существующем кластере {{ ydb-short-name }} с помощью [Ansible](https://www.ansible.com). Предполагается, что кластер был развернут по инструкции [первоначального развёртывания](./initial-deployment.md).
 
 Шаги, по добавлению fq-connector-go в такой кластер:
 
 1. Перейдите в ту же директорию, которая использовалась для [первоначального развёртывания](./initial-deployment.md) кластера.
 1. Добавьте дополнительные настройки в раздел `vars` инвентори-файла `files/50-inventory.yaml`:
     1. Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
-        1. `ydb_fq_connector_archive`: локальный путь к архиву с дистрибутивом fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
-        1. `ydb_fq_connector_binary`: локальный путь к исполняемому файлу fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
+
+        {% include [fq-connector-go-install-variants](./_includes/fq-connector-go-install-variants.md) %}
+        
     1. Составьте конфигурационный файл fq-connector-go ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
         1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
     1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
@@ -108,14 +72,6 @@
 1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`:
     1. отредактируйте `query_service_config.generic.connector` по образцу:
 
-    ```yaml
-    query_service_config:
-        generic:
-            connector:
-                endpoint:
-                    host: localhost      # имя хоста, где развернут коннектор
-                offset_from_ic_port: 100 # если в конфигурационном файле коннектора указан порт 19102 (19102 - 19002 = 100)
-                use_ssl: false
-    ```
+    {% include [query-service-config-multislot-connector](./_includes/query-service-config-multislot-connector.md) %}
 
 1. Продолжите установку

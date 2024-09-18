@@ -1,0 +1,2 @@
+* `ydb_fq_connector_archive`: локальный путь к архиву с дистрибутивом fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.
+* `ydb_fq_connector_binary`: локальный путь к исполняемому файлу fq-connector-go, [загруженному](https://github.com/ydb-platform/fq-connector-go/releases) или подготовленному заранее.

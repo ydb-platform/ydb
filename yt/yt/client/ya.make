@@ -53,6 +53,7 @@ SRCS(
     api/rpc_proxy/transaction_impl.cpp
     api/rpc_proxy/row_batch_reader.cpp
     api/rpc_proxy/row_stream.cpp
+    api/rpc_proxy/row_batch_writer.cpp
     api/rpc_proxy/wire_row_stream.cpp
 
     bundle_controller_client/bundle_controller_client.cpp

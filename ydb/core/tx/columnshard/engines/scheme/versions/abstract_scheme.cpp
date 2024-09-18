@@ -81,12 +81,18 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
-    const auto pred = [&](const i32 incomingIdx, const ui32 targetIdx) {
+    ui32 pkColumnsCount = 0;
+    const auto pred = [&](const ui32 incomingIdx, const i32 targetIdx) {
+        if (targetIdx == -1) {
+            return TConclusionStatus::Success();
+        }
         const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (incomingIdx > -1 && !NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
+        if (!NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
             if (pkFieldIdx) {
                 AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+                AFL_VERIFY(!pkColumns[*pkFieldIdx]);
                 pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+                ++pkColumnsCount;
             }
             return TConclusionStatus::Success();
         }
@@ -112,11 +118,16 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                 return TConclusionStatus::Success();
         }
     };
-
+    const auto pred = [&](const std::string& fieldName) -> i32 {
+        return GetIndexInfo().GetCol
+    };
     auto batchConclusion =
-        NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptExt(incomingBatch, dstSchema->fields(), pred);
+        NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(incomingBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;
+    }
+    if (pkColumnsCount < pkColumns.size()) {
+        return TConclusionStatus::Fail("not enough pk fields");
     }
     auto batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));

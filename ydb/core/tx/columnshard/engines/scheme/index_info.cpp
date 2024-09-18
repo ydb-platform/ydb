@@ -42,6 +42,17 @@ std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) con
     return IIndexInfo::GetColumnIdOptional(name);
 }
 
+std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) const {
+    const auto pred = [](const TNameInfo& item, const std::string& value) {
+        return item.GetName() < value;
+    };
+    auto it = std::lower_bound(ColumnNames.begin(), ColumnNames.end(), name, pred);
+    if (it != ColumnNames.end() && it->GetName() == name) {
+        return it - ColumnNames.begin();
+    }
+    return IIndexInfo::GetColumnIndexOptional(name, ColumnNames.size());
+}
+
 TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
     const auto& f = GetColumnFeaturesOptional(id);
     if (!f) {

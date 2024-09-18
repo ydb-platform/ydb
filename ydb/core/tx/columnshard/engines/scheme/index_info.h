@@ -360,6 +360,7 @@ public:
         return result;
     }
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    std::optional<ui32> GetColumnIndexOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
     TString GetColumnName(const ui32 id, bool required = true) const;

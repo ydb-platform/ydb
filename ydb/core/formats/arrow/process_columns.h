@@ -58,8 +58,9 @@ public:
         return *this;
     }
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> AdaptExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
-        const std::vector<std::shared_ptr<arrow::Field>>& columns, const std::function<TConclusionStatus(const i32, const ui32)>& checker) const;
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> AdaptIncomingToDestinationExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
+        const std::vector<std::shared_ptr<arrow::Field>>& columns, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
+        const std::function<i32(const std::string&)>& nameResolver) const;
 
     std::shared_ptr<arrow::RecordBatch> Extract(
         const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames);

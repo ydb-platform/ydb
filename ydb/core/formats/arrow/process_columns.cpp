@@ -263,23 +263,27 @@ TConclusion<TSchemaSubset> TColumnOperator::BuildSequentialSubset(
 }
 namespace {
 template <class TDataContainer>
-TConclusion<std::shared_ptr<TDataContainer>> AdaptExtImpl(const std::shared_ptr<TDataContainer>& incoming,
-    const std::vector<std::shared_ptr<arrow::Field>>& dstFields, const std::function<TConclusionStatus(const i32, const ui32)>& checker,
+TConclusion<std::shared_ptr<TDataContainer>> AdaptIncomingToDestinationExtImpl(const std::shared_ptr<TDataContainer>& incoming,
+    const std::shared_ptr<TSchemaLite>& dstSchema, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
+    const std::function<i32(const std::string&)>& nameResolver,
     const TColumnOperator::ECheckFieldTypesPolicy differentColumnTypesPolicy,
     const TColumnOperator::EAbsentFieldPolicy absentColumnPolicy) {
+    struct TFieldData {
+        ui32 Index;
+        std::shared_ptr<NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn> Column;
+        bool operator<(const TFieldData& item) const {
+            return Index < item.Index;
+        }
+    };
     AFL_VERIFY(incoming);
     AFL_VERIFY(dstFields.size());
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(dstFields.size());
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(dstFields.size());
+    std::vector<TFieldData> resultColumns;
+    resultColumns.reserve(incoming->num_columns());
     ui32 idx = 0;
-    for (auto& dstField : dstFields) {
-        const int index = incoming->schema()->GetFieldIndex(dstField->name());
-        if (index > -1) {
-            columns.push_back(incoming->column(index));
-            fields.emplace_back(dstField);
-            auto srcField = incoming->schema()->field(index);
+    for (auto& srcField : incoming->schema()->fields()) {
+        const int dstIndex = nameResolver(srcField->name());
+        if (dstIndex > -1) {
+            const auto& dstField = dstSchema->GetFieldByIndexVerified(dstIndex);
             switch (differentColumnTypesPolicy) {
                 case TColumnOperator::ECheckFieldTypesPolicy::Verify:
                     AFL_VERIFY(dstField->Equals(srcField))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
@@ -295,17 +299,18 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptExtImpl(const std::shared_ptr<
                 case TColumnOperator::ECheckFieldTypesPolicy::Ignore:
                     break;
             }
-            auto resultCheck = checker(index, idx);
+            auto resultCheck = checker(idx, dstIndex);
             if (resultCheck.IsFail()) {
                 return resultCheck;
             }
+            resultColumns.emplace_back(TFieldData{ .Index = dstIndex, .Column = incoming->column(idx) });
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Skip) {
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Verify) {
-            AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "absent_field")("dst_column", dstField->ToString(true));
+            AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "absent_field")("dst_column", srcField->ToString(true));
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Error) {
             AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "absent_field")(
-                "dst_column", dstField->ToString(true));
-            return TConclusionStatus::Fail("not found column '" + dstField->name() + "'");
+                "dst_column", srcField->ToString(true));
+            return TConclusionStatus::Fail("not found column '" + srcField->name() + "'");
         } else {
             AFL_VERIFY(false);
         }
@@ -314,12 +319,22 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptExtImpl(const std::shared_ptr<
     if (fields.empty()) {
         return TConclusionStatus::Fail("not found any column");
     }
+    std::sort(resultColumns.begin(), resultColumns.end());
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
+    columns.reserve(resultColumns.size());
+    fields.reserve(resultColumns.size());
+    for (auto&& i : resultColumns) {
+        fields.emplace_back(dstSchema->field(i.Index));
+        columns.emplace_back(dstSchema->Column);
+    }
     return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), incoming->num_rows());
 }
 }   // namespace
-TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::AdaptExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
-    const std::vector<std::shared_ptr<arrow::Field>>& dstFields, const std::function<TConclusionStatus(const i32, const ui32)>& checker) const {
-    return AdaptExtImpl(incoming, dstFields, checker, DifferentColumnTypesPolicy, AbsentColumnPolicy);
+TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::AdaptIncomingToDestinationExt(
+    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& dstFields,
+    const std::function<TConclusionStatus(const ui32, const i32)>& checker, const std::function<i32(const std::string&)>& nameResolver) const {
+    return AdaptIncomingToDestinationExtImpl(incoming, dstFields, checker, nameResolver, DifferentColumnTypesPolicy, AbsentColumnPolicy);
 }
 
 }   // namespace NKikimr::NArrow

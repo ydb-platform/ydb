@@ -101,7 +101,7 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
-    void ReportMetadataLatency(TDuration duration);
+    void ReportMetadataLatency(const TDuration& duration);
     void ReportRecompileRequestGet();
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
@@ -295,6 +295,7 @@ public:
 
     void ReportQueryLatency(TKqpDbCountersPtr dbCounters,
         NKikimrKqp::EQueryAction action, const TDuration& duration);
+    void ReportMetadataLatency(const TDuration& duration);
     void ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion);
     void ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTransactionInfo& txInfo);
 

@@ -181,7 +181,7 @@ public:
         QueryState->RequestEv.reset(ev->Release().Release());
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
-            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
+            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, Counters, false, nullptr);
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 

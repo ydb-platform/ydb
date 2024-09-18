@@ -800,7 +800,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 if (entry.Status != EStatus::Ok) {
                     promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
-                    Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                    if (Counters) {
+                        Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                    }
                     return;
                 }
 
@@ -816,7 +818,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                         promise.SetValue(ResultFromError<TResult>(YqlIssue({},
                             TIssuesIds::KIKIMR_SCHEME_MISMATCH, message)));
-                        Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                        if (Counters) {
+                            Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                        }
                         return;
                     }
                 }
@@ -829,7 +833,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             << "\" is expected to be external data source";
 
                     promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST, message)));
-                    Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                    if (Counters) {
+                        Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                    }
                     return;
                 }
 
@@ -841,7 +847,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
                         if (!externalDataSourceMetadata.Success() || !settings.RequestAuthInfo_) {
                             promise.SetValue(externalDataSourceMetadata);
-                            Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                            if (Counters) {
+                                Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                            }
                             return;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
@@ -884,7 +892,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
                         if (!externalTableMetadata.Success()) {
                             promise.SetValue(externalTableMetadata);
-                            Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                            if (Counters) {
+                                Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+                            }
                             return;
                         }
                         settings.WithExternalDatasources_ = true;
@@ -921,7 +931,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             catch (yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
-            Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+            if (Counters) {
+                Counters->ReportMetadataLatency(TInstant::Now() - beforeMetadata);
+            }
         });
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata

@@ -1013,6 +1013,10 @@ void TKqpCounters::ReportQueryLatency(TKqpDbCountersPtr dbCounters,
     }
 }
 
+void TKqpCounters::ReportMetadataLatency(const TDuration& duration) {
+    TKqpCountersBase::ReportMetadataLatency(duration);
+}
+
 void TKqpCounters::ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTransactionInfo& txInfo) {
     TKqpCountersBase::ReportTransaction(txInfo);
     if (dbCounters) {

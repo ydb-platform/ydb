@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -22,12 +23,14 @@ public:
     explicit TKqpTableMetadataLoader(const TString& cluster,
         TActorSystem* actorSystem,
         NYql::TKikimrConfiguration::TPtr config,
+        TIntrusivePtr<TKqpCounters> counters,
         bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
+        , Counters (counters)
         , TempTablesState(std::move(tempTablesState))
     {}
 
@@ -67,6 +70,7 @@ private:
     bool NeedCollectSchemeData;
     TActorSystem* ActorSystem;
     NYql::TKikimrConfiguration::TPtr Config;
+    TIntrusivePtr<TKqpCounters> Counters;
     TKqpTempTablesState::TConstPtr TempTablesState;
 };
 

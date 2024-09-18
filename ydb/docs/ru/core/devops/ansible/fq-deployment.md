@@ -4,17 +4,21 @@
 
 Эта инструкция описывает развертывание коннектора [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) в существующем кластере {{ ydb-short-name }} с помощью [Ansible](https://www.ansible.com). Предполагается, что кластер был развернут по инструкции [первоначального развёртывания](./initial-deployment.md).
 
-Шаги, по добавлению fq-connector-go в такой кластер:
+Шаги по добавлению fq-connector-go в такой кластер:
 
 1. Перейдите в ту же директорию, которая использовалась для [первоначального развёртывания](./initial-deployment.md) кластера.
 1. Добавьте дополнительные настройки в раздел `vars` инвентори-файла `files/50-inventory.yaml`:
+
     1. Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
 
         {% include [fq-connector-go-install-variants](./_includes/fq-connector-go-install-variants.md) %}
 
     1. Составьте конфигурационный файл fq-connector-go ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
+
         1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
+
     1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
+
 1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml` в соответствии с [инструкцией](../../deploy/manual/deploy-ydb-federated-query.md#guide)
 1. Опционально: [включите функцию multislot развертывания](#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше).
 1. Установите fq-connector-go командой `ansible-playbook ydb_platform.ydb.install_connector`.
@@ -46,7 +50,7 @@
 
 {% note info %}
 
-Номер порта interconnect динноды определить по формуле: `19002 + ydb_dynnodes[*].offset`.
+Номер interconnect порта динноды можно определить по формуле: `19002 + ydb_dynnodes[*].offset`.
 
 {% endnote %}
 
@@ -68,8 +72,11 @@
 Шаги, для включения функции multislot развертывания:
 
 1. Внесите дополнительные изменения в раздел `vars` инвентори-файла `files/50-inventory.yaml`:
+
     1. `ydb_fq_connector_multislot`: установите в `true`
+
 1. Отредактируйте конфигурационный файл {{ ydb-short-name }} `files/config.yaml`:
+
     1. отредактируйте `query_service_config.generic.connector` по образцу:
 
     {% include [query-service-config-multislot-connector](./_includes/query-service-config-multislot-connector.md) %}

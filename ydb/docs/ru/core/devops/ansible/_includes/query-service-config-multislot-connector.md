@@ -1,3 +1,4 @@
+
 ```yaml
 query_service_config:
     generic:

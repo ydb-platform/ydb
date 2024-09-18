@@ -199,11 +199,11 @@ all:
 * Раскомментируйте `feature_flags` `enable_external_data_sources` и `enable_script_execution_operations`
 * Если включена [функция multislot развертывания](./fq-deployment.md#multislot), внесите дополнительные изменения в раздел `query_service_config.generic.connector` (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше):
 
-{% include [query-service-config-multislot-connector](./_includes/query-service-config-multislot-connector.md) %}
+  {% include [query-service-config-multislot-connector](./_includes/query-service-config-multislot-connector.md) %}
 
 Остальные секции и настройки конфигурационного файла остаются без изменений.
 
-### Подготовка конфигурационного файла fq-connector-go { #fq-connector-go-config-prepare }
+### Подготовка конфигурационного файла fq-connector-go {#fq-connector-go-config-prepare}
 
 Если [включено развертывание fq-connector-go](#inventory-edit-fq-connector-go), может потребоваться изменить его конфигурационный файл. Конфигурационный файл находится по пути `files/fq-connector-go/config.yaml`. Его описание можно найти [в этой статье](../../deploy/manual/connector.md#fq-connector-go-config).
 

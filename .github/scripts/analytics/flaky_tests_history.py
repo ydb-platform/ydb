@@ -30,6 +30,8 @@ def create_tables(pool,  table_path):
                 `suite_folder` Utf8 NOT NULL,
                 `full_name` Utf8 NOT NULL,
                 `date_window` Date NOT NULL,
+                `build_type` Utf8 NOT NULL,
+                `branch` Utf8 NOT NULL,
                 `days_ago_window` Uint64 NOT NULL,
                 `history` String,
                 `history_class` String,
@@ -52,6 +54,8 @@ def bulk_upsert(table_client, table_path, rows):
         ydb.BulkUpsertColumns()
         .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
         .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
@@ -68,9 +72,13 @@ def bulk_upsert(table_client, table_path, rows):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--days-window', default=5, type=int, help='how many days back we collecting history')
+    parser.add_argument('--build_type',choices=['relwithdebinfo', 'release-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or release-asan')
+    parser.add_argument('--branch', default='main',choices=['main'], type=str, help='branch')
 
     args, unknown = parser.parse_known_args()
     history_for_n_day = args.days_window
+    build_type = args.build_type
+    branch = args.branch
     
     print(f'Getting hostory in window {history_for_n_day} days')
     
@@ -133,7 +141,9 @@ def main():
         history_list,
         dist_hist,
         suite_folder,
-        test_name
+        test_name,
+        '{build_type}' as  build_type,
+        '{branch}' as  branch
     from (
         select
             full_name,
@@ -151,9 +161,8 @@ def main():
                         test_name
                     from  `test_results/test_runs_column`
                     where
-                        status in ('failure','mute')
-                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo','Postcommit_asan')
-                        and branch = 'main'
+                        (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
+                        and branch = '{branch}'
                         and run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
                 ) as tests_with_fails
                 cross join (
@@ -161,9 +170,7 @@ def main():
                         DISTINCT DateTime::MakeDate(run_timestamp) as date_base
                     from  `test_results/test_runs_column`
                     where
-                        status in ('failure','mute')
-                        and job_name in ('Nightly-run', 'Postcommit_relwithdebinfo','Postcommit_asan')
-                        and branch = 'main'
+                        (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
                         and run_timestamp>= Date('{last_date}')
                     ) as date_list
                 ) as test_and_date
@@ -173,18 +180,19 @@ def main():
                         suite_folder || '/' || test_name as full_name,
                         run_timestamp,
                         status
-                        --ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
                     from  `test_results/test_runs_column`
                     where
-                        run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") and
-                        job_name in ('Nightly-run', 'Postcommit_relwithdebinfo')
-                        and build_type = 'relwithdebinfo'
+                        run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
+                        and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
+                        and build_type = '{build_type}'
+                        and branch = '{branch}'
+                    order by full_name,run_timestamp desc
                 )
             ) as hist
             ON test_and_date.full_name=hist.full_name
             where
                 hist.run_timestamp >= test_and_date.date_base -{history_for_n_day}*Interval("P1D") AND
-                hist.run_timestamp <= test_and_date.date_base
+                hist.run_timestamp < test_and_date.date_base + Interval("P1D")
 
         )
         GROUP BY full_name,suite_folder,test_name,date_base
@@ -211,13 +219,15 @@ def main():
         print(f'history data captured, {len(results)} rows')
         for row in results:
             row['count'] = dict(zip(list(row['history_list']), [list(
-                row['history_list']).count(i) for i in list(row['history_list'])]))
+                row['history_list']).count(i) for i in list(row['history_list'])]))                
             prepared_for_update_rows.append({
                 'suite_folder': row['suite_folder'],
                 'test_name': row['test_name'],
                 'full_name': row['full_name'],
                 'date_window': row['date_base'],
                 'days_ago_window': history_for_n_day,
+                'build_type': row['build_type'],
+                'branch': row['branch'],
                 'history': ','.join(row['history_list']).encode('utf8'),
                 'history_class': row['dist_hist'],
                 'pass_count': row['count'].get('passed', 0),

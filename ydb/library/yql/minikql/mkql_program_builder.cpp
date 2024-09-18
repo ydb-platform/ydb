@@ -5892,7 +5892,7 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode dict,
     EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
     const TArrayRef<const ui32>& leftKeyDrops
 ) {
@@ -5923,14 +5923,14 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
             return NewDataLiteral(idx);
         });
 
-    const auto leftFlowItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    const auto leftStreamItems = ValidateBlockStreamType(stream.GetStaticType(), false);
     const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
     TVector<TType*> returnJoinItems;
-    for (size_t i = 0; i < leftFlowItems.size(); i++) {
+    for (size_t i = 0; i < leftStreamItems.size(); i++) {
         if (leftKeyDropsSet.contains(i)) {
             continue;
         }
-        returnJoinItems.push_back(leftFlowItems[i]);
+        returnJoinItems.push_back(leftStreamItems[i]);
     }
 
     const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
@@ -5950,7 +5950,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
                                 : NewOptionalType(payloadItem);
             dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
         }
-        // Block length column has to be the last column in wide block flow item,
+        // Block length column has to be the last column in wide block stream item,
         // so all contents of the dict payload should be appended to the resulting
         // wide type before the block size column.
         const auto blockLenPos = std::prev(returnJoinItems.end());
@@ -5960,10 +5960,10 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
         // optimizers for join types that don't require the right (i.e. dict) part.
         MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
     }
-    TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
+    TType* returnJoinType = NewStreamType(NewMultiType(returnJoinItems));
 
     TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(stream);
     callableBuilder.Add(dict);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));

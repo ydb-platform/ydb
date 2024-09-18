@@ -143,6 +143,11 @@ private:
         const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const;
 
 public:
+    std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
+        AFL_VERIFY(columnIndex < ColumnFeatures.size());
+        return ColumnFeatures[columnIndex]->GetPKColumnIndex();
+    }
+
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
@@ -363,6 +368,10 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    ui32 GetColumnIdByIndexVerified(const ui32 index) const {
+        AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
+        return SchemaColumnIdsWithSpecials[index];
+    }
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;

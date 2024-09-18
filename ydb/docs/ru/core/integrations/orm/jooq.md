@@ -136,44 +136,44 @@ try(CloseableYdbDSLContext dsl = YDB.using(url)) {
 
 `YdbDSLContext` готов к использованию.
 
-## YQL команды 
+## YQL команды
 
 Из синтаксиса YQL доступны следующие команды в `YdbDSLContext`:
 
 - [`UPSERT`](../../yql/reference/syntax/upsert_into.md):
 
-  ```java
-  // generated SQL:
-  // upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
-  public void upsert(YdbDSLContext context) {
-      context.upsertInto(EPISODES)
-              .set(record)
-              .execute();
-  }
-  ```
+```java
+// generated SQL:
+// upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+public void upsert(YdbDSLContext context) {
+    context.upsertInto(EPISODES)
+            .set(record)
+            .execute();
+}
+```
 
--  [`REPLACE`](../../yql/reference/syntax/replace_into.md):
+- [`REPLACE`](../../yql/reference/syntax/replace_into.md):
 
-  ```java
-  // generated SQL:
-  // replace into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
-  public void replace(YdbDSLContext context) {
-      ydbDSLContext.replaceInto(EPISODES)
-              .set(record)
-              .execute();
-  }
-  ```
+```java
+// generated SQL:
+// replace into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+public void replace(YdbDSLContext context) {
+    ydbDSLContext.replaceInto(EPISODES)
+            .set(record)
+            .execute();
+}
+```
 
 - `VIEW index_name`:
 
-  ```java
-  // generated SQL:
-  // select `series`.`series_id`, `series`.`title`, `series`.`series_info`, `series`.`release_date` 
-  // from `series` view `title_name` where `series`.`title` = ?
-  var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
-          .where(SERIES.TITLE.eq(title))
-          .fetchOne();
-  ```
+```java
+// generated SQL:
+// select `series`.`series_id`, `series`.`title`, `series`.`series_info`, `series`.`release_date` 
+// from `series` view `title_name` where `series`.`title` = ?
+var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
+        .where(SERIES.TITLE.eq(title))
+        .fetchOne();
+```
 
 В остальном диалект {{ ydb-short-name }} следует документации JOOQ.
 

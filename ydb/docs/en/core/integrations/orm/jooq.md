@@ -130,7 +130,7 @@ or
 ```java
 String url = "jdbc:ydb:<schema>://<host>:<port>/path/to/database[?saFile=file:~/sa_key.json]";
 try(CloseableYdbDSLContext dsl = YDB.using(url)) {
-        // ...
+    // ...
 }
 ```
 
@@ -142,15 +142,15 @@ The following statements are available from the YQL syntax in `YdbDSLContext`:
 
 - [`UPSERT`](../../yql/reference/syntax/upsert_into.md):
 
-  ```java
-  // generated SQL:
-  // upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
-  public void upsert(YdbDSLContext context) {
-      context.upsertInto(EPISODES)
-              .set(record)
-              .execute();
-  }
-  ```
+```java
+// generated SQL:
+// upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+public void upsert(YdbDSLContext context) {
+    context.upsertInto(EPISODES)
+            .set(record)
+            .execute();
+}
+```
 
 The [`REPLACE`](../../yql/reference/syntax/replace_into.md) command:
 
@@ -166,14 +166,14 @@ public void replace(YdbDSLContext context) {
 
 - `VIEW index_name`:
 
-  ```java
-  // generated SQL:
-  // select `series`.`series_id`, `series`.`title`, `series`.`series_info`, `series`.`release_date` 
-  // from `series` view `title_name` where `series`.`title` = ?
-  var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
-          .where(SERIES.TITLE.eq(title))
-          .fetchOne();
-  ```
+```java
+// generated SQL:
+// select `series`.`series_id`, `series`.`title`, `series`.`series_info`, `series`.`release_date` 
+// from `series` view `title_name` where `series`.`title` = ?
+var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
+        .where(SERIES.TITLE.eq(title))
+        .fetchOne();
+```
 
 In all other respects, the {{ ydb-short-name }} dialect follows the JOOQ documentation.
 

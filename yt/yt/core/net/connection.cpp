@@ -628,8 +628,7 @@ public:
 
     TFuture<void> Close()
     {
-        auto error = TError("Connection closed")
-            << TErrorAttribute("connection", Name_);
+        auto error = AnnotateError(TError("Connection closed"));
         return AbortIO(error);
     }
 
@@ -665,12 +664,17 @@ public:
         return future;
     }
 
-    const TNetworkAddress& LocalAddress() const
+    TConnectionId GetId() const
+    {
+        return Id_;
+    }
+
+    const TNetworkAddress& GetLocalAddress() const
     {
         return LocalAddress_;
     }
 
-    const TNetworkAddress& RemoteAddress() const
+    const TNetworkAddress& GetRemoteAddress() const
     {
         return RemoteAddress_;
     }
@@ -746,7 +750,8 @@ public:
     }
 
 private:
-    const TString Name_;
+    const TConnectionId Id_ = TConnectionId::Create();
+    const TString Endpoint_;
     const TString LoggingTag_;
     const TNetworkAddress LocalAddress_;
     const TNetworkAddress RemoteAddress_;
@@ -768,7 +773,8 @@ private:
         TString filePath,
         const IPollerPtr& poller,
         bool useDeliveryFence)
-        : Name_(Format("File{%v}", filePath))
+        : Endpoint_(Format("File{%v}", filePath))
+        , LoggingTag_(Format("ConnectionId: %v %v", Id_, Endpoint_))
         , FD_(fd)
         , Poller_(std::move(poller))
         , UseDeliveryFence_(useDeliveryFence)
@@ -780,8 +786,8 @@ private:
         const TNetworkAddress& localAddress,
         const TNetworkAddress& remoteAddress,
         IPollerPtr poller)
-        : Name_(Format("FD{%v<->%v}", localAddress, remoteAddress))
-        , LoggingTag_(Format("ConnectionId: %v", Name_))
+        : Endpoint_(Format("FD{%v<->%v}", localAddress, remoteAddress))
+        , LoggingTag_(Format("ConnectionId: %v %v", Id_, Endpoint_))
         , LocalAddress_(localAddress)
         , RemoteAddress_(remoteAddress)
         , FD_(fd)
@@ -894,6 +900,13 @@ private:
     TDelayedExecutorCookie ReadTimeoutCookie_;
     TDelayedExecutorCookie WriteTimeoutCookie_;
 
+    TError AnnotateError(const TError& error) const
+    {
+        return error
+            << TErrorAttribute("connection_id", Id_)
+            << TErrorAttribute("connection_endpoint", Endpoint_);
+    }
+
     TFuture<void> DoWrite(const TSharedRef& data)
     {
         auto write = std::make_unique<TWriteOperation>(data);
@@ -959,8 +972,7 @@ private:
 
             if (error.IsOK()) {
                 if (direction->Operation) {
-                    THROW_ERROR_EXCEPTION("Another IO operation is in progress")
-                        << TErrorAttribute("connection", Name_);
+                    THROW_ERROR(AnnotateError(TError("Another IO operation is in progress")));
                 }
 
                 YT_VERIFY(!direction->Running);
@@ -1010,7 +1022,7 @@ private:
         if (result.IsOK()) {
             direction->BytesTransferred += result.Value().ByteCount;
         } else {
-            result = result << TErrorAttribute("connection", Name_);
+            result = AnnotateError(result);
         }
 
         bool needUnregister = false;
@@ -1154,14 +1166,19 @@ public:
         YT_UNUSED_FUTURE(Impl_->Abort(TError("Connection is abandoned")));
     }
 
-    const TNetworkAddress& LocalAddress() const override
+    TConnectionId GetId() const override
     {
-        return Impl_->LocalAddress();
+        return Impl_->GetId();
     }
 
-    const TNetworkAddress& RemoteAddress() const override
+    const TNetworkAddress& GetLocalAddress() const override
     {
-        return Impl_->RemoteAddress();
+        return Impl_->GetLocalAddress();
+    }
+
+    const TNetworkAddress& GetRemoteAddress() const override
+    {
+        return Impl_->GetRemoteAddress();
     }
 
     int GetHandle() const override

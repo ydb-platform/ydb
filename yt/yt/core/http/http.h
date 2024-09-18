@@ -233,8 +233,9 @@ struct IRequest
 
     virtual const NNet::TNetworkAddress& GetRemoteAddress() const = 0;
 
-    virtual TGuid GetConnectionId() const = 0;
-    virtual TGuid GetRequestId() const = 0;
+    virtual TConnectionId GetConnectionId() const = 0;
+    virtual TRequestId GetRequestId() const = 0;
+
     virtual i64 GetReadByteCount() const = 0;
     virtual TInstant GetStartTime() const = 0;
 

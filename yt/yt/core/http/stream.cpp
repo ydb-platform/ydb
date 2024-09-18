@@ -295,22 +295,17 @@ const TNetworkAddress& THttpInput::GetRemoteAddress() const
     return RemoteAddress_;
 }
 
-TGuid THttpInput::GetConnectionId() const
+TConnectionId THttpInput::GetConnectionId() const
 {
-    return ConnectionId_;
+    return Connection_->GetId();
 }
 
-void THttpInput::SetConnectionId(TGuid connectionId)
-{
-    ConnectionId_ = connectionId;
-}
-
-TGuid THttpInput::GetRequestId() const
+TRequestId THttpInput::GetRequestId() const
 {
     return RequestId_;
 }
 
-void THttpInput::SetRequestId(TGuid requestId)
+void THttpInput::SetRequestId(TRequestId requestId)
 {
     RequestId_ = requestId;
 }
@@ -633,12 +628,7 @@ void THttpOutput::Reset()
     Trailers_.Reset();
 }
 
-void THttpOutput::SetConnectionId(TGuid connectionId)
-{
-    ConnectionId_ = connectionId;
-}
-
-void THttpOutput::SetRequestId(TGuid requestId)
+void THttpOutput::SetRequestId(TRequestId requestId)
 {
     RequestId_ = requestId;
 }

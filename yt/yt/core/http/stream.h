@@ -105,11 +105,10 @@ public:
 
     const NNet::TNetworkAddress& GetRemoteAddress() const override;
 
-    TGuid GetConnectionId() const override;
-    void SetConnectionId(TGuid connectionId);
+    TConnectionId GetConnectionId() const override;
 
-    TGuid GetRequestId() const override;
-    void SetRequestId(TGuid requestId);
+    TRequestId GetRequestId() const override;
+    void SetRequestId(TRequestId requestId);
 
     i64 GetReadByteCount() const override;
 
@@ -149,8 +148,7 @@ private:
     THeadersPtr Headers_;
 
     // Debug.
-    TGuid ConnectionId_;
-    TGuid RequestId_;
+    TRequestId RequestId_;
     i64 StartByteCount_ = 0;
     NNet::TConnectionStatistics StartStatistics_;
     TInstant LastProgressLogTime_;
@@ -215,8 +213,7 @@ public:
     bool IsSafeToReuse() const;
     void Reset();
 
-    void SetConnectionId(TGuid connectionId);
-    void SetRequestId(TGuid requestId);
+    void SetRequestId(TRequestId requestId);
 
     i64 GetWriteByteCount() const override;
 
@@ -228,8 +225,7 @@ private:
     TClosure OnWriteFinish_;
 
     //! Debugging.
-    TGuid ConnectionId_;
-    TGuid RequestId_;
+    TRequestId RequestId_;
     i64 StartByteCount_ = 0;
     NNet::TConnectionStatistics StartStatistics_;
     bool HeadersLogged_ = false;

@@ -9,8 +9,13 @@ CONLYFLAGS(
     -Wno-unused-but-set-variable
 )
 
-CONLYFLAGS(GLOBAL -DLINUX)
-NO_WERROR()
+IF(OS_WINDOWS)
+    CONLYFLAGS(-DWIN32 -DUSE_STDLIB_H)
+ELSEIF(OS_DARWIN OR OS_MACOS)
+    CONLYFLAGS(-DINTERIX -DUSE_STDLIB_H -D_POSIX_SOURCE)
+ELSE()
+    CONLYFLAGS(-DLINUX)
+ENDIF()
 
 SRCS(
     address.c
@@ -40,43 +45,43 @@ SRCS(
     release.c
     sparse.c
     validate.c
-    s_brand.c
+#    s_brand.c
 #    s_customer_address.c
-    s_call_center.c
-    s_catalog.c
-    s_catalog_order.c
-    s_catalog_order_lineitem.c
-    s_catalog_page.c
-    s_catalog_promotional_item.c
-    s_catalog_returns.c
-    s_category.c
-    s_class.c
-    s_company.c
+#    s_call_center.c
+#    s_catalog.c
+#    s_catalog_order.c
+#    s_catalog_order_lineitem.c
+#    s_catalog_page.c
+#    s_catalog_promotional_item.c
+#    s_catalog_returns.c
+#    s_category.c
+#    s_class.c
+#    s_company.c
 #    s_customer.c
-    s_division.c
-    s_inventory.c
-    s_item.c
-    s_manager.c
-    s_manufacturer.c
-    s_market.c
-    s_pline.c
-    s_product.c
-    s_promotion.c
-    s_purchase.c
-    s_reason.c
-    s_store.c
-    s_store_promotional_item.c
-    s_store_returns.c
-    s_subcategory.c
-    s_subclass.c
-    s_warehouse.c
-    s_web_order.c
-    s_web_order_lineitem.c
-    s_web_page.c
-    s_web_promotinal_item.c
-    s_web_returns.c
-    s_web_site.c
-    s_zip_to_gmt.c
+#    s_division.c
+#    s_inventory.c
+#    s_item.c
+#    s_manager.c
+#    s_manufacturer.c
+#    s_market.c
+#    s_pline.c
+#    s_product.c
+#    s_promotion.c
+#    s_purchase.c
+#    s_reason.c
+#    s_store.c
+#    s_store_promotional_item.c
+#    s_store_returns.c
+#    s_subcategory.c
+#    s_subclass.c
+#    s_warehouse.c
+#    s_web_order.c
+#    s_web_order_lineitem.c
+#    s_web_page.c
+#    s_web_promotinal_item.c
+#    s_web_returns.c
+#    s_web_site.c
+#    s_zip_to_gmt.c
     w_call_center.c
     w_catalog_page.c
     w_catalog_returns.c

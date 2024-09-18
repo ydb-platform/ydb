@@ -63,7 +63,7 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
     const auto listTupleType = pgmBuilder.NewListType(leftTuple);
     leftArg = pgmBuilder.Arg(listTupleType);
 
-    const auto leftWideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
+    const auto leftWideStream = pgmBuilder.FromFlow(pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
         [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
             TRuntimeNode::TList wide;
             wide.reserve(tupleType->GetElementsCount());
@@ -71,14 +71,14 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
                 wide.emplace_back(pgmBuilder.Nth(tupleNode, i));
             }
             return wide;
-        });
+        }));
 
-    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind,
+    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideStream, dictNode, joinKind,
                                                       leftKeyColumns, leftKeyDrops);
-    const auto joinItems = GetWideComponents(AS_TYPE(TFlowType, joinNode.GetStaticType()));
+    const auto joinItems = GetWideComponents(AS_TYPE(TStreamType, joinNode.GetStaticType()));
     const auto resultType = AS_TYPE(TTupleType, pgmBuilder.NewTupleType(joinItems));
 
-    const auto rootNode = pgmBuilder.Collect(pgmBuilder.NarrowMap(joinNode,
+    const auto rootNode = pgmBuilder.Collect(pgmBuilder.FromFlow(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(joinNode),
         [&](TRuntimeNode::TList items) -> TRuntimeNode {
             TVector<TRuntimeNode> tupleElements;
             tupleElements.reserve(resultType->GetElementsCount());
@@ -86,7 +86,7 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
                 tupleElements.emplace_back(items[i]);
             }
             return pgmBuilder.NewTuple(tupleElements);
-        }));
+        })));
 
     return rootNode;
 }

@@ -55,7 +55,7 @@ struct TTypeInfoOrder {
     TTypeInfoOrder()
     {}
 
-    TTypeInfoOrder(TTypeIdOrder typeIdOrder, TTypeInfo::TTypeDesc typeDesc = {})
+    TTypeInfoOrder(TTypeIdOrder typeIdOrder, const TTypeInfo::TTypeDesc& typeDesc = {})
         : TypeIdOrder(typeIdOrder)
         , TypeDesc(typeDesc)
     {}

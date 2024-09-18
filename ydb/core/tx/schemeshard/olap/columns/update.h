@@ -15,58 +15,16 @@ namespace NKikimr::NSchemeShard {
 class TOlapColumnDiff {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(TString, FamilyName);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
+    YDB_READONLY_DEF(std::optional<ui32>, ColumnFamilyId);
+    YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+
 public:
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors,
-        const TOlapColumnFamiliesDescription& columnFamilies = {}) {
-        Name = columnSchema.GetName();
-        if (!!columnSchema.GetStorageId()) {
-            StorageId = columnSchema.GetStorageId();
-        }
-        if (!Name) {
-            errors.AddError("empty field name");
-            return false;
-        }
-        if (columnSchema.HasDefaultValue()) {
-            DefaultValue = columnSchema.GetDefaultValue();
-        }
-        if (columnSchema.HasDataAccessorConstructor()) {
-            if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
-                errors.AddError("cannot parse accessor constructor from proto");
-                return false;
-            }
-        }
-        if (columnSchema.HasFamilyName()) {
-            FamilyName = columnSchema.GetFamilyName();
-            NKikimrSchemeOp::TOlapColumn_TSerializer serialzier;
-            if (columnSchema.HasSerializer()) {
-                serialzier = columnSchema.GetSerializer();
-            } else {
-                serialzier.SetClassName("ARROW_SERIALIZER");
-                const TOlapColumnFamilyScheme* family = columnFamilies.GetFamilyByName(columnSchema.GetFamilyName());
-                if (family == nullptr) {
-                    errors.AddError("Family " + columnSchema.GetFamilyName() + " not found in table ");
-                    return false;
-                }
-                auto mutableCompression = serialzier.MutableArrowCompression();
-                mutableCompression->SetCodec(family->GetCodec());
-            }
-            if (!Serializer.DeserializeFromProto(serialzier)) {
-                errors.AddError("Cannot parse serializer info");
-                return false;
-            }
-        }
-        if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
-            errors.AddError("cannot parse dictionary encoding diff from proto");
-            return false;
-        }
-        return true;
-    }
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors);
 };
 
 class TOlapColumnAdd {
@@ -77,22 +35,24 @@ private:
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
     YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
-    YDB_READONLY_DEF(TString, FamilyName);
-    YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
+    YDB_ACCESSOR_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
+    YDB_ACCESSOR_DEF(std::optional<ui32>, ColumnFamilyId);
+    YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
 
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
         : KeyOrder(keyOrder) {
 
     }
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors,
-        const TOlapColumnFamiliesDescription& columnFamilies = {});
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
-    bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
+    bool HasColumnFamily() const;
+    bool ApplySerializer(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
+    bool ApplyDiff(const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool IsKeyColumn() const {
         return !!KeyOrder;
     }
@@ -107,10 +67,8 @@ private:
     YDB_READONLY_DEF(TSet<TString>, DropColumns);
     YDB_READONLY_DEF(TVector<TOlapColumnDiff>, AlterColumns);
 public:
-    bool Parse(const TOlapColumnFamiliesDescription& columnFamilies, const NKikimrSchemeOp::TColumnTableSchema& tableSchema,
-        IErrorCollector& errors, bool allowNullKeys = false);
-    bool Parse(const TOlapColumnFamiliesDescription& columnFamilies, const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest,
-        IErrorCollector& errors);
+    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
+    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
 };
 
 }

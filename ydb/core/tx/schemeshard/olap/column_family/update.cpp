@@ -1,63 +1,82 @@
 #include "update.h"
 
+#include <ydb/core/formats/arrow/serializer/native.h>
+
 namespace NKikimr::NSchemeShard {
+
+NKikimr::TConclusion<std::shared_ptr<NArrow::NSerialization::ISerializer>> TOlapColumnFamilyHelper::ParseSerializer(
+    const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer) {
+    std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
+    if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {
+        Serializer = std::make_shared<NArrow::NSerialization::TNativeSerializer>();
+        Serializer->DeserializeFromProto(serializer);
+    } else {
+        return NKikimr::TConclusionStatus::Fail("Parse serializer in TOlapColumnFamilu: Unknow ClassName");
+    }
+    return Serializer;
+}
 
 bool TOlapColumnFamlilyDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnFamilyDiff& diffColumnFamily, IErrorCollector& errors) {
     if (!diffColumnFamily.HasName()) {
         errors.AddError("Column family: empty field name");
         return false;
     }
-    if (!diffColumnFamily.HasColumnCodec()) {
-        errors.AddError("Column family: empty field codec");
+    if (!diffColumnFamily.HasSerializer()) {
+        errors.AddError("Column family: empty field serializer");
         return false;
     }
 
     Name = diffColumnFamily.GetName();
-    Codec = diffColumnFamily.GetColumnCodec();
+    auto resultParseSerializer = ParseSerializer(diffColumnFamily.GetSerializer());
+    if (resultParseSerializer.IsFail()) {
+        errors.AddError(resultParseSerializer.GetErrorMessage());
+        return false;
+    }
     return true;
 }
 
-bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors) {
-    // if (!columnFamily.HasId()) {
-    //     errors.AddError("Column family: empty field Id");
-    //     return false;
-    // }
-
+bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnFamily& columnFamily, IErrorCollector& errors) {
     if (!columnFamily.HasName()) {
         errors.AddError("Column family: empty field Name");
         return false;
     }
 
-    if (!columnFamily.HasColumnCodec()) {
-        errors.AddError("Column family: empty field Codec");
+    if (!columnFamily.HasSerializer()) {
+        errors.AddError("Column family: empty field Serializer");
         return false;
     }
 
-    // Id = columnFamily.GetId();
     Name = columnFamily.GetName();
-    Codec = columnFamily.GetColumnCodec();
+    auto resultParseSerializer = ParseSerializer(columnFamily.GetSerializer());
+    if (resultParseSerializer.IsFail()) {
+        errors.AddError(resultParseSerializer.GetErrorMessage());
+        return false;
+    }
+    SerializerContainer = *resultParseSerializer;
     return true;
 }
 
-void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily) {
-    // Id = columnFamily.GetId();
+void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnFamily& columnFamily) {
     Name = columnFamily.GetName();
-    Codec = columnFamily.GetColumnCodec();
+    auto resultParseSerializer = ParseSerializer(columnFamily.GetSerializer());
+    Y_ABORT_UNLESS(!resultParseSerializer.IsFail());
+    SerializerContainer = *resultParseSerializer;
 }
 
-void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& familyDescription) const {
-    // familyDescription.SetId(Id);
-    familyDescription.SetName(Name);
-    familyDescription.SetColumnCodec(Codec);
+void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TOlapColumnFamily& columnFamily) const {
+    columnFamily.SetName(Name);
+    auto serializer = columnFamily.MutableSerializer();
+    SerializerContainer->SerializeToProto(*serializer);
+    serializer->SetClassName(SerializerContainer->GetClassName());
 }
 
 bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFamily, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumnFamily.GetName());
-    if (!diffColumnFamily.GetCodec()) {
-        errors.AddError("Column family: empty field Codec");
+    if (!diffColumnFamily.GetSerializerContainer()) {
+        errors.AddError("Column family: empty field Serializer");
         return false;
     }
-    Codec = diffColumnFamily.GetCodec();
+    SerializerContainer = diffColumnFamily.GetSerializerContainer();
     return true;
 }
 

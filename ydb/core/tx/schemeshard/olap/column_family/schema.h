@@ -3,40 +3,41 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TOlapColumnFamilyScheme: public TOlapColumnFamlilyAdd {
+class TOlapColumnFamily: public TOlapColumnFamlilyAdd {
 private:
     using TBase = TOlapColumnFamlilyAdd;
+    YDB_READONLY(ui32, Id, Max<ui32>());
 
 public:
-    TOlapColumnFamilyScheme() = default;
-
-    TOlapColumnFamilyScheme(const TOlapColumnFamlilyAdd& base)
+    TOlapColumnFamily() = default;
+    TOlapColumnFamily(const TOlapColumnFamlilyAdd& base, ui32 Id)
         : TBase(base)
+        , Id(Id)
     {
     }
 
-    void Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const;
-    void ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily);
+    void Serialize(NKikimrSchemeOp::TOlapColumnFamily& columnFamily) const;
+    void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnFamily& columnFamily);
 };
 
 class TOlapColumnFamiliesDescription {
 public:
 private:
-    using TOlapColumnFamily = TOlapColumnFamilyScheme;
-    using TOlapColumnFamilies = TVector<TOlapColumnFamily>;
+    using TOlapColumnFamilies = TMap<ui32, TOlapColumnFamily>;
     using TOlapColumnFamiliesByName = THashMap<TString, ui32>;
 
     YDB_READONLY_DEF(TOlapColumnFamilies, ColumnFamilies);
     YDB_READONLY_DEF(TOlapColumnFamiliesByName, ColumnFamiliesByName);
 
 public:
-    const TOlapColumnFamilyScheme* GetFamilyById(const ui32 id) const noexcept;
-    const TOlapColumnFamilyScheme* GetByIdVerified(const ui32 id) const noexcept;
-    const TOlapColumnFamilyScheme* GetFamilyByName(const TString& name) const noexcept;
+    const TOlapColumnFamily* GetById(const ui32 id) const noexcept;
+    const TOlapColumnFamily* GetByIdVerified(const ui32 id) const noexcept;
+    const TOlapColumnFamily* GetByName(const TString& name) const noexcept;
 
-    bool ApplyUpdate(const TOlapColumnFamiliesUpdate& schemaUpdate, IErrorCollector& errors);
+    bool ApplyUpdate(
+        const TOlapColumnFamiliesUpdate& schemaUpdate, IErrorCollector& errors, ui32& NextColumnFamilyId, THashSet<ui32>& alterColumnFamilyId);
 
-    void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
+    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
 };
 }

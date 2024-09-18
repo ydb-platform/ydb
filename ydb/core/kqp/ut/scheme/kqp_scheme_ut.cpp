@@ -7971,7 +7971,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
 
-    TString eColumnCodecToString(const NKikimrSchemeOp::EColumnCodec& codec) {
+    TString EColumnCodecToString(const NKikimrSchemeOp::EColumnCodec& codec) {
         switch (codec) {
             case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
                 return "UNCOMPRESSED";
@@ -7993,6 +7993,26 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 return "LZ4_HADOOP";
         }
         return "";
+    }
+
+    TString GetNameCodecFromSerializer(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer) {
+        return EColumnCodecToString(serializer.GetArrowCompression().GetCodec());
+    }
+
+    TString GetNameCodecFromSchema(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
+        return GetNameCodecFromSerializer(schema.GetColumnFamilies()[index].GetSerializer());
+    }
+
+    TString GetColumnFamilyName(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
+        return schema.GetColumnFamilies()[index].GetName();
+    }
+
+    ui32 GetColumnFamilyId(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
+        return schema.GetColumnFamilies()[index].GetId();
+    }
+
+    TString GetNameCodecFromColumn(const NKikimrSchemeOp::TOlapColumnDescription& column) {
+        return EColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec());
     }
 
     Y_UNIT_TEST(CreateWithDefaultColumnFamily) {
@@ -8020,15 +8040,18 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         NKikimrSchemeOp::EColumnCodec expectedCodec = NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY;
 
         UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
-        UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[0].GetName(), "default");
-        UNIT_ASSERT_EQUAL(eColumnCodecToString(schema.GetColumnFamilies()[0].GetColumnCodec()), eColumnCodecToString(expectedCodec));
+        UNIT_ASSERT(schema.GetColumnFamilies()[0].HasSerializer());
+        UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, 0), 0);
+        UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, 0), "default");
+        UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, 0), EColumnCodecToString(expectedCodec));
+
         for (const auto& column : schema.GetColumns()) {
             UNIT_ASSERT(column.HasSerializer());
-            UNIT_ASSERT_EQUAL_C(
-                column.GetFamilyName(), "default", TStringBuilder() << "family for column " << column.GetName() << " is not default");
-            UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                eColumnCodecToString(expectedCodec),
-                TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be " << eColumnCodecToString(expectedCodec) << ")");
+            UNIT_ASSERT_EQUAL_C(column.GetColumnFamilyId(), 0, TStringBuilder() << "Family id in column " << column.GetName() << " is not 0");
+            UNIT_ASSERT_EQUAL_C(column.GetColumnFamilyId(), GetColumnFamilyId(schema, 0),
+                TStringBuilder() << "family for column " << column.GetName() << " is not default");
+            UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(column), EColumnCodecToString(expectedCodec),
+                TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be " << EColumnCodecToString(expectedCodec) << ")");
         }
     }
 
@@ -8069,19 +8092,20 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD, NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4 };
         UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), columnFamiliesName.size());
         for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-            UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-            UNIT_ASSERT_EQUAL(
-                eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+            UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+            UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+            UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+            UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
         }
 
         auto columns = schema.GetColumns();
         for (ui32 i = 0; i < (ui32)columnFamiliesName.size(); i++) {
-            UNIT_ASSERT_EQUAL_C(columns[i].GetFamilyName(), columnFamiliesName[i],
+            UNIT_ASSERT(columns[i].HasSerializer());
+            UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), GetColumnFamilyId(schema, i),
                 TStringBuilder() << "family for column " << columns[i].GetName() << " is not " << columnFamiliesName[i]);
-            UNIT_ASSERT_EQUAL_C(eColumnCodecToString(columns[i].GetSerializer().GetArrowCompression().GetCodec()),
-                eColumnCodecToString(columnFamiliesCodec[i]),
+            UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(columns[i]), EColumnCodecToString(columnFamiliesCodec[i]),
                 TStringBuilder() << "Wrong codec for column " << columns[i].GetName() << " (must be "
-                                 << eColumnCodecToString(columnFamiliesCodec[i]) << ")");
+                                 << EColumnCodecToString(columnFamiliesCodec[i]) << ")");
         }
     }
 
@@ -8113,17 +8137,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
         {
-            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
-            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
-            }
-        }
-
-        {
             auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
                     ADD FAMILY family1 (
                         DATA = "test",
@@ -8135,9 +8148,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
             for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+                UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+                UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+                UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+                UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
             }
         }
 
@@ -8156,14 +8170,15 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 4);
             for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+                UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+                UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+                UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+                UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
             }
         }
     }
 
-    Y_UNIT_TEST(AddColumnWithFamily) {
+    Y_UNIT_TEST(AddColumnWithColumnFamily) {
         TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
         auto tableClient = runner.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -8189,29 +8204,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        auto runtime = runner.GetTestServer().GetRuntime();
-        TActorId sender = runtime->AllocateEdgeActor();
-        {
-            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
-            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
-            }
-
-            for (const auto& column : schema.GetColumns()) {
-                UNIT_ASSERT(column.HasSerializer());
-                ui32 indexFamily = indexColumnFamilies[column.GetId() - 1];
-                UNIT_ASSERT_EQUAL(column.GetFamilyName(), columnFamiliesName[indexFamily]);
-                UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                    eColumnCodecToString(columnFamiliesCodec[indexFamily]),
-                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                     << eColumnCodecToString(columnFamiliesCodec[indexFamily]) << ")");
-            }
-        }
-
         {
             auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
                     ADD FAMILY family1 (
@@ -8219,26 +8211,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                         COMPRESSION = "zstd");)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
-            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
-            }
-
-            for (const auto& column : schema.GetColumns()) {
-                UNIT_ASSERT(column.HasSerializer());
-                ui32 indexFamily = indexColumnFamilies[column.GetId() - 1];
-                UNIT_ASSERT_EQUAL(column.GetFamilyName(), columnFamiliesName[indexFamily]);
-                UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                    eColumnCodecToString(columnFamiliesCodec[indexFamily]),
-                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                     << eColumnCodecToString(columnFamiliesCodec[indexFamily]) << ")");
-            }
         }
+
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
 
         {
             auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
@@ -8250,19 +8226,22 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
             for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+                UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+                UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+                UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+                UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
             }
 
-            for (const auto& column : schema.GetColumns()) {
-                UNIT_ASSERT(column.HasSerializer());
-                ui32 indexFamily = indexColumnFamilies[column.GetId() - 1];
-                UNIT_ASSERT_EQUAL(column.GetFamilyName(), columnFamiliesName[indexFamily]);
-                UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                    eColumnCodecToString(columnFamiliesCodec[indexFamily]),
-                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                     << eColumnCodecToString(columnFamiliesCodec[indexFamily]) << ")");
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < (ui32)columns.size(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), GetColumnFamilyId(schema, columns[i].GetColumnFamilyId()),
+                    TStringBuilder() << "family for column " << columns[i].GetName() << " is not "
+                                     << columnFamiliesName[columns[i].GetColumnFamilyId()]);
+                UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(columns[i]),
+                    EColumnCodecToString(columnFamiliesCodec[columns[i].GetColumnFamilyId()]),
+                    TStringBuilder() << "Wrong codec for column " << columns[i].GetName() << " (must be "
+                                     << EColumnCodecToString(columnFamiliesCodec[i]) << ")");
             }
         }
 
@@ -8280,45 +8259,22 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 3);
             for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+                UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+                UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+                UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+                UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
             }
 
-            for (const auto& column : schema.GetColumns()) {
-                UNIT_ASSERT(column.HasSerializer());
-                ui32 indexFamily = indexColumnFamilies[column.GetId() - 1];
-                UNIT_ASSERT_EQUAL(column.GetFamilyName(), columnFamiliesName[indexFamily]);
-                UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                    eColumnCodecToString(columnFamiliesCodec[indexFamily]),
-                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                     << eColumnCodecToString(columnFamiliesCodec[indexFamily]) << ")");
-            }
-        }
-
-        {
-            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
-                    ADD COLUMN Value3 Uint32 FAMILY family1;)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
-            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
-            }
-
-            for (const auto& column : schema.GetColumns()) {
-                UNIT_ASSERT(column.HasSerializer());
-                ui32 indexFamily = indexColumnFamilies[column.GetId() - 1];
-                UNIT_ASSERT_EQUAL(column.GetFamilyName(), columnFamiliesName[indexFamily]);
-                UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                    eColumnCodecToString(columnFamiliesCodec[indexFamily]),
-                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                     << eColumnCodecToString(columnFamiliesCodec[indexFamily]) << ")");
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < (ui32)columns.size(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), GetColumnFamilyId(schema, columns[i].GetColumnFamilyId()),
+                    TStringBuilder() << "family for column " << columns[i].GetName() << " is not "
+                                     << columnFamiliesName[columns[i].GetColumnFamilyId()]);
+                UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(columns[i]),
+                    EColumnCodecToString(columnFamiliesCodec[columns[i].GetColumnFamilyId()]),
+                    TStringBuilder() << "Wrong codec for column " << columns[i].GetName() << " (must be "
+                                     << EColumnCodecToString(columnFamiliesCodec[i]) << ")");
             }
         }
     }
@@ -8354,25 +8310,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         auto runtime = runner.GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
-        {
-            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
-            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
-            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
-            }
-
-            for (const auto& column : schema.GetColumns()) {
-                UNIT_ASSERT(column.HasSerializer());
-                UNIT_ASSERT_EQUAL(column.GetFamilyName(), "default");
-                UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                    eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
-                    TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                     << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY) << ")");
-            }
-        }
 
         {
             auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
@@ -8382,27 +8319,19 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
             auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 2);
-            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
-            }
 
             for (const auto& column : schema.GetColumns()) {
                 UNIT_ASSERT(column.HasSerializer());
                 if (column.GetName() == "Value1") {
-                    UNIT_ASSERT_EQUAL(column.GetFamilyName(), "family1");
-                    UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD),
+                    UNIT_ASSERT_EQUAL(column.GetColumnFamilyId(), 1);
+                    UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(column), EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD),
                         TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                         << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) << ")");
+                                         << EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) << ")");
                 } else {
-                    UNIT_ASSERT_EQUAL(column.GetFamilyName(), "default");
-                    UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
+                    UNIT_ASSERT_EQUAL(column.GetColumnFamilyId(), 0);
+                    UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(column), EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
                         TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                         << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY) << ")");
+                                         << EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY) << ")");
                 }
             }
         }
@@ -8410,7 +8339,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
                     ADD FAMILY family2 (
-                        DATA = "test", 
+                        DATA = "test",
                         COMPRESSION = "lz4"),
                     ALTER COLUMN Value2 SET FAMILY family2;)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -8420,32 +8349,92 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 3);
             for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
-                UNIT_ASSERT_EQUAL(schema.GetColumnFamilies()[i].GetName(), columnFamiliesName[i]);
-                UNIT_ASSERT_EQUAL(
-                    eColumnCodecToString(schema.GetColumnFamilies()[i].GetColumnCodec()), eColumnCodecToString(columnFamiliesCodec[i]));
+                UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+                UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+                UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+                UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
             }
 
             for (const auto& column : schema.GetColumns()) {
                 UNIT_ASSERT(column.HasSerializer());
                 if (column.GetName() == "Value1" || column.GetName() == "Value3") {
-                    UNIT_ASSERT_EQUAL(column.GetFamilyName(), "family1");
-                    UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD),
+                    UNIT_ASSERT_EQUAL(column.GetColumnFamilyId(), 1);
+                    UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(column), EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD),
                         TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                         << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) << ")");
+                                         << EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) << ")");
                 } else if (column.GetName() == "Value2") {
-                    UNIT_ASSERT_EQUAL(column.GetFamilyName(), "family2");
-                    UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4),
+                    UNIT_ASSERT_EQUAL(column.GetColumnFamilyId(), 2);
+                    UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(column), EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4),
                         TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                         << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4) << ")");
+                                         << EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4) << ")");
                 } else {
-                    UNIT_ASSERT_EQUAL(column.GetFamilyName(), "default");
-                    UNIT_ASSERT_EQUAL_C(eColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec()),
-                        eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
+                    UNIT_ASSERT_EQUAL(column.GetColumnFamilyId(), 0);
+                    UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(column), EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY),
                         TStringBuilder() << "Wrong codec for column " << column.GetName() << " (must be "
-                                         << eColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY) << ")");
+                                         << EColumnCodecToString(NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY) << ")");
                 }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AlterColumnFamily) {
+        TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family2,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ),
+                FAMILY family2 (
+                     DATA = "test",
+                     COMPRESSION = "lz4"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY family1 SET COMPRESSION "LZ4";)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto runtime = runner.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            std::vector<TString> columnFamiliesName = { "default", "family1", "family2" };
+            std::vector<NKikimrSchemeOp::EColumnCodec> columnFamiliesCodec = { NKikimrSchemeOp::EColumnCodec::ColumnCodecSNAPPY,
+                NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4, NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4 };
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), columnFamiliesName.size());
+            for (ui32 i = 0; i < schema.ColumnFamiliesSize(); i++) {
+                UNIT_ASSERT(schema.GetColumnFamilies()[i].HasSerializer());
+                UNIT_ASSERT_EQUAL(GetColumnFamilyId(schema, i), i);
+                UNIT_ASSERT_EQUAL(GetColumnFamilyName(schema, i), columnFamiliesName[i]);
+                UNIT_ASSERT_EQUAL(GetNameCodecFromSchema(schema, i), EColumnCodecToString(columnFamiliesCodec[i]));
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < (ui32)columnFamiliesName.size(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), GetColumnFamilyId(schema, columns[i].GetColumnFamilyId()),
+                    TStringBuilder() << "family for column " << columns[i].GetName() << " is not "
+                                     << columnFamiliesName[columns[i].GetColumnFamilyId()]);
+                UNIT_ASSERT_EQUAL_C(GetNameCodecFromColumn(columns[i]), EColumnCodecToString(columnFamiliesCodec[i]),
+                    TStringBuilder() << "Wrong codec for column " << columns[i].GetName() << " (must be "
+                                     << EColumnCodecToString(columnFamiliesCodec[i]) << ")");
             }
         }
     }

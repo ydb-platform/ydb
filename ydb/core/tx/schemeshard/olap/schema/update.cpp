@@ -2,24 +2,16 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TOlapSchemaUpdate::PutCurrentFamilies(const TOlapColumnFamiliesDescription& currentColumnFamilies) {
-    CurrentColumnFamilies = currentColumnFamilies;
-}
-
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
         if (tableSchema.HasEngine()) {
             Engine = tableSchema.GetEngine();
         }
 
-        TOlapColumnFamiliesUpdate columnFamiliesUpdate;
-        if (!columnFamiliesUpdate.Parse(tableSchema, errors)) {
-            return false;
-        }
-        if (!CurrentColumnFamilies.ApplyUpdate(columnFamiliesUpdate, errors)) {
+        if (!ColumnFamilies.Parse(tableSchema, errors)) {
             return false;
         }
 
-        if (!Columns.Parse(CurrentColumnFamilies, tableSchema, errors, allowNullKeys)) {
+        if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
             return false;
         }
 
@@ -27,16 +19,11 @@ void TOlapSchemaUpdate::PutCurrentFamilies(const TOlapColumnFamiliesDescription&
     }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        TOlapColumnFamiliesUpdate columnFamiliesUpdate;
-        if (!columnFamiliesUpdate.Parse(alterRequest, errors)) {
+        if (!ColumnFamilies.Parse(alterRequest, errors)) {
             return false;
         }
 
-        if (!CurrentColumnFamilies.ApplyUpdate(columnFamiliesUpdate, errors)) {
-            return false;
-        }
-
-        if (!Columns.Parse(CurrentColumnFamilies, alterRequest, errors)) {
+        if (!Columns.Parse(alterRequest, errors)) {
             return false;
         }
 

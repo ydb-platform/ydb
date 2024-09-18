@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 
@@ -6,29 +7,30 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TOlapColumnFamlilyDiff {
+class TOlapColumnFamilyHelper {
+protected:
+    [[nodiscard]] NKikimr::TConclusion<std::shared_ptr<NArrow::NSerialization::ISerializer>> ParseSerializer(
+        const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer);
+};
+
+class TOlapColumnFamlilyDiff: public TOlapColumnFamilyHelper {
 private:
-    // YDB_READONLY_DEF(ui32, Id);
-    YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(NKikimrSchemeOp::EColumnCodec, Codec);
-    YDB_READONLY_DEF(TMaybe<i32>, CodecLevel);
+    YDB_ACCESSOR_DEF(TString, Name);
+    YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, SerializerContainer);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnFamilyDiff& diffColumnFamily, IErrorCollector& errors);
 };
 
-class TOlapColumnFamlilyAdd {
+class TOlapColumnFamlilyAdd: public TOlapColumnFamilyHelper {
 private:
-    // YDB_READONLY_DEF(ui32, Id);
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(TMaybe<TString>, Data);
-    YDB_READONLY_DEF(NKikimrSchemeOp::EColumnCodec, Codec);
-    YDB_READONLY_DEF(TMaybe<i32>, CodecLevel);
+    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, SerializerContainer);
 
 public:
-    bool ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors);
-    void ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily);
-    void Serialize(NKikimrSchemeOp::TFamilyDescription& columnSchema) const;
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnFamily& columnFamily, IErrorCollector& errors);
+    void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnFamily& columnFamily);
+    void Serialize(NKikimrSchemeOp::TOlapColumnFamily& columnSchema) const;
     bool ApplyDiff(const TOlapColumnFamlilyDiff& diffColumn, IErrorCollector& errors);
 };
 

@@ -61,7 +61,11 @@ private:
 
         for (auto&& family : dsDescription.GetPartitionConfig().GetColumnFamilies()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
-            alterSchema->AddAddColumnFamily()->CopyFrom(family);
+            NKikimrSchemeOp::TOlapColumnFamily* olapColumnFamily = alterSchema->AddAddColumnFamily();
+            auto parse = ParseFromDSRequest(family, *olapColumnFamily);
+            if (parse.IsFail()) {
+                return parse;
+            }
         }
 
         return TConclusionStatus::Success();
@@ -69,7 +73,6 @@ private:
 
     TConclusionStatus ParseFromDSRequest(
         const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn) const {
-        Cerr << "ParseFromDSRequest from TColumn " << dsColumn.GetName() << " has type " << dsColumn.HasType() << Endl;
         olapColumn.SetName(dsColumn.GetName());
         if (dsColumn.HasType()) {
             olapColumn.SetType(dsColumn.GetType());
@@ -89,8 +92,10 @@ private:
         if (dsColumn.HasDefaultFromSequence()) {
             return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }
-        if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            olapColumn.SetFamilyName(dsColumn.GetFamilyName());
+        if (dsColumn.HasFamilyName()) {
+            olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        } else if (dsColumn.HasFamily()) {
+            olapColumn.SetColumnFamilyId(dsColumn.GetFamily());
         }
         return TConclusionStatus::Success();
     }
@@ -101,9 +106,21 @@ private:
         if (dsColumn.HasDefaultFromSequence()) {
             return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }
-        if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            olapColumn.SetFamilyName(dsColumn.GetFamilyName());
+        if (dsColumn.HasFamilyName()) {
+            olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        } else if (dsColumn.HasFamily()) {
+            olapColumn.SetColumnFamilyId(dsColumn.GetFamily());
         }
+        return TConclusionStatus::Success();
+    }
+
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TFamilyDescription& dsColumnFamily, NKikimrSchemeOp::TOlapColumnFamily& olapColumnFamily) const {
+        olapColumnFamily.SetName(dsColumnFamily.GetName());
+        auto serializer = olapColumnFamily.MutableSerializer();
+        serializer->SetClassName("ARROW_SERIALIZER");
+        auto arrowCompression = serializer->MutableArrowCompression();
+        arrowCompression->SetCodec(dsColumnFamily.GetColumnCodec());
         return TConclusionStatus::Success();
     }
 

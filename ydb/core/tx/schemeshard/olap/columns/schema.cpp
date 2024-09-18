@@ -15,7 +15,8 @@ void TOlapColumnSchema::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescr
     Id = columnSchema.GetId();
 }
 
-bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, const TOlapColumnFamiliesDescription& columnFamilies,
+    const THashSet<ui32>& alterColumnFamilyId, IErrorCollector& errors, ui32& nextEntityId) {
     if (Columns.empty() && schemaUpdate.GetAddColumns().empty()) {
         errors.AddError(NKikimrScheme::StatusSchemeError, "No add columns specified");
         return false;
@@ -42,6 +43,9 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
+        if (newColumn.HasColumnFamily() && !newColumn.ApplySerializer(columnFamilies, errors)) {
+            return false;
+        }
 
         Y_ABORT_UNLESS(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
         Y_ABORT_UNLESS(Columns.emplace(newColumn.GetId(), std::move(newColumn)).second);
@@ -56,7 +60,7 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
             auto itColumn = Columns.find(it->second);
             Y_ABORT_UNLESS(itColumn != Columns.end());
             TOlapColumnSchema& newColumn = itColumn->second;
-            if (!newColumn.ApplyDiff(columnDiff, errors)) {
+            if (!newColumn.ApplyDiff(columnDiff, columnFamilies, errors)) {
                 return false;
             }
         }
@@ -87,6 +91,21 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
         }
         ColumnsByName.erase(columnName);
         Columns.erase(columnInfo->GetId());
+    }
+
+    // Alter column family
+    if (!alterColumnFamilyId.empty()) {
+        for (auto& [_, column] : Columns) {
+            if (!column.GetColumnFamilyId().has_value()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot alter family for column `" << column.GetName() << "`. Column family is not set");
+                return false;
+            }
+            ui32 id = column.GetColumnFamilyId().value();
+            if (alterColumnFamilyId.contains(id)) {
+                column.SetSerializer(columnFamilies.GetByIdVerified(id)->GetSerializerContainer());
+            }
+        }
     }
 
     return true;

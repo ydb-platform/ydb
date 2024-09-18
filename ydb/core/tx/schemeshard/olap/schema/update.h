@@ -12,10 +12,9 @@ class TOlapSchemaUpdate {
     YDB_READONLY_DEF(TOlapIndexesUpdate, Indexes);
     YDB_READONLY_DEF(TOlapOptionsUpdate, Options);
     YDB_READONLY_OPT(NKikimrSchemeOp::EColumnTableEngine, Engine);
-    YDB_READONLY_DEF(TOlapColumnFamiliesDescription, CurrentColumnFamilies);
+    YDB_READONLY_DEF(TOlapColumnFamiliesUpdate, ColumnFamilies);
 
 public:
-    void PutCurrentFamilies(const TOlapColumnFamiliesDescription& currentColumnFamilies);
     bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
 };

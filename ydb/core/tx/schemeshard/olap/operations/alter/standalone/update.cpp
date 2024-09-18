@@ -18,7 +18,6 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     if (alterCS.HasAlterSchema()) {
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
-        schemaUpdate.PutCurrentFamilies(originalSchema.GetColumnFamilies());
         if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
             return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }

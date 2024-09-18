@@ -4,60 +4,71 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TOlapColumnFamilyScheme::Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const {
+void TOlapColumnFamily::Serialize(NKikimrSchemeOp::TOlapColumnFamily& columnFamily) const {
+    columnFamily.SetId(Id);
     TBase::Serialize(columnFamily);
 }
 
-void TOlapColumnFamilyScheme::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily) {
+void TOlapColumnFamily::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnFamily& columnFamily) {
+    Id = columnFamily.GetId();
     TBase::ParseFromLocalDB(columnFamily);
 }
 
-const TOlapColumnFamilyScheme* TOlapColumnFamiliesDescription::GetFamilyById(const ui32 id) const noexcept {
-    if (id < ColumnFamilies.size()) {
-        return &ColumnFamilies[id];
+const TOlapColumnFamily* TOlapColumnFamiliesDescription::GetById(const ui32 id) const noexcept {
+    auto it = ColumnFamilies.find(id);
+    if (it == ColumnFamilies.end()) {
+        return nullptr;
     }
-    return nullptr;
+    return &it->second;
 }
 
-const NKikimr::NSchemeShard::TOlapColumnFamilyScheme* TOlapColumnFamiliesDescription::GetByIdVerified(const ui32 id) const noexcept {
-    return TValidator::CheckNotNull(GetFamilyById(id));
+const TOlapColumnFamily* TOlapColumnFamiliesDescription::GetByIdVerified(const ui32 id) const noexcept {
+    return TValidator::CheckNotNull(GetById(id));
 }
 
-const TOlapColumnFamilyScheme* TOlapColumnFamiliesDescription::GetFamilyByName(const TString& name) const noexcept {
+const TOlapColumnFamily* TOlapColumnFamiliesDescription::GetByName(const TString& name) const noexcept {
     auto it = ColumnFamiliesByName.find(name);
-    if (it != ColumnFamiliesByName.end()) {
-        return GetByIdVerified(it->second);
+    if (it.IsEnd()) {
+        return nullptr;
     }
-    return nullptr;
+        return GetByIdVerified(it->second);
 }
 
-bool TOlapColumnFamiliesDescription::ApplyUpdate(const TOlapColumnFamiliesUpdate& schemaUpdate, IErrorCollector& errors) {
-    for (const auto& family : schemaUpdate.GetAddColumnFamilies()) {
+bool TOlapColumnFamiliesDescription::ApplyUpdate(
+    const TOlapColumnFamiliesUpdate& schemaUpdate, IErrorCollector& errors, ui32& NextColumnFamilyId, THashSet<ui32>& alterColumnFamilyId) {
+        for (const auto& family : schemaUpdate.GetAddColumnFamilies()) {
         auto familyName = family.GetName();
-        if (ColumnFamiliesByName.contains(familyName)) {
-            errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "family '" << familyName << "' already exists");
-            return false;
+        if (!ColumnFamiliesByName.contains(familyName)) {
+            TOlapColumnFamily columFamilyAdd(family, NextColumnFamilyId++);
+            Y_ABORT_UNLESS(ColumnFamilies.emplace(columFamilyAdd.GetId(), columFamilyAdd).second);
+            Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamilyAdd.GetName(), columFamilyAdd.GetId()).second);
+        } else {
+            auto id = ColumnFamiliesByName[familyName];
+            Y_ABORT_UNLESS(alterColumnFamilyId.insert(id).second);
+            TOlapColumnFamlilyDiff columnFamilyDiff;
+            columnFamilyDiff.SetName(familyName);
+            columnFamilyDiff.SetSerializerContainer(family.GetSerializerContainer());
+            if (!ColumnFamilies[id].ApplyDiff(columnFamilyDiff, errors)) {
+                errors.AddError(TStringBuilder() << "Can't alter for column family: " << familyName);
+                return false;
+            }
         }
-        TOlapColumnFamily columFamilyAdd(family);
-        ColumnFamilies.emplace_back(columFamilyAdd);
-        // Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamilyAdd.GetName(), columFamilyAdd.GetId()).second);
-        Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamilyAdd.GetName(), ColumnFamilies.size() - 1).second);
-    }
+        }
     return true;
 }
 
-void TOlapColumnFamiliesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    bool TOlapColumnFamiliesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     for (const auto& family : tableSchema.GetColumnFamilies()) {
-        TOlapColumnFamily columFamilyAdd;
-        columFamilyAdd.ParseFromLocalDB(family);
-        ColumnFamilies.emplace_back(columFamilyAdd);
-        // Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamilyAdd.GetName(), columFamilyAdd.GetId()).second);
-        Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamilyAdd.GetName(), ColumnFamilies.size() - 1).second);
+        TOlapColumnFamily columFamily;
+        columFamily.ParseFromLocalDB(family);
+        Y_ABORT_UNLESS(ColumnFamilies.emplace(columFamily.GetId(), columFamily).second);
+        Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamily.GetName(), columFamily.GetId()).second);
     }
-}
+    return true;
+    }
 
 void TOlapColumnFamiliesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
-    for (const auto& family : ColumnFamilies) {
+    for (const auto& [_, family] : ColumnFamilies) {
         family.Serialize(*tableSchema.AddColumnFamilies());
     }
 }

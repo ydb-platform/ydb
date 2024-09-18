@@ -11,8 +11,48 @@ extern "C" {
 
 namespace NKikimr::NSchemeShard {
 
-bool TOlapColumnAdd::ParseFromRequest(
-    const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors, const TOlapColumnFamiliesDescription& columnFamilies) {
+bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
+    Name = columnSchema.GetName();
+    if (!!columnSchema.GetStorageId()) {
+        StorageId = columnSchema.GetStorageId();
+    }
+    if (!Name) {
+        errors.AddError("empty field name");
+        return false;
+    }
+    if (columnSchema.HasDefaultValue()) {
+        DefaultValue = columnSchema.GetDefaultValue();
+    }
+    if (columnSchema.HasDataAccessorConstructor()) {
+        if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
+            errors.AddError("cannot parse accessor constructor from proto");
+            return false;
+        }
+    }
+    if (columnSchema.HasColumnFamilyId()) {
+        ColumnFamilyId = columnSchema.GetColumnFamilyId();
+    }
+
+    if (columnSchema.HasColumnFamilyName()) {
+        ColumnFamilyName = columnSchema.GetColumnFamilyName();
+    }
+
+    if (columnSchema.HasSerializer()) {
+        if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
+            errors.AddError("cannot parse serializer diff from proto");
+            return false;
+        }
+    }
+
+    if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
+        errors.AddError("cannot parse dictionary encoding diff from proto");
+        return false;
+    }
+
+    return true;
+}
+
+bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
     if (!columnSchema.GetName()) {
         errors.AddError("Columns cannot have an empty name");
         return false;
@@ -21,29 +61,21 @@ bool TOlapColumnAdd::ParseFromRequest(
     NotNullFlag = columnSchema.GetNotNull();
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();
-
-    if (columnSchema.HasFamilyName()) {
-        FamilyName = columnSchema.GetFamilyName();
-        NArrow::NSerialization::TSerializerContainer serializerContainer;
-        NKikimrSchemeOp::TOlapColumn_TSerializer serialzier;
-        if (columnSchema.HasSerializer()) {
-            serialzier = columnSchema.GetSerializer();
-        } else {
-            serialzier.SetClassName("ARROW_SERIALIZER");
-            const TOlapColumnFamilyScheme* family = columnFamilies.GetFamilyByName(columnSchema.GetFamilyName());
-            if (family == nullptr) {
-                errors.AddError("Family " + columnSchema.GetFamilyName() + " not found in table ");
-                return false;
-            }
-            auto mutableCompression = serialzier.MutableArrowCompression();
-            mutableCompression->SetCodec(family->GetCodec());
-        }
-        if (!serializerContainer.DeserializeFromProto(serialzier)) {
+    if (columnSchema.HasColumnFamilyId()) {
+        ColumnFamilyId = columnSchema.GetColumnFamilyId();
+    }
+    if (columnSchema.HasColumnFamilyName()) {
+        ColumnFamilyName = columnSchema.GetColumnFamilyName();
+    }
+    if (columnSchema.HasSerializer()) {
+        NArrow::NSerialization::TSerializerContainer serializer;
+        if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
             errors.AddError("Cannot parse serializer info");
             return false;
         }
-        Serializer = serializerContainer;
+        Serializer = serializer;
     }
+
     if (columnSchema.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
         if (!settings) {
@@ -128,11 +160,19 @@ bool TOlapColumnAdd::ParseFromRequest(
             DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
             AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
         }
-        if (columnSchema.HasFamilyName()) {
-            FamilyName = columnSchema.GetFamilyName();
-            AFL_VERIFY(columnSchema.HasSerializer());
+        if (columnSchema.HasColumnFamilyId()) {
+            ColumnFamilyId = columnSchema.GetColumnFamilyId();
+        }
+        if (columnSchema.HasColumnFamilyName()) {
+            ColumnFamilyName = columnSchema.GetColumnFamilyName();
+        }
+        if (columnSchema.HasSerializer()) {
             NArrow::NSerialization::TSerializerContainer serializer;
             AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
+            Serializer = serializer;
+        } else if (columnSchema.HasCompression()) {
+            NArrow::NSerialization::TSerializerContainer serializer;
+            serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
         if (columnSchema.HasDataAccessorConstructor()) {
@@ -158,6 +198,12 @@ bool TOlapColumnAdd::ParseFromRequest(
         columnSchema.SetNotNull(NotNullFlag);
         columnSchema.SetStorageId(StorageId);
         *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
+        if (ColumnFamilyId.has_value()) {
+            columnSchema.SetColumnFamilyId(ColumnFamilyId.value());
+        }
+        if (ColumnFamilyName.has_value()) {
+            columnSchema.SetColumnFamilyName(columnSchema.GetColumnFamilyName());
+        }
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
@@ -173,10 +219,33 @@ bool TOlapColumnAdd::ParseFromRequest(
         if (columnType.TypeInfo) {
             *columnSchema.MutableTypeInfo() = *columnType.TypeInfo;
         }
-        columnSchema.SetFamilyName(FamilyName);
     }
 
-    bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
+    bool TOlapColumnAdd::HasColumnFamily() const {
+        return GetColumnFamilyId().has_value() || GetColumnFamilyName().has_value();
+    }
+
+    bool TOlapColumnAdd::ApplySerializer(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
+        if (GetColumnFamilyId().has_value()) {
+            SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
+        } else {
+            TString familyName = GetColumnFamilyName().value();
+            auto idIt = columnFamilies.GetColumnFamiliesByName().find(familyName);
+
+            if (idIt.IsEnd()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "Cannot set column family `" << familyName << "` for column `" << GetName() << "`. Family not found");
+            return false;
+            }
+
+            SetColumnFamilyId(idIt->second);
+            SetSerializer(columnFamilies.GetByIdVerified(idIt->second)->GetSerializerContainer());
+        }
+        return true;
+    }
+
+    bool TOlapColumnAdd::ApplyDiff(
+        const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
         if (diffColumn.GetDefaultValue()) {
             auto conclusion = DefaultValue.ParseFromString(*diffColumn.GetDefaultValue(), Type);
@@ -196,10 +265,24 @@ bool TOlapColumnAdd::ParseFromRequest(
         if (diffColumn.GetStorageId()) {
             StorageId = *diffColumn.GetStorageId();
         }
-        if (diffColumn.GetFamilyName()) {
-            FamilyName = diffColumn.GetFamilyName();
-            Serializer = diffColumn.GetSerializer();
+        if (diffColumn.GetColumnFamilyId().has_value()) {
+            ColumnFamilyId = diffColumn.GetColumnFamilyId();
         }
+        if (diffColumn.GetColumnFamilyName().has_value()) {
+            ColumnFamilyName = diffColumn.GetColumnFamilyName();
+            auto idIt = columnFamilies.GetColumnFamiliesByName().find(ColumnFamilyName.value());
+            if (idIt.IsEnd()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot set column family `" << ColumnFamilyName
+                                                                                   << "` for column `" << GetName() << "`. Family not found");
+                return false;
+            }
+            ColumnFamilyId = idIt->second;
+        }
+
+        if (HasColumnFamily() && !ApplySerializer(columnFamilies, errors)) {
+            return false;
+        }
+
         {
             auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);
             if (!result) {
@@ -266,8 +349,7 @@ bool TOlapColumnAdd::ParseFromRequest(
         }
     }
 
-    bool TOlapColumnsUpdate::Parse(const TOlapColumnFamiliesDescription& columnFamilies,
-        const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+    bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         for (const auto& column : alterRequest.GetDropColumns()) {
             if (!DropColumns.emplace(column.GetName()).second) {
                 errors.AddError(NKikimrScheme::StatusInvalidParameter, "Duplicated column for drop");
@@ -277,7 +359,7 @@ bool TOlapColumnAdd::ParseFromRequest(
         TSet<TString> addColumnNames;
         for (auto& columnSchema : alterRequest.GetAddColumns()) {
             TOlapColumnAdd column({});
-            if (!column.ParseFromRequest(columnSchema, errors, columnFamilies)) {
+            if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
             }
             if (addColumnNames.contains(column.GetName())) {
@@ -291,7 +373,7 @@ bool TOlapColumnAdd::ParseFromRequest(
         TSet<TString> alterColumnNames;
         for (auto& columnSchemaDiff : alterRequest.GetAlterColumns()) {
             TOlapColumnDiff columnDiff;
-            if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors, columnFamilies)) {
+            if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors)) {
                 return false;
             }
             if (addColumnNames.contains(columnDiff.GetName())) {
@@ -308,8 +390,7 @@ bool TOlapColumnAdd::ParseFromRequest(
         return true;
     }
 
-    bool TOlapColumnsUpdate::Parse(const TOlapColumnFamiliesDescription& columnFamilies, const NKikimrSchemeOp::TColumnTableSchema& tableSchema,
-        IErrorCollector& errors, bool allowNullKeys) {
+    bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
         TMap<TString, ui32> keyColumnNames;
         for (auto&& pkKey : tableSchema.GetKeyColumnNames()) {
             if (!keyColumnNames.emplace(pkKey, keyColumnNames.size()).second) {
@@ -329,7 +410,7 @@ bool TOlapColumnAdd::ParseFromRequest(
             }
 
             TOlapColumnAdd column(keyOrder);
-            if (!column.ParseFromRequest(columnSchema, errors, columnFamilies)) {
+            if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
             }
             if (column.IsKeyColumn()) {

@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
+#include <ydb/core/kqp/opt/kqp_column_statistics_requester.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 
@@ -137,7 +138,8 @@ class TKqpRunner : public IKqpRunner {
 public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-        const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry)
+        const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry,
+        TActorSystem* actorSystem)
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
@@ -146,9 +148,10 @@ public:
         , Config(sessionCtx->ConfigPtr())
         , TransformCtx(transformCtx)
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
-            sessionCtx->TablesPtr()))
+            sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel)))
+        , ActorSystem(actorSystem)
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
@@ -297,6 +300,7 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
+            .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnStatisticsRequester")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
@@ -324,7 +328,7 @@ private:
                     Config),
                 "BuildPhysicalTxs")
             .Build(false));
-
+        
         auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
@@ -399,15 +403,17 @@ private:
     TKqpProviderContext Pctx;
 
     TAutoPtr<IGraphTransformer> Transformer;
+    
+    TActorSystem* ActorSystem; 
 };
 
 } // namespace
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry)
+    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry, TActorSystem* actorSystem)
 {
-    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry);
+    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry, actorSystem);
 }
 
 } // namespace NKqp

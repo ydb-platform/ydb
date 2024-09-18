@@ -16,6 +16,7 @@
 #include <array>
 #include <bitset>
 #include <functional>
+#include <utility>
 
 
 namespace NKikimr {
@@ -55,6 +56,11 @@ struct TKqpResourcesRequest {
 
 class TTxState;
 
+class TMemoryResourceCookie : public TAtomicRefCount<TMemoryResourceCookie> {
+public:
+    std::atomic<bool> SpillingPercentReached{false};
+};
+
 class TTaskState : public TAtomicRefCount<TTaskState> {
     friend TTxState;
 
@@ -65,6 +71,8 @@ public:
     ui64 ExternalDataQueryMemory = 0;
     ui64 ResourceBrokerTaskId = 0;
     ui32 ExecutionUnits = 0;
+    TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
+    TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
 
 public:
 
@@ -78,6 +86,11 @@ public:
         resources.Memory = releaseScanQueryMemory;
         resources.ExternalMemory = releaseExternalDataQueryMemory;
         return resources;
+    }
+
+    bool IsReasonableToStartSpilling() {
+        return (PoolMemoryCookie && PoolMemoryCookie->SpillingPercentReached.load())
+            || (TotalMemoryCookie && TotalMemoryCookie->SpillingPercentReached.load());
     }
 
     TKqpResourcesRequest FreeResourcesRequest() const {
@@ -101,26 +114,47 @@ public:
     const ui64 TxId;
     const TInstant CreatedAt;
     TIntrusivePtr<TKqpCounters> Counters;
+    const TString PoolId;
+    const double MemoryPoolPercent;
+    const TString Database;
+
 private:
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
 
 public:
-    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters)
+    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
+        const TString& database)
         : TxId(txId)
         , CreatedAt(now)
         , Counters(std::move(counters))
+        , PoolId(poolId)
+        , MemoryPoolPercent(memoryPoolPercent)
+        , Database(database)
     {}
 
+    std::pair<TString, TString> MakePoolId() const {
+        return std::make_pair(Database, PoolId);
+    }
+
     TString ToString() const {
-        return TStringBuilder() << "TxResourcesInfo{ "
+        auto res = TStringBuilder() << "TxResourcesInfo{ "
             << "TxId: " << TxId
-            << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
+            << "Database: " << Database;
+
+        if (!PoolId.empty()) {
+            res << ", PoolId: " << PoolId
+                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent);
+        }
+
+        res << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
             << ", extra allocations " << TxScanQueryMemory.load()
             << ", execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }";
+
+        return res;
     }
 
     ui64 GetExtraMemoryAllocatedSize() {

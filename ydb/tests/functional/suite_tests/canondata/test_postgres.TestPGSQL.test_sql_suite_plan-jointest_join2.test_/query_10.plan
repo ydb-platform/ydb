@@ -69,7 +69,7 @@
                                                 "TopSortBy": "row.x1"
                                             },
                                             {
-                                                "Condition": "x_1.x1 = x1",
+                                                "Condition": "x_1.x1 = xx.x1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 20
@@ -92,7 +92,7 @@
                                                         "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
-                                                                "Condition": "x1 = y1",
+                                                                "Condition": "x_1.x1 = y.y1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 18
@@ -117,8 +117,8 @@
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [],
-                                                                                "Iterator": "precompute_0_0",
-                                                                                "Name": "Iterator"
+                                                                                "Name": "ToFlow",
+                                                                                "ToFlow": "precompute_0_0"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 17
@@ -131,7 +131,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Collect",
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 15,
                                                                         "Plans": [
                                                                             {
@@ -192,7 +192,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {

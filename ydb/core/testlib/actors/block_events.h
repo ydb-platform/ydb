@@ -14,7 +14,7 @@ namespace NActors {
     template<class TEvType>
     class TBlockEvents : public std::deque<typename TEvType::TPtr> {
     public:
-        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(const typename TEvType::TPtr&)> condition = {})
+        TBlockEvents(TTestActorRuntime& runtime, std::function<bool(typename TEvType::TPtr&)> condition = {})
             : Runtime(runtime)
             , Condition(std::move(condition))
             , Holder(Runtime.AddObserver<TEvType>(
@@ -27,7 +27,7 @@ namespace NActors {
          * Unblocks up to count events at the front of the deque, allowing them
          * to be handled by the destination actor.
          */
-        TBlockEvents& Unblock(size_t count = Max<size_t>()) {
+        TBlockEvents& Unblock(size_t count = -1) {
             while (!this->empty() && count > 0) {
                 auto& ev = this->front();
                 if (!Stopped) {
@@ -85,6 +85,5 @@ namespace NActors {
         THashSet<IEventHandle*> UnblockedOnce;
         bool Stopped = false;
     };
-
 
 } // namespace NActors

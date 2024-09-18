@@ -230,7 +230,11 @@ private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
         appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
 
         return appConfig;
     }
@@ -323,15 +327,8 @@ private:
             return;
         }
 
-        NResourcePool::TPoolSettings poolConfig;
-        poolConfig.ConcurrentQueryLimit = Settings_.ConcurrentQueryLimit_;
-        poolConfig.QueueSize = Settings_.QueueSize_;
-        poolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
-        poolConfig.QueryMemoryLimitPercentPerNode = Settings_.QueryMemoryLimitPercentPerNode_;
-        poolConfig.DatabaseLoadCpuThreshold = Settings_.DatabaseLoadCpuThreshold_;
-
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, poolConfig, nullptr, {}));
+        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, Settings_.GetDefaultPoolSettings(), nullptr, {}));
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     }
@@ -401,7 +398,7 @@ public:
         auto token = NACLib::TUserToken(userSID, {});
 
         WaitFor(FUTURE_WAIT_TIMEOUT, "pool acl", [this, token, access, poolId](TString& errorString) {
-            auto response = Navigate(TStringBuilder() << ".resource_pools/" << (poolId ? poolId : Settings_.PoolId_));
+            auto response = Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << (poolId ? poolId : Settings_.PoolId_));
             if (!response) {
                 errorString = "empty response";
                 return false;
@@ -520,15 +517,17 @@ private:
     }
 
     std::unique_ptr<TEvKqp::TEvQueryRequest> GetQueryRequest(const TString& query, const TQueryRunnerSettings& settings) const {
+        UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
+
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
-        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
+        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, settings.GroupSIDs_).SerializeAsString());
 
         auto request = event->Record.MutableRequest();
         request->SetQuery(query);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->SetDatabase(Settings_.DomainName_);
-        request->SetPoolId(settings.PoolId_);
+        request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
+        request->SetPoolId(*settings.PoolId_);
 
         return event;
     }
@@ -616,6 +615,16 @@ bool TQueryRunnerResultAsync::HasValue() const {
 }
 
 //// TYdbSetupSettings
+
+NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
+    NResourcePool::TPoolSettings poolConfig;
+    poolConfig.ConcurrentQueryLimit = ConcurrentQueryLimit_;
+    poolConfig.QueueSize = QueueSize_;
+    poolConfig.QueryCancelAfter = QueryCancelAfter_;
+    poolConfig.QueryMemoryLimitPercentPerNode = QueryMemoryLimitPercentPerNode_;
+    poolConfig.DatabaseLoadCpuThreshold = DatabaseLoadCpuThreshold_;
+    return poolConfig;
+}
 
 TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);

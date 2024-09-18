@@ -76,6 +76,8 @@ NActors::IActor* CreateTableCreator(
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
-    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing());
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
+    bool isSystemUser = false,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
 
 } // namespace NKikimr

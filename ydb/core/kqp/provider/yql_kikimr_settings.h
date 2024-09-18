@@ -50,6 +50,14 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseLlvm;
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
+    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
+    NCommon::TConfSetting<TString, false> OverridePlanner;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+
+    NCommon::TConfSetting<TString, false> OptOverrideStatistics;
+    NCommon::TConfSetting<TString, false> OptCardinalityHints;
+    NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
+    NCommon::TConfSetting<TString, false> OptJoinOrderHints;
     NCommon::TConfSetting<TString, false> OverrideStatistics;
 
     /* Disable optimizer rules */
@@ -61,7 +69,6 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
-    NCommon::TConfSetting<bool, false> OptEnableConstantFolding;
 
     NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
 
@@ -83,8 +90,6 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
-    bool HasOptEnableConstantFolding() const;
-
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
@@ -169,6 +174,12 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOltpSink = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpillingGenericQuery = false;
+    ui32 DefaultCostBasedOptimizationLevel = 4;
+    bool EnableConstantFolding = true;
+    ui64 DefaultEnableSpillingNodes = 0;
+
+    void SetDefaultEnabledSpillingNodes(const TString& node);
+    ui64 GetEnabledSpillingNodes() const;
 };
 
 }

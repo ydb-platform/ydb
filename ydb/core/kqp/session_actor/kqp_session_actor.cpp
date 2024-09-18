@@ -352,8 +352,9 @@ public:
             auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
 
             Send(ExecuterId, abortEv.Release());
+        } else {
+            Cleanup();
         }
-        Cleanup();
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -580,10 +581,18 @@ public:
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             if (QueryState->CompileResult->NeedToSplit) {
-                YQL_ENSURE(!QueryState->HasTxControl() && QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
-                auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
-                Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                    QueryState->KqpSessionSpan.GetTraceId());
+                if (!QueryState->HasTxControl()) {
+                    YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
+                    auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
+                    Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                        QueryState->KqpSessionSpan.GetTraceId());
+                } else {
+                    NYql::TIssues issues;
+                    ReplyQueryError(
+                        ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+                        "CTAS statement can be executed only in NoTx mode.",
+                        MessageFromIssues(issues));
+                }
             } else {
                 ReplyQueryCompileError();
             }
@@ -1282,8 +1291,11 @@ public:
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
-            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY 
-                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY);
+            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+                || (!HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML)
+                || (!HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML));
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
@@ -1359,7 +1371,7 @@ public:
                     executionStats.Swap(&stats);
                     stats = QueryState->QueryStats.ToProto();
                     stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                    ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats));
+                    ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
                 }
             }
 
@@ -1427,6 +1439,12 @@ public:
 
         ExecuterId = TActorId{};
 
+        auto& executerResults = *response->MutableResult();
+        if (executerResults.HasStats()) {
+            QueryState->QueryStats.Executions.emplace_back();
+            QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
+        }
+
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 
@@ -1488,14 +1506,8 @@ public:
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
-        auto& executerResults = *response->MutableResult();
         if (!MergeLocksWithTxResult(executerResults)) {
             return;
-        }
-
-        if (executerResults.HasStats()) {
-            QueryState->QueryStats.Executions.emplace_back();
-            QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
         if (!response->GetIssues().empty()){
@@ -1591,6 +1603,10 @@ public:
 
     void FillStats(NKikimrKqp::TEvQueryResponse* record) {
         YQL_ENSURE(QueryState);
+        // workaround to ensure that request was not transfered to worker.
+        if (WorkerId || !QueryState->RequestEv) {
+            return;
+        }
 
         FillSystemViewQueryStats(record);
 
@@ -1607,7 +1623,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
                 response->SetQueryAst(QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst());
             }
             response->MutableQueryStats()->Swap(&stats);
@@ -2229,6 +2245,8 @@ public:
                 response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
             }
         }
+
+        FillStats(&QueryResponse->Record.GetRef());
 
         if (issues) {
             for (auto& i : *issues) {

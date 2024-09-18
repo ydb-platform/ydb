@@ -51,7 +51,17 @@ For more details, see the description of the commands for each benchmark:
 
 Filling with data is performed using the `import` command. This command is specific to each benchmark and its behavior depends on the subcommands. However, there are also parameters common to all.
 
-For a detailed description, see the relevant sections: [clickbench import](../../reference/ydb-cli/workload-click-bench.md#load) [tpch import](../../reference/ydb-cli/workload-tpch.md#load) [tpcds import](../../reference/ydb-cli/workload-tpcds.md#load) Example s: ```bash {{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz {{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1 {{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
+For a detailed description, see the relevant sections:
+[clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)
+[tpch import](../../reference/ydb-cli/workload-tpch.md#load)
+[tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
+
+Examples:
+
+```bash
+{{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz
+{{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1
+{{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
 ```
 
 ## Testing

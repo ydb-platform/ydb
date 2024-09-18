@@ -533,19 +533,29 @@ runs:
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
     
-    - name: Fetch SHAs
-      shell: bash
-      continue-on-error: true
-      run: |
-        git fetch origin ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}}
-        git diff ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}} -- .github/config/muted_ya.txt
-
-
     - name: show diff mute_ya.txt
       if: inputs.build_preset == 'relwithdebinfo'
       shell: bash
       continue-on-error: true
-      run: python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
+      run: |
+        git fetch origin ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}}
+        python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
+        FILE_PATH=$PUBLIC_DIR/mute_info/1_new_muted_tests.txt
+        if [ -f "$FILE_PATH" ]; then
+          LINE_COUNT=$(wc -l < "$FILE_PATH")
+          if [ "$LINE_COUNT" -gt 0 ]; then
+            MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/1_new_muted_tests.txt)/n/n"
+          fi
+        fi
+        FILE_PATH=$PUBLIC_DIR/mute_info/2_unmuted_tests.txt
+        if [ -f "$FILE_PATH" ]; then
+          LINE_COUNT=$(wc -l < "$FILE_PATH")
+          if [ "$LINE_COUNT" -gt 0 ]; then
+            MESSAGE="${MESSAGE}Unmuted $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_unmuted_tests.txt)/n/n"
+          fi
+        fi
+        printf "$MESSAGE" | .github/scripts/tests/comment-pr.py 
+
 
     - name: sync results to s3 and publish links
       if: always()

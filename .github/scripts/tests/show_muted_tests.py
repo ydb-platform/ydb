@@ -165,18 +165,13 @@ def get_mute_details():
     use_all_tests_s3_file = args.use_all_tests_s3_file
        
 
-    added_lines_file = os.path.join(output_path, 'added_muted_line.txt')
-    added_lines_file_muted = os.path.join(output_path, 'added_muted_tests.txt')
-    removed_lines_file = os.path.join(output_path, 'removed_muted_line.txt')
-    removed_lines_file_muted = os.path.join(output_path, 'removed_muted_tests.txt')
-    all_tests_file = os.path.join(output_path, 'all_tests.txt')
-    all_muted_tests_file = os.path.join(output_path, 'all_muted_tests.txt')
+    added_lines_file = os.path.join(output_path, '1_added_mute_lines.txt')
+    added_lines_file_muted = os.path.join(output_path, '1_new_muted_tests.txt')
+    removed_lines_file = os.path.join(output_path, '2_removed_mute_lines.txt')
+    removed_lines_file_muted = os.path.join(output_path, '2_unmuted_tests.txt')
+    all_tests_file = os.path.join(output_path, '3_all_tests.txt')
+    all_muted_tests_file = os.path.join(output_path, '3_all_muted_tests.txt')
     
-
-    print(f"All tests have been written to {all_tests_file}.")
-    print(f"All mutes tests have been written to {all_muted_tests_file}.")
-    print(f"Added lines have been written to {added_lines_file}.")
-    print(f"Removed lines have been written to {removed_lines_file}.")
     
     added_texts, removed_texts = extract_diff_lines(muted_ya_path)
     write_to_file('\n'.join(added_texts), added_lines_file)
@@ -239,10 +234,11 @@ def get_mute_details():
     write_to_file(added_muted_tests, added_lines_file_muted)
     write_to_file(removed_muted_tests, removed_lines_file_muted)
     
-    #for test in added_muted_tests:
-    #    print(test)
-   #for test in removed_muted_tests:
-    #    print(test)
+    print(f"All tests have been written to {all_tests_file}.")
+    print(f"All mutes tests have been written to {all_muted_tests_file}.")
+    print(f"Added lines have been written to {added_lines_file}.")
+    print(f"Removed lines have been written to {removed_lines_file}.")
+    
 
 
 

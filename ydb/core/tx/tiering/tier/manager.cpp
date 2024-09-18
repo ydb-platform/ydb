@@ -5,12 +5,10 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
-    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, const NSchemeShard::TSchemeShard& ss) const {
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
     if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
         return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
     }
-
-    Y_UNUSED(ss);  // TODO: use
 
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));

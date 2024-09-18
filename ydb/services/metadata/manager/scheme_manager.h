@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
+#include <ydb/services/metadata/container/snapshot.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/service.h>
@@ -13,7 +14,7 @@ class TSchemeOperationsController: public IAlterController {
 private:
     using TSideEffectPtr = std::shared_ptr<NContainer::TObjectSnapshotBase>;
 
-    YDB_READONLY_DEF(TActorId, SSActor);
+    YDB_READONLY_DEF(TActorId, Recipient);
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(ui64, OriginalCookie);
@@ -23,15 +24,15 @@ private:
 private:
     void Reply(TConclusion<TSideEffectPtr> result) {
         Ctx.Send(
-            SSActor, MakeHolder<NSchemeShard::TEvPrivate::TEvObjectModificationResult>(TypeId, ObjectId, std::move(result)), 0, OriginalCookie);
+            Recipient, MakeHolder<NSchemeShard::TEvPrivate::TEvObjectModificationResult>(TypeId, ObjectId, std::move(result)), 0, OriginalCookie);
     }
 
 public:
-    TSchemeOperationsController(const TActorId& ssActor, const TString& typeId, const TString& objectId, ui64 originalCookie,
+    TSchemeOperationsController(const TActorId& recipient, const NYql::TObjectSettingsImpl& operation, ui64 originalCookie,
         TSideEffectPtr sideEffect, const TActorContext& ctx)
-        : SSActor(ssActor)
-        , TypeId(typeId)
-        , ObjectId(objectId)
+        : Recipient(recipient)
+        , TypeId(operation.GetTypeId())
+        , ObjectId(operation.GetObjectId())
         , OriginalCookie(originalCookie)
         , SideEffect(std::move(sideEffect))
         , Ctx(ctx) {
@@ -52,13 +53,14 @@ public:
 class TSchemeOperationsManagerBase {
 protected:
     // TODO: fix terminology: abstract, extended, history, container
-    virtual NFetcher::ISnapshotsFetcher::TPtr DoGetAbstractSnapshotFetcher() const = 0;
+    // TODO: what should this method do? unclear. fix terminology: abstract
+    virtual NFetcher::ISnapshotsFetcher::TPtr DoGetExtendedSnapshotFetcher() const = 0;
 
     virtual TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        IOperationsManager::TInternalModificationContext& context, const NSchemeShard::TSchemeShard& ss) const = 0;
+        IOperationsManager::TInternalModificationContext& context, NSchemeShard::TSchemeShard& ss) const = 0;
 
     virtual TConclusion<std::shared_ptr<IObjectModificationCommand>> DoBuildModificationCommand(
-        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, const NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const = 0;
+        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const = 0;
 
     static NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> StartSchemeOperation(
         NKikimrSchemeOp::TModifyObjectDescription description, TActorSystem& actorSystem, TDuration livetime);
@@ -70,10 +72,10 @@ protected:
 
         const TSelf& Owner;
         IOperationsManager::TInternalModificationContext& Context;
-        const NSchemeShard::TSchemeShard& SS;
+        NSchemeShard::TSchemeShard& SS;
 
     public:
-        TPatchBuilder(const TSelf& owner, IOperationsManager::TInternalModificationContext& context, const NSchemeShard::TSchemeShard& ss)
+        TPatchBuilder(const TSelf& owner, IOperationsManager::TInternalModificationContext& context, NSchemeShard::TSchemeShard& ss)
             : Owner(owner)
             , Context(context)
             , SS(ss) {
@@ -87,19 +89,19 @@ protected:
 
 public:
     TConclusion<std::shared_ptr<IObjectModificationCommand>> BuildModificationCommand(
-        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, const NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const {
+        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const {
         return DoBuildModificationCommand(request, ss, ctx);
     }
 
-    NFetcher::ISnapshotsFetcher::TPtr GetAbstractSnapshotFetcher() const {
-        return DoGetAbstractSnapshotFetcher();
+    NFetcher::ISnapshotsFetcher::TPtr GetExtendedSnapshotFetcher() const {
+        return DoGetExtendedSnapshotFetcher();
     }
 };
 
-template <class T>
-class TSchemeOperationsManager: public IObjectOperationsManager<T>, public TSchemeOperationsManagerBase {
+template <MetadataObject TObject>
+class TSchemeOperationsManager: public IObjectOperationsManager<TObject>, public TSchemeOperationsManagerBase {
 private:
-    using TBase = IObjectOperationsManager<T>;
+    using TBase = IObjectOperationsManager<TObject>;
     using IOperationsManager::TYqlConclusionStatus;
 
 public:
@@ -108,6 +110,10 @@ public:
     using EActivityType = typename IOperationsManager::EActivityType;
 
 protected:
+    virtual NFetcher::ISnapshotsFetcher::TPtr DoGetExtendedSnapshotFetcher() const override {
+        return std::make_shared<NContainer::TSnapshotsFetcher<TObject>>();
+    }
+
     // TODO: Consider putting nodeId to LocalContext. Why is it not in the context?
     virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 /*nodeId*/,
         const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const override {
@@ -119,7 +125,7 @@ protected:
                 TYqlConclusionStatus::Fail("modification is unavailable for " + manager->GetTypeId()));
         }
 
-        TActorSystem* actorSystem = context.GetExternalData().GetLocalContext().GetLocalData().GetActorSystem();
+        TActorSystem* actorSystem = context.GetExternalData().GetLocalData().GetActorSystem();
         if (!actorSystem) {
             return NThreading::MakeFuture<TYqlConclusionStatus>(
                 TYqlConclusionStatus::Fail("This place needs an actor system. Please contact internal support"));
@@ -143,8 +149,7 @@ protected:
 
 public:
     TConclusion<std::shared_ptr<IObjectModificationCommand>> DoBuildModificationCommand(
-        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, const NSchemeShard::TSchemeShard& ss,
-        const TActorContext& ctx) const override {
+        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const override {
         NYql::TObjectSettingsImpl settings;
         settings.DeserializeFromProto(request->Get()->Record.GetSettings());
 
@@ -161,18 +166,31 @@ public:
         if (!patch.IsSuccess()) {
             return TConclusionStatus::Fail(patch.GetErrorMessage());
         }
-        auto controller = std::make_shared<TSchemeOperationsController>(ss.ActorContext().SelfID);
+
+        std::shared_ptr<NContainer::TObjectSnapshotBase> resultObject;
+        if (modificationCtx.GetActivityType() != EActivityType::Drop) {
+            Ydb::ResultSet records = patch.GetResult().BuildRecordSet();
+            AFL_VERIFY(records.rowsSize() == 1);
+            typename TObject::TDecoder decoder(records);
+            TObject object;
+            if (!object.DeserializeFromRecord(decoder, records.Getrows(0))) {
+                return TConclusionStatus::Fail("Internal error: can't deserialize object.");
+            }
+            resultObject = std::make_shared<NContainer::TObjectSnapshot<TObject>>(std::move(object), TInstant::Zero());
+        }
+
         IObjectModificationCommand::TPtr modifyObjectCommand;
+        auto controller = std::make_shared<TSchemeOperationsController>(ss.ActorContext().SelfID, settings, request->Cookie, resultObject, ctx);
         switch (modificationCtx.GetActivityType()) {
             case EActivityType::Upsert:
-                return std::make_shared<TUpsertObjectCommand<T>>(patch.GetResult(), manager, std::move(controller), modificationCtx);
+                return std::make_shared<TUpsertObjectCommand<TObject>>(patch.GetResult(), manager, std::move(controller), modificationCtx);
             case EActivityType::Create:
-                return std::make_shared<TCreateObjectCommand<T>>(
+                return std::make_shared<TCreateObjectCommand<TObject>>(
                     patch.GetResult(), manager, std::move(controller), modificationCtx, settings.GetExistingOk());
             case EActivityType::Alter:
-                return std::make_shared<TUpdateObjectCommand<T>>(patch.GetResult(), manager, std::move(controller), modificationCtx);
+                return std::make_shared<TUpdateObjectCommand<TObject>>(patch.GetResult(), manager, std::move(controller), modificationCtx);
             case EActivityType::Drop:
-                return std::make_shared<TDeleteObjectCommand<T>>(
+                return std::make_shared<TDeleteObjectCommand<TObject>>(
                     patch.GetResult(), manager, std::move(controller), modificationCtx, settings.GetMissingOk());
             case EActivityType::Undefined:
                 return TConclusionStatus::Fail("undefined action type");

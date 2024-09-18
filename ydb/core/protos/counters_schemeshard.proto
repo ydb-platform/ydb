@@ -574,4 +574,9 @@ enum ETxTypes {
     TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
 
     TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
+
+    TXTYPE_START_OBJECT_MODIFICATION = 87                 [(TxTypeOpts) = {Name: "TxStartObjectModification"}];
+    TXTYPE_COMMIT_OBJECT_MODIFICATION = 88                [(TxTypeOpts) = {Name: "TxCommitObjectModification"}];
+    TXTYPE_COMPLETE_OBJECT_MODIFICATION = 89              [(TxTypeOpts) = {Name: "TxCompleteObjectModification"}];
+    TXTYPE_INITIALIZE_OBJECT_METADATA = 90                [(TxTypeOpts) = {Name: "TxInitializeObjectMetadata"}];
 }

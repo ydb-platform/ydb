@@ -193,6 +193,7 @@ SRCS(
     schemeshard_identificators.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
+    schemeshard_object_modification.cpp
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
     schemeshard_path_element.h

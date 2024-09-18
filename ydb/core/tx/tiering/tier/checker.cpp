@@ -1,20 +1,16 @@
 #include "checker.h"
 
+#include <util/string/join.h>
 #include <ydb/core/tx/tiering/external_data.h>
-#include <ydb/core/tx/tiering/rule/ss_checker.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
 void TTierPreparationActor::StartChecker() {
-    if (!Tierings || !Secrets || !SSCheckResult) {
+    if (!Tierings || !Secrets) {
         return;
     }
     auto g = PassAwayGuard();
-    if (!SSCheckResult->GetContent().GetOperationAllow()) {
-        Controller->OnPreparationProblem(SSCheckResult->GetContent().GetDenyReason());
-        return;
-    }
     for (auto&& tier : Objects) {
         if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
             std::set<TString> tieringsWithTiers;
@@ -42,24 +38,6 @@ void TTierPreparationActor::StartChecker() {
     Controller->OnPreparationFinished(std::move(Objects));
 }
 
-void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
-    auto& proto = ev->Get()->Record;
-    if (proto.HasError()) {
-        Controller->OnPreparationProblem(proto.GetError().GetErrorMessage());
-        PassAway();
-    } else if (proto.HasContent()) {
-        SSCheckResult = SSFetcher->UnpackResult(ev->Get()->Record.GetContent().GetData());
-        if (!SSCheckResult) {
-            Controller->OnPreparationProblem("cannot unpack ss-fetcher result for class " + SSFetcher->GetClassName());
-            PassAway();
-        } else {
-            StartChecker();
-        }
-    } else {
-        Y_ABORT_UNLESS(false);
-    }
-}
-
 void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto snapshot = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
         Secrets = snapshot;
@@ -77,13 +55,6 @@ void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberDat
             } else {
                 tieringIds.insert(tIds.begin(), tIds.end());
             }
-        }
-        {
-            SSFetcher = std::make_shared<TFetcherCheckUserTieringPermissions>();
-            SSFetcher->SetUserToken(Context.GetExternalData().GetUserToken());
-            SSFetcher->SetActivityType(Context.GetActivityType());
-            SSFetcher->MutableTieringRuleIds() = tieringIds;
-            Register(new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10)));
         }
     } else {
         Y_ABORT_UNLESS(false);

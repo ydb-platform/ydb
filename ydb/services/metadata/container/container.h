@@ -19,16 +19,17 @@ public:
     }
 
     virtual TString GetTypeId() const = 0;
+
+    virtual ~TObjectSnapshotBase() = default;
 };
 
 template <NModifications::MetadataObject TObject>
-class TObjectSnapshot: TObjectSnapshotBase {
+class TObjectSnapshot: public TObjectSnapshotBase {
 private:
     YDB_READONLY_DEF(TObject, Metadata);
 
 public:
     TString GetTypeId() const override {
-        // TODO: Consider returning static string from GetTypeId everywhere
         return TObject::GetTypeId();
     }
 
@@ -95,14 +96,14 @@ public:
     using TSnapshotPtr = std::shared_ptr<TObjectSnapshot<TObject>>;
     using TSelf = TObjectContainer<TObject>;
 
-    const TSnapshotPtr& FindObject(const TString& objectId) const {
+    TSnapshotPtr FindObject(const TString& objectId) const {
         auto findObject = FindObjectAbstract(objectId);
         if (!findObject) {
-            return findObject;
+            return nullptr;
         }
-        auto resultPtr = dynamic_pointer_cast<TObjectSnapshot<TObject>>(findObject);
+        auto resultPtr = std::dynamic_pointer_cast<TObjectSnapshot<TObject>>(findObject);
         AFL_VERIFY(!!resultPtr);
-        return *resultPtr;
+        return resultPtr;
     }
 
     bool Emplace(const TString& objectId, TSnapshotPtr snapshot) {
@@ -112,7 +113,7 @@ public:
     static std::shared_ptr<TSelf> ConvertFromAbstractVerified(const std::shared_ptr<TAbstractObjectContainer>& container) {
         auto resultPtr = static_pointer_cast<TSelf>(container);
         AFL_VERIFY(resultPtr->MatchElementTypeId(TObject::GetTypeId()));
-        return *resultPtr;
+        return resultPtr;
     }
 };
 

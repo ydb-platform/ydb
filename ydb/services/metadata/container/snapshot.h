@@ -25,6 +25,8 @@ public:
     TAbstractObjectContainer GetObjects() && {
         return std::move(Objects);
     }
+
+    using NFetcher::ISnapshot::ISnapshot;
 };
 
 template <typename TObject>
@@ -54,7 +56,7 @@ protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override {
         AFL_VERIFY(rawData.result_sets().size() == 1);
         const auto& objectsData = rawData.result_sets()[0];
-        THistoryDecoderWrapper decoder(rawData);
+        THistoryDecoderWrapper decoder(objectsData);
         for (auto&& r : objectsData.rows()) {
             TObject object;
             if (!object.DeserializeFromRecord(decoder.GetBaseDecoder(), r)) {
@@ -66,10 +68,13 @@ protected:
                 return false;
             }
             Objects.EmplaceAbstractVerified(
-                object.GetId(), std::make_shared<TObjectSnapshot<TObject>>(std::move(object), TInstant::MicroSeconds(historyInstantUs)));
+                object.GetTypeId(), std::make_shared<TObjectSnapshot<TObject>>(std::move(object), TInstant::MicroSeconds(historyInstantUs)));
         }
         return true;
     }
+
+public:
+    using TSnapshotBase::TSnapshotBase;
 };
 
 template <NModifications::MetadataObject TObject>
@@ -82,10 +87,6 @@ protected:
         auto manager = NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(TObject::GetTypeId()));
         AFL_VERIFY(manager);
         return { manager };
-    }
-
-    TSnapshot<TObject> CreateSnapshot(const TInstant /*actuality*/) const override {
-        return std::make_shared<TSnapshot<TObject>>();
     }
 
     TString GetComponentId() const override {

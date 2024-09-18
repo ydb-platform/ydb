@@ -3476,13 +3476,13 @@ public:
     }
 
     template <NMetadata::NModifications::MetadataObject TObject>
-    const std::shared_ptr<NMetadata::NContainer::TObjectContainer<TObject>>& GetMetadataVerified() const {
+    std::shared_ptr<NMetadata::NContainer::TObjectContainer<TObject>> GetMetadataVerified() const {
         auto findMetadata = Metadata.FindPtr(TObject::GetTypeId());
         AFL_VERIFY(findMetadata);
         return NMetadata::NContainer::TObjectContainer<TObject>::ConvertFromAbstractVerified(*findMetadata);
     }
 
-    const std::shared_ptr<NMetadata::NContainer::TAbstractObjectContainer>& GetMetadataVerified(const TString& typeId) const {
+    std::shared_ptr<NMetadata::NContainer::TAbstractObjectContainer> GetMetadataVerified(const TString& typeId) const {
         auto findMetadata = Metadata.FindPtr(typeId);
         AFL_VERIFY(findMetadata);
         return *findMetadata;

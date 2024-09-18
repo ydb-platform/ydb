@@ -4,18 +4,49 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
+TConclusionStatus TTieringRulesManager::ValidateOperation(
+    const NYql::TObjectSettingsImpl& settings, IOperationsManager::TInternalModificationContext& context, NSchemeShard::TSchemeShard& ss) {
+    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
+        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+    }
+
+    if (context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Undefined) {
+        return TConclusionStatus::Fail("undefined activity type");
+    }
+
+    const ui32 requiredAccess = NACLib::EAccessRights::AlterSchema;
+    const TString& tieringRuleId = settings.GetObjectId();
+    const auto& pathIds = ss.ColumnTables.GetTablesWithTiering(tieringRuleId);
+    for (auto&& pathId : pathIds) {
+        auto path = NSchemeShard::TPath::Init(pathId, &ss);
+        if (!path.IsResolved() || path.IsUnderDeleting() || path.IsDeleted()) {
+            continue;
+        }
+        if (context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
+            return TConclusionStatus::Fail("tiering in using by table");
+        } else if (context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Alter) {
+            if (auto userToken = context.GetExternalData().GetUserToken()) {
+                TSecurityObject sObject(path->Owner, path->ACL, path->IsContainer());
+                if (!sObject.CheckAccess(requiredAccess, *userToken)) {
+                    return TConclusionStatus::Fail("no alter permissions for affected table");
+                }
+            }
+        }
+    }
+
+    return TConclusionStatus::Success();
+}
+
 void TTieringRulesManager::DoPrepareObjectsBeforeModification(std::vector<TTieringRule>&& objects,
     NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
     const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
     TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
 }
 
-// TODO: use context.SchemeOperation to validate update against table descriptions
 NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
-    const NYql::TObjectSettingsImpl& settings,
-    TInternalModificationContext& /*context*/) const {
-    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
-        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+    const NYql::TObjectSettingsImpl& settings, IOperationsManager::TInternalModificationContext& context, NSchemeShard::TSchemeShard& ss) const {
+    if (TConclusionStatus status = ValidateOperation(settings, context, ss); status.IsFail()) {
+        return status;
     }
 
     NMetadata::NInternal::TTableRecord result;
@@ -40,5 +71,4 @@ NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuild
     }
     return result;
 }
-
 }

@@ -156,7 +156,7 @@ struct TTxCompleteObjectModification: public TSchemeShard::TRwTxBase {
         AFL_VERIFY(modification)("type_id", typeId)("object_id", objectId);
 
         if (result.IsSuccess()) {
-            auto& objectsMetadata = Self->Objects.GetMetadataVerified(typeId);
+            auto objectsMetadata = Self->Objects.GetMetadataVerified(typeId);
             if (result.GetResult()) {
                 objectsMetadata->EmplaceAbstractVerified(objectId, result.GetResult());
             } else {
@@ -272,7 +272,7 @@ private:
 
     void StartFetching() const {
         Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-            MakeHolder<NMetadata::NProvider::TEvAskExtendedSnapshot>(Manager->GetAbstractSnapshotFetcher()));
+            MakeHolder<NMetadata::NProvider::TEvAskExtendedSnapshot>(Manager->GetExtendedSnapshotFetcher()));
     }
 
     void ScheduleRetry() const {

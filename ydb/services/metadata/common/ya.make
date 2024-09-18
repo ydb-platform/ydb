@@ -6,8 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    // ydb/services/metadata/initializer
-    // ydb/services/metadata/abstract
     ydb/services/bg_tasks/abstract
     ydb/core/tx/scheme_cache
 )

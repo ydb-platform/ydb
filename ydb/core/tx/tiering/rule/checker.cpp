@@ -1,24 +1,18 @@
 #include "checker.h"
-#include "ss_checker.h"
 
-#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tiering/external_data.h>
-#include <ydb/core/tx/tiering/rule/ss_fetcher.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
 void TRulePreparationActor::StartChecker() {
-    if (!Tierings || !Secrets || !SSCheckResult) {
+    if (!Tierings || !Secrets) {
         return;
     }
     auto g = PassAwayGuard();
-    if (!SSCheckResult->GetContent().GetOperationAllow()) {
-        Controller->OnPreparationProblem(SSCheckResult->GetContent().GetDenyReason());
-        return;
-    }
 
     for (auto&& tiering : Objects) {
         for (auto&& interval : tiering.GetIntervals()) {
@@ -38,24 +32,6 @@ void TRulePreparationActor::StartChecker() {
     Controller->OnPreparationFinished(std::move(Objects));
 }
 
-void TRulePreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
-    auto& proto = ev->Get()->Record;
-    if (proto.HasError()) {
-        Controller->OnPreparationProblem(proto.GetError().GetErrorMessage());
-        PassAway();
-    } else if (proto.HasContent()) {
-        SSCheckResult = SSFetcher->UnpackResult(ev->Get()->Record.GetContent().GetData());
-        if (!SSCheckResult) {
-            Controller->OnPreparationProblem("cannot unpack ss-fetcher result for class " + SSFetcher->GetClassName());
-            PassAway();
-        } else {
-            StartChecker();
-        }
-    } else {
-        Y_ABORT_UNLESS(false);
-    }
-}
-
 void TRulePreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto snapshot = ev->Get()->GetSnapshotPtrAs<TConfigsSnapshot>()) {
         Tierings = snapshot;
@@ -73,15 +49,6 @@ void TRulePreparationActor::Bootstrap() {
         new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
     Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
         new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
-    {
-        SSFetcher = std::make_shared<TFetcherCheckUserTieringPermissions>();
-        SSFetcher->SetUserToken(Context.GetExternalData().GetUserToken());
-        SSFetcher->SetActivityType(Context.GetActivityType());
-        for (auto&& i : Objects) {
-            SSFetcher->MutableTieringRuleIds().emplace(i.GetTieringRuleId());
-        }
-        Register(new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10)));
-    }
 }
 
 TRulePreparationActor::TRulePreparationActor(std::vector<TTieringRule>&& objects,

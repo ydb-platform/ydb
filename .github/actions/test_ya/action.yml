@@ -532,6 +532,54 @@ runs:
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+    - name: Check for changes in muted_ya
+      id: check_muted_ya
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const pr = context.payload.pull_request;
+          const response = await github.pulls.listFiles({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pr.number,
+          });
+
+          const files = response.data.map(file => file.filename);
+          const file_changed = files.includes('muted_ya');
+          
+          if (file_changed) {
+            core.setOutput('file_changed', 'true');
+          } else {
+            core.setOutput('file_changed', 'false');
+          }
+
+    - name: show diff mute_ya.txt
+      if: inputs.build_preset == 'relwithdebinfo' && steps.check_muted_ya.outputs.file_changed == 'true'
+      shell: bash
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        git fetch origin ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}}
+        python3 .github/scripts/tests/get_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
+        FILE_PATH=$PUBLIC_DIR/mute_info/1_new_muted_tests.txt
+        SEPARATOR=""
+        if [ -f "$FILE_PATH" ]; then
+          LINE_COUNT=$(wc -l < "$FILE_PATH")
+          if [ "$LINE_COUNT" -gt 0 ]; then
+            SEPARATOR=', '
+            MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/1_new_muted_tests.txt)"
+          fi
+        fi
+        FILE_PATH=$PUBLIC_DIR/mute_info/2_unmuted_tests.txt
+        if [ -f "$FILE_PATH" ]; then
+          LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
+          if [ "$LINE_COUNT_unmute" -gt 0 ]; then
+            MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/2_unmuted_tests.txt)"
+          fi
+        fi
+        printf "$MESSAGE" | .github/scripts/tests/comment-pr.py --color orange
+
 
     - name: sync results to s3 and publish links
       if: always()

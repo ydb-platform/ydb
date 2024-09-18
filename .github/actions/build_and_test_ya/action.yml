@@ -57,7 +57,6 @@ defaults:
 runs:
   using: "composite"
   steps:
-
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:

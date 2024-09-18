@@ -16,7 +16,7 @@ namespace NOIDC {
 class TContext {
 private:
     TString State;
-    bool IsAjaxRequest = false;
+    bool AjaxRequest = false;
     TString RequestedAddress;
 
 public:
@@ -24,7 +24,7 @@ public:
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
     TString GetState() const;
-    bool GetIsAjaxRequest() const;
+    bool IsAjaxRequest() const;
     TString GetRequestedAddress() const;
 
     TString CreateYdbOidcCookie(const TString& secret) const;

@@ -68,7 +68,7 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
 void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
     if (event->Get()->Status == "400") {
-        RetryRequestToProtectedResource(ctx, "Can not create session cookie");
+        RetryRequestToProtectedResource(ctx, "Cannot create session cookie");
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");

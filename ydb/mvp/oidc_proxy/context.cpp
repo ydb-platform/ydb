@@ -11,22 +11,22 @@ namespace NOIDC {
 
 TContext::TContext(const TString& state, const TString& requestedAddress, bool isAjaxRequest)
     : State(state)
-    , IsAjaxRequest(isAjaxRequest)
+    , AjaxRequest(isAjaxRequest)
     , RequestedAddress(requestedAddress)
 {}
 
 TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
     : State(GenerateState())
-    , IsAjaxRequest(DetectAjaxRequest(request))
-    , RequestedAddress(GetRequestedUrl(request, IsAjaxRequest))
+    , AjaxRequest(DetectAjaxRequest(request))
+    , RequestedAddress(GetRequestedUrl(request, AjaxRequest))
 {}
 
 TString TContext::GetState() const {
     return State;
 }
 
-bool TContext::GetIsAjaxRequest() const {
-    return IsAjaxRequest;
+bool TContext::IsAjaxRequest() const {
+    return AjaxRequest;
 }
 
 TString TContext::GetRequestedAddress() const {
@@ -49,7 +49,7 @@ TString TContext::GenerateCookie(const TString& secret) const {
     stateStruct << "{\"state\":\"" << State
                 << "\",\"requested_address\":\"" << RequestedAddress
                 << "\",\"expiration_time\":" << ToString(expirationTime.TimeT())
-                << ",\"ajax_request\":" << (IsAjaxRequest ? "true" : "false") << "}";
+                << ",\"ajax_request\":" << (AjaxRequest ? "true" : "false") << "}";
     TString digest = HmacSHA256(secret, stateStruct);
     TString cookieStruct {"{\"state_struct\":\"" + Base64Encode(stateStruct) + "\",\"digest\":\"" + Base64Encode(digest) + "\"}"};
     return Base64Encode(cookieStruct);

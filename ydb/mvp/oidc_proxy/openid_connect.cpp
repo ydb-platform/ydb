@@ -75,7 +75,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
-    if (context.GetIsAjaxRequest()) {
+    if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
     responseHeaders.Set("Location", redirectUrl);
@@ -122,16 +122,21 @@ TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state,
             stateStruct = jsonStateStruct->GetStringRobust();
             stateStruct = Base64Decode(stateStruct);
         }
+        if (stateStruct.Empty()) {
+            return TRestoreOidcContextResult({.IsSuccess = false,
+                                         .IsErrorRetryable = false,
+                                         .ErrorMessage = errorMessage << "Struct with state is empty"});
+        }
         const NJson::TJsonValue* jsonDigest = nullptr;
         if (jsonValue.GetValuePointer("digest", &jsonDigest)) {
             expectedDigest = jsonDigest->GetStringRobust();
             expectedDigest = Base64Decode(expectedDigest);
         }
-    }
-    if (stateStruct.Empty() || expectedDigest.Empty()) {
-        return TRestoreOidcContextResult({.IsSuccess = false,
-                                         .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Struct with state and expected digest are empty"});
+        if (expectedDigest.Empty()) {
+            return TRestoreOidcContextResult({.IsSuccess = false,
+                                            .IsErrorRetryable = false,
+                                            .ErrorMessage = errorMessage << "Expected digest is empty"});
+        }
     }
     TString digest = HmacSHA256(secret, stateStruct);
     if (expectedDigest != digest) {
@@ -153,7 +158,7 @@ TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state,
         } else {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                              .IsErrorRetryable = false,
-                                             .ErrorMessage = errorMessage << "Requested address not found in cookie"});
+                                             .ErrorMessage = errorMessage << "Requested address was not found in the cookie"});
         }
         const NJson::TJsonValue* jsonExpirationTime = nullptr;
         if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
@@ -169,7 +174,7 @@ TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state,
         } else {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                              .IsErrorRetryable = true,
-                                             .ErrorMessage = errorMessage << "Expiration time not found in json"}, TContext(state, redirectUrl));
+                                             .ErrorMessage = errorMessage << "Expiration time was not found in the json"}, TContext(state, redirectUrl));
         }
         const NJson::TJsonValue* jsonAjaxRequest = nullptr;
         if (jsonValue.GetValuePointer("ajax_request", &jsonAjaxRequest)) {
@@ -177,7 +182,7 @@ TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state,
         } else {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                              .IsErrorRetryable = true,
-                                             .ErrorMessage = errorMessage << "Can not detect ajax request"}, TContext(state, redirectUrl));
+                                             .ErrorMessage = errorMessage << "Cannot detect ajax request"}, TContext(state, redirectUrl));
         }
     }
     if (expectedState.Empty() || expectedState != state) {

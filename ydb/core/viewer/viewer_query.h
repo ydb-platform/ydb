@@ -218,6 +218,9 @@ public:
                 Span.Attribute("database", Database);
             }
         }
+        event->Record.MutableRequest()->SetApplicationName("ydb-ui");
+        event->Record.MutableRequest()->SetClientAddress(Event->Get()->Request.GetRemoteAddr());
+        event->Record.MutableRequest()->SetClientUserAgent(Event->Get()->Request.GetHeader("User-Agent"));
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 

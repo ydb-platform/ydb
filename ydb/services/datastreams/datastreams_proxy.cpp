@@ -522,8 +522,6 @@ namespace NKikimr::NDataStreams::V1 {
                 t->SetScaleThresholdSeconds(ws.stabilization_window().seconds() ? ws.stabilization_window().seconds() : 300);
                 t->SetScaleUpPartitionWriteSpeedThresholdPercent(ws.up_utilization_percent() ? ws.up_utilization_percent() : 90);
                 t->SetScaleDownPartitionWriteSpeedThresholdPercent(ws.down_utilization_percent() ? ws.down_utilization_percent() : 30);
-            } else if (0 == s.max_active_partitions()) {
-                t->SetMaxPartitionCount(0);
             }
         }
 

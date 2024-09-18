@@ -32,12 +32,12 @@ $config = [
 ];
 
 $ydb = new Ydb($config);
-
 ```
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
 Для создания строковых таблиц используется метод `session->createTable()`:
+
 ```php
 protected function createTabels()
 {
@@ -149,7 +149,6 @@ protected function upsertSimple()
 }
 ```
 
-
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `session->query()`.
@@ -175,6 +174,7 @@ print_r($result->rows());
 {% include [param_queries.md](../_includes/steps/06_param_queries.md) %}
 
 Для использования параметризированных запросов можно использовать следующий код:
+
 ```php
 protected function selectPrepared($series_id, $season_id, $episode_id)
 {

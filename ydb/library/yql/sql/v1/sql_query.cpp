@@ -220,7 +220,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) && 
+                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) &&
                      IS_TOKEN(rule.GetBlock2().GetToken2().GetId(), REPLACE))
                 );
             }
@@ -1239,8 +1239,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TDeferredAtom> features;
-            ParseViewOptions(features, node.GetRule_with_table_settings4());
-            ParseViewQuery(features, node.GetRule_select_stmt6());
+            if (!ParseViewOptions(features, node.GetRule_with_table_settings4())) {
+                return false;
+            }
+            if (!ParseViewQuery(features, node.GetRule_select_stmt6())) {
+                return false;
+            }
 
             const TString objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             constexpr const char* TypeId = "VIEW";
@@ -1465,7 +1469,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TVector<TString> columns;
             if (analyzeTable.HasBlock2()) {
-                auto columnsNode = 
+                auto columnsNode =
                     analyzeTable.GetBlock2().GetRule_column_list2();
 
                 if (columnsNode.HasRule_column_name1()) {
@@ -2821,6 +2825,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansiimplicitcrossjoin") {
             Ctx.AnsiImplicitCrossJoin = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiImplicitCrossJoin");
+        } else if (normalizedPragma == "distinctoverwindow") {
+            Ctx.DistinctOverWindow = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DistinctOverWindow");
+        } else if (normalizedPragma == "disabledistinctoverwindow") {
+            Ctx.DistinctOverWindow = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverWindow");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

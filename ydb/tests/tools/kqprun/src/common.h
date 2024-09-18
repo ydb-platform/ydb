@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -31,6 +32,11 @@ struct TYdbSetupSettings {
     std::unordered_set<TString> SharedTenants;
     std::unordered_set<TString> ServerlessTenants;
     TDuration InitializationTimeout = TDuration::Seconds(10);
+    TDuration RequestsTimeout;
+
+    bool DisableDiskMock = false;
+    bool UseRealPDisks = false;
+    ui64 DiskSize = 32_GB;
 
     bool MonitoringEnabled = false;
     ui16 MonitoringPortOffset = 0;
@@ -68,6 +74,7 @@ struct TRunnerOptions {
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
+    TString ScriptQueryTimelineFile;
     TString InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;

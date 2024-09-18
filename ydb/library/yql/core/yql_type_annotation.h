@@ -282,7 +282,7 @@ struct TUdfCachedInfo {
 
 struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
-    THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
+    THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSourceMap;
@@ -430,17 +430,24 @@ struct TTypeAnnotationContext: public TThrRefBase {
     void Reset();
 
     /**
+     * Helper method to check statistics in type annotation context
+     */
+    bool ContainsStats(const TExprNode* input) {
+        return StatisticsMap.contains(input ? input->UniqueId() : 0);
+    }
+
+    /**
      * Helper method to fetch statistics from type annotation context
      */
     std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
-        return StatisticsMap.Value(input, std::shared_ptr<TOptimizerStatistics>(nullptr));
+        return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 
     /**
      * Helper method to set statistics in type annotation context
      */
     void SetStats(const TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats) {
-        StatisticsMap[input] = stats;
+        StatisticsMap[input ? input->UniqueId() : 0] = stats;
     }
 
     bool IsBlockEngineEnabled() const {

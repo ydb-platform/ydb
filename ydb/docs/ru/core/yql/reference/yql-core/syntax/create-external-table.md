@@ -2,7 +2,7 @@
 
 Вызов `CREATE EXTERNAL TABLE` создает [внешнюю таблицу](../../../concepts/datamodel/external_table.md) с указанной схемой данных.
 
-```sql
+```yql
 CREATE EXTERNAL TABLE table_name (
   column1 type1,
   column2 type2 NOT NULL,
@@ -17,6 +17,7 @@ CREATE EXTERNAL TABLE table_name (
 ```
 
 Где:
+
 * `column1 type1`, `columnN typeN NULL` - колонка данных и ее тип;
 * `data_source_name` - имя [подключения](../../../concepts/datamodel/external_data_source.md) к S3 ({{ objstorage-name }}).
 * `path` - путь внутри бакета с данными. Путь должен вести на существующий каталог внутри бакета.
@@ -25,6 +26,7 @@ CREATE EXTERNAL TABLE table_name (
 
 
 Допускается использование только ограниченного подмножества типов данных:
+
 - `Bool`.
 - `Int8`, `Uint8`, `Int16`, `Uint16`, `Int32`, `Uint32`, `Int64`, `Uint64`.
 - `Float`, `Double`.
@@ -33,11 +35,11 @@ CREATE EXTERNAL TABLE table_name (
 
 Без дополнительных модификаторов колонка приобретает [опциональный тип](../types/optional.md) тип, и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 
-**Пример**
+## Пример
 
 Cледующий SQL-запрос создает внешнюю таблицу с именем `s3_test_data`, в котором расположены файлы в формате `CSV` со строковыми полями `key` и `value`, находящиеся внутри бакета по пути `test_folder`, при этом для указания реквизитов подключения используется объект [подключение](../../../concepts/datamodel/external_data_source.md) `bucket`:
 
-```sql
+```yql
 CREATE EXTERNAL TABLE s3_test_data (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL

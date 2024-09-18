@@ -2,13 +2,13 @@
 
 Row number within a [partition](../../../syntax/window.md#partition). No arguments.
 
-**Signature**
+### Signature
 
-```
+```yql
 ROW_NUMBER()->Uint64
 ```
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

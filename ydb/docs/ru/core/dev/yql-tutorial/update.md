@@ -12,7 +12,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 UPDATE episodes
 SET title="test Episode 2"
 WHERE

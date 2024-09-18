@@ -134,8 +134,8 @@ jobs:
             const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
             const header = `<!-- merge pr=${pr.number} -->\n`;
             
-            const fail_msg = header + ':red_circle: Unable to merge your PR into the `main` branch. '
-                + 'Please rebase or merge it with the `main` branch.'
+            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
+                + 'Please rebase or merge it with the base branch.'
             
             let i = 0;
             

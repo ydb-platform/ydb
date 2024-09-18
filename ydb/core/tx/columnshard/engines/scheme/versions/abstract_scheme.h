@@ -27,7 +27,7 @@ public:
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
 
     bool IsSpecialColumnId(const ui32 columnId) const;
-    virtual const std::set<ui32>& GetColumnIds() const = 0;
+    virtual const std::vector<ui32>& GetColumnIds() const = 0;
 
     virtual NArrow::NAccessor::TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
     NArrow::NAccessor::TColumnSaver GetColumnSaver(const TString& columnName) const {
@@ -63,7 +63,7 @@ public:
     TString DebugString() const {
         return DoDebugString();
     }
-    virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
+    virtual const std::shared_ptr<NArrow::TSchemaLite>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;
     virtual ui64 GetVersion() const = 0;

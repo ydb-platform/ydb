@@ -933,6 +933,29 @@ private:
             return TStatus::Error;
         }
 
+        TStringBuf outGroup;
+        if (auto setting = NYql::GetSetting(copy.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+            outGroup = setting->Tail().Content();
+        }
+
+        TStringBuf inputColGroupSpec;
+        const auto& path = copy.Input().Item(0).Paths().Item(0);
+        if (auto table = path.Table().Maybe<TYtTable>()) {
+            if (auto tableDesc = State_->TablesData->FindTable(copy.DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
+                inputColGroupSpec = tableDesc->ColumnGroupSpec;
+            }
+        } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                inputColGroupSpec = setting->Tail().Content();
+            }
+        }
+
+        if (outGroup != inputColGroupSpec) {
+            ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
+                << "has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
+            return TStatus::Error;
+        }
+
         input->SetTypeAnn(MakeOutputOperationType(copy, ctx));
         return TStatus::Ok;
     }
@@ -950,7 +973,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::TransformColGroups | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
 

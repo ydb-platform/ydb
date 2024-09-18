@@ -168,6 +168,8 @@ namespace NLs {
     TCheckFunc BackupHistoryCount(ui64 count);
 
     TCheckFunc HasOwner(const TString& owner);
+    TCheckFunc HasRight(const TString& right);
+    TCheckFunc HasNotRight(const TString& right);
     TCheckFunc HasEffectiveRight(const TString& right);
     TCheckFunc HasNotEffectiveRight(const TString& right);
 

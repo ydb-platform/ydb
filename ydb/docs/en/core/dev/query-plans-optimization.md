@@ -4,7 +4,7 @@ Before executing a query, it is essential to analyze its execution plan to detec
 
 Let's consider the following query that searches for episodes by title:
 
-``` sql
+```yql
 SELECT season_id, episode_id
   FROM episodes
   WHERE title = 'The Work Outing'
@@ -21,7 +21,8 @@ Let's build a plan for this query. You can do this via either UI or {{ ydb-short
 - {{ ydb-short-name }} CLI
 
   You can build a query plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) using the following command:
-  ```
+
+  ```bash
   ydb -p <profile_name> table query explain \
     -q "SELECT season_id, episode_id
     FROM episodes
@@ -29,7 +30,8 @@ Let's build a plan for this query. You can do this via either UI or {{ ydb-short
   ```
 
   Result:
-  ```
+
+  ```text
   Query Plan:
   ResultSet
   └──Limit (Limit: 1001)
@@ -56,7 +58,7 @@ Both plan representations contain the result being returned to the client at the
 
 One typical approach to avoid full scans is using a [secondary index](secondary-indexes.md). In this case, it makes sense to add a secondary index for the column `title` using the following query:
 
-``` sql
+```yql
 ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
@@ -70,7 +72,8 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
 - {{ ydb-short-name }} CLI
 
   Command:
-  ```
+
+  ```bash
   ydb -p <profile_name> table query explain \
     -q "SELECT season_id, episode_id
     FROM episodes VIEW title_index
@@ -78,7 +81,8 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
   ```
 
   Result:
-  ```
+
+  ```text
   Query Plan:
   ResultSet
   └──Limit (Limit: 1001)
@@ -88,6 +92,7 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
         └──TablePointLookup (ReadRange: ["title (The Work Outing)","series_id (-∞, +∞)","season_id (-∞, +∞)","episode_id (-∞, +∞)"], ReadLimit: 1001, ReadColumns: ["episode_id","season_id","title"], Table: episodes/title_index/indexImplTable)
            Tables: ["episodes/title_index/indexImplTable"]
   ```
+
 - Embedded UI
 
   ![explain_ui](../_assets/explain_with_index_ui.png)

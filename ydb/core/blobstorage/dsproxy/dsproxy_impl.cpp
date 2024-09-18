@@ -19,6 +19,8 @@ namespace NKikimr {
         , EnableVPatch(params.EnableVPatch)
         , SlowDiskThreshold(params.SlowDiskThreshold)
         , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
+        , MaxNumOfSlowDisks(params.MaxNumOfSlowDisks)
+        , LongRequestThresholdMs(params.LongRequestThresholdMs)
     {}
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected,TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
@@ -32,6 +34,8 @@ namespace NKikimr {
         , EnableVPatch(params.EnableVPatch)
         , SlowDiskThreshold(params.SlowDiskThreshold)
         , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
+        , MaxNumOfSlowDisks(params.MaxNumOfSlowDisks)
+        , LongRequestThresholdMs(params.LongRequestThresholdMs)
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {

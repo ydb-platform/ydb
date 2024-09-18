@@ -15,7 +15,7 @@
 
 Для начала работы необходимо:
 
-1. Развернуть кластер [YDB](../devops/index.md)
+1. Развернуть кластер [{{ ydb-short-name }}](../devops/index.md)
 2. Создать базу данных (описано в п.1 для соответствующего типа развертывания кластера)
 3. Установить [Terraform](https://developer.hashicorp.com/terraform/install)
 4. Установить и настроить [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/)
@@ -23,8 +23,7 @@
 ## Настройка Terraform провайдера для работы с {{ ydb-short-name }} {#setup}
 
 1. Нужно скачать [код провайдера](https://github.com/ydb-platform/terraform-provider-ydb/)
-2. Собрать провайдер, выполнив `$ make local-build` в корневой директории кода провайдера. Для этого вам необходимо дополнительно установить утилиту [make](https://www.gnu.org/software/make/) и [go](https://go.dev/)
-Провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
+2. Собрать провайдер, выполнив `$ make local-build` в корневой директории кода провайдера. Для этого вам необходимо дополнительно установить утилиту [make](https://www.gnu.org/software/make/) и [go](https://go.dev/); провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
 3. Добавить провайдер в `~/.terraformrc`, дописав в секцию `provider_installation` следующее содержание (если такой секции ещё не было, то создать):
 
     ```tf
@@ -240,7 +239,6 @@ resource "ydb_topic" "test" {
 
 * `path` — (обязательный) путь строковой таблицы, относительно корня базы (пример - `/path/to/table`).
 * `connection_string` — (обязательный) [строка соединения](#connection_string).
-
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
 * `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table/index.md) таблицы, содержит упорядоченный список имён колонок первичного ключа.
@@ -535,7 +533,7 @@ resource "ydb_table_index" "ydb_table_index" {
 }
 ```
 
-## Управление конфигурацией топиков {{ydb-short-name}} через Terraform
+## Управление конфигурацией топиков {{ ydb-short-name }} через Terraform
 
 Для работы с [топиками](../concepts/topic.md) используется ресурс `ydb_topic`
 

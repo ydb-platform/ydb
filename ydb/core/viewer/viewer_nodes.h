@@ -22,6 +22,7 @@ enum class ENodeFields : ui8 {
     Tablets,
     NodeId,
     HostName,
+    NodeName,
     DC,
     Rack,
     Version,
@@ -61,9 +62,7 @@ class TJsonNodes : public TViewerPipeClient {
 
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResourceNavigateResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
@@ -95,9 +94,7 @@ class TJsonNodes : public TViewerPipeClient {
 
     ETimeoutTag CurrentTimeoutState = NoTimeout;
 
-    TString Database;
     TString SharedDatabase;
-    bool Direct = false;
     bool FilterDatabase = false;
     bool HasDatabaseNodes = false;
     TPathId FilterPathId;
@@ -180,6 +177,10 @@ class TJsonNodes : public TViewerPipeClient {
                 return NodeInfo.ResolveHost;
             }
             return {};
+        }
+
+        TString GetNodeName() const {
+            return SystemState.GetNodeName();
         }
 
         TString GetDataCenter() const {
@@ -406,6 +407,33 @@ class TJsonNodes : public TViewerPipeClient {
         bool HasSubDomainKey(const TSubDomainKey& subDomainKey) const {
             return SubDomainKey == subDomainKey;
         }
+
+        TString GetGroupName(ENodeFields groupBy, TInstant now) const {
+            switch (groupBy) {
+                case ENodeFields::NodeId:
+                    return ToString(GetNodeId());
+                case ENodeFields::HostName:
+                    return GetHostName();
+                case ENodeFields::NodeName:
+                    return GetNodeName();
+                case ENodeFields::Database:
+                    return Database;
+                case ENodeFields::DiskSpaceUsage:
+                    return GetDiskUsageForGroup();
+                case ENodeFields::DC:
+                    return GetDataCenter();
+                case ENodeFields::Rack:
+                    return GetRack();
+                case ENodeFields::Missing:
+                    return ToString(MissingDisks);
+                case ENodeFields::Uptime:
+                    return GetUptimeForGroup(now);
+                case ENodeFields::Version:
+                    return GetVersionForGroup();
+                default:
+                    return {};
+            }
+        }
     };
 
     struct TNodeGroup {
@@ -446,6 +474,7 @@ class TJsonNodes : public TViewerPipeClient {
                                                     .set(+ENodeFields::Rack);
     const TFieldsType FieldsSystemState = TFieldsType().set(+ENodeFields::SystemState)
                                                        .set(+ENodeFields::Database)
+                                                       .set(+ENodeFields::NodeName)
                                                        .set(+ENodeFields::Version)
                                                        .set(+ENodeFields::Uptime)
                                                        .set(+ENodeFields::Memory)
@@ -464,6 +493,7 @@ class TJsonNodes : public TViewerPipeClient {
         { ENodeFields::Rack, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Uptime, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Version, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::NodeName, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Missing, TFieldsType().set(+ENodeFields::PDisks) },
     };
 
@@ -474,6 +504,8 @@ class TJsonNodes : public TViewerPipeClient {
     ENodeFields SortBy = ENodeFields::NodeId;
     bool ReverseSort = false;
     ENodeFields GroupBy = ENodeFields::NodeId;
+    ENodeFields FilterGroupBy = ENodeFields::NodeId;
+    TString FilterGroup;
     bool NeedFilter = false;
     bool NeedGroup = false;
     bool NeedSort = false;
@@ -499,6 +531,8 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::NodeId;
         } else if (field == "Host") {
             result = ENodeFields::HostName;
+        } else if (field == "NodeName") {
+            result = ENodeFields::NodeName;
         } else if (field == "DC") {
             result = ENodeFields::DC;
         } else if (field == "Rack") {
@@ -556,10 +590,6 @@ public:
         if (UptimeSeconds || ProblemNodesOnly || !Filter.empty()) {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        Database = params.Get("database");
-        if (!Database) {
-            Database = params.Get("tenant");
-        }
         FilterPath = params.Get("path");
         if (FilterPath && !Database) {
             Database = FilterPath;
@@ -569,6 +599,11 @@ public:
         }
         if (FilterPath == Database) {
             FilterPath.clear();
+        }
+        if (params.Has("filter_group") && params.Has("filter_group_by")) {
+            FilterGroup = params.Get("filter_group");
+            FilterGroupBy = ParseENodeFields(params.Get("filter_group_by"));
+            FieldsRequired.set(+FilterGroupBy);
         }
 
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
@@ -603,7 +638,7 @@ public:
         } else if (params.Get("type") == "any") {
             Type = EType::Any;
         }
-        NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0;
+        NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
         if (params.Has("offset")) {
             Offset = FromStringWithDefault<ui32>(params.Get("offset"), 0);
             NeedLimit = true;
@@ -667,55 +702,54 @@ public:
     }
 
     void Bootstrap() override {
-        Direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
 
-        if (Database && !Direct) {
-            return RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        } else {
-            if (FieldsNeeded(FieldsNodeInfo)) {
-                NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
-                NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
-            }
-            if (FilterStoragePool || !FilterGroupIds.empty()) {
-                FilterDatabase = false; // we disable database filter if we're filtering by pool or group
-            }
-            if (FilterDatabase) {
+        if (FieldsNeeded(FieldsNodeInfo)) {
+            NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+            NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
+        }
+        if (FilterStoragePool || !FilterGroupIds.empty()) {
+            FilterDatabase = false; // we disable database filter if we're filtering by pool or group
+        }
+        if (FilterDatabase) {
+            if (!DatabaseNavigateResponse) {
                 DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, ENavigateRequestDatabase);
-                if (!FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
-                    DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database, EBoardInfoRequestDatabase);
-                }
             }
-            if (FilterPath && FieldsNeeded(FieldsTablets)) {
-                PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
+            if (!FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database, EBoardInfoRequestDatabase);
             }
-            if (FilterStoragePool) {
-                StoragePoolsResponse = RequestBSControllerPools();
-                GroupsResponse = RequestBSControllerGroups();
-                VSlotsResponse = RequestBSControllerVSlots();
-                FilterStorageStage = EFilterStorageStage::Pools;
-            } else if (!FilterGroupIds.empty()) {
-                VSlotsResponse = RequestBSControllerVSlots();
-                FilterStorageStage = EFilterStorageStage::VSlots;
-            }
-            if (With != EWith::Everything) {
+        }
+        if (FilterPath && FieldsNeeded(FieldsTablets)) {
+            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
+        }
+        if (FilterStoragePool) {
+            StoragePoolsResponse = RequestBSControllerPools();
+            GroupsResponse = RequestBSControllerGroups();
+            VSlotsResponse = RequestBSControllerVSlots();
+            FilterStorageStage = EFilterStorageStage::Pools;
+        } else if (!FilterGroupIds.empty()) {
+            VSlotsResponse = RequestBSControllerVSlots();
+            FilterStorageStage = EFilterStorageStage::VSlots;
+        }
+        if (With != EWith::Everything) {
+            PDisksResponse = RequestBSControllerPDisks();
+        }
+        if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
+            FieldsRequired.set(+ENodeFields::SystemState);
+            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            HivesToAsk.push_back(rootHiveId);
+            if (!PDisksResponse) {
                 PDisksResponse = RequestBSControllerPDisks();
             }
-            if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::SystemState);
-                TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
-                HivesToAsk.push_back(rootHiveId);
-                if (!PDisksResponse) {
-                    PDisksResponse = RequestBSControllerPDisks();
-                }
-            }
-            if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
-                TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
-                HivesToAsk.push_back(rootHiveId);
-            }
-            Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutTablets)); // 50% timeout (for tablets)
-            TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal));
         }
+        if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
+            TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
+            HivesToAsk.push_back(rootHiveId);
+        }
+        Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutTablets)); // 50% timeout (for tablets)
+        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal));
     }
 
     void InvalidateNodes() {
@@ -888,17 +922,29 @@ public:
                 Filter.clear();
                 InvalidateNodes();
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0;
+            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
+                TNodeView nodeView;
+                auto now = TInstant::Now();
+                for (TNode* node : NodeView) {
+                    if (node->GetGroupName(FilterGroupBy, now) == FilterGroup) {
+                        nodeView.push_back(node);
+                    }
+                }
+                NodeView.swap(nodeView);
+                FilterGroup.clear();
+                InvalidateNodes();
+            }
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
             FoundNodes = NodeView.size();
         }
     }
 
-    template<typename F>
-    void GroupCollection(F&& groupBy) {
+    void GroupCollection() {
+        auto now = TInstant::Now();
         std::unordered_map<TString, size_t> nodeGroups;
         NodeGroups.clear();
         for (TNode* node : NodeView) {
-            auto gb = groupBy(node);
+            auto gb = node->GetGroupName(GroupBy, now);
             TNodeGroup* nodeGroup = nullptr;
             auto it = nodeGroups.find(gb);
             if (it == nodeGroups.end()) {
@@ -916,40 +962,18 @@ public:
         if (FilterDone() && NeedGroup && FieldsAvailable.test(+GroupBy)) {
             switch (GroupBy) {
                 case ENodeFields::NodeId:
-                    GroupCollection([](const TNode* node) { return ToString(node->GetNodeId()); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::HostName:
-                    GroupCollection([](const TNode* node) { return node->GetHostName(); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
+                case ENodeFields::NodeName:
                 case ENodeFields::Database:
-                    GroupCollection([](const TNode* node) { return node->Database; });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::DiskSpaceUsage:
-                    GroupCollection([](const TNode* node) { return node->GetDiskUsageForGroup(); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::DC:
-                    GroupCollection([](const TNode* node) { return node->GetDataCenter(); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::Rack:
-                    GroupCollection([](const TNode* node) { return node->GetRack(); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::Missing:
-                    GroupCollection([](const TNode* node) { return ToString(node->MissingDisks); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::Uptime:
-                    GroupCollection([now = TInstant::Now()](const TNode* node) { return node->GetUptimeForGroup(now); });
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
-                    break;
                 case ENodeFields::Version:
-                    GroupCollection([](const TNode* node) { return node->GetVersionForGroup(); });
+                    GroupCollection();
                     SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
+                    NeedGroup = false;
                     break;
                 case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
@@ -964,7 +988,6 @@ public:
                 case ENodeFields::DisconnectTime:
                     break;
             }
-            NeedGroup = false;
         }
     }
 
@@ -976,6 +999,9 @@ public:
                     break;
                 case ENodeFields::HostName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetHostName(); }, ReverseSort);
+                    break;
+                case ENodeFields::NodeName:
+                    SortCollection(NodeView, [](const TNode* node) { return node->GetNodeName(); }, ReverseSort);
                     break;
                 case ENodeFields::DC:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetDataCenterId(); }, ReverseSort);
@@ -1534,7 +1560,7 @@ public:
             }
             if (FieldsNeeded(FieldsTablets) && TabletViewerResponse.count(nodeId) == 0) {
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
-                viewerRequest->Record.MutableTabletRequest()->SetGroupBy("NodeId,Type,State");
+                viewerRequest->Record.MutableTabletRequest()->SetGroupBy("Type,State");
                 viewerRequest->Record.SetTimeout(Timeout / 2);
                 for (const TNode* node : batch.NodesToAskAbout) {
                     viewerRequest->Record.MutableLocation()->AddNodeId(node->GetNodeId());
@@ -1652,14 +1678,10 @@ public:
         if (FieldsNeeded(FieldsTablets)) {
             for (auto& [nodeId, response] : TabletViewerResponse) {
                 if (response.IsOk()) {
-                    Cerr << "Good tablet response for node " << nodeId << Endl;
-                    Cerr << "LocationResponded: " << response.Get()->Record.GetLocationResponded().ShortDebugString() << Endl;
                     auto& tabletResponse(*(response.Get()->Record.MutableTabletResponse()));
                     if (tabletResponse.TabletStateInfoSize() > 0 && !tabletResponse.GetTabletStateInfo(0).HasCount()) {
-                        Cerr << "TabletResponse before merge: " << tabletResponse.ShortDebugString() << Endl;
                         GroupWhiteboardResponses(tabletResponse, "NodeId,Type,State");
                     }
-                    Cerr << "TabletResponse: " << tabletResponse.ShortDebugString() << Endl;
                     for (const auto& tabletState : tabletResponse.GetTabletStateInfo()) {
                         TNode* node = FindNode(tabletState.GetNodeId());
                         if (node) {
@@ -1671,8 +1693,6 @@ public:
                             }
                         }
                     }
-                } else {
-                    Cerr << "Bad tablet response for node " << nodeId << Endl;
                 }
             }
             for (auto& [nodeId, response] : TabletStateResponse) {
@@ -2076,7 +2096,7 @@ public:
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
         NKikimrViewer::TNodesInfo json;
-        json.SetVersion(2);
+        json.SetVersion(Viewer->GetCapabilityVersion("/viewer/nodes"));
         json.SetFieldsAvailable(FieldsAvailable.to_string());
         json.SetFieldsRequired(FieldsRequired.to_string());
         if (NeedFilter) {
@@ -2159,74 +2179,187 @@ public:
     }
 
     static YAML::Node GetSwagger() {
-        TSimpleYamlBuilder yaml({
-            .Method = "get",
-            .Tag = "viewer",
-            .Summary = "Nodes info",
-            .Description = "Information about nodes",
-        });
-        yaml.AddParameter({
-            .Name = "path",
-            .Description = "path to schema object",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "with",
-            .Description = "filter nodes by missing disks or space",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "storage",
-            .Description = "return storage info",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "tablets",
-            .Description = "return tablets info",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "sort",
-            .Description = "sort by (NodeId,Host,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "group",
-            .Description = "group by (NodeId,Host,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "offset",
-            .Description = "skip N nodes",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "limit",
-            .Description = "limit to N nodes",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "uptime",
-            .Description = "return only nodes with less uptime in sec.",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "problems_only",
-            .Description = "return only problem nodes",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "filter",
-            .Description = "filter nodes by id or host",
-            .Type = "string",
-        });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>());
-        return yaml;
+        YAML::Node node = YAML::Load(R"___(
+            get:
+                tags:
+                  - viewer
+                summary: Nodes info
+                description: Information about nodes
+                parameters:
+                  - name: database
+                    in: query
+                    description: database name
+                    required: false
+                    type: string
+                  - name: path
+                    in: query
+                    description: path to schema object
+                    required: false
+                    type: string
+                  - name: node_id
+                    in: query
+                    description: node id
+                    required: false
+                    type: integer
+                  - name: group_id
+                    in: query
+                    description: group id
+                    required: false
+                    type: integer
+                  - name: pool
+                    in: query
+                    description: storage pool name
+                    required: false
+                    type: string
+                  - name: type
+                    in: query
+                    description: >
+                        return nodes of specific type:
+                          * `static`
+                          * `dynamic`
+                          * `any`
+                  - name: with
+                    in: query
+                    description: >
+                        filter groups by missing or space:
+                          * `missing`
+                          * `space`
+                  - name: storage
+                    in: query
+                    description: return storage info
+                    required: false
+                    type: boolean
+                  - name: tablets
+                    in: query
+                    description: return tablets info
+                    required: false
+                    type: boolean
+                  - name: problems_only
+                    in: query
+                    description: return only problem nodes
+                    required: false
+                    type: boolean
+                  - name: uptime
+                    in: query
+                    description: return only nodes with less uptime in sec.
+                    required: false
+                    type: integer
+                  - name: filter
+                    in: query
+                    description: filter nodes by id or host
+                    required: false
+                    type: string
+                  - name: sort
+                    in: query
+                    description: >
+                        sort by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `DC`
+                          * `Rack`
+                          * `Version`
+                          * `Uptime`
+                    required: false
+                    type: string
+                  - name: group
+                    in: query
+                    description: >
+                        group by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `Database`
+                          * `DiskSpaceUsage`
+                          * `DC`
+                          * `Rack`
+                          * `Missing`
+                          * `Uptime`
+                          * `Version`
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        group by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `Database`
+                          * `DiskSpaceUsage`
+                          * `DC`
+                          * `Rack`
+                          * `Missing`
+                          * `Uptime`
+                          * `Version`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: content for filter group by
+                    required: false
+                    type: string
+                  - name: fields_required
+                    in: query
+                    description: >
+                        list of fields required in response, the more - the heavier could be request. `all` for all fields:
+                          * `NodeId` (always required)
+                          * `SystemState`
+                          * `PDisks`
+                          * `VDisks`
+                          * `Tablets`
+                          * `Host`
+                          * `NodeName`
+                          * `DC`
+                          * `Rack`
+                          * `Version`
+                          * `Uptime`
+                          * `Memory`
+                          * `CPU`
+                          * `LoadAverage`
+                          * `Missing`
+                          * `DiskSpaceUsage`
+                          * `SubDomainKey`
+                          * `DisconnectTime`
+                          * `Database`
+                    required: false
+                    type: string
+                  - name: offset
+                    in: query
+                    description: skip N nodes
+                    required: false
+                    type: integer
+                  - name: limit
+                    in: query
+                    description: limit to N nodes
+                    required: false
+                    type: integer
+                  - name: timeout
+                    in: query
+                    description: timeout in ms
+                    required: false
+                    type: integer
+                  - name: direct
+                    in: query
+                    description: fulfill request on the target node without redirects
+                    required: false
+                    type: boolean
+                responses:
+                    200:
+                        description: OK
+                        content:
+                            application/json:
+                                schema:
+                                    type: object
+                    400:
+                        description: Bad Request
+                    403:
+                        description: Forbidden
+                    504:
+                        description: Gateway Timeout
+                )___");
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
+        return node;
     }
 };
 

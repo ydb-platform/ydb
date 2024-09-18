@@ -79,6 +79,7 @@ struct TKqpExecuterTxResult {
     bool IsStream = true;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
+    const TVector<TString>* ColumnHints = nullptr;
     TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
     Ydb::ResultSet TrailingResult;
@@ -88,10 +89,12 @@ struct TKqpExecuterTxResult {
         bool isStream,
         NKikimr::NMiniKQL::TType* mkqlItemType,
         const TVector<ui32>* сolumnOrder,
+        const TVector<TString>* columnHints,
         const TMaybe<ui32>& queryResultIndex)
         : IsStream(isStream)
         , MkqlItemType(mkqlItemType)
         , ColumnOrder(сolumnOrder)
+        , ColumnHints(columnHints)
         , QueryResultIndex(queryResultIndex)
     {}
 

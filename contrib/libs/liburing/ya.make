@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.6)
+VERSION(2.7)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.7.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -47,12 +47,14 @@ RECURSE(
     test/a0908ae19763.t
     test/a4c0b3decb33.t
     test/accept-link.t
+    test/accept-non-empty.t
     test/accept-reuse.t
     test/accept-test.t
     test/accept.t
     test/across-fork.t
     test/b19062a56726.t
     test/b5837bd5311d.t
+    test/bind-listen.t
     test/buf-ring-nommap.t
     test/buf-ring-put.t
     test/buf-ring.t
@@ -95,12 +97,15 @@ RECURSE(
     test/files-exit-hang-timeout.t
     test/fixed-buf-iter.t
     test/fixed-buf-merge.t
+    test/fixed-hugepage.t
     test/fixed-link.t
     test/fixed-reuse.t
     test/fpos.t
     test/fsync.t
     test/futex.t
     test/hardlink.t
+    test/ignore-single-mmap.t
+    test/init-mem.t
     test/io-cancel.t
     test/io_uring_enter.t
     test/io_uring_passthrough.t
@@ -125,6 +130,7 @@ RECURSE(
     test/nolibc.t
     test/nop-all-sizes.t
     test/nop.t
+    test/ooo-file-unreg.t
     test/open-close.t
     test/open-direct-link.t
     test/open-direct-pick.t
@@ -153,6 +159,7 @@ RECURSE(
     test/recv-msgall-stream.t
     test/recv-msgall.t
     test/recv-multishot.t
+    test/recvsend_bundle.t
     test/reg-fd-only.t
     test/reg-hint.t
     test/reg-reg-ring.t
@@ -189,6 +196,7 @@ RECURSE(
     test/sq-poll-share.t
     test/sq-space_left.t
     test/sqpoll-disable-exit.t
+    test/sqpoll-exec.t
     test/sqpoll-exit-hang.t
     test/sqpoll-sleep.t
     test/stdout.t

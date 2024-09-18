@@ -895,7 +895,6 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
-            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }
@@ -908,7 +907,7 @@ namespace {
         Codec_ = ::NYdb::NConsoleClient::ParseCodec(CodecStr_, AllowedCodecs_);
     }
 
-    NTopic::ECodec TCommandWithCodec::GetCodec() const {
+    TMaybe<NTopic::ECodec> TCommandWithCodec::GetCodec() const {
         return Codec_;
     }
 
@@ -958,7 +957,9 @@ namespace {
 
     NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
         NTopic::TWriteSessionSettings settings;
-        settings.Codec(GetCodec());
+        if (auto codec = GetCodec(); codec.Defined()) {
+            settings.Codec(*codec);
+        }
         settings.Path(TopicName);
 
         if (!MessageGroupId_.Defined()) {

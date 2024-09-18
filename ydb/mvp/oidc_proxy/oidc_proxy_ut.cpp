@@ -10,6 +10,7 @@
 #include "oidc_session_create_handler.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
+#include "context.h"
 
 using namespace NMVP::NOIDC;
 
@@ -719,7 +720,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        request << "Cookie: " << CreateNameYdbOidcCookie(settings.ClientSecret, wrongState) << "=" << GenerateCookie(wrongState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest()) << "\r\n";
+        TContext context(wrongState, "/requested/page", redirectStrategy.IsAjaxRequest());
+        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -727,15 +729,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
-        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Location"));
-        TString location = TString(headers.Get("Location"));
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
-        UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
-        UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
-        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
+
     }
 
     Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlow) {
@@ -773,8 +769,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        const TString oidcCookie = CreateNameYdbOidcCookie(settings.ClientSecret, state);
-        request << "Cookie: " << oidcCookie << "=" << GenerateCookie(state, "/requested/page", settings.ClientSecret, false) << "\r\n\r\n";
+        TContext context(state, "/requested/page", false);
+        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -823,7 +819,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        request << "Cookie: " << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest()) << "\r\n";
+        TContext context(state, "/requested/page", redirectStrategy.IsAjaxRequest());
+        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -843,22 +840,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
                                                     "Content-Length: " + ToString(authorizationServerResponse.length()) + "\r\n\r\n" + authorizationServerResponse);
         runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
-        TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
-        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
-        UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
-        UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
-        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://oidcproxy.net/auth/callback");
-
-        NHttp::TUrlParameters urlParameters(location);
-        const TString newState = urlParameters["state"];
-
-        NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(headers.Has("Set-Cookie"));
-        const TStringBuf setCookie = headers.Get("Set-Cookie");
-        UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, newState));
-        redirectStrategy.CheckSpecificHeaders(headers);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(headers.Has("Location"));
+        TStringBuf location = headers.Get("Location");
+        UNIT_ASSERT_STRING_CONTAINS(location, "/requested/page");
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAccessTokenInvalid) {
@@ -896,8 +882,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        const TString oidcCookie = CreateNameYdbOidcCookie(settings.ClientSecret, state);
-        request << "Cookie: " << oidcCookie << "=" << GenerateCookie(state, "/requested/page", settings.ClientSecret, false) << "\r\n\r\n";
+        TContext context(state, "/requested/page", false);
+        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -941,14 +927,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TStringBuf firstRequestState = "first_request_state";
-        TStringBuf secondRequestState = "second_request_state";
-        TString firstCookie {CreateNameYdbOidcCookie(settings.ClientSecret, firstRequestState) + "=" + GenerateCookie(firstRequestState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest())};
-        TString secondCookie {CreateNameYdbOidcCookie(settings.ClientSecret, secondRequestState) + "=" + GenerateCookie(secondRequestState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest())};
+        TString firstRequestState = "first_request_state";
+        TString secondRequestState = "second_request_state";
+        TContext context1(firstRequestState, "/requested/page", redirectStrategy.IsAjaxRequest());
+        TContext context2(secondRequestState, "/requested/page", redirectStrategy.IsAjaxRequest());
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << firstRequestState << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        request << "Cookie: " << firstCookie << "; " << secondCookie << "\r\n";
+        request << "Cookie: " << context1.CreateYdbOidcCookie(settings.ClientSecret) << "; " << context2.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;

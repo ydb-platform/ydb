@@ -1091,13 +1091,13 @@ YT_DEFINE_THREAD_LOCAL(TFiberId, CurrentFiberId);
 
 TFiberId GetCurrentFiberId()
 {
-    NYT::NOrigin::EnableOriginOverrides();
+    NYT::NDetail::EnableErrorOriginOverrides();
     return CurrentFiberId();
 }
 
 void SetCurrentFiberId(TFiberId id)
 {
-    NYT::NOrigin::EnableOriginOverrides();
+    NYT::NDetail::EnableErrorOriginOverrides();
     CurrentFiberId() = id;
 }
 

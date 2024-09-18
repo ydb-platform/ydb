@@ -20,6 +20,10 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch_);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTestService
     : public ITestService
     , public TServiceBase
@@ -54,6 +58,10 @@ public:
             .SetQueueSizeLimit(20)
             .SetConcurrencyByteLimit(10_MB)
             .SetQueueByteSizeLimit(20_MB));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(LatchedCall)
+            .SetCancelable(true)
+            .SetConcurrencyLimit(10)
+            .SetQueueSizeLimit(20));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(SlowCanceledCall)
             .SetCancelable(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
@@ -163,6 +171,15 @@ public:
     {
         context->SetRequestInfo();
         TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
+        context->Reply();
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, LatchedCall)
+    {
+        context->SetRequestInfo();
+        if (request->wait_on_latch()) {
+            Latch_()->Wait();
+        }
         context->Reply();
     }
 
@@ -392,6 +409,31 @@ ITestServicePtr CreateTestService(
         secure,
         createChannel,
         std::move(memoryUsageTracker));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ReleaseLatchedCalls()
+{
+    if (!Latch_()) {
+        return;
+    }
+
+    Latch_()->NotifyAll();
+}
+
+void MaybeInitLatch()
+{
+    if (!Latch_()) {
+        Latch_() = std::make_unique<NThreading::TEvent>();
+    }
+}
+
+void ResetLatch()
+{
+    if (Latch_()) {
+        Latch_().reset();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -15,13 +15,13 @@ namespace NActors {
     class ISchedulerCookie;
 
     struct TCpuConsumption {
-        double ConsumedUs = 0;
-        double BookedUs = 0;
+        double ElapsedUs = 0;
+        double CpuUs = 0;
         ui64 NotEnoughCpuExecutions = 0;
 
         void Add(const TCpuConsumption& other) {
-            ConsumedUs += other.ConsumedUs;
-            BookedUs += other.BookedUs;
+            ElapsedUs += other.ElapsedUs;
+            CpuUs += other.CpuUs;
             NotEnoughCpuExecutions += other.NotEnoughCpuExecutions;
         }
     };

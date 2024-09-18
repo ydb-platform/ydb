@@ -17,25 +17,29 @@ namespace NActors {
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
         ui64 DecreasingThreadsByExchange = 0;
-        float MaxConsumedCpu = 0.0;
-        float MinConsumedCpu = 0.0;
-        float AvgConsumedCpu = 0.0;
-        float MaxBookedCpu = 0.0;
-        float MinBookedCpu = 0.0;
+        float MaxElapsedCpu = 0.0;
+        float MinElapsedCpu = 0.0;
+        float AvgElapsedCpu = 0.0;
+        float MaxCpu = 0.0;
+        float MinCpu = 0.0;
         i16 PotentialMaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
         bool IsHoggish = false;
+    
+        TString ToString() const;
     };
 
     struct THarmonizerStats {
-        i64 MaxConsumedCpu = 0.0;
-        i64 MinConsumedCpu = 0.0;
-        i64 MaxBookedCpu = 0.0;
-        i64 MinBookedCpu = 0.0;
+        i64 MaxElapsedCpu = 0.0;
+        i64 MinElapsedCpu = 0.0;
+        i64 MaxCpu = 0.0;
+        i64 MinCpu = 0.0;
 
         double AvgAwakeningTimeUs = 0;
         double AvgWakingUpTimeUs = 0;
+
+        TString ToString() const;
     };
 
     // Pool cpu harmonizer

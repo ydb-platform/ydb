@@ -83,11 +83,11 @@ def save_tests_to_file(path):
         # geting last date from history
         tests = f"""
         select 
-                                    suite_folder,
-                                    test_name,
+            suite_folder,
+            test_name,
 
-                                from  `test_results/analytics/testowners`
-                                order by suite_folder,test_name
+            from  `test_results/analytics/testowners`
+            order by suite_folder,test_name
         """
         query = ydb.ScanQuery(tests, {})
         it = table_client.scan_query(query)
@@ -240,7 +240,6 @@ def get_mute_details():
     print(f"Removed lines have been written to {removed_lines_file}.")
     
 
-
-
 if __name__ == "__main__":
     get_mute_details()
+    

@@ -198,7 +198,7 @@ def main():
                                         where
                                             run_timestamp <= Date('{date}') + Interval("P1D")
                                             and run_timestamp >= Date('{date}') -13*Interval("P1D") 
-                                            and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
+                                            and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
                                             and build_type = '{build_type}'
                                             and status != 'skipped'
                                             and branch = '{branch}'
@@ -216,7 +216,7 @@ def main():
                                         where
                                             run_timestamp <= Date('{date}') + Interval("P1D")
                                             and run_timestamp >= Date('{date}') -13*Interval("P1D") 
-                                            and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
+                                            and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
                                             and build_type = '{build_type}'
                                             and status = 'skipped'
                                             and branch = '{branch}'

@@ -225,7 +225,7 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway)
+        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -234,6 +234,7 @@ public:
     {
         Config->EnableKqpScanQueryStreamLookup = true;
         Config->EnablePreparedDdl = true;
+        Config->EnableAntlr4Parser = enableAntlr4Parser;
     }
 
     void Bootstrap() {
@@ -679,7 +680,7 @@ private:
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser);
 }

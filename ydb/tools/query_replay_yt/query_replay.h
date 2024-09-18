@@ -22,6 +22,7 @@ struct TQueryReplayConfig {
     TVector<TString> UdfFiles;
     TString QueryFile;
     NActors::NLog::EPriority YqlLogLevel = NActors::NLog::EPriority::PRI_ERROR;
+    bool EnableAntlr4Parser = false;
 
     void ParseConfig(int argc, const char** argv);
 };
@@ -81,4 +82,4 @@ struct TQueryReplayEvents {
 };
 
 NActors::IActor* CreateQueryCompiler(TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> moduleResolverState,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, std::shared_ptr<NYql::IHTTPGateway> httpGateway);
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, std::shared_ptr<NYql::IHTTPGateway> httpGateway, bool enableAntlr4Parser);

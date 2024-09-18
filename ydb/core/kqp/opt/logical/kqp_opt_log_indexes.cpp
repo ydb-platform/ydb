@@ -412,44 +412,67 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
 }
 
 TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!kqpCtx.IsScanQuery()) {
+    if (!node.Maybe<TKqlStreamLookupIndex>()) {
         return node;
     }
 
-    if (auto maybeStreamLookupIndex = node.Maybe<TKqlStreamLookupIndex>()) {
-        auto streamLookupIndex = maybeStreamLookupIndex.Cast();
+    auto streamLookupIndex = node.Maybe<TKqlStreamLookupIndex>().Cast();
 
-        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, streamLookupIndex.Table().Path());
-        const auto& [indexMeta, _] = tableDesc.Metadata->GetIndexMetadata(streamLookupIndex.Index().StringValue());
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, streamLookupIndex.Table().Path());
+    const auto& [indexMeta, _] = tableDesc.Metadata->GetIndexMetadata(streamLookupIndex.Index().StringValue());
 
-        const bool needDataRead = CheckIndexCovering(streamLookupIndex, indexMeta);
-        if (!needDataRead) {
-            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
-                .LookupKeys(streamLookupIndex.LookupKeys())
-                .Columns(streamLookupIndex.Columns())
-                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
-                .Done();
-        }
-
-        auto keyColumnsList = BuildKeyColumnsList(tableDesc, streamLookupIndex.Pos(), ctx);
-
-        TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+    const bool needDataRead = CheckIndexCovering(streamLookupIndex, indexMeta);
+    if (!needDataRead) {
+        return Build<TKqlStreamLookupTable>(ctx, node.Pos())
             .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())
-            .Columns(keyColumnsList)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
-            .Done();
-
-        return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-            .Table(streamLookupIndex.Table())
-            .LookupKeys(lookupIndexTable.Ptr())
             .Columns(streamLookupIndex.Columns())
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .LookupStrategy().Build(streamLookupIndex.LookupStrategy())
             .Done();
     }
 
-    return node;
+    auto keyColumnsList = BuildKeyColumnsList(tableDesc, streamLookupIndex.Pos(), ctx);
+
+    TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+        .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+        .LookupKeys(streamLookupIndex.LookupKeys())
+        .Columns(keyColumnsList)
+        .LookupStrategy().Build(streamLookupIndex.LookupStrategy())
+        .Done();
+
+    TMaybeNode<TExprBase> lookupKeys;
+    YQL_ENSURE(streamLookupIndex.LookupStrategy().Maybe<TCoAtom>());
+    TString lookupStrategy = streamLookupIndex.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
+    if (lookupStrategy == TKqpStreamLookupJoinStrategyName || lookupStrategy == TKqpStreamLookupSemiJoinStrategyName) {
+        // Result type of lookupIndexTable: list<tuple<left_row, optional<main_table_pk>>>,
+        // expected input type for main table stream join: list<tuple<optional<main_table_pk>, left_row>>,
+        // so we should transform list<tuple<left_row, optional<main_table_pk>>> to list<tuple<optional<main_table_pk>, left_row>>
+        lookupKeys = Build<TCoMap>(ctx, node.Pos())
+            .Input(lookupIndexTable)
+            .Lambda()
+                .Args({"tuple"})
+                .Body<TExprList>()
+                    .Add<TCoNth>()
+                        .Tuple("tuple")
+                        .Index().Value("1").Build()
+                        .Build()
+                    .Add<TCoNth>()
+                        .Tuple("tuple")
+                        .Index().Value("0").Build()
+                        .Build()
+                    .Build()  
+                .Build()    
+            .Done();
+    } else {
+        lookupKeys = lookupIndexTable;
+    }
+
+    return Build<TKqlStreamLookupTable>(ctx, node.Pos())
+        .Table(streamLookupIndex.Table())
+        .LookupKeys(lookupKeys.Cast())
+        .Columns(streamLookupIndex.Columns())
+        .LookupStrategy().Build(streamLookupIndex.LookupStrategy())
+        .Done();
 }
 
 /// Can push flat map node to read from table using only columns available in table description

@@ -48,7 +48,7 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) 
     };
     auto it = std::lower_bound(ColumnNames.begin(), ColumnNames.end(), name, pred);
     if (it != ColumnNames.end() && it->GetName() == name) {
-        return it - ColumnNames.begin();
+        return it->GetColumnIdx();
     }
     return IIndexInfo::GetColumnIndexOptional(name, ColumnNames.size());
 }
@@ -235,7 +235,10 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, cache->GetStringCache(typeInfoMod.TypeMod), notNull);
-            ColumnNames.emplace_back(name, id);
+            if (ColumnNames.size()) {
+                AFL_VERIFY(ColumnNames.back().GetColumnId() < id);
+            }
+            ColumnNames.emplace_back(name, id, ColumnNames.size());
         }
         std::sort(ColumnNames.begin(), ColumnNames.end());
     }

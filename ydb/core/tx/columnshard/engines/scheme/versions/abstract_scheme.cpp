@@ -118,8 +118,8 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                 return TConclusionStatus::Success();
         }
     };
-    const auto pred = [&](const std::string& fieldName) -> i32 {
-        return GetIndexInfo().GetCol
+    const auto nameResolver = [&](const std::string& fieldName) -> i32 {
+        return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
     auto batchConclusion =
         NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(incomingBatch, dstSchema, pred, nameResolver);

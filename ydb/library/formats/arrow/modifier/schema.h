@@ -17,6 +17,7 @@ public:
     TSchemaLite(const std::shared_ptr<arrow::Schema>& schema) {
         AFL_VERIFY(schema);
         Fields = schema->fields();
+        AFL_VERIFY(Fields.size());
     }
 
     const std::shared_ptr<arrow::Field>& field(const ui32 index) const {
@@ -81,10 +82,12 @@ public:
 
     TSchemaLite(std::vector<std::shared_ptr<arrow::Field>>&& fields)
         : Fields(std::move(fields)) {
+        AFL_VERIFY(Fields.size());
     }
 
     TSchemaLite(const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : Fields(fields) {
+        AFL_VERIFY(Fields.size());
     }
 };
 

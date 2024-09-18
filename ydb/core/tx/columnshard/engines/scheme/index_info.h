@@ -111,11 +111,12 @@ private:
     private:
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY(ui32, ColumnId, 0);
-
+        YDB_READONLY(ui32, ColumnIdx, 0);
     public:
-        TNameInfo(const TString& name, const ui32 columnId)
+        TNameInfo(const TString& name, const ui32 columnId, const ui32 columnIdx)
             : Name(name)
             , ColumnId(columnId)
+            , ColumnIdx(columnIdx)
         {
 
         }
@@ -247,7 +248,7 @@ public:
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
         for (auto&& i : columns) {
-            result.ColumnNames.emplace_back(i.second.Name, i.first);
+            result.ColumnNames.emplace_back(i.second.Name, i.first, result.ColumnNames.size());
         }
         std::sort(result.ColumnNames.begin(), result.ColumnNames.end());
         for (auto&& i : pkNames) {

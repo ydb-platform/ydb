@@ -54,7 +54,7 @@ PEERDIR(
     ydb/library/yql/providers/ydb/comp_nodes
     ydb/library/yql/providers/ydb/provider
     ydb/library/yql/providers/pg/provider
-    ydb/library/yql/public/udf/service/terminate_policy
+    #ydb/library/yql/public/udf/service/terminate_policy
     ydb/library/yql/utils/log
     ydb/library/yql/utils/backtrace
     ydb/library/yql/utils/failure_injector

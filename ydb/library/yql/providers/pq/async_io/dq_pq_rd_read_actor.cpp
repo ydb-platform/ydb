@@ -374,13 +374,13 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
     SRC_LOG_D("TEvStartSessionAck " << ev->Sender);
 
-    //  TODO 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
     YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        SRC_LOG_W("Wrong seq num, ignore message");
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
 }
@@ -394,7 +394,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        SRC_LOG_W("Wrong seq num, ignore message");
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
     Stop(ev->Get()->Record.GetMessage());
@@ -421,7 +422,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        SRC_LOG_W("Wrong seq num, ignore message");
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
     sessionInfo.NewDataArrived = true;
@@ -563,7 +565,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     Metrics.InFlyGetNextBatch->Dec();
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        SRC_LOG_W("Wrong seq num, ignore message");
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
     ReadyBuffer.emplace(partitionId, ev->Get()->Record.MessagesSize());

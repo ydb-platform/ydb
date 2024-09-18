@@ -53,6 +53,7 @@ struct TEvPrivate {
         EvDataParsed,
         EvDataAfterFilteration,
         EvDataFiltered,
+        EvPrintState,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
@@ -60,6 +61,7 @@ struct TEvPrivate {
     // Events
     struct TEvPqEventsReady : public NActors::TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
+    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
         TEvDataParsed(ui64 offset, TList<TString>&& value) 
@@ -87,6 +89,8 @@ struct TEvPrivate {
         TActorId ReadActorId;
     };
 };
+
+ui64 PrintStatePeriodSec = 60;
 
 TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& value) {
     return {value.begin(), value.end()};
@@ -193,6 +197,7 @@ private:
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
@@ -210,6 +215,7 @@ private:
         hFunc(NFq::TEvPrivate::TEvDataAfterFilteration, Handle);
         hFunc(NFq::TEvPrivate::TEvStatus, Handle);
         hFunc(NFq::TEvPrivate::TEvDataFiltered, Handle);
+        hFunc(NFq::TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
@@ -227,6 +233,7 @@ private:
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
+        IgnoreFunc(NFq::TEvPrivate::TEvPrintState);
     })
 };
 
@@ -258,6 +265,7 @@ void TTopicSession::Bootstrap() {
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
     Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvStatus());
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
 }
 
 void TTopicSession::PassAway() {
@@ -447,7 +455,7 @@ void TTopicSession::HandleNewEvents() {
             break;
         }
         std::visit(TTopicEventProcessor{*this, LogPrefix}, *event);
-    }
+    } 
 }
 
 void TTopicSession::CloseTopicSession() {
@@ -466,7 +474,8 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         Self.IngressStats.Bytes += data.size();
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
-        const TString& item = message.GetData();
+        TString item = message.GetData();
+        item.Detach();
         Self.SendToParsing(message.GetOffset(), item);
         Self.LastMessageOffset = message.GetOffset();
     }
@@ -731,6 +740,11 @@ void TTopicSession::PrintInternalState() {
             << ", data arrived sent " << info.DataArrivedSent << "\n";
     }
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
+}
+
+void TTopicSession::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
+    PrintInternalState();
 }
 
 } // namespace

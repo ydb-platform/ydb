@@ -377,6 +377,9 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
             self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
 
+        if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
+            self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
+
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True

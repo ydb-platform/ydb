@@ -29,15 +29,26 @@ struct TRestoreOidcContextResult {
     bool IsSuccess() const;
 };
 
+struct TCheckStateResult {
+    bool Success = true;
+    TString ErrorMessage;
+
+    TCheckStateResult(bool success = true, const TString& errorMessage = "");
+
+    bool IsSuccess() const;
+};
+
 TString HmacSHA256(TStringBuf key, TStringBuf data);
+TString HmacSHA1(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, const TContext& context);
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings);
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
 TString CreateNameSessionCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
-TRestoreOidcContextResult RestoreSessionStoredOnClientSide(const TString& state, const NHttp::TCookies& cookies, const TString& secret);
+TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
+TCheckStateResult CheckState(const TString& state, const TString& key);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {

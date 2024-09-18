@@ -2,6 +2,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
+#include <util/datetime/base.h>
 
 namespace NHttp {
 
@@ -23,7 +24,7 @@ public:
     TContext(const TString& state = "", const TString& requestedAddress = "", bool isAjaxRequest = false);
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
-    TString GetState() const;
+    TString GetState(const TString& key) const;
     bool IsAjaxRequest() const;
     TString GetRequestedAddress() const;
 
@@ -34,7 +35,7 @@ private:
     static bool DetectAjaxRequest(const NHttp::THttpIncomingRequestPtr& request);
     static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isAjaxRequest);
 
-    TString GenerateCookie(const TString& secret) const;
+    TString GenerateCookie(const TString& key) const;
 };
 
 } // NOIDC

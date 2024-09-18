@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
 #include "openid_connect.h"
+#include "oidc_settings.h"
 #include "context.h"
 
 namespace NMVP {
@@ -21,8 +22,17 @@ TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
     , RequestedAddress(GetRequestedUrl(request, AjaxRequest))
 {}
 
-TString TContext::GetState() const {
-    return State;
+TString TContext::GetState(const TString& key) const {
+    static const TDuration STATE_LIFE_TIME = TDuration::Minutes(10);
+    TInstant expirationTime = TInstant::Now() + STATE_LIFE_TIME;
+    TStringBuilder json;
+    json << "{\"state\":\"" << State
+         << "\",\"expiration_time\":\"" << ToString(expirationTime.TimeT()) << "\"}";
+    TString digest = HmacSHA1(key, json);
+    TStringBuilder signedState;
+    signedState << "{\"container\":\"" << Base64Encode(json) << "\","
+                  "\"digest\":\"" << Base64Encode(digest) << "\"}";
+    return Base64EncodeNoPadding(signedState);
 }
 
 bool TContext::IsAjaxRequest() const {
@@ -34,25 +44,23 @@ TString TContext::GetRequestedAddress() const {
 }
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
-    static constexpr size_t COOKIE_MAX_AGE_SEC = 420;
-    return TStringBuilder() << CreateNameYdbOidcCookie(secret, State) << "="
+    static constexpr size_t COOKIE_MAX_AGE_SEC = 60 * 60 * 12;
+    return TStringBuilder() << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "="
                             << GenerateCookie(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"
                             " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"
                             " SameSite=None; Secure";
 }
 
-TString TContext::GenerateCookie(const TString& secret) const {
-    const TDuration StateLifeTime = TDuration::Minutes(10);
-    TInstant expirationTime = TInstant::Now() + StateLifeTime;
-    TStringBuilder stateStruct;
-    stateStruct << "{\"state\":\"" << State
-                << "\",\"requested_address\":\"" << RequestedAddress
-                << "\",\"expiration_time\":" << ToString(expirationTime.TimeT())
-                << ",\"ajax_request\":" << (AjaxRequest ? "true" : "false") << "}";
-    TString digest = HmacSHA256(secret, stateStruct);
-    TString cookieStruct {"{\"state_struct\":\"" + Base64Encode(stateStruct) + "\",\"digest\":\"" + Base64Encode(digest) + "\"}"};
-    return Base64Encode(cookieStruct);
+TString TContext::GenerateCookie(const TString& key) const {
+    TStringBuilder requestedAddressContext;
+    requestedAddressContext << "{\"requested_address\":\"" << RequestedAddress
+                            << "\",\"ajax_request\":" << (AjaxRequest ? "true" : "false") << "}";
+    TString digest = HmacSHA256(key, requestedAddressContext);
+    TStringBuilder signedRequestedAddress;
+    signedRequestedAddress << "{\"requested_address_context\":\"" << Base64Encode(requestedAddressContext)
+                           << "\",\"digest\":\"" << Base64Encode(digest) << "\"}";
+    return Base64Encode(signedRequestedAddress);
 }
 
 TString TContext::GenerateState() {

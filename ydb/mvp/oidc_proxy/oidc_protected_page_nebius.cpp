@@ -100,8 +100,7 @@ void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessi
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "Request authorization code");
-    TContext context(Request);
-    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, context);
+    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }

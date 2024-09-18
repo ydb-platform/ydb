@@ -5,6 +5,8 @@
 #include "openid_connect.h"
 #include "oidc_session_create.h"
 #include "oidc_settings.h"
+#include "context.h"
+#include "context_storage.h"
 
 namespace NMVP {
 namespace NOIDC {
@@ -12,28 +14,20 @@ namespace NOIDC {
 THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
                                              const NHttp::THttpIncomingRequestPtr& request,
                                              const NActors::TActorId& httpProxyId,
-                                             const TOpenIdConnectSettings& settings)
+                                             const TOpenIdConnectSettings& settings,
+                                             TContextStorage* const contextStorage)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
+    , ContextStorage(contextStorage)
 {}
 
 void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
-    NHttp::TUrlParameters urlParameters(Request->URL);
-    TString code = urlParameters["code"];
-    TString state = urlParameters["state"];
-
-    NHttp::THeaders headers(Request->Headers);
-    NHttp::TCookies cookies(headers.Get("cookie"));
-
-    if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
-        RequestSessionToken(code, ctx);
+    if (Settings.StoreContextOnHost) {
+        TryRestoreContextFromHostStorage(ctx);
     } else {
-        NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-        TBase::Die(ctx);
-        return;
+        TryRestoreContextFromCookie(ctx);
     }
 }
 
@@ -75,76 +69,6 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
     Die(ctx);
 }
 
-bool THandlerSessionCreate::IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx) {
-    const TString cookieName {CreateNameYdbOidcCookie(Settings.ClientSecret, state)};
-    if (!cookies.Has(cookieName)) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Check state: Cannot find cookie " << cookieName);
-        return false;
-    }
-    TString cookieStruct = Base64Decode(cookies.Get(cookieName));
-    TString stateStruct;
-    TString expectedDigest;
-    NJson::TJsonValue jsonValue;
-    NJson::TJsonReaderConfig jsonConfig;
-    if (NJson::ReadJsonTree(cookieStruct, &jsonConfig, &jsonValue)) {
-        const NJson::TJsonValue* jsonStateStruct = nullptr;
-        if (jsonValue.GetValuePointer("state_struct", &jsonStateStruct)) {
-            stateStruct = jsonStateStruct->GetStringRobust();
-            stateStruct = Base64Decode(stateStruct);
-        }
-        const NJson::TJsonValue* jsonDigest = nullptr;
-        if (jsonValue.GetValuePointer("digest", &jsonDigest)) {
-            expectedDigest = jsonDigest->GetStringRobust();
-            expectedDigest = Base64Decode(expectedDigest);
-        }
-    }
-    if (stateStruct.Empty() || expectedDigest.Empty()) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Check state: Struct with state and expected digest are empty");
-        return false;
-    }
-    TString digest = HmacSHA256(Settings.ClientSecret, stateStruct);
-    if (expectedDigest != digest) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Check state: Calculated digest is not equal expected digest");
-        return false;
-    }
-    TString expectedState;
-    if (NJson::ReadJsonTree(stateStruct, &jsonConfig, &jsonValue)) {
-        const NJson::TJsonValue* jsonState = nullptr;
-        if (jsonValue.GetValuePointer("state", &jsonState)) {
-            expectedState = jsonState->GetStringRobust();
-        }
-        const NJson::TJsonValue* jsonRedirectUrl = nullptr;
-        if (jsonValue.GetValuePointer("redirect_url", &jsonRedirectUrl)) {
-            RedirectUrl = jsonRedirectUrl->GetStringRobust();
-        } else {
-            LOG_DEBUG_S(ctx, EService::MVP, "Check state: Redirect url not found in json");
-            return false;
-        }
-        const NJson::TJsonValue* jsonExpirationTime = nullptr;
-        if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
-            timeval timeVal {
-                .tv_sec = jsonExpirationTime->GetIntegerRobust(),
-                .tv_usec = 0
-            };
-            if (TInstant::Now() > TInstant(timeVal)) {
-                LOG_DEBUG_S(ctx, EService::MVP, "Check state: State life time expired");
-                return false;
-            }
-        } else {
-            LOG_DEBUG_S(ctx, EService::MVP, "Check state: Expiration time not found in json");
-            return false;
-        }
-        const NJson::TJsonValue* jsonAjaxRequest = nullptr;
-        if (jsonValue.GetValuePointer("ajax_request", &jsonAjaxRequest)) {
-            IsAjaxRequest = jsonAjaxRequest->GetBooleanRobust();
-        } else {
-            LOG_DEBUG_S(ctx, EService::MVP, "Check state: Can not detect ajax request");
-            return false;
-        }
-    }
-    return (!expectedState.Empty() && expectedState == state);
-}
-
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
     const static TStringBuf SameSiteParameter {"SameSite=Lax"};
     size_t n = cookie.find(SameSiteParameter);
@@ -156,6 +80,93 @@ TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString&
     cookieBuilder << "SameSite=None";
     cookieBuilder << cookie.substr(n + SameSiteParameter.size());
     return cookieBuilder;
+}
+
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx, const TString& responseMessage) {
+    NHttp::THeadersBuilder responseHeaders;
+    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx, responseMessage);
+}
+
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage) {
+    SetCORS(Request, responseHeaders);
+    responseHeaders->Set("Location", RestoredContext.GetRequestedAddress());
+    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", responseMessage, *responseHeaders)));
+    Die(ctx);
+}
+
+void THandlerSessionCreate::TryRestoreContextFromCookie(const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Try restore context from cookie");
+    NHttp::TUrlParameters urlParameters(Request->URL);
+    TString code = urlParameters["code"];
+    TString state = urlParameters["state"];
+
+    NHttp::THeaders headers(Request->Headers);
+    NHttp::TCookies cookies(headers.Get("cookie"));
+    TRestoreOidcContextResult restoreSessionResult = RestoreContextFromCookie(state, cookies, Settings.ClientSecret);
+    RestoredContext = restoreSessionResult.Context;
+    if (restoreSessionResult.IsSuccess()) {
+        if (code.empty()) {
+            LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore context from cookie failed: receive empty 'code' parameter");
+            RetryRequestToProtectedResourceAndDie(ctx, "Empty code");
+        } else {
+            RequestSessionToken(code, ctx);
+        }
+    } else {
+        const auto& restoreSessionStatus = restoreSessionResult.Status;
+        LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
+        if (restoreSessionStatus.IsErrorRetryable) {
+            RetryRequestToProtectedResourceAndDie(ctx, "Cannot restore oidc context from cookie");
+        } else {
+            SendUnknownErrorResponseAndDie(ctx);
+        }
+    }
+}
+
+void THandlerSessionCreate::TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Try restore context from host storage");
+    NHttp::TUrlParameters urlParameters(Request->URL);
+    TString code = urlParameters["code"];
+    TString state = urlParameters["state"];
+    static const TString ERROR_RESTORE_CONTEXT_FROM_HOST = "Restore context from host failed: ";
+
+    std::pair<bool, TContextRecord> restoreContextResult = ContextStorage->Find(state);
+    if (restoreContextResult.first) {
+        RestoredContext = restoreContextResult.second.GetContext();
+        if (code.empty()) {
+            LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "Receive empty 'code' parameter");
+            RetryRequestToProtectedResourceAndDie(ctx, "Empty code");
+        } else if (TInstant::Now() > restoreContextResult.second.GetExpirationTime()) {
+            LOG_DEBUG_S(ctx, NMVP::EService::MVP, ERROR_RESTORE_CONTEXT_FROM_HOST << "State life time expired");
+            RetryRequestToProtectedResourceAndDie(ctx, "Found");
+        } else {
+            RequestSessionToken(code, ctx);
+        }
+    } else {
+        LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Did not find context on host.");
+        SendUnknownErrorResponseAndDie(ctx);
+    }
+}
+
+void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
+    NHttp::THeadersBuilder responseHeaders;
+    responseHeaders.Set("Content-Type", "text/html");
+    SetCORS(Request, &responseHeaders);
+    const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html>"
+                                                        "<head>"
+                                                            "<title>"
+                                                                "400 Bad Request"
+                                                            "</title>"
+                                                        "</head>"
+                                                        "<body bgcolor=\"white\">"
+                                                            "<center>"
+                                                                "<h1>"
+                                                                    "Unknown error has occurred. Please open the page again"
+                                                                "</h1>"
+                                                            "</center>"
+                                                        "</body>"
+                                                    "</html>";
+    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE)));
+    Die(ctx);
 }
 
 } // NOIDC

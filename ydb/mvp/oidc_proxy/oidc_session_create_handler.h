@@ -8,14 +8,17 @@
 namespace NMVP {
 namespace NOIDC {
 
+class TContextStorage;
+
 class TSessionCreateHandler : public NActors::TActor<TSessionCreateHandler> {
     using TBase = NActors::TActor<TSessionCreateHandler>;
 
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
+    TContextStorage* const ContextStorage;
 
 public:
-    TSessionCreateHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
+    TSessionCreateHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings, TContextStorage* const contextStorage);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
 
     STFUNC(StateWork) {

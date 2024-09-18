@@ -7,16 +7,17 @@ namespace NOIDC {
 
 void InitOIDC(NActors::TActorSystem& actorSystem,
               const NActors::TActorId& httpProxyId,
-              const TOpenIdConnectSettings& settings) {
+              const TOpenIdConnectSettings& settings,
+              TContextStorage* const contextStorage) {
     actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/auth/callback",
-                         actorSystem.Register(new TSessionCreateHandler(httpProxyId, settings))
+                         actorSystem.Register(new TSessionCreateHandler(httpProxyId, settings, contextStorage))
                          )
                      );
 
     actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                         "/",
-                        actorSystem.Register(new TProtectedPageHandler(httpProxyId, settings))
+                        actorSystem.Register(new TProtectedPageHandler(httpProxyId, settings, contextStorage))
                         )
                     );
 }

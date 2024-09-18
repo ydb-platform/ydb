@@ -6,6 +6,8 @@ LIBRARY()
 
 SRCS(
     mvp.cpp
+    context.cpp
+    context_storage.cpp
     oidc_client.cpp
     openid_connect.cpp
     oidc_settings.cpp
@@ -17,6 +19,7 @@ SRCS(
     oidc_session_create_yandex.cpp
     oidc_session_create_nebius.cpp
     oidc_session_create.cpp
+    context_storage_refresher.cpp
 )
 
 PEERDIR(

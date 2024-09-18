@@ -11,8 +11,9 @@ namespace NOIDC {
 THandlerSessionCreateYandex::THandlerSessionCreateYandex(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
-                                                         const TOpenIdConnectSettings& settings)
-    : THandlerSessionCreate(sender, request, httpProxyId, settings)
+                                                         const TOpenIdConnectSettings& settings,
+                                                         TContextStorage* const contextStorage)
+    : THandlerSessionCreate(sender, request, httpProxyId, settings, contextStorage)
 {}
 
 void THandlerSessionCreateYandex::RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) {
@@ -61,25 +62,21 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
     for (const auto& cookie : response.Getset_cookie_header()) {
         responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
-    NHttp::THttpOutgoingResponsePtr httpResponse;
-    responseHeaders.Set("Location", RedirectUrl);
-    httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx, "Cookie set");
 }
 
 void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
-    NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
+        RetryRequestToProtectedResourceAndDie(ctx, "Can not create session cookie");
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
+        SetCORS(Request, &responseHeaders);
+        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+        Die(ctx);
     }
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
 }
 
 } // NOIDC

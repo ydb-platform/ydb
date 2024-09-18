@@ -6,6 +6,8 @@
 namespace NMVP {
 namespace NOIDC {
 
+class TContextStorage;
+
 class THandlerSessionServiceCheckYandex : public THandlerSessionServiceCheck {
 private:
     using TBase = THandlerSessionServiceCheck;
@@ -15,7 +17,8 @@ public:
     THandlerSessionServiceCheckYandex(const NActors::TActorId& sender,
                                 const NHttp::THttpIncomingRequestPtr& request,
                                 const NActors::TActorId& httpProxyId,
-                                const TOpenIdConnectSettings& settings);
+                                const TOpenIdConnectSettings& settings,
+                                TContextStorage* const contextStorage);
 
     void Bootstrap(const NActors::TActorContext& ctx) override;
 

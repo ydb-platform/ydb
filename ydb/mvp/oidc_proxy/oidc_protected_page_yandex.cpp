@@ -2,6 +2,7 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
+#include "context.h"
 #include "oidc_protected_page_yandex.h"
 
 namespace NMVP {
@@ -10,8 +11,9 @@ namespace NOIDC {
 THandlerSessionServiceCheckYandex::THandlerSessionServiceCheckYandex(const NActors::TActorId& sender,
                                                                      const NHttp::THttpIncomingRequestPtr& request,
                                                                      const NActors::TActorId& httpProxyId,
-                                                                     const TOpenIdConnectSettings& settings)
-    : THandlerSessionServiceCheck(sender, request, httpProxyId, settings)
+                                                                     const TOpenIdConnectSettings& settings,
+                                                                     TContextStorage* const contextStorage)
+    : THandlerSessionServiceCheck(sender, request, httpProxyId, settings, contextStorage)
 {}
 
 void THandlerSessionServiceCheckYandex::Bootstrap(const NActors::TActorContext& ctx) {
@@ -31,7 +33,7 @@ void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPt
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
+        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, ContextStorage);
     } else {
         httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details);
     }

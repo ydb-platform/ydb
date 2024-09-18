@@ -21,6 +21,7 @@ struct TOpenIdConnectSettings {
     TString AuthorizationServerAddress;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
+    bool StoreContextOnHost = false;
 
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;

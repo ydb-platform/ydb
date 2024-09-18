@@ -11,12 +11,14 @@ namespace NOIDC {
 THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
-                                                         const TOpenIdConnectSettings& settings)
+                                                         const TOpenIdConnectSettings& settings,
+                                                         TContextStorage* const contextStorage)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
     , ProtectedPageUrl(Request->URL.SubStr(1))
+    , ContextStorage(contextStorage)
 {}
 
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
@@ -26,7 +28,6 @@ void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
         return;
     }
     NHttp::THeaders headers(Request->Headers);
-    IsAjaxRequest = DetectAjaxRequest(headers);
     TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
     if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
         ForwardUserRequest(TString(authHeader), ctx);
@@ -190,21 +191,21 @@ void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomi
 
 TString THandlerSessionServiceCheck::GetFixedLocationHeader(TStringBuf location) {
     TStringBuf scheme, host, uri;
-        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
-        if (location.StartsWith("//")) {
-            return TStringBuilder() << '/' << (scheme.empty() ? "" : TString(scheme) + "://") << location.SubStr(2);
-        } else if (location.StartsWith('/')) {
-            return TStringBuilder() << '/'
-                                    << (scheme.empty() ? "" : TString(scheme) + "://")
-                                    << host << location;
-        } else {
-            TStringBuf locScheme, locHost, locUri;
-            NHttp::CrackURL(location, locScheme, locHost, locUri);
-            if (!locScheme.empty()) {
-                return TStringBuilder() << '/' << location;
-            }
+    NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+    if (location.StartsWith("//")) {
+        return TStringBuilder() << '/' << (scheme.empty() ? "" : TString(scheme) + "://") << location.SubStr(2);
+    } else if (location.StartsWith('/')) {
+        return TStringBuilder() << '/'
+                                << (scheme.empty() ? "" : TString(scheme) + "://")
+                                << host << location;
+    } else {
+        TStringBuf locScheme, locHost, locUri;
+        NHttp::CrackURL(location, locScheme, locHost, locUri);
+        if (!locScheme.empty()) {
+            return TStringBuilder() << '/' << location;
         }
-        return TString(location);
+    }
+    return TString(location);
 }
 
 NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateResponseForbiddenHost() {

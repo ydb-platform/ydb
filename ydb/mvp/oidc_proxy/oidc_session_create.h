@@ -7,9 +7,12 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
+#include "context.h"
 
 namespace NMVP {
 namespace NOIDC {
+
+class TContextStorage;
 
 class THandlerSessionCreate : public NActors::TActorBootstrapped<THandlerSessionCreate> {
 private:
@@ -20,14 +23,15 @@ protected:
     const NHttp::THttpIncomingRequestPtr Request;
     NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    TString RedirectUrl;
-    bool IsAjaxRequest = false;
+    TContext RestoredContext;
+    TContextStorage* const ContextStorage;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
                           const NHttp::THttpIncomingRequestPtr& request,
                           const NActors::TActorId& httpProxyId,
-                          const TOpenIdConnectSettings& settings);
+                          const TOpenIdConnectSettings& settings,
+                          TContextStorage* const contextStorage);
 
     virtual void RequestSessionToken(const TString&, const NActors::TActorContext&) = 0;
     virtual void ProcessSessionToken(const TString& accessToken, const NActors::TActorContext&) = 0;
@@ -36,8 +40,15 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
 protected:
-    bool IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx);
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
+    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
+    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
+
+private:
+    void TryRestoreContextFromCookie(const NActors::TActorContext& ctx);
+    void TryRestoreContextFromHostStorage(const NActors::TActorContext& ctx);
+
+    void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
 };
 
 }  // NOIDC

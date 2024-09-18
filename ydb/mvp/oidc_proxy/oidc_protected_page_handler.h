@@ -8,14 +8,17 @@
 namespace NMVP {
 namespace NOIDC {
 
+class TContextStorage;
+
 class TProtectedPageHandler : public NActors::TActor<TProtectedPageHandler> {
     using TBase = NActors::TActor<TProtectedPageHandler>;
 
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
+    TContextStorage* const ContextStorage;
 
 public:
-    TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
+    TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings,TContextStorage* const contextStorage);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
 
     STFUNC(StateWork) {

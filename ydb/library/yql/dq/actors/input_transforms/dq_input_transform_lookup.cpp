@@ -185,7 +185,7 @@ private: //IDqComputeActorAsyncInput
             }
         }
         finished = IsFinished();
-        return 0;
+        return AwaitingQueue.RowCount();
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {

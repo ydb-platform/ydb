@@ -15,7 +15,7 @@ public:
         : Precision(precision)
         , Scale(scale)
     {
-        // TODO Uncomment Uncomment after parametrized decimal in KQP
+        // TODO Uncomment after parametrized decimal in KQP
         //Y_ABORT_UNLESS(Precision);
         //Y_ABORT_UNLESS(Scale);
     }

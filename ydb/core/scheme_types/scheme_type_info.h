@@ -13,8 +13,6 @@ namespace NKikimr::NScheme {
 
 class TTypeInfo {
 public:
-    typedef uintptr_t TTypeDesc;
-
     constexpr TTypeInfo()
         : TypeId(0)
         , RawDesc(0)
@@ -31,18 +29,7 @@ public:
         , DecimalTypeDesc(typeId == NTypeIds::Decimal ? TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE) : TDecimalType(0, 0))
     {
         // TODO Uncomment after parametrized decimal in KQP
-        //Y_ABORT(TypeId != NTypeIds::Decimal)
-    }
-
-    constexpr TTypeInfo(TTypeId typeId, const TTypeDesc typeDesc)
-        : TypeId(typeId)
-        , RawDesc(typeDesc)
-    {
-        if (NTypeIds::IsParametrizedType(TypeId)) {
-            Y_ABORT_UNLESS(RawDesc);
-        } else {
-            Y_ABORT_UNLESS(!RawDesc);
-        }
+        //Y_ABORT_UNLESS(NTypeIds::IsParametrizedType(TypeId))
     }
 
     constexpr TTypeInfo(TTypeId typeId, const NKikimr::NPg::ITypeDesc* typeDesc)
@@ -78,10 +65,6 @@ public:
         return TypeId;
     }
 
-    constexpr TTypeDesc GetTypeDesc() const {
-        return RawDesc;
-    }
-
     constexpr const NKikimr::NPg::ITypeDesc* GetPgTypeDesc() const {
         Y_ABORT_UNLESS (TypeId == NTypeIds::Pg);
         return PgTypeDesc;
@@ -95,18 +78,25 @@ public:
         Y_ABORT_UNLESS (TypeId == NTypeIds::Decimal);
         return DecimalTypeDesc;
     }
-
 private:
+    friend struct TTypeInfoOrder;
+    typedef uintptr_t TRawTypeDesc;  
+
+    constexpr TTypeInfo(TTypeId typeId, const TRawTypeDesc typeDesc)
+        : TypeId(typeId)
+        , RawDesc(typeDesc)
+    {}
+
     TTypeId TypeId = 0;
 
     // Storage for parameters of types
     union {
-        TTypeDesc RawDesc;                          // internal descriptor, used for passing inside YDB Core
+        TRawTypeDesc RawDesc;                       // internal descriptor, used for passing inside YDB Core
         const NKikimr::NPg::ITypeDesc* PgTypeDesc;  // PG descriptor, used for pg_wrapper
         TDecimalType DecimalTypeDesc;               // Decimal parameters, stored inplace
     };
 
-    static_assert(sizeof(TDecimalType) == sizeof(TTypeDesc));
+    static_assert(sizeof(TDecimalType) == sizeof(TRawTypeDesc));
 };
 
 } // namespace NKikimr::NScheme

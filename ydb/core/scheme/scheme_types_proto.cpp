@@ -18,9 +18,10 @@ TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const 
         break;
     }
     case NTypeIds::Decimal: {
-        Y_ABORT_UNLESS(typeInfo.GetTypeDesc(), "no decimal type descriptor");
+        const TDecimalType decimalType = typeInfo.GetDecimalType();
+        // TODO Uncomment after parametrized decimal in KQP
+        //Y_ABORT_UNLESS(decimalType.GetPrecision() != 0 && decimalType.GetScale() != 0);
         columnType.TypeInfo = NKikimrProto::TTypeInfo();
-        const TDecimalType decimalType =typeInfo.GetDecimalType();
         columnType.TypeInfo->SetDecimalPrecision(decimalType.GetPrecision());
         columnType.TypeInfo->SetDecimalScale(decimalType.GetScale());
         break;

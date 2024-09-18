@@ -13,8 +13,8 @@ KQPRUN_PATH = os.getenv("KQPRUN_EXECUTABLE") or "ydb/tests/tools/kqprun/kqprun"
 
 
 def is_kqprun_daemon_ready() -> bool:
-    info = open(yatest_common.output_path("kqprun_daemon.out.log"), "r").read()
-    return "Initialization finished" in info
+    with open(yatest_common.output_path("kqprun_daemon.out.log"), "r") as outFile:
+        return "Initialization finished" in outFile.read()
 
 
 def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]:

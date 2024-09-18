@@ -9,9 +9,6 @@ TEST_SRCS(
 )
 
 PEERDIR(
-    library/python/testing/recipe
-    library/python/testing/yatest_common
-    library/recipes/common
     ydb/tests/oss/ydb_sdk_import
 )
 
@@ -27,7 +24,6 @@ USE_RECIPE(
         --query ydb/tests/tools/kqprun/tests/cfg/fill_tables.sql
 )
 
-TIMEOUT(10)
 SIZE(MEDIUM)
 
 END()

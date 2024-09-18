@@ -209,7 +209,10 @@
         {
             "Name": "TKqlStreamLookupIndex",
             "Base": "TKqlLookupIndexBase",
-            "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"}
+            "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"},
+            "Children": [
+                {"Index": 4, "Name": "LookupStrategy", "Type": "TCoAtom"}
+            ]
         },
         {
             "Name": "TKqlEffectBase",

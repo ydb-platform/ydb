@@ -532,6 +532,10 @@ public:
         Gateway->SetToken(cluster, token);
     }
 
+    void SetPeerName(const TString& peerName) override {
+        Gateway->SetPeerName(peerName);
+    }
+
     bool GetDatabaseForLoginOperation(TString& database) {
         return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }

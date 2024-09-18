@@ -64,6 +64,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , PeerName(ev->Get()->GetPeerName())
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
@@ -128,6 +129,7 @@ public:
     TKqpQueryStats QueryStats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString PeerName;
     NActors::TMonotonic StartedAt;
     bool CompilationRunning = false;
 

@@ -228,6 +228,14 @@ public:
         return Token_;
     }
 
+    TString GetPeerName() const {
+        if (RequestCtx) {
+            return RequestCtx->GetPeerName();
+        }
+
+        return Record.GetPeerName();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;

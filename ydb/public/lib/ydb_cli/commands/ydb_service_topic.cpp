@@ -337,10 +337,9 @@ namespace {
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
         auto codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        if (!codecs.empty()) {
+            settings.SetSupportedCodecs(codecs);
         }
-        settings.SetSupportedCodecs(codecs);
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());
@@ -546,11 +545,10 @@ namespace {
             consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
         }
 
-        TVector<NTopic::ECodec> codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        auto codecs = GetCodecs();
+        if (!codecs.empty()) {
+            consumerSettings.SetSupportedCodecs(codecs);
         }
-        consumerSettings.SetSupportedCodecs(codecs);
         consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);

@@ -692,6 +692,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 DECLARE $in AS List<Struct<v: String?>>;
                 SELECT *
                 FROM AS_TABLE($in) AS k RIGHT SEMI JOIN `/Root/RSJ_SimpleKey_1` AS t ON k.v = t.Value
+                ORDER BY Key
             )");
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()

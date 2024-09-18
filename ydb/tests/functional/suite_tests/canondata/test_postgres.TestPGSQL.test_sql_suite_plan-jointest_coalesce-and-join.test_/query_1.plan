@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (Grace)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,10 +48,19 @@
                                                         "ExternalPlanNodeId": 29
                                                     },
                                                     {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (Grace)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 27
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.x)"
                                             }
                                         ],
                                         "PlanNodeId": 30,
@@ -179,7 +188,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Node Type": "LeftJoin (Grace)-Filter",
                                         "Operators": [
                                             {
                                                 "Condition": "a.x = qt.x",
@@ -188,10 +197,19 @@
                                                         "ExternalPlanNodeId": 15
                                                     },
                                                     {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (Grace)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
                                                         "ExternalPlanNodeId": 13
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.x)"
                                             }
                                         ],
                                         "PlanNodeId": 16,

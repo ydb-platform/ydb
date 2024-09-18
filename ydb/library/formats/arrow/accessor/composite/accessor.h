@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor {

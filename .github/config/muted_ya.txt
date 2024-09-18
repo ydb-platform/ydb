@@ -29,6 +29,7 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
+ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/persqueue/ut [37/40] chunk chunk
 ydb/core/persqueue/ut [38/40] chunk chunk
 ydb/core/persqueue/ut TPQTest.*DirectRead*

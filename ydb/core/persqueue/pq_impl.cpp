@@ -1511,9 +1511,10 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
                                               ctx);
         }
         partition.PendingRequests.clear();
+    } else {
+        ++PartitionsInited;
     }
 
-    ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
     auto allInitialized = AllOriginalPartitionsInited();
@@ -1912,11 +1913,17 @@ void TPersQueue::ProcessStatusRequests(const TActorContext &ctx) {
 
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPersQueue::TEvStatus");
+
     ReadBalancerActorId = ev->Sender;
 
     if (!ConfigInited || !AllOriginalPartitionsInited()) {
-      StatusRequests.push_back(ev);
-      return;
+        PQ_LOG_D("Postpone the request." <<
+                 " ConfigInited " << static_cast<int>(ConfigInited) <<
+                 ", PartitionsInited " << PartitionsInited <<
+                 ", OriginalPartitionsCount " << OriginalPartitionsCount);
+        StatusRequests.push_back(ev);
+        return;
     }
 
     ui32 cnt = 0;

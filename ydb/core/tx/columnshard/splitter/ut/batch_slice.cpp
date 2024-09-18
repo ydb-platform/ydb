@@ -29,7 +29,7 @@ TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::Record
         std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
         for (auto&& i : splitter.Split(i, Schema->GetField(c.GetEntityId()), settings.GetMaxBlobSize())) {
             NOlap::TSimpleColumnInfo columnInfo(c.GetEntityId(), Schema->GetField(c.GetEntityId()),
-                Schema->GetColumnSaver(c.GetEntityId()).GetSerializer(), true, false, true, nullptr);
+                Schema->GetColumnSaver(c.GetEntityId()).GetSerializer(), true, false, true, nullptr, std::nullopt);
             chunks.emplace_back(std::make_shared<NOlap::NChunks::TChunkPreparation>(i.GetSerializedChunk(),
                 std::make_shared<NArrow::NAccessor::TTrivialArray>(i.GetSlicedBatch()->column(0)), TChunkAddress(c.GetEntityId(), 0),
                 columnInfo));

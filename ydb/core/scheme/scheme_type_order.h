@@ -55,7 +55,7 @@ struct TTypeInfoOrder {
     TTypeInfoOrder()
     {}
 
-    TTypeInfoOrder(TTypeIdOrder typeIdOrder, const ITypeDesc* typeDesc = {})
+    TTypeInfoOrder(TTypeIdOrder typeIdOrder, TTypeInfo::TTypeDesc typeDesc = {})
         : TypeIdOrder(typeIdOrder)
         , TypeDesc(typeDesc)
     {}
@@ -81,7 +81,7 @@ struct TTypeInfoOrder {
         return TypeIdOrder.IsDescending();
     }
 
-    const ITypeDesc* GetTypeDesc() const {
+    TTypeInfo::TTypeDesc GetTypeDesc() const {
         return TypeDesc;
     }
 
@@ -95,7 +95,7 @@ struct TTypeInfoOrder {
 
 private:
     TTypeIdOrder TypeIdOrder;
-    const ITypeDesc* TypeDesc = {};
+    TTypeInfo::TTypeDesc TypeDesc;
 };
 
 }

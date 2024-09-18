@@ -1,65 +1,112 @@
 #pragma once
 
+#include "scheme_decimal_type.h"
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NKikimr::NPg {
-
 struct ITypeDesc;
-
+TString TypeModFromPgTypeName(const TStringBuf name);
 }
 
 namespace NKikimr::NScheme {
 
-struct ITypeDesc;
-
 class TTypeInfo {
 public:
+    typedef uintptr_t TTypeDesc;
+
     constexpr TTypeInfo()
+        : TypeId(0)
+        , RawDesc(0)
+    {}
+    
+    constexpr TTypeInfo(const TTypeInfo& typeInfo)
+        : TypeId(typeInfo.TypeId)
+        , RawDesc(typeInfo.RawDesc)
     {}
 
     constexpr TTypeInfo(TTypeId typeId)
         : TypeId(typeId)
-    { }
-
-    constexpr TTypeInfo(TTypeId typeId, const ITypeDesc* typeDesc)
-        : TypeId(typeId)
-        , TypeDesc(typeDesc)
+        // TODO Remove after parametrized decimal in KQP
+        , DecimalTypeDesc(typeId == NTypeIds::Decimal ? TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE) : TDecimalType(0, 0))
     {
-        if (TypeId != NTypeIds::Pg) {
-            Y_ABORT_UNLESS(!TypeDesc);
+        // TODO Uncomment after parametrized decimal in KQP
+        //Y_ABORT(TypeId != NTypeIds::Decimal)
+    }
+
+    constexpr TTypeInfo(TTypeId typeId, const TTypeDesc typeDesc)
+        : TypeId(typeId)
+        , RawDesc(typeDesc)
+    {
+        if (NTypeIds::IsParametrizedType(TypeId)) {
+            Y_ABORT_UNLESS(RawDesc);
+        } else {
+            Y_ABORT_UNLESS(!RawDesc);
         }
     }
 
-    TTypeInfo(TTypeId typeId, const NPg::ITypeDesc* typeDesc)
+    constexpr TTypeInfo(TTypeId typeId, const NKikimr::NPg::ITypeDesc* typeDesc)
         : TypeId(typeId)
-        , TypeDesc(reinterpret_cast<const ITypeDesc *>(typeDesc))
+        , PgTypeDesc(typeDesc)
     {
-        Y_ABORT_UNLESS (TypeId == NTypeIds::Pg);
+        Y_ABORT_UNLESS(TypeId == NTypeIds::Pg);
     }
 
-    bool operator==(const TTypeInfo& other) const {
-        return TypeId == other.TypeId && TypeDesc == other.TypeDesc;
+    constexpr TTypeInfo(TTypeId typeId, const TDecimalType& decimalType)
+        : TypeId(typeId)
+        // TODO Remove after parametrized decimal in KQP
+        , DecimalTypeDesc(decimalType.GetPrecision() == 0 && decimalType.GetScale() == 0 ? TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE) : decimalType)
+    {
+        Y_ABORT_UNLESS(TypeId == NTypeIds::Decimal);
     }
 
-    bool operator!=(const TTypeInfo& other) const {
+    constexpr bool operator==(const TTypeInfo& other) const {
+        return TypeId == other.TypeId && RawDesc == other.RawDesc;
+    }
+
+    constexpr bool operator!=(const TTypeInfo& other) const {
         return !operator==(other);
     }
 
-    TTypeId GetTypeId() const {
+    constexpr TTypeInfo& operator=(const TTypeInfo& other) {
+        TypeId = other.TypeId;
+        RawDesc = other.RawDesc;
+        return *this;
+    }
+
+    constexpr TTypeId GetTypeId() const {
         return TypeId;
     }
 
-    const ITypeDesc* GetTypeDesc() const {
-        return TypeDesc;
+    constexpr TTypeDesc GetTypeDesc() const {
+        return RawDesc;
     }
 
-    const NPg::ITypeDesc* GetPgTypeDesc() const {
-        return reinterpret_cast<const NPg::ITypeDesc*>(TypeDesc);
+    constexpr const NKikimr::NPg::ITypeDesc* GetPgTypeDesc() const {
+        Y_ABORT_UNLESS (TypeId == NTypeIds::Pg);
+        return PgTypeDesc;
+    }
+
+    const TString GetPgTypeMod(const TStringBuf name) const {
+        return TypeId != NTypeIds::Pg ? TString{} : NPg::TypeModFromPgTypeName(name);
+    }
+
+    constexpr const TDecimalType GetDecimalType() const {
+        Y_ABORT_UNLESS (TypeId == NTypeIds::Decimal);
+        return DecimalTypeDesc;
     }
 
 private:
     TTypeId TypeId = 0;
-    const ITypeDesc* TypeDesc = nullptr;
+
+    // Storage for parameters of types
+    union {
+        TTypeDesc RawDesc;                          // internal descriptor, used for passing inside YDB Core
+        const NKikimr::NPg::ITypeDesc* PgTypeDesc;  // PG descriptor, used for pg_wrapper
+        TDecimalType DecimalTypeDesc;               // Decimal parameters, stored inplace
+    };
+
+    static_assert(sizeof(TDecimalType) == sizeof(TTypeDesc));
 };
 
 } // namespace NKikimr::NScheme

@@ -177,7 +177,7 @@ var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
 
 In all other respects, the {{ ydb-short-name }} dialect follows the JOOQ documentation.
 
-### Spring Boot
+### Spring Boot Configuration
 
 Extend `JooqAutoConfiguration.DslContextConfiguration` with your own `YdbDSLContext`. For example:
 

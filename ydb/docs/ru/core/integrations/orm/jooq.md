@@ -177,7 +177,7 @@ var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
 
 В остальном диалект {{ ydb-short-name }} следует документации JOOQ.
 
-### Spring Boot
+### Конфигурация Spring Boot
 
 Расширим `JooqAutoConfiguration.DslContextConfiguration` собственным `YdbDSLContext`. Например:
 

@@ -137,10 +137,11 @@ private:
 class TResultStreamChannelProxy : public TResultCommonChannelProxy {
 public:
     TResultStreamChannelProxy(ui64 txId, ui64 channelId, NKikimr::NMiniKQL::TType* itemType,
-        const TVector<ui32>* columnOrder, ui32 queryResultIndex, TActorId target,
+        const TVector<ui32>* columnOrder, const TVector<TString>* columnHints, ui32 queryResultIndex, TActorId target,
         TActorId executer, size_t statementResultIndex)
         : TResultCommonChannelProxy(txId, channelId, executer)
         , ColumnOrder(columnOrder)
+        , ColumnHints(columnHints)
         , ItemType(itemType)
         , QueryResultIndex(queryResultIndex)
         , Target(target)
@@ -157,7 +158,7 @@ private:
         batch.Payload = std::move(computeData.Payload);
 
         TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-        auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), ItemType, ColumnOrder);
+        auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), ItemType, ColumnOrder, ColumnHints);
 
         auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
@@ -173,6 +174,7 @@ private:
 
 private:
     const TVector<ui32>* ColumnOrder;
+    const TVector<TString>* ColumnHints;
     NKikimr::NMiniKQL::TType* ItemType;
     ui32 QueryResultIndex = 0;
     const NActors::TActorId Target;
@@ -214,7 +216,7 @@ private:
 } // anonymous namespace end
 
 NActors::IActor* CreateResultStreamChannelProxy(ui64 txId, ui64 channelId, NKikimr::NMiniKQL::TType* itemType,
-    const TVector<ui32>* columnOrder, ui32 queryResultIndex, TActorId target,
+    const TVector<ui32>* columnOrder, const TVector<TString>* columnHints, ui32 queryResultIndex, TActorId target,
     TActorId executer, ui32 statementResultIndex)
 {
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
@@ -222,7 +224,7 @@ NActors::IActor* CreateResultStreamChannelProxy(ui64 txId, ui64 channelId, NKiki
         ", channelId: " << channelId
     );
 
-    return new TResultStreamChannelProxy(txId, channelId, itemType, columnOrder, queryResultIndex, target,
+    return new TResultStreamChannelProxy(txId, channelId, itemType, columnOrder, columnHints, queryResultIndex, target,
         executer, statementResultIndex);
 }
 

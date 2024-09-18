@@ -6,12 +6,11 @@
 
 {% endnote %}
 
-
 Удаляет указанный [секрет](../../../concepts/datamodel/secrets.md).
 
 Если секрета с таким именем не существует, возвращается ошибка.
 
-**Пример**
+## Пример
 
 ```yql
 DROP OBJECT my_secret (TYPE SECRET);

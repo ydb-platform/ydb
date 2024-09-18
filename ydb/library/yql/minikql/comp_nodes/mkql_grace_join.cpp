@@ -1035,7 +1035,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         {}
 
         EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output)  const {
-            if (!state.HasValue()) {
+            if (state.IsInvalid()) {
                 MakeSpillingSupportState(ctx, state);
             }
 

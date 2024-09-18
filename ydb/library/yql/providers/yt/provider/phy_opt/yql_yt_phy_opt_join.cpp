@@ -7,6 +7,7 @@
 
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -321,6 +322,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EarlyMergeJoin(TExprBas
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
     auto equiJoin = node.Cast<TYtEquiJoin>();
+    auto cluster = equiJoin.DataSink().Cluster().StringValue();
 
     const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
         && equiJoin.Input().Size() > 2
@@ -338,10 +340,19 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
             }
         }
     }
-
     const auto tree = ImportYtEquiJoin(equiJoin, ctx);
+
+    const TMaybe<ui64> maxChunkCountExtendedStats = State_->Configuration->ExtendedStatsMaxChunkCount.Get();
+
+    if (tryReorder && waitAllInputs && maxChunkCountExtendedStats) {
+        YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for equiJoin";
+        auto collectStatus = CollectCboStats(cluster, *tree, State_, ctx);
+        if (collectStatus == TStatus::Repeat) {
+            return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
+        }
+    }
     if (tryReorder) {
-        const auto optimizedTree = OrderJoins(tree, State_, ctx);
+        const auto optimizedTree = OrderJoins(tree, State_, cluster, ctx);
         if (optimizedTree != tree) {
             return ExportYtEquiJoin(equiJoin, *optimizedTree, ctx, State_);
         }

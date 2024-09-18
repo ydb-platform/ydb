@@ -82,11 +82,11 @@ In {{ ydb-short-name }}, actors with the reliably persisted state are called [ta
 
 A **tablet** is one of {{ ydb-short-name }}'s primary building blocks and abstractions. It is an entity responsible for a relatively small segment of user or system data. Typically, a tablet manages up to single-digit gigabytes of data, but some kinds of tablets can handle more.
 
-For example, a [row-oriented user table](#row-oriented-table) is managed by one or more [DataShard](#datashard) tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
+For example, a [row-oriented user table](#row-oriented-table) is managed by one or more [DataShard](#data-shard) tablets, with each tablet responsible for a continuous range of [primary keys](#primary-key) and the corresponding data.
 
 End users sending queries to a {{ ydb-short-name }} cluster aren't expected to know much about tablets, their kinds, or how they work, but it might still be helpful, for example, for performance optimizations.
 
-Technically, tablets are [actors](#actors) with a persistent state reliably saved in [Distributed Storage](#distributed-storage). This state allows the tablet to continue operating on a different [database node](#database-node) if the previous one is down or overloaded.
+Technically, tablets are [actors](#actor) with a persistent state reliably saved in [Distributed Storage](#distributed-storage). This state allows the tablet to continue operating on a different [database node](#database-node) if the previous one is down or overloaded.
 
 [Tablet implementation details](#tablet-implementation) and related terms, as well as [main tablet types](#tablet-types), are covered below in the advanced section.
 
@@ -99,7 +99,7 @@ Technically, tablets are [actors](#actors) with a persistent state reliably save
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transactions-implementation).
+The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -338,7 +338,7 @@ A **PQ Tablet** or **persistent queue tablet** is a tablet that implements the c
 
 #### TxAllocator {#txallocator}
 
-A **TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) within the cluster. Typically, a cluster has several such tablets, from which [transaction proxy](##transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
+A **TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) within the cluster. Typically, a cluster has several such tablets, from which [transaction proxy](#transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
 
 #### Coordinator {#coordinator}
 
@@ -383,7 +383,7 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 
 #### gRPC proxy {#grpc-proxy}
 
-A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
+A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
 
 ### Distributed storage implementation {#distributed-storage-implementation}
 
@@ -398,7 +398,7 @@ A **LogoBlob** is a piece of binary immutable data identified by [LogoBlobID](#l
 #### LogoBlobID {#logoblobid}
 
 A **LogoBlobID** is the [LogoBlob](#logoblob) identifier in the [Distributed storage](#distributed-storage). It has a structure of the form `[TabletID, Generation, Step, Channel, Cookie, BlobSize, PartID]`. The key elements of LogoBlobID are:
-  
+
 * `TabletID` is an [ID](#tabletid) of the tablet that the LogoBlob belongs to.
 * `Generation` is the generation of the tablet in which the blob was recorded.
 * `Channel` is the tablet [channel](#channel) where the LogoBlob is recorded.
@@ -443,13 +443,13 @@ The **distributed storage controller** or **DS controller** manages the dynamic 
 
 #### Proxy {#ds-proxy}
 
-The **distributed storage proxy**, **DS proxy**, or **BS proxy** plays the role of a client library for performing operations with [Distributed storage](#distributed-storage). DS Proxy users are [tablets](#tablets) that write to and read from Distributed storage. DS Proxy hides the distributed nature of Distributed storage from the user. The task of DS Proxy is to write to the quorum of the [VDisks](#vdisk), make retries if necessary, and control the write/read flow to avoid overloading VDisks.
+The **distributed storage proxy**, **DS proxy**, or **BS proxy** plays the role of a client library for performing operations with [Distributed storage](#distributed-storage). DS Proxy users are [tablets](#tablet) that write to and read from Distributed storage. DS Proxy hides the distributed nature of Distributed storage from the user. The task of DS Proxy is to write to the quorum of the [VDisks](#vdisk), make retries if necessary, and control the write/read flow to avoid overloading VDisks.
 
 Technically, DS Proxy is implemented as an [actor service](#actor-service) launched by the [node warden](#node-warden) on each node for each storage group, processing all requests to the group (writing, reading, and deleting [LogoBlobs](#logoblob), blocking the group). When writing data, DS proxy performs [erasure encoding](#erasure-coding) of data by dividing LogoBlobs into parts, which are then sent to the corresponding VDisks. DS Proxy performs the reverse process when reading, receiving parts from VDisks, and restoring LogoBlobs from them.
 
 #### Node warden {#node-warden}
 
-**Node warden** or `BS_NODE` is an [actor service](#actor-service) on each node of the cluster, launching [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#proxy) of [static storage groups](#static-group) at the node start. Also, it interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). The DS proxy of dynamic groups is launched on request: node warden processes "undelivered" messages to the DS proxy, launching the corresponding DS proxies and receiving the group configuration from the DS controller.
+**Node warden** or `BS_NODE` is an [actor service](#actor-service) on each node of the cluster, launching [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#ds-proxy) of [static storage groups](#static-group) at the node start. Also, it interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). The DS proxy of dynamic groups is launched on request: node warden processes "undelivered" messages to the DS proxy, launching the corresponding DS proxies and receiving the group configuration from the DS controller.
 
 #### Fail realm {#fail-realm}
 
@@ -470,11 +470,11 @@ Domain failures are handled automatically by {{ ydb-short-name }} without shutti
 A **channel** is a logical connection between a [tablet](#tablet) and [Distributed storage](#distributed-storage) group. The tablet can write data to different channels, and each channel is mapped to a specific [storage group](#storage-group). Having multiple channels allows the tablet to:
 
 * Record more data than one storage group can contain.
-* Store different [LogoBlobs](#logoblobs) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).
+* Store different [LogoBlobs](#logoblob) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#distributed-transaction) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
 
 #### Deterministic transactions {#deterministic-transactions}
 
@@ -500,7 +500,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Read-write set {#rw-set}
 
-The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transactions). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
+The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transaction). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
 
 #### Read set {#read-set}
 
@@ -508,7 +508,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transaction): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -533,7 +533,7 @@ During the distributed query execution, **mediator time** is the logical time be
 #### MiniKQL {#minikql}
 
 **MiniKQL** is a language that allows the expression of a single [deterministic transaction](#deterministic-transactions) in the system. It is a functional, strongly typed language. Conceptually, the language describes a graph of reading from the database, performing calculations on the read data, and writing the results to the database and/or to a special document representing the query result (shown to the user). The MiniKQL transaction must explicitly set its read set (readable data) and assume a deterministic selection of execution branches (for example, there is no random).
-  
+
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
 #### KQP {#kqp}

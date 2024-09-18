@@ -1,12 +1,28 @@
 #include "cache_cache.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
+namespace NKikimr::NCache {
 
 Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 
     struct TPage : public TIntrusiveListItem<TPage> {
-        TCacheCacheConfig::ECacheGeneration CacheGeneration = TCacheCacheConfig::CacheGenNone;
+        ECacheCacheGeneration CacheGeneration;
+    };
+
+    struct TCacheCachePageTraits {
+        static ui64 GetWeight(const TPage*) {
+            return 1;
+        }
+
+        static ECacheCacheGeneration GetGeneration(const TPage *page) {
+            return static_cast<ECacheCacheGeneration>(page->CacheGeneration);
+        }
+
+        static void SetGeneration(TPage *page, ECacheCacheGeneration generation) {
+            ui32 generation_ = static_cast<ui32>(generation);
+            Y_ABORT_UNLESS(generation_ < (1 << 4));
+            page->CacheGeneration = generation;
+        }
     };
 
     Y_UNIT_TEST(MoveToWarm) {
@@ -17,14 +33,14 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
         // this should mean nothing is cacheable, but currently we will
         // place 1 page on a level until it is inspected again.
         TCacheCacheConfig config(1, fresh, staging, warm);
-        TCacheCache<TPage> cache(config);
+        TCacheCache<TPage, TCacheCachePageTraits> cache(config);
 
         TVector<TPage> pages(3);
         TIntrusiveList<TPage> evicted;
 
         // page 0 added to fresh
         evicted = cache.Touch(&pages[0]);
-        UNIT_ASSERT(pages[0].CacheGeneration == TCacheCacheConfig::CacheGenFresh);
+        UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::Fresh);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 0ULL);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 0ULL);
@@ -32,8 +48,8 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 
         // page 1 added to fresh first bumps page 0 to staging 
         evicted = cache.Touch(&pages[1]);
-        UNIT_ASSERT(pages[1].CacheGeneration == TCacheCacheConfig::CacheGenFresh);
-        UNIT_ASSERT(pages[0].CacheGeneration == TCacheCacheConfig::CacheGenStaging);
+        UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::Fresh);
+        UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::Staging);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 0ULL);
@@ -41,7 +57,7 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 
         // page 0 is moved to warm from staging
         evicted = cache.Touch(&pages[0]);
-        UNIT_ASSERT(pages[0].CacheGeneration == TCacheCacheConfig::CacheGenWarm);
+        UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::Warm);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 0ULL);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 1ULL);
@@ -49,8 +65,8 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 
         // page 2 added to fresh first bumps page 1 to staging
         evicted = cache.Touch(&pages[2]);
-        UNIT_ASSERT(pages[2].CacheGeneration == TCacheCacheConfig::CacheGenFresh);
-        UNIT_ASSERT(pages[1].CacheGeneration == TCacheCacheConfig::CacheGenStaging);
+        UNIT_ASSERT(pages[2].CacheGeneration == ECacheCacheGeneration::Fresh);
+        UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::Staging);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 1ULL);
@@ -58,8 +74,8 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
 
         // page 1 moves to warm, but first it bumps page 0 to staging
         evicted = cache.Touch(&pages[1]);
-        UNIT_ASSERT(pages[1].CacheGeneration == TCacheCacheConfig::CacheGenWarm);
-        UNIT_ASSERT(pages[0].CacheGeneration == TCacheCacheConfig::CacheGenStaging);
+        UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::Warm);
+        UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::Staging);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 1ULL);
@@ -73,7 +89,7 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
         
         // 2 pages per layer
         TCacheCacheConfig config(3, fresh, staging, warm);
-        TCacheCache<TPage, TCacheCacheConfig::TDefaultWeight<TPage>, TCacheCacheConfig::TDefaultGeneration<TPage>> cache(config);
+        TCacheCache<TPage, TCacheCachePageTraits> cache(config);
 
         TVector<TPage> pages(6);
 
@@ -85,38 +101,38 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
         cache.Touch(&pages[1]);
         cache.Touch(&pages[4]);
         cache.Touch(&pages[5]);
-        UNIT_ASSERT(pages[0].CacheGeneration == TCacheCacheConfig::CacheGenWarm);
-        UNIT_ASSERT(pages[1].CacheGeneration == TCacheCacheConfig::CacheGenWarm);
-        UNIT_ASSERT(pages[2].CacheGeneration == TCacheCacheConfig::CacheGenStaging);
-        UNIT_ASSERT(pages[3].CacheGeneration == TCacheCacheConfig::CacheGenStaging);
-        UNIT_ASSERT(pages[4].CacheGeneration == TCacheCacheConfig::CacheGenFresh);
-        UNIT_ASSERT(pages[5].CacheGeneration == TCacheCacheConfig::CacheGenFresh);
+        UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::Warm);
+        UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::Warm);
+        UNIT_ASSERT(pages[2].CacheGeneration == ECacheCacheGeneration::Staging);
+        UNIT_ASSERT(pages[3].CacheGeneration == ECacheCacheGeneration::Staging);
+        UNIT_ASSERT(pages[4].CacheGeneration == ECacheCacheGeneration::Fresh);
+        UNIT_ASSERT(pages[5].CacheGeneration == ECacheCacheGeneration::Fresh);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 2ULL);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 2ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 2ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[2]);
-        UNIT_ASSERT(pages[2].CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
+        UNIT_ASSERT(pages[2].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 1ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[3]);
-        UNIT_ASSERT(pages[3].CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
+        UNIT_ASSERT(pages[3].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 0ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[4]);
-        UNIT_ASSERT(pages[4].CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
+        UNIT_ASSERT(pages[4].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[5]);
-        UNIT_ASSERT(pages[5].CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
+        UNIT_ASSERT(pages[5].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 0ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[0]);
-        UNIT_ASSERT(pages[0].CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
+        UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 1ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[1]);
-        UNIT_ASSERT(pages[1].CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
+        UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 0ULL);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), nullptr);

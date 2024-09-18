@@ -18,15 +18,14 @@ namespace NMiniKQL {
 namespace {
 
 template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> {
+class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
     TDecimalDivWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
+        , NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128>(precision, scale)
         , Left(left)
         , Right(right)
-        , Bound(NYql::NDecimal::GetDivider(precision))
-        , Divider(NYql::NDecimal::GetDivider(scale))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -39,11 +38,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        const auto div = NYql::NDecimal::MulAndDivNormalMultiplier(left.GetInt128(), Divider, right.GetInt128());
-        if (div > -Bound && div < +Bound)
-            return NUdf::TUnboxedValuePod(div);
-
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsNan(div) ? NYql::NDecimal::Nan() : (div > 0 ? +NYql::NDecimal::Inf() : -NYql::NDecimal::Inf()));
+        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -143,12 +138,10 @@ private:
 
     IComputationNode* const Left;
     IComputationNode* const Right;
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
 };
 
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> {
+class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
 public:
     TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
@@ -167,7 +160,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::Div(left.GetInt128(), NYql::NDecimal::TInt128(right.Get<TRight>())));
+        return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.Get<TRight>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

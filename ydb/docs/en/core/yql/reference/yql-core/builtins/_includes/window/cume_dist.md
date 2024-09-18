@@ -2,17 +2,17 @@
 
 Returns the relative position (> 0 and <= 1) of a row within a [partition](../../../syntax/window.md#partition). No arguments.
 
-**Signature**
-```
+### Signature
+
+```yql
 CUME_DIST()->Double
 ```
 
+### Examples
 
-**Examples**
-``` yql
+```yql
 SELECT
     CUME_DIST() OVER w AS dist
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-

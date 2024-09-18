@@ -398,6 +398,8 @@ enum EServiceKikimr {
     BS_REQUEST_COST = 2500;
 
     GROUPED_MEMORY_LIMITER = 2700;
+
+    DATA_INTEGRITY = 3000;
 };
 
 message TActivity {
@@ -1050,5 +1052,8 @@ message TActivity {
         SAMPLE_K_SCAN_ACTOR = 643;
         MEMORY_CONTROLLER = 644;
         BUILD_COLUMNS_SCAN_ACTOR = 645;
+        SAMPLE_K_UPLOAD_ACTOR = 646;
+        LOCAL_KMEANS_SCAN_ACTOR = 647;
+        INCREMENTAL_RESTORE_SCAN_ACTOR = 648;
     };
 };

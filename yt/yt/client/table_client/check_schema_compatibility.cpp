@@ -85,6 +85,15 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                         inputColumn->GetDiagnosticNameString()),
                 };
             }
+
+            if (outputColumn.Materialized().value_or(true) != inputColumn->Materialized().value_or(true)) {
+                return {
+                    ESchemaCompatibility::Incompatible,
+                    TError("Column %v materialization mismatch",
+                        inputColumn->GetDiagnosticNameString()),
+                };
+            }
+
             if (outputColumn.Aggregate() && inputColumn->Aggregate() != outputColumn.Aggregate()) {
                 return {
                     ESchemaCompatibility::Incompatible,

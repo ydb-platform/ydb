@@ -38,7 +38,7 @@ IChannelPtr CreateTimestampProviderChannel(
     auto channel = CreateBalancingChannel(
         config,
         std::move(channelFactory),
-        std::move(endpointDescription),
+        endpointDescription,
         std::move(endpointAttributes));
     channel = CreateRetryingChannel(
         config,

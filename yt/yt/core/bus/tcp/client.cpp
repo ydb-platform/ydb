@@ -51,7 +51,7 @@ public:
         Connection_->Terminate(TError(NBus::EErrorCode::TransportError, "Bus terminated"));
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         VERIFY_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointDescription();
@@ -161,7 +161,7 @@ public:
             .EndMap());
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -220,7 +220,7 @@ private:
 
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
-    TString EndpointDescription_;
+    std::string EndpointDescription_;
     IAttributeDictionaryPtr EndpointAttributes_;
 };
 

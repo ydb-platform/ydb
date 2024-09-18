@@ -2,6 +2,10 @@
 
 namespace NYdb::NConsoleClient {
 
+namespace BenchmarkUtils {
+    class TQueryBenchmarkResult;
+}
+
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
     TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
@@ -16,6 +20,7 @@ private:
 
     template <typename TClient>
     bool RunBench(TClient& client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
+    void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const;
 
 private:
     TString QueryExecuterType;

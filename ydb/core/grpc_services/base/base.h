@@ -26,6 +26,7 @@
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/util/ulid.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -696,38 +697,34 @@ private:
     NYql::TIssueManager IssueManager_;
 };
 
-namespace {
-
-    inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
-        if (vec.empty()) {
-            return {};
-        }
-        return TString{vec[0]};
+inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
+    if (vec.empty()) {
+        return {};
     }
+    return TString{vec[0]};
+}
 
-    inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
-        if (authHeadValues.empty()) {
-            return {};
-        }
-        return TString{authHeadValues[0]};
+inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
+    if (authHeadValues.empty()) {
+        return {};
     }
+    return TString{authHeadValues[0]};
+}
 
-    inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
-        if (dbHeaderValues.empty()) {
-            return {};
-        }
-        return CGIUnescapeRet(dbHeaderValues[0]);
+inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
+    if (dbHeaderValues.empty()) {
+        return {};
     }
+    return CGIUnescapeRet(dbHeaderValues[0]);
+}
 
-    inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
-        TStringStream out;
-        out << "unauthenticated"
-            << (in ? ", " : "") << in
-            << (issues.GetIssues() ? ": " : "");
-        issues.GetIssues().PrintTo(out, true /* one line */);
-        return out.Str();
-    }
-
+inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
+    TStringStream out;
+    out << "unauthenticated"
+        << (in ? ", " : "") << in
+        << (issues.GetIssues() ? ": " : "");
+    issues.GetIssues().PrintTo(out, true /* one line */);
+    return out.Str();
 }
 
 template <ui32 TRpcId, typename TReq, typename TResp, TRateLimiterMode RlMode = TRateLimiterMode::Off>
@@ -751,7 +748,12 @@ public:
     TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, bool rlAllowed = true)
         : Ctx_(ctx)
         , RlAllowed_(rlAllowed)
-    { }
+        , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+    {
+        if (!TraceId) {
+            TraceId = UlidGen.Next().ToString();
+        }
+    }
 
     bool IsClientLost() const override {
         // TODO: Implement for BiDirectional streaming
@@ -852,7 +854,7 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
+        return TraceId;
     }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
@@ -930,6 +932,8 @@ private:
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
     bool IsTracingDecided_ = false;
+    TULIDGenerator UlidGen;
+    TMaybe<TString> TraceId;
 };
 
 template <typename TDerived>
@@ -1037,7 +1041,12 @@ public:
 
     TGRpcRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : Ctx_(ctx)
-    { }
+        , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+    {
+        if (!TraceId) {
+            TraceId = UlidGen.Next().ToString();
+        }
+    }
 
     const TMaybe<TString> GetYdbToken() const override {
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
@@ -1169,7 +1178,7 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
+        return TraceId;
     }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
@@ -1372,6 +1381,8 @@ private:
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
     bool IsTracingDecided_ = false;
+    TULIDGenerator UlidGen;
+    TMaybe<TString> TraceId;
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>

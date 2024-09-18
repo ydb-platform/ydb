@@ -20,20 +20,23 @@ namespace NKikimr::NEvWrite {
         WriteIds[WritesIndex.Inc() - 1] = TWriteIdForShard(shardId, writeId, writePartId);
         Counters->OnCSReply(TMonotonic::Now() - StartInstant);
         if (!WritesCount.Dec()) {
-            Counters->OnFullReply(TMonotonic::Now() - StartInstant);
-            auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
-            for (auto&& i : WriteIds) {
-                req->AddWrite(i.GetShardId(), i.GetWriteId());
-            }
-            LongTxActorId.Send(NLongTxService::MakeLongTxServiceID(LongTxActorId.NodeId()), req.Release());
+            SendReply();
         }
     }
 
     void TWritersController::OnFail(const Ydb::StatusIds::StatusCode code, const TString& message) {
         Counters->OnCSFailed(code);
-        NYql::TIssues issues;
-        issues.AddIssue(message);
-        LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(code, issues));
+        FailsCount.Inc();
+        if (!Code) {
+            TGuard<TMutex> g(Mutex);
+            if (!Code) {
+                Issues.AddIssue(message);
+                Code = code;
+            }
+        }
+        if (!WritesCount.Dec()) {
+            SendReply();
+        }
     }
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const IShardInfo::TPtr& data,
@@ -63,7 +66,7 @@ namespace NKikimr::NEvWrite {
 
         const auto ydbStatus = msg->GetYdbStatus();
         if (ydbStatus == Ydb::StatusIds::OVERLOADED) {
-            if (RetryWriteRequest()) {
+            if (RetryWriteRequest(true)) {
                 return;
             }
         }
@@ -84,7 +87,7 @@ namespace NKikimr::NEvWrite {
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->TabletId == ShardId);
 
-        if (RetryWriteRequest()) {
+        if (RetryWriteRequest(true)) {
             return;
         }
 
@@ -102,7 +105,7 @@ namespace NKikimr::NEvWrite {
         RetryWriteRequest(false);
     }
 
-    bool TShardWriter::RetryWriteRequest(bool delayed) {
+    bool TShardWriter::RetryWriteRequest(const bool delayed) {
         if (NumRetries >= MaxRetriesPerShard) {
             return false;
         }

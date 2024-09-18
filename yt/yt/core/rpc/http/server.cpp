@@ -54,7 +54,7 @@ public:
         , Logger(logger)
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointAddress_;
     }

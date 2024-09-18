@@ -56,5 +56,6 @@ int main(int argc, char *argv[])
 	}
 
 	wait(&wstat);
+	unlink("core");
 	return T_EXIT_PASS;
 }

@@ -3,8 +3,8 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-// EOutputFormat to be used in operations related to structured data
-enum class EOutputFormat {
+// EDataFormat to be used in operations related to structured data
+enum class EDataFormat {
     Default /* "default" */,
     Pretty /* "pretty" */,
     PrettyTable /* "pretty-table" */,

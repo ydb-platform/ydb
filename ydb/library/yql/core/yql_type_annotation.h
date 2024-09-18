@@ -282,7 +282,7 @@ struct TUdfCachedInfo {
 
 struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
-    THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
+    THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSourceMap;
@@ -353,6 +353,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     bool StreamLookupJoin = false;
+    ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -429,17 +430,24 @@ struct TTypeAnnotationContext: public TThrRefBase {
     void Reset();
 
     /**
+     * Helper method to check statistics in type annotation context
+     */
+    bool ContainsStats(const TExprNode* input) {
+        return StatisticsMap.contains(input ? input->UniqueId() : 0);
+    }
+
+    /**
      * Helper method to fetch statistics from type annotation context
      */
     std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
-        return StatisticsMap.Value(input, std::shared_ptr<TOptimizerStatistics>(nullptr));
+        return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 
     /**
      * Helper method to set statistics in type annotation context
      */
     void SetStats(const TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats) {
-        StatisticsMap[input] = stats;
+        StatisticsMap[input ? input->UniqueId() : 0] = stats;
     }
 
     bool IsBlockEngineEnabled() const {

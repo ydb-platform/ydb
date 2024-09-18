@@ -164,7 +164,7 @@ public:
         , EndpointAttributes_(MakeEndpointAttributes(config, connectionId))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -205,7 +205,7 @@ private:
     const bool Sticky_;
     const TGuid ConnectionId_;
 
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);

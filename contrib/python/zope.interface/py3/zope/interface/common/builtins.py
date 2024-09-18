@@ -35,6 +35,7 @@ __all__ = [
     'IFile',
 ]
 
+
 # pylint:disable=no-self-argument
 class IList(collections.IMutableSequence):
     """
@@ -86,6 +87,8 @@ class INativeString(ITextString):
     On all Python versions, this is :class:`str`. Tt extends
     :class:`ITextString`.
     """
+
+
 # We're not extending ABCInterface so extra_classes won't work
 classImplements(str, INativeString)
 
@@ -108,8 +111,8 @@ class IFile(io.IIOBase):
     """
     Interface for :class:`file`.
 
-    It is recommended to use the interfaces from :mod:`zope.interface.common.io`
-    instead of this interface.
+    It is recommended to use the interfaces from
+    :mod:`zope.interface.common.io` instead of this interface.
 
     On Python 3, there is no single implementation of this interface;
     depending on the arguments, the :func:`open` builtin can return

@@ -62,6 +62,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetIsEnablePgSyntax(bool value) {
+        IsEnablePgSyntax = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -73,6 +78,7 @@ private:
     TString KqpTablePathPrefix = {};
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
+    bool IsEnablePgSyntax = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
@@ -85,7 +91,8 @@ NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceCon
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName);
+    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
+    NSQLTranslation::TTranslationSettings* effectiveSettings = nullptr);
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 

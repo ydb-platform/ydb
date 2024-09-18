@@ -19,6 +19,7 @@ default:
 #  feature_topic_settings_reset: true
 #  feature_logbroker: true
   feature_view: true
+  feature_async_replication: true
   ydb: YDB
   ydb-name: YDB
   ydb-full-name: YDB
@@ -55,7 +56,7 @@ default:
   corporate-yt-cluster: example-cluster
 
   datalens-name: DataLens
-  airflow-name: Apache Airflow
+  airflow-name: Apache Airflow™
   ydb-airflow: false
   ydb-finebi: false
   ydb-superset: false

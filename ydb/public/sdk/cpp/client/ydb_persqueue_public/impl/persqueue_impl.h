@@ -56,7 +56,7 @@ public:
 
         bool autoPartitioningSettingsDefined = false;
         if (settings.MaxPartitionsCount_.Defined()) {
-            props.mutable_auto_partitioning_settings()->set_max_active_partitions(settings.PartitionsCount_);
+            props.mutable_auto_partitioning_settings()->set_max_active_partitions(*settings.MaxPartitionsCount_);
             autoPartitioningSettingsDefined = true;
         }
         if (settings.AutoPartitioningStrategy_.Defined()) {
@@ -76,9 +76,7 @@ public:
             autoPartitioningSettingsDefined = true;
         }
 
-        if (!autoPartitioningSettingsDefined) {
-            props.set_partitions_count(settings.PartitionsCount_);
-        } else {
+        if (autoPartitioningSettingsDefined) {
             props.mutable_auto_partitioning_settings()->set_min_active_partitions(settings.PartitionsCount_);
         }
 

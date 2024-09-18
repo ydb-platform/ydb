@@ -16,7 +16,7 @@ PEERDIR(
 )
 
 SRCS(
-    main.cpp
+    backup_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
@@ -29,3 +29,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 END()
+
+RECURSE(
+    s3_path_style
+)

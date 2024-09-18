@@ -18,6 +18,11 @@ ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink
 ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
 ydb/core/kqp/ut/tx KqpSinkTx.InvalidateOnError
+ydb/core/kqp/ut/tx KqpSinkMvcc.ReadWriteTxFailsOnConcurrentWrite3
+ydb/core/kqp/ut/tx KqpSinkMvcc.OltpNamedStatement
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
+ydb/core/kqp/ut/tx KqpSinkMvcc.OltpMultiSinks
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OlapRWQueries

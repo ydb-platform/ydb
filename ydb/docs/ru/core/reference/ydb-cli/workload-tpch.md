@@ -92,3 +92,5 @@
 ```bash
 {{ ydb-cli }} workload clickbench  --path clickbench/hits clean
 ```
+
+Команда не имеет параметров.

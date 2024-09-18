@@ -72,11 +72,10 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         return TConclusionStatus::Fail("empty incoming batch");
     }
 
-    auto status = incomingBatch->ValidateFull();
-    if (!status.ok()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", status.ToString());
-        return TConclusionStatus::Fail("not valid incoming batch: " + status.ToString());
-    }
+#ifndef NDEBUG
+    // its correct (dont check in release) through validation in long tx + validation in kqp streaming
+    NArrow::TStatusValidator::Validate(incomingBatch->ValidateFull());
+#endif
 
     const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;

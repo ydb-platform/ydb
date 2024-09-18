@@ -1133,6 +1133,11 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
             PQ_LOG_D("Load tx " << tx.ShortDebugString());
 
+            if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
+                PQ_LOG_D("fix tx state");
+                tx.SetState(NKikimrPQ::TTransaction::PLANNED);
+            }
+
             Txs.emplace(tx.GetTxId(), tx);
 
             if (tx.HasStep()) {
@@ -1506,9 +1511,10 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
                                               ctx);
         }
         partition.PendingRequests.clear();
+    } else {
+        ++PartitionsInited;
     }
 
-    ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
     auto allInitialized = AllOriginalPartitionsInited();
@@ -1907,11 +1913,17 @@ void TPersQueue::ProcessStatusRequests(const TActorContext &ctx) {
 
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPersQueue::TEvStatus");
+
     ReadBalancerActorId = ev->Sender;
 
     if (!ConfigInited || !AllOriginalPartitionsInited()) {
-      StatusRequests.push_back(ev);
-      return;
+        PQ_LOG_D("Postpone the request." <<
+                 " ConfigInited " << static_cast<int>(ConfigInited) <<
+                 ", PartitionsInited " << PartitionsInited <<
+                 ", OriginalPartitionsCount " << OriginalPartitionsCount);
+        StatusRequests.push_back(ev);
+        return;
     }
 
     ui32 cnt = 0;
@@ -4284,10 +4296,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        Y_ABORT_UNLESS(tx.WriteInProgress,
-                       "PQ %" PRIu64 ", TxId %" PRIu64,
-                       TabletID(), tx.TxId);
-
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));

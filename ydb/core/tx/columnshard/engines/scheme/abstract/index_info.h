@@ -133,7 +133,8 @@ public:
     }
 
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
-    TString GetColumnName(ui32 id, bool required) const;
+    std::optional<ui32> GetColumnIndexOptional(const std::string& name, const ui32 shift) const;
+    TString GetColumnName(const ui32 id, const bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);
     static std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId);
 

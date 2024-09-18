@@ -533,8 +533,29 @@ runs:
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
     
+    - name: Check for changes in muted_ya
+      id: check_muted_ya
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const pr = context.payload.pull_request;
+          const response = await github.pulls.listFiles({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pr.number,
+          });
+
+          const files = response.data.map(file => file.filename);
+          const file_changed = files.includes('muted_ya');
+          
+          if (file_changed) {
+            core.setOutput('file_changed', 'true');
+          } else {
+            core.setOutput('file_changed', 'false');
+          }
+
     - name: show diff mute_ya.txt
-      if: inputs.build_preset == 'relwithdebinfo'
+      if: inputs.build_preset == 'relwithdebinfo' && steps.check_muted_ya.outputs.file_changed == 'true'
       shell: bash
       continue-on-error: true
       env:

@@ -16,7 +16,7 @@
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique) {
-    std::optional<ui64> count;
+    std::optional<i64> count;
     for (auto&& i : keyColumns) {
         AFL_VERIFY(i);
         if (!count) {
@@ -33,7 +33,7 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
     }
 
     bool haveNulls = false;
-    for (auto& column : *keyColumns) {
+    for (auto& column : keyColumns) {
         if (HasNulls(column)) {
             haveNulls = true;
             break;

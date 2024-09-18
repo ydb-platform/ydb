@@ -2,6 +2,7 @@
 #include <ydb/library/conclusion/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <functional>
 
 namespace NKikimr::NArrow {
 
@@ -10,8 +11,8 @@ class TSchemaLite;
 
 class TColumnOperator {
 public:
-    enum class EExtractProblemsPolicy {
-        Null,
+    enum class EAbsentFieldPolicy {
+        Error,
         Verify,
         Skip
     };
@@ -23,7 +24,7 @@ public:
     };
 
 private:
-    EExtractProblemsPolicy AbsentColumnPolicy = EExtractProblemsPolicy::Verify;
+    EAbsentFieldPolicy AbsentColumnPolicy = EAbsentFieldPolicy::Verify;
     ECheckFieldTypesPolicy DifferentColumnTypesPolicy = ECheckFieldTypesPolicy::Error;
 
 public:
@@ -42,70 +43,23 @@ public:
         return *this;
     };
 
-    TColumnOperator& NullIfAbsent() {
-        AbsentColumnPolicy = EExtractProblemsPolicy::Null;
+    TColumnOperator& ErrorIfAbsent() {
+        AbsentColumnPolicy = EAbsentFieldPolicy::Error;
         return *this;
     }
 
     TColumnOperator& VerifyIfAbsent() {
-        AbsentColumnPolicy = EExtractProblemsPolicy::Verify;
+        AbsentColumnPolicy = EAbsentFieldPolicy::Verify;
         return *this;
     }
 
     TColumnOperator& SkipIfAbsent() {
-        AbsentColumnPolicy = EExtractProblemsPolicy::Skip;
+        AbsentColumnPolicy = EAbsentFieldPolicy::Skip;
         return *this;
     }
 
-    template <class TExtChecker>
     TConclusion<std::shared_ptr<arrow::RecordBatch>> AdaptExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
-        const std::vector<std::shared_ptr<arrow::Field>>& columns, const TExtChecker& checker) const {
-        AFL_VERIFY(incoming);
-        AFL_VERIFY(columns.size());
-        std::vector<std::shared_ptr<arrow::Array>> columns;
-        columns.reserve(dstSchema->num_fields());
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        fields.reserve(dstSchema->num_fields());
-        ui32 idx = 0;
-        for (auto& dstField : columns) {
-            const int index = incoming->schema()->GetFieldIndex(dstField->name());
-            if (index > -1) {
-                columns.push_back(incoming->column(index));
-                fields.emplace_back(dstField);
-                auto srcField = incoming->schema()->field(index);
-                if (DifferentColumnTypesPolicy != ECheckFieldTypesPolicy::Ignore  && !dstField->Equals(srcField)) {
-                    if (DifferentColumnTypesPolicy == ECheckFieldTypesPolicy::Error) {
-                        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                            "dst_column", dstField->ToString(true))("src_column", srcField->ToString(true));
-                        return TConclusionStatus::Fail("incompatible column types for '" + dstField->name() + "'");
-                    } else if (DifferentColumnTypesPolicy == ECheckFieldTypesPolicy::Verify) {
-                        AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                            "dst_column", dstField->ToString(true))("src_column", srcField->ToString(true));
-                    } else {
-                        AFL_VERIFY(false);
-                    }
-                }
-                auto resultCheck = checker(index, idx);
-                if (resultCheck.IsFail()) {
-                    return resultCheck;
-                }
-            } else if (AbsentColumnPolicy == EExtractProblemsPolicy::Skip) {
-            } else if (AbsentColumnPolicy == EExtractProblemsPolicy::Verify) {
-                AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "absent_field")("dst_column", dstField->ToString(true));
-            } else if (AbsentColumnPolicy == EExtractProblemsPolicy::Null) {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "absent_field")(
-                    "dst_column", dstField->ToString(true));
-                return TConclusionStatus::Fail("not found column '" + field->name() + "'");
-            } else {
-                AFL_VERIFY(false);
-            }
-            ++idx;
-        }
-        if (fields.empty()) {
-            return TConclusionStatus::Fail("not found any column");
-        }
-        return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), incoming->num_rows());
-    }
+        const std::vector<std::shared_ptr<arrow::Field>>& columns, const std::function<TConclusionStatus(const i32, const ui32)>& checker) const;
 
     std::shared_ptr<arrow::RecordBatch> Extract(
         const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames);

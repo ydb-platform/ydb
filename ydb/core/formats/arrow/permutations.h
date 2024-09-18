@@ -16,8 +16,8 @@ public:
 
 };
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique, const bool needAdaptSchema = true);
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& columns, const bool andUnique);
 

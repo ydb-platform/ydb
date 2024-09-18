@@ -543,17 +543,19 @@ runs:
         git fetch origin ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}}
         python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
         FILE_PATH=$PUBLIC_DIR/mute_info/1_new_muted_tests.txt
+        SEPARATOR=""
         if [ -f "$FILE_PATH" ]; then
           LINE_COUNT=$(wc -l < "$FILE_PATH")
           if [ "$LINE_COUNT" -gt 0 ]; then
-            MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/1_new_muted_tests.txt)/n/n"
+            SEPARATOR=', '
+            MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/1_new_muted_tests.txt)"
           fi
         fi
         FILE_PATH=$PUBLIC_DIR/mute_info/2_unmuted_tests.txt
         if [ -f "$FILE_PATH" ]; then
-          LINE_COUNT=$(wc -l < "$FILE_PATH")
-          if [ "$LINE_COUNT" -gt 0 ]; then
-            MESSAGE="${MESSAGE}Unmuted $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_unmuted_tests.txt)/n/n"
+          LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
+          if [ "$LINE_COUNT_unmute" -gt 0 ]; then
+            MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/2_unmuted_tests.txt)"
           fi
         fi
         printf "$MESSAGE" | .github/scripts/tests/comment-pr.py --color orange

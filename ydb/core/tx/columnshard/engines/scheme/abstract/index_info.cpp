@@ -46,7 +46,18 @@ std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) con
     return {};
 }
 
-TString IIndexInfo::GetColumnName(ui32 id, bool required) const {
+std::optional<ui32> IIndexInfo::GetColumnIndexOptional(const std::string& name, const ui32 shift) const {
+    if (name == SPEC_COL_PLAN_STEP) {
+        return shift + 0;
+    } else if (name == SPEC_COL_TX_ID) {
+        return shift + 1;
+    } else if (name == SPEC_COL_DELETE_FLAG) {
+        return shift + 2;
+    }
+    return {};
+}
+
+TString IIndexInfo::GetColumnName(const ui32 id, const bool required) const {
     if (ESpecialColumn(id) == ESpecialColumn::PLAN_STEP) {
         return SPEC_COL_PLAN_STEP;
     } else if (ESpecialColumn(id) == ESpecialColumn::TX_ID) {

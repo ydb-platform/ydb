@@ -1,5 +1,7 @@
 # Развертывание коннектора fq-connector-go в кластере {{ ydb-short-name }} с помощью Ansible
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 [Федеративные запросы](../../concepts/federated_query/index.md) - это способ получать информацию из [внешних источников данных](../../concepts/datamodel/external_data_source.md) без необходимости переноса данных этих источников непосредственно в {{ ydb-full-name }}. Для работы с большинством внешних источников данных необходимо использование [коннектора](../../concepts/federated_query/architecture.md#connectors) - отдельного процесса, в котором инкапсулируется логика взаимодействия YDB с внешним источником.
 
 Эта инструкция описывает развертывание коннектора [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go) в существующем кластере {{ ydb-short-name }} с помощью [Ansible](https://www.ansible.com). Предполагается, что кластер был развернут по инструкции [первоначального развёртывания](./initial-deployment.md).
@@ -79,6 +81,6 @@
 
     1. отредактируйте `query_service_config.generic.connector` по образцу:
 
-    {% include [query-service-config-multislot-connector](./_includes/query-service-config-multislot-connector.md) %}
+        {% include [query-service-config-multislot-connector](./_includes/query-service-config-multislot-connector.md) %}
 
 1. Продолжите установку

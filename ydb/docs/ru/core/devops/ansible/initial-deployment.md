@@ -90,13 +90,13 @@ all:
 
 Если необходимо развернуть fq-connector-go, внесите следующие изменения в разделе `vars` инвентори-файла:
 
-  * `ydb_install_fq_connector` - установите в `true`
-  * Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
+* `ydb_install_fq_connector` - установите в `true`
+* Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
 
-    {% include [fq-connector-go-install-variants](./_includes/fq-connector-go-install-variants.md) %}
+  {% include [fq-connector-go-install-variants](./_includes/fq-connector-go-install-variants.md) %}
 
-  * `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
-  * (Опционально) `ydb_fq_connector_multislot`: установите в `true`, чтобы использовать [функцию multislot развертывания](./fq-deployment.md#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше)
+* `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
+* (Опционально) `ydb_fq_connector_multislot`: установите в `true`, чтобы использовать [функцию multislot развертывания](./fq-deployment.md#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше)
 
 #### Дополнительные изменения в инвентори-файлах
 

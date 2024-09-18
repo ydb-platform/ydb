@@ -5081,14 +5081,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return clean;
         }
 
-        if (auto hopping = NHopping::RewriteAsHoppingWindow(
-                node,
-                ctx,
-                false,                          // analyticsHopping
-                TDuration::MilliSeconds(5'000), // TDqSettings::TDefault::WatermarksLateArrivalDelayMs
-                true,                           // defaultWatermarksMode
-                true);                          // syncActor
-            hopping) {
+        if (auto hopping = NHopping::RewriteAsHoppingWindow(node, ctx); hopping) {
             return hopping;
         }
 

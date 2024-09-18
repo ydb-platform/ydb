@@ -17,14 +17,6 @@ using namespace NYql::NNodes;
 
 namespace {
 
-struct THoppingTraits {
-    TString Column;
-    TCoHoppingTraits Traits;
-    ui64 Hop;
-    ui64 Interval;
-    ui64 Delay;
-};
-
 struct TKeysDescription {
     TVector<TString> PickleKeys;
     TVector<TString> MemberKeys;
@@ -174,7 +166,7 @@ void EnsureNotDistinct(const TCoAggregate& aggregate) {
         "Distinct is not supported for aggregation with hop");
 }
 
-TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx, bool analyticsMode) {
+TMaybe<std::tuple<TString, TCoHoppingTraits>> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx) {
     const auto pos = aggregate.Pos();
 
     const auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
@@ -237,20 +229,7 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
         return Nothing();
     }
 
-    const auto newTraits = Build<TCoHoppingTraits>(ctx, aggregate.Pos())
-        .InitFrom(traits)
-        .DataWatermarks(analyticsMode
-            ? ctx.NewAtom(aggregate.Pos(), "false")
-            : traits.DataWatermarks().Ptr())
-        .Done();
-
-    return THoppingTraits {
-        hoppingColumn,
-        newTraits,
-        hop,
-        interval,
-        delay
-    };
+    return std::tuple{hoppingColumn, traits};
 }
 
 TExprNode::TPtr BuildTimeExtractor(const TCoHoppingTraits& hoppingTraits, TExprContext& ctx) {
@@ -583,140 +562,91 @@ TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& 
         .Ptr();
 }
 
-TMaybe<bool> BuildWatermarkMode(
-    const TCoAggregate& aggregate,
-    const TCoHoppingTraits& hoppingTraits,
-    TExprContext& ctx,
-    bool analyticsMode,
-    bool defaultWatermarksMode,
-    bool syncActor)
-{
-    const bool enableWatermarks = !analyticsMode &&
-        defaultWatermarksMode &&
-        hoppingTraits.Version().Cast<TCoAtom>().StringValue() == "v2";
-    if (enableWatermarks && syncActor) {
-        ctx.AddError(TIssue(ctx.GetPosition(aggregate.Pos()), "Watermarks should be used only with async compute actor"));
-        return Nothing();
-    }
-
-    if (hoppingTraits.Version().Cast<TCoAtom>().StringValue() == "v2" && !enableWatermarks) {
-        ctx.AddError(TIssue(
-            ctx.GetPosition(aggregate.Pos()),
-            "HoppingWindow requires watermarks to be enabled. If you don't want to do that, you can use HOP instead."));
-        return Nothing();
-    }
-
-    return enableWatermarks;
-}
-
-TExprNode::TPtr RewriteAsHoppingWindowFullOutput(
-    const TCoAggregate& aggregate,
-    TExprContext& ctx,
-    bool analyticsMode,
-    TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor
-) {
+TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, TExprContext& ctx) {
     const auto pos = aggregate.Pos();
 
     EnsureNotDistinct(aggregate);
 
-    const auto maybeHopTraits = ExtractHopTraits(aggregate, ctx, analyticsMode);
+    const auto maybeHopTraits = ExtractHopTraits(aggregate, ctx);
     if (!maybeHopTraits) {
         return nullptr;
     }
-    const auto hopTraits = *maybeHopTraits;
+    const auto [hoppingColumn, hoppingTraits] = *maybeHopTraits;
 
     const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
-    TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
+    TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hoppingColumn);
+
+    // if (keysDescription.NeedPickle()) {
+    //     return Build<TCoMap>(ctx, pos)
+    //         .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
+    //         .Input<TCoAggregate>()
+    //             .InitFrom(aggregate)
+    //             .Input<TCoMap>()
+    //                 .Lambda(keysDescription.BuildPickleLambda(ctx, pos))
+    //                 .Input(aggregate.Input())
+    //             .Build()
+    //             .Settings(RemoveSetting(aggregate.Settings().Ref(), "output_columns", ctx))
+    //         .Build()
+    //         .Done()
+    //         .Ptr();
+    // }
 
     const auto keyLambda = keysDescription.GetKeySelector(ctx, pos, aggregateInputType);
-    const auto timeExtractorLambda = BuildTimeExtractor(hopTraits.Traits, ctx);
+    const auto timeExtractorLambda = BuildTimeExtractor(hoppingTraits, ctx);
     const auto initLambda = BuildInitHopLambda(aggregate, ctx);
     const auto updateLambda = BuildUpdateHopLambda(aggregate, ctx);
     const auto saveLambda = BuildSaveHopLambda(aggregate, ctx);
     const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
     const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
-    const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
-    const auto enableWatermarks = BuildWatermarkMode(aggregate, hopTraits.Traits, ctx, analyticsMode, defaultWatermarksMode, syncActor);
-    if (!enableWatermarks) {
-        return nullptr;
-    }
+    const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hoppingColumn, ctx);
 
     const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
     auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
         .KeyExtractor(keyLambda)
         .TimeExtractor(timeExtractorLambda)
-        .Hop(hopTraits.Traits.Hop())
-        .Interval(hopTraits.Traits.Interval())
-        .DataWatermarks(hopTraits.Traits.DataWatermarks())
+        .Hop(hoppingTraits.Hop())
+        .Interval(hoppingTraits.Interval())
+        .Delay(hoppingTraits.Delay())
+        .DataWatermarks(hoppingTraits.DataWatermarks())
         .InitHandler(initLambda)
         .UpdateHandler(updateLambda)
         .MergeHandler(mergeLambda)
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks));
+        .template WatermarkMode<TCoAtom>().Build(ToString(false));
 
-    if (*enableWatermarks) {
-        const auto hop = TDuration::MicroSeconds(hopTraits.Hop);
-        multiHoppingCoreBuilder.template Delay<TCoInterval>()
-            .Literal().Build(ToString(Max(hop, lateArrivalDelay).MicroSeconds()))
-            .Build();
-    } else {
-        multiHoppingCoreBuilder.Delay(hopTraits.Traits.Delay());
-    }
-
-    if (true) {
-        return Build<TCoPartitionsByKeys>(ctx, pos)
-            .Input(aggregate.Input())
-            .KeySelectorLambda(keyLambda)
-            .SortDirections<TCoBool>()
-                    .Literal()
-                    .Value("true")
-                    .Build()
+    return Build<TCoPartitionsByKeys>(ctx, pos)
+        .Input(aggregate.Input())
+        .KeySelectorLambda(keyLambda)
+        .SortDirections<TCoBool>()
+                .Literal()
+                .Value("true")
                 .Build()
-            .SortKeySelectorLambda(timeExtractorLambda)
-            .ListHandlerLambda()
-                .Args(streamArg)
-                .template Body<TCoForwardList>()
-                    .Stream(multiHoppingCoreBuilder
-                        .template Input<TCoIterator>()
-                            .List(streamArg)
-                            .Build()
-                        .Done())
-                    .Build()
+            .Build()
+        .SortKeySelectorLambda(timeExtractorLambda)
+        .ListHandlerLambda()
+            .Args(streamArg)
+            .template Body<TCoForwardList>()
+                .Stream(multiHoppingCoreBuilder
+                    .template Input<TCoIterator>()
+                        .List(streamArg)
+                        .Build()
+                    .Done())
                 .Build()
-            .Done()
-            .Ptr();
-    } else {
-        return Build<TCoCollect>(ctx, pos)
-            .Input(multiHoppingCoreBuilder
-                .Input<TCoToStream>()
-                    .Input(aggregate.Input())
-                    .Build()
-                .Done())
-            .Done()
-            .Ptr();
-    }
+            .Build()
+        .Done()
+        .Ptr();
 }
 
 } // namespace
 
 namespace NYql::NHopping {
 
-TExprNode::TPtr RewriteAsHoppingWindow(
-    TExprNode::TPtr node,
-    TExprContext& ctx,
-    bool analyticsMode,
-    TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor
-) {
+TExprNode::TPtr RewriteAsHoppingWindow(TExprNode::TPtr node, TExprContext& ctx) {
     const auto aggregate = TCoAggregate(node);
-    const auto pos = aggregate.Pos();
 
-    if (!aggregate.Input().Ref().IsCallable("AsList")) {
+    if (aggregate.Input().Ptr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
         return nullptr;
     }
 
@@ -724,7 +654,7 @@ TExprNode::TPtr RewriteAsHoppingWindow(
         return nullptr;
     }
 
-    auto result = RewriteAsHoppingWindowFullOutput(aggregate, ctx, analyticsMode, lateArrivalDelay, defaultWatermarksMode, syncActor);
+    auto result = RewriteAsHoppingWindowFullOutput(aggregate, ctx);
     if (!result) {
         return result;
     }
@@ -734,7 +664,7 @@ TExprNode::TPtr RewriteAsHoppingWindow(
         return result;
     }
 
-    return Build<TCoExtractMembers>(ctx, pos)
+    return Build<TCoExtractMembers>(ctx, aggregate.Pos())
         .Input(result)
         .Members(outputColumnSetting->ChildPtr(1))
         .Done()

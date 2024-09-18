@@ -6,12 +6,6 @@
 
 namespace NYql::NHopping {
 
-TExprNode::TPtr RewriteAsHoppingWindow(
-    TExprNode::TPtr node,
-    TExprContext& ctx,
-    bool analyticsMode,
-    TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor);
+TExprNode::TPtr RewriteAsHoppingWindow(TExprNode::TPtr node, TExprContext& ctx);
 
 } // namespace NYql::NHopping

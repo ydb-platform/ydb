@@ -537,10 +537,8 @@ runs:
       shell: bash
       continue-on-error: true
       run: |
-        echo "BASE_SHA=$(jq -r .pull_request.base.sha $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
-        echo "HEAD_SHA=$(jq -r .pull_request.head.sha $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
-        git fetch origin ${{ env.BASE_SHA }} ${{ env.HEAD_SHA }}
-        git diff ${{ env.BASE_SHA }} ${{ env.HEAD_SHA }} -- .github/config/muted_ya.txt
+        git fetch origin ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}}
+        git diff ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}} -- .github/config/muted_ya.txt
 
 
     - name: show diff mute_ya.txt

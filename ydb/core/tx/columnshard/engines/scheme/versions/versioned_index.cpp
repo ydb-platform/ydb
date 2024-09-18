@@ -6,7 +6,22 @@
 
 namespace NKikimr::NOlap {
 
-void TVersionedIndex::RemoveVersion(ui64 version) {
+bool TVersionedIndex::RemoveVersion(ui64 version) {
+    if (SnapshotByVersion.size() > 0) {
+        ui64 lastVersion = SnapshotByVersion.rbegin()->first;
+        if (lastVersion == version) { // keep last version until greater version is added
+            if (LastNotDeletedVersion.has_value()) {
+                RemoveVersionNoCheck(version);
+            }
+            LastNotDeletedVersion = version;
+            return false;
+        }
+    }
+    RemoveVersionNoCheck(version);
+    return true;
+}
+
+void TVersionedIndex::RemoveVersionNoCheck(ui64 version) {
     auto itVersion = SnapshotByVersion.find(version);
     AFL_VERIFY(itVersion != SnapshotByVersion.end());
     auto itSnap = Snapshots.find(itVersion->second->GetSnapshot());
@@ -24,6 +39,10 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
 
     const bool needActualization = indexInfo.GetSchemeNeedActualization();
     auto newVersion = indexInfo.GetVersion();
+    if (LastNotDeletedVersion.has_value() && (*LastNotDeletedVersion < newVersion)) {
+        RemoveVersionNoCheck(*LastNotDeletedVersion);
+        LastNotDeletedVersion.reset();
+    }
     auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
     if (!itVersion.second) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);

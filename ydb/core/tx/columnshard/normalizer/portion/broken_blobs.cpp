@@ -22,7 +22,6 @@ public:
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
         LOG_S_CRIT("SaveToDatabase from Broken blobs Normalizer");
-        exit(1);
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
 
         TDbWrapper db(txc.DB, nullptr);
@@ -33,6 +32,11 @@ public:
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
             LOG_S_CRIT("Saving broken portion");
             portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
+            NColumnShard::TColumnShard* self = static_cast<NColumnShard::TColumnShard*>(txc.Owner);
+            AFL_VERIFY(self != nullptr);
+            txc.DB.OnCommit([self, portion = portionInfo->GetPortion(), pathId = portionInfo->GetPathId(), schema = portionInfo->GetSchemaVersionVerified()]() {
+                self->VersionAddRef(portion, pathId, schema);
+            });
         }
         if (BrokenPortions.size()) {
             TStringBuilder sb;
@@ -162,7 +166,6 @@ INormalizerTask::TPtr TNormalizer::BuildTask(std::vector<std::shared_ptr<TPortio
 
  TConclusion<bool> TNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
     LOG_S_CRIT("SaveToDatabase from Broken blobs Normalizer init");
-    exit(1);
     return true;
 }
 

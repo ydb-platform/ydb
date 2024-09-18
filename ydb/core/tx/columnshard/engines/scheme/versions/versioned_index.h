@@ -30,6 +30,7 @@ class TVersionedIndex {
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
+    std::optional<ui64> LastNotDeletedVersion;
     ISnapshotSchema::TPtr SchemeForActualization;
 
 public:
@@ -108,9 +109,12 @@ public:
         return PrimaryKey;
     }
 
-    void RemoveVersion(ui64 version);
+    bool RemoveVersion(ui64 version);
     const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
+
+private:
+    void RemoveVersionNoCheck(ui64 version);
 };
 }   // namespace NKikimr::NOlap

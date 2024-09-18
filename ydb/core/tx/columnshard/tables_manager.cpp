@@ -280,10 +280,13 @@ void TTablesManager::RemoveUnusedSchemaVersion(NTable::TDatabase* database, ui64
     auto iter = VersionToKey.find(version);
     AFL_VERIFY(iter != VersionToKey.end());
     NIceDb::TNiceDb db(*database);
-    db.Table<Schema::SchemaPresetVersionInfo>().Key(iter->second.Id, iter->second.PlanStep, iter->second.TxId).Delete();
-//    if (PrimaryIndex) {
-//        PrimaryIndex->RemoveSchemaVersion(version);
-//    }
+    bool removed = false;
+    if (PrimaryIndex) {
+        removed = PrimaryIndex->RemoveSchemaVersion(version);
+    }
+    if (removed) {
+        db.Table<Schema::SchemaPresetVersionInfo>().Key(iter->second.Id, iter->second.PlanStep, iter->second.TxId).Delete();
+    }
 }
 
 void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {

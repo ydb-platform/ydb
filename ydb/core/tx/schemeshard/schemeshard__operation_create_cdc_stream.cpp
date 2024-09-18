@@ -131,6 +131,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotBackupTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting();
 

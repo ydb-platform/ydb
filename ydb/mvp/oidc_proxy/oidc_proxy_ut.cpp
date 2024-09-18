@@ -725,7 +725,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TStringBuf cookieBuf(cookie);
+        TStringBuf cookieValue, suffixCookie;
+        cookieBuf.TrySplit(';', cookieValue, suffixCookie);
+        cookie = TString(cookieValue);
+        request << "Cookie: " << cookie << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -739,12 +744,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
     }
 
-    Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlow) {
+    Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlow) {
         TRedirectStrategy redirectStrategy;
         OidcWrongStateAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlowAjax) {
+    Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
         OidcWrongStateAuthorizationFlow(redirectStrategy);
     }
@@ -774,7 +779,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TStringBuf cookieBuf(cookie);
+        TStringBuf cookieValue, suffixCookie;
+        cookieBuf.TrySplit(';', cookieValue, suffixCookie);
+        cookie = TString(cookieValue);
+        request << "Cookie: " << cookie << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -823,7 +833,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n";
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TStringBuf cookieBuf(cookie);
+        TStringBuf cookieValue, suffixCookie;
+        cookieBuf.TrySplit(';', cookieValue, suffixCookie);
+        cookie = TString(cookieValue);
+        request << "Cookie: " << cookie << "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
         incomingRequest->Endpoint->Secure = true;
@@ -885,7 +900,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        request << "Cookie: " << context.CreateYdbOidcCookie(settings.ClientSecret) << "\r\n\r\n";
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TStringBuf cookieBuf(cookie);
+        TStringBuf cookieValue, suffixCookie;
+        cookieBuf.TrySplit(';', cookieValue, suffixCookie);
+        cookie = TString(cookieValue);
+        request << "Cookie: " << cookie << "\r\n\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
         runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -1013,5 +1033,98 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
         UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, expectedError);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateNotFoundCookie) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "0123456789abcdef"
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedAccessTokens.insert("valid_access_token");
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        TContext context("good_state", "/requested/page", false);
+        const TString hostProxy = "oidcproxy.net";
+        TStringBuilder request;
+        request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "Host: " + hostProxy + "\r\n";
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, request);
+        incomingRequest->Endpoint->Secure = true;
+        runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+
+        TAutoPtr<IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateGetWrongStateAndWrongCookie) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "client_id",
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .ClientSecret = "0123456789abcdef"
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedAccessTokens.insert("valid_access_token");
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
+        TContext context("good_state", "/requested/page", false);
+        TString wrongState = context.GetState(settings.ClientSecret);
+        if (wrongState[0] != 'a') {
+            wrongState[0] = 'a';
+        } else {
+            wrongState[0] = 'b';
+        }
+        const TString hostProxy = "oidcproxy.net";
+        TStringBuilder request;
+        request << "GET /auth/callback?code=code_template&state=" << wrongState << " HTTP/1.1\r\n";
+        request << "Host: " + hostProxy + "\r\n";
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TStringBuf cookieBuf(cookie);
+        TStringBuf cookieValue, suffixCookie;
+        cookieBuf.TrySplit(';', cookieValue, suffixCookie);
+        cookie = TString(cookieValue);
+        if (cookie.back() != 'a') {
+            cookie.back() = 'a';
+        } else {
+            cookie.back() = 'b';
+        }
+        request << "Cookie: " << cookie << "\r\n";
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, request);
+        incomingRequest->Endpoint->Secure = true;
+        runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+
+        TAutoPtr<IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
     }
 }

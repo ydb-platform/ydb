@@ -244,6 +244,7 @@ public:
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["MultiHoppingCore"] = &TCallableConstraintTransformer::MultiHoppingCoreWrap;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -2920,6 +2921,23 @@ private:
 
         return TStatus::Ok;
     }
+
+    TStatus MultiHoppingCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+            return status;
+        }
+
+        TExprNode::TPtr keySelectorLambda = input->Child(TCoMultiHoppingCore::idx_KeyExtractor);
+        std::vector<std::string_view> columns;
+        ExtractKeys(*keySelectorLambda, columns);
+        if (!columns.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+            input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+        }
+        
+        return TStatus::Ok;
+    }
+
 private:
     template <class TConstraintContainer>
     static void CopyExcept(TConstraintContainer& dst, const TConstraintContainer& from, const TSet<TStringBuf>& except) {
@@ -2939,7 +2957,7 @@ private:
         }
     }
 
-    static void ExtractKeys(const TExprNode& keySelectorLambda, TVector<TStringBuf>& columns) {
+    static void ExtractKeys(const TExprNode& keySelectorLambda, std::vector<std::string_view>& columns) {
         const auto arg = keySelectorLambda.Head().Child(0);
         auto body = keySelectorLambda.Child(1);
         if (body->IsCallable("StablePickle")) {

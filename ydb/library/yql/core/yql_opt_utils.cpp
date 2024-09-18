@@ -1258,7 +1258,7 @@ TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& 
         .Seal().Build();
 }
 
-void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {
+void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, std::vector<std::string_view>& columns) {
     if (keySelectorBody->IsList()) {
         for (auto& child: keySelectorBody->Children()) {
             if (child->IsCallable("Member") && child->Child(0) == keySelectorArg) {

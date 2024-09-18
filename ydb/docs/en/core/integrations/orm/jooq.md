@@ -144,7 +144,8 @@ The following statements are available from the YQL syntax in `YdbDSLContext`:
 
 ```java
 // generated SQL:
-// upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+// upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) 
+// values (?, ?, ?, ?, ?)
 public void upsert(YdbDSLContext context) {
     context.upsertInto(EPISODES)
             .set(record)
@@ -152,11 +153,12 @@ public void upsert(YdbDSLContext context) {
 }
 ```
 
-The [`REPLACE`](../../yql/reference/syntax/replace_into.md) command:
+- [`REPLACE`](../../yql/reference/syntax/replace_into.md):
 
 ```java
 // generated SQL:
-// replace into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+// replace into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) 
+// values (?, ?, ?, ?, ?)
 public void replace(YdbDSLContext context) {
     ydbDSLContext.replaceInto(EPISODES)
             .set(record)

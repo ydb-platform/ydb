@@ -11,7 +11,7 @@ bool TVersionedIndex::RemoveVersion(ui64 version) {
         ui64 lastVersion = SnapshotByVersion.rbegin()->first;
         if (lastVersion == version) { // keep last version until greater version is added
             if (LastNotDeletedVersion.has_value()) {
-                RemoveVersionNoCheck(version);
+                RemoveVersionNoCheck(*LastNotDeletedVersion);
             }
             LastNotDeletedVersion = version;
             return false;

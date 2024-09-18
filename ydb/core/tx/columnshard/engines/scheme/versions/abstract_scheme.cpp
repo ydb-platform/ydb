@@ -82,16 +82,16 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     const auto pred = [&](const i32 incomingIdx, const ui32 targetIdx) {
-        const i32 pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
-        if (pkFieldIdx > -1) {
-            AFL_VERIFY(pkFieldIdx < pkColumns.size());
-            pkColumns[pkFieldIdx] = batch->column(incomingIdx);
-        }
-        if (incomingIdx > -1 && !NArrow::HasNulls(batch->column(incomingIdx))) {
+        const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
+        if (incomingIdx > -1 && !NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
+            if (pkFieldIdx) {
+                AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+                pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            }
             return TConclusionStatus::Success();
         }
-        if (pkFieldIdx > -1) {
-            return TConclusionStatus::Fail("null data for pk column is impossible for '" + batch->field(incomingIdx)->name() + "'");
+        if (pkFieldIdx) {
+            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema->field(targetIdx)->name() + "'");
         }
         switch (mType) {
             case NEvWrite::EModificationType::Replace:
@@ -100,10 +100,11 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                 if (GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
                     return TConclusionStatus::Success();
                 }
-                if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(idx)) {
+                if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                     return TConclusionStatus::Success();
                 } else {
-                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema->field(idx)->name() + "'");
+                    return TConclusionStatus::Fail(
+                        "empty field for non-default column: '" + dstSchema->field(targetIdx)->name() + "'");
                 }
             }
             case NEvWrite::EModificationType::Delete:
@@ -117,7 +118,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     if (batchConclusion.IsFail()) {
         return batchConclusion;
     }
-    batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
+    auto batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
     return batch;
 }

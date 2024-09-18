@@ -29,11 +29,15 @@ jobs:
         python3 -m pip install ydb ydb[yc] codeowners
     - name: Collect testowners 
       run: python3 .github/scripts/analytics/upload_testowners.py
-    - name: Collect test history data with window 5 days
+    - name: Collect test history data with window 5 days relwithdebinfo for main
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5
-    - name: Collect test history data with window 1 day
+    - name: Collect test history data with window 5 days release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=5 --build_type=release-asan
+    - name: Collect test history data with window 1 days relwithdebinfo for main
       run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
-    - name: Collect test history data with window 10 run relwithdebinfo for main
+    - name: Collect test history data with window 1 days release-asan for main
+      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --build_type=release-asan
+    - name: Collect test history data with window 10 run relwithdebinfo for main 
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 
     - name: Collect test history data with window 10 run release-asan for main
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 --build_type=release-asan

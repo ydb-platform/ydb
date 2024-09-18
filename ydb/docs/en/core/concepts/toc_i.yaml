@@ -24,5 +24,5 @@ items:
     href: cluster/distributed_storage.md
 - name: Federated query
   include: { path: federated_query/toc_p.yaml, mode: link }
-- name: Query Optimizer
+- name: Query optimizer
   href: optimizer.md

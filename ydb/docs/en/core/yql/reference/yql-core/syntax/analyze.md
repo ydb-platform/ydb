@@ -1,16 +1,16 @@
 # ANALYZE
 
-`ANALYZE` forces the collection of statistics for {{ ydb-short-name }} Cost-Based Optimizer.
+`ANALYZE` forces the collection of statistics for [{{ ydb-short-name }} cost-based optimizer](../../../concepts/optimizer.md).
 
-Syntax:
+## Syntax
 
 ```yql
 ANALYZE <path_to_table> [ (<column_name> [, ...]) ]
 ```
 
-This command forces synchronous collection of table statistics and column statistics for the specied columns, or all columns of the table if the columns were not specified. ANALYZE will return when all the specified statistics has been collected and is up to date.
+This command forces the synchronous collection of table statistics and column statistics for the specified columns or for all columns if none are specified. `ANALYZE` returns once all the requested statistics have been collected and are up to date.
 
-* `path_to_table` — path to the table for which the statistics should be collected
-* `column_name` — collect column statistics only for specified columns of the table
+* `path_to_table` — the path to the table for which statistics should be collected.
+* `column_name` — collect column statistics only for the specified columns of the table.
 
-Current set of statistics is described here [{#T}](../../../concepts/optimizer.md#statistics).
+The current set of statistics is described in [{#T}](../../../concepts/optimizer.md#statistics).

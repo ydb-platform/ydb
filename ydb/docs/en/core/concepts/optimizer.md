@@ -1,12 +1,12 @@
-# Query Optimization in {{ ydb-short-name }}
+# Query optimization in {{ ydb-short-name }}
 
-{{ ydb-short-name }} uses two types of query optimizers: a rule-based optimizer and a cost-based optimizer. The cost-based optimizer is used for complex queries, usually analytical ([OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing)), while rule-based optimization works on all queries.
+{{ ydb-short-name }} uses two types of query optimizers: a rule-based optimizer and a cost-based optimizer. The cost-based optimizer is used for complex queries, typically analytical ([OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing)), while rule-based optimization works on all queries.
 
-A query plan is a graph of operations, such as reading data from a source, filtering a data stream by a predicate, or more complex operations such as [JOIN](../yql/reference/syntax/join.md) и [GROUP BY](../yql/reference/syntax/group_by.md). Optimizers in YDB take an initial query plan as input and transform it into a more efficient plan that is equivalent to the initial one in terms of the returned result.
+A query plan is a graph of operations, such as reading data from a source, filtering a data stream by a predicate, or performing more complex operations such as [JOIN](../yql/reference/syntax/join.md) and [GROUP BY](../yql/reference/syntax/group_by.md). Optimizers in {{ ydb-short-name }} take an initial query plan as input and transform it into a more efficient plan that is equivalent to the initial one in terms of the returned result.
 
-## Rule-based Optimizer
+## Rule-based optimizer
 
-A significant part of the optimizations in YDB is applicable to almost any query plan, which eliminates the need to analyze alternative plans and their costs. The rule-based optimizer consists of a set of heuristic rules that are applied whenever possible. For example, it is useful to filter out data as early as possible in the execution plan for any query. Each optimizer rule comprises a condition that triggers the rule and rewriting logic that is executed when the plan is applied. Rules are applied iteratively as long as any rule conditions match.
+A significant part of the optimizations in {{ ydb-short-name }} applies to almost any query plan, eliminating the need to analyze alternative plans and their costs. The rule-based optimizer consists of a set of heuristic rules that are applied whenever possible. For example, it is beneficial to filter out data as early as possible in the execution plan for any query. Each optimizer rule comprises a condition that triggers the rule and a rewriting logic that is executed when the plan is applied. Rules are applied iteratively as long as any rule conditions match.
 
 ## Cost-Based Query Optimizer
 
@@ -43,7 +43,8 @@ GROUP BY
 ```
 
 In this query graph, all `Dim...` tables are joined to the `Fact_Sales` fact table:
-![Join Graph](_assets/Star-Schema.png)
+
+![Join graph](_assets/Star-Schema.png)
 
 Common topologies also include chain and clique. A "chain" is a topology where tables are connected to each other sequentially and each table participates in no more than one join. A "clique" is a fully connected graph where each table is connected to another.
 
@@ -59,23 +60,23 @@ The topology greatly influences the number of alternative plans that the optimiz
 
 {{ ydb-short-name }} uses a modification of the [DPHyp](https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back) algorithm to search for the best join order. DPHyp is a modern dynamic programming algorithm for query optimization that avoids enumerating unnecessary alternatives and allows you to optimize plans with `JOIN` operators, complex predicates, and even `GROUP BY` and `ORDER BY` operators.
 
-### Cost Estimation Function
+### Cost estimation function
 
-In order to compare plans, we need to estimate their costs. Cost Function estimates the time and resources it takes to execute an operation in {{ ydb-short-name }}. The main parameters of the cost function are estimates of the input data size for each operator and the size of its result. These estimates are made based on statistics collected from {{ ydb-short-name }} tables, as well as an analysis of the plan itself.
+To compare plans, the optimizer needs to estimate their costs. The cost function estimates the time and resources required to execute an operation in {{ ydb-short-name }}. The primary parameters of the cost function are estimates of the input data size for each operator and the size of its output. These estimates are based on statistics collected from {{ ydb-short-name }} tables, along with an analysis of the plan itself.
 
-### Statistics for the Cost Based Optimizer {#statistics}
+### Statistics for the cost-based optimizer {#statistics}
 
-Cost Based Optimizer uses table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains statistics in the background. You can force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) command.
+The cost-based optimizer relies on table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains these statistics in the background. You can manually force statistics collection using the [ANALYZE](../yql/reference/syntax/analyze.md) query.
 
-Current set of table statistics:
+The current set of table statistics includes:
 
 * Number of records
 * Table size in bytes
 
-Current set of column statistics:
+The current set of column statistics includes:
 
 * [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch)
 
-Current cost optimization levels
+### Cost optimization levels
 
-In {{ ydb-short-name }}, you can set the cost optimization level via pragma [CostBasedOptimizationLevel](../yql/reference/syntax/pragma.md#costbasedoptimizationlevel).
+In {{ ydb-short-name }}, you can configure the cost optimization level via the [CostBasedOptimizationLevel](../yql/reference/syntax/pragma.md#costbasedoptimizationlevel) pragma.

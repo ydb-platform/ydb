@@ -532,26 +532,29 @@ runs:
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+
     - name: Check for changes in muted_ya
       id: check_muted_ya
       uses: actions/github-script@v6
       with:
+        github-token: ${{ github.token }}
         script: |
           const pr = context.payload.pull_request;
-          const response = await github.pulls.listFiles({
+          if (!pr) {
+            throw new Error('This action only works on pull_request events');
+          }
+
+          const response = await github.rest.pulls.listFiles({
             owner: context.repo.owner,
             repo: context.repo.repo,
             pull_number: pr.number,
           });
 
           const files = response.data.map(file => file.filename);
-          const file_changed = files.includes('muted_ya');
+          console.log('Changed files:', files);
+          const file_changed = files.includes('muted_ya.txt');
           
-          if (file_changed) {
-            core.setOutput('file_changed', 'true');
-          } else {
-            core.setOutput('file_changed', 'false');
-          }
+          return { file_changed };
 
     - name: show diff mute_ya.txt
       if: inputs.build_preset == 'relwithdebinfo' && steps.check_muted_ya.outputs.file_changed == 'true'

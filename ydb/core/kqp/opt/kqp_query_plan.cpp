@@ -2304,7 +2304,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.EndObject();
 
     auto resultPlan =  writer.Str();
-    if (optCtx->Config->DisableSimplifiedPlans) {
+    if (!optCtx || optCtx->Config->DisableSimplifiedPlans) {
         return resultPlan;
     }
     else {
@@ -2705,7 +2705,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true);
     auto resultPlan = txWriter.Str();
-    if (optCtx->Config->DisableSimplifiedPlans) {
+    if (!optCtx || optCtx->Config->DisableSimplifiedPlans) {
         return resultPlan;
     }
     else {

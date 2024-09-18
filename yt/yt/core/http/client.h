@@ -78,12 +78,12 @@ DEFINE_REFCOUNTED_TYPE(IClient)
 ////////////////////////////////////////////////////////////////////////////////
 
 IClientPtr CreateClient(
-    const TClientConfigPtr& config,
-    const NNet::IDialerPtr& dialer,
-    const IInvokerPtr& invoker);
+    TClientConfigPtr config,
+    NNet::IDialerPtr dialer,
+    IInvokerPtr invoker);
 IClientPtr CreateClient(
-    const TClientConfigPtr& config,
-    const NConcurrency::IPollerPtr& poller);
+    TClientConfigPtr config,
+    NConcurrency::IPollerPtr poller);
 
 ////////////////////////////////////////////////////////////////////////////////
 

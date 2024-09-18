@@ -21,6 +21,13 @@ bool IsScalarType(EObjectType type)
         type == EObjectType::BooleanNode;
 }
 
+bool IsSequoiaNode(NObjectClient::EObjectType type)
+{
+    return
+        type == EObjectType::SequoiaMapNode ||
+        type == EObjectType::SequoiaLink;
+}
+
 bool IsVersionedType(EObjectType type)
 {
     return

@@ -336,10 +336,18 @@ namespace NKikimr::NBsController {
                         const NKikimrBlobStorage::EVDiskStatus prevStatus = base->second->GetStatus();
                         const NKikimrBlobStorage::EVDiskStatus curStatus = overlay->second->GetStatus();
                         
-                        // Only check groups whose vdisks ready status has changed
+                        // Check groups whose vdisks status has changed to ERROR
                         if (prevStatus != NKikimrBlobStorage::EVDiskStatus::ERROR && curStatus == NKikimrBlobStorage::EVDiskStatus::ERROR) {
                             groupsToCheck.emplace(overlay->second->GroupId);
                         }
+
+                        if (overlay->second->Mood == TMood::Donor) {
+                            // If vdisk is being moved, check the group
+                            groupsToCheck.emplace(overlay->second->GroupId);
+                        }
+                    } else if (base) {
+                        // If vdisk is being moved, check the group
+                        groupsToCheck.emplace(base->second->GroupId);
                     }
                 }
                 for (TGroupId groupId : state.GroupFailureModelChanged) {

@@ -60,7 +60,7 @@ JOOQ — это библиотека для Java, которая позволя�
 </plugin>
 ```
 
-Пример сгенерированных классов из [туториал по YQL](../../dev/yql-tutorial/create_demo_tables.md):
+Пример сгенерированных классов из [туториал по YQL](../../dev/yql-tutorial/create_demo_tables.md) (сгенерированные классы доступны по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq/src/main/java/ydb/default_schema)):
 
 ```
 ydb/DefaultCatalog.java
@@ -96,11 +96,11 @@ ydb/default_schema/DefaultSchema.java
         <artifactId>ydb-jdbc-driver</artifactId>
         <version>${ydb.jdbc.version}</version>
     </dependency>
-
+    
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
-        <artifactId>spring-data-jdbc-ydb</artifactId>
-        <version>${spring.data.jdbc.ydb}</version> 
+        <artifactId>jooq-ydb-dialect</artifactId>
+        <version>${jooq.ydb.dialect.version}</version>
     </dependency>
     ```
 
@@ -109,7 +109,7 @@ ydb/default_schema/DefaultSchema.java
     ```groovy
     dependencies {
         // Set actual versions
-        implementation "tech.ydb.dialects:spring-data-jdbc-ydb:$ydbDialectVersion"
+        implementation "tech.ydb.dialects:jooq-ydb-dialect:$jooqYdbDialectVersion"
         implementation "tech.ydb.jdbc:ydb-jdbc-driver:$ydbJdbcVersion"
     }
     ```
@@ -119,7 +119,7 @@ ydb/default_schema/DefaultSchema.java
 Для получения `YdbDSLContext` (расширение `org.jooq.DSLContext`) используйте класс `tech.ydb.jooq.YDB`. Например:
 
 ```java
-String url = "jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]";
+String url = "jdbc:ydb:<schema>://<host>:<port>/path/to/database[?saFile=file:~/sa_key.json]";
 Connection conn = DriverManager.getConnection(url);
 
 YdbDSLContext dsl = YDB.using(conn);
@@ -128,13 +128,56 @@ YdbDSLContext dsl = YDB.using(conn);
 или
 
 ```java
-String url = "jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]";
+String url = "jdbc:ydb:<schema>://<host>:<port>/path/to/database[?saFile=file:~/sa_key.json]";
 try(CloseableYdbDSLContext dsl = YDB.using(url)) {
     // ...
 }
 ```
 
-### Интеграция с Spring Boot
+`YdbDSLContext` готов к использованию.
+
+## YQL команды 
+
+Из синтаксиса YQL доступны следующие команды в `YdbDSLContext`:
+
+- [`UPSERT`](../../yql/reference/syntax/upsert_into.md):
+
+  ```java
+  // generated SQL:
+  // upsert into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+  public void upsert(YdbDSLContext context) {
+      context.upsertInto(EPISODES)
+              .set(record)
+              .execute();
+  }
+  ```
+
+-  [`REPLACE`](../../yql/reference/syntax/replace_into.md):
+
+  ```java
+  // generated SQL:
+  // replace into `episodes` (`series_id`, `season_id`, `episode_id`, `title`, `air_date`) values (?, ?, ?, ?, ?)
+  public void replace(YdbDSLContext context) {
+      ydbDSLContext.replaceInto(EPISODES)
+              .set(record)
+              .execute();
+  }
+  ```
+
+- `VIEW index_name`:
+
+  ```java
+  // generated SQL:
+  // select `series`.`series_id`, `series`.`title`, `series`.`series_info`, `series`.`release_date` 
+  // from `series` view `title_name` where `series`.`title` = ?
+  var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
+          .where(SERIES.TITLE.eq(title))
+          .fetchOne();
+  ```
+
+В остальном диалект {{ ydb-short-name }} следует документации JOOQ.
+
+### Spring Boot
 
 Расширим `JooqAutoConfiguration.DslContextConfiguration` собственным `YdbDSLContext`. Например:
 
@@ -151,39 +194,7 @@ public class YdbJooqConfiguration extends JooqAutoConfiguration.DslContextConfig
 
 ```properties
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
+spring.datasource.url=jdbc:ydb:<schema>://<host>:<port>/path/to/database[?saFile=file:~/sa_key.json]
 ```
-
-`YdbDSLContext` готов к использованию. Рассмотрим примеры специфичных YQL запросов:
-
-Команда [`UPSERT`](../../yql/reference/syntax/upsert_into.md):
-
-```java
-public void upsert(YdbDSLContext context) {
-    context.upsertInto(EPISODES)
-            .set(record)
-            .execute();
-}
-```
-
-Команда [`REPLACE`](../../yql/reference/syntax/replace_into.md):
-
-```java
-public void replace(YdbDSLContext context) {
-    ydbDSLContext.replaceInto(EPISODES)
-            .set(record)
-            .execute();
-}
-```
-
-Чтобы указать индекс в конструкции `VIEW`, необходимо использовать конструкцию `useIndex` у `Table`:
-
-```java
-var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
-        .where(SERIES.TITLE.eq(title))
-        .fetchOne();
-```
-
-В остальном диалект {{ ydb-short-name }} следует документации JOOQ.
 
 Пример простого приложения Spring Boot можно найти по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq).

@@ -18,6 +18,18 @@ set(YDB-CPP-SDK_AVAILABLE_COMPONENTS "" CACHE INTERNAL "")
 set(YDB-CPP-SDK_COMPONENT_TARGETS "" CACHE INTERNAL "")
 file(READ "src/client/resources/ydb_sdk_version.txt" YDB_SDK_VERSION)
 
+#[=============================================================================[
+  NOTE: if `ccache` is used with the environment variable `CCACHE_BASEDIR`,
+  these cached variable should be set manually by passing them to `cmake` as
+  `-DARCADIA_ROOT=source/path/relative/to/build/dir` and
+  `-DARCADIA_BUILD_ROOT=.`, because in that case the macro `__FILE__` will be
+  expanded to a relative path, even if the source code file was specified as
+  an absolute path, and we have to know the proper prefix of that path.
+  See details: https://ccache.dev/manual/3.1.html#_compiling_in_different_directories
+#]=============================================================================]
+set(ARCADIA_ROOT ${YDB_SDK_SOURCE_DIR} CACHE INTERNAL "The source root directory")
+set(ARCADIA_BUILD_ROOT ${YDB_SDK_BINARY_DIR} CACHE INTERNAL "The build root directory")
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 

@@ -1,3 +1,7 @@
+if (YDB_SDK_TESTS)
+  add_subdirectory(benchmark)
+endif()
+
 add_subdirectory(grpc/client)
 add_subdirectory(json_value)
 add_subdirectory(jwt)

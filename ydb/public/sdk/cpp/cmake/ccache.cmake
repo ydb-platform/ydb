@@ -1,6 +1,4 @@
-if (NOT CCACHE_PATH)
-  find_program(CCACHE_PATH ccache)
-endif()
+find_program(CCACHE_PATH ccache)
 if (NOT CCACHE_PATH)
   message(AUTHOR_WARNING
     "Ccache is not found, that will increase the re-compilation time; "

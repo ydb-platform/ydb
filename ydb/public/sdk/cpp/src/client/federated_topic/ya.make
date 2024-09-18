@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/federated_topic/impl
+    ydb/public/sdk/cpp/src/client/federated_topic/ut/fds_mock
 )
 
 END()

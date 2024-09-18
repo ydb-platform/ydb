@@ -24,7 +24,7 @@ void SanitizeNonAscii(std::string& s) {
         const unsigned char* i = reinterpret_cast<const unsigned char*>(s.data());
         const unsigned char* end = i + s.size();
         while (i < end) {
-            wchar32 rune;
+            char32_t rune;
             size_t runeLen;
             const RECODE_RESULT result = SafeReadUTF8Char(rune, runeLen, i, end);
             if (result == RECODE_OK) {
@@ -52,13 +52,18 @@ TTextWalker& TTextWalker::Advance(char c) {
         return *this;
     }
 
+    uint32_t charDistance = 1;
+    if (Utf8Aware && IsUtf8Intermediate(c)) {
+        charDistance = 0;
+    }
+
     // either not '\r' or second '\r'
     if (LfCount) {
         Position.Row += LfCount;
-        Position.Column = 1;
+        Position.Column = charDistance;
         LfCount = 0;
     } else {
-        Position.Column += 1 + (HaveCr && c != '\r');
+        Position.Column += charDistance + (HaveCr && c != '\r');
     }
     HaveCr = (c == '\r');
     return *this;

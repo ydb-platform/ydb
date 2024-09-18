@@ -137,13 +137,13 @@ void TSchemeEntry::Out(IOutputStream& out) const {
 void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
     request.mutable_actions()->Add()->set_change_owner(TStringType{Owner});
     for (const auto& permission : Permissions) {
-    permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
+        permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
     }
 }
 
 TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
     for (const auto& action : request.actions()) {
-        switch (action.GetActionCase()) {
+        switch (action.action_case()) {
             case Ydb::Scheme::PermissionsAction::kGrant:
                 AddGrantPermissions(action.grant());
                 break;

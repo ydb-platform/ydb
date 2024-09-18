@@ -124,7 +124,7 @@ void AssertFromCache(const std::optional<TQueryStats>& stats, bool expectedValue
     UNIT_ASSERT_VALUES_EQUAL_C(*isFromCache, expectedValue, stats->ToString());
 }
 
-void CompareResults(const TVector<TResultSet>& firstResults, const TVector<TResultSet>& secondResults) {
+void CompareResults(const std::vector<TResultSet>& firstResults, const std::vector<TResultSet>& secondResults) {
     UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
     for (size_t i = 0; i < firstResults.size(); ++i) {
         CompareYson(FormatResultSetYson(firstResults[i]), FormatResultSetYson(secondResults[i]));

@@ -1,6 +1,6 @@
 function(add_yunittest)
   set(opts "")
-  set(oneval_args NAME TEST_TARGET)
+  set(oneval_args NAME TEST_TARGET WORKING_DIRECTORY)
   set(multival_args TEST_ARG)
   cmake_parse_arguments(YUNITTEST_ARGS
     "${opts}"
@@ -13,13 +13,19 @@ function(add_yunittest)
   get_property(SPLIT_TYPE TARGET ${YUNITTEST_ARGS_TEST_TARGET} PROPERTY SPLIT_TYPE)
 
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack")
-    add_test(NAME ${YUNITTEST_ARGS_NAME} COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack" ${YUNITTEST_ARGS_TEST_ARG})
+    add_test(NAME ${YUNITTEST_ARGS_NAME}
+      COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run_testpack" ${YUNITTEST_ARGS_TEST_ARG}
+      WORKING_DIRECTORY ${YUNITTEST_ARGS_WORKING_DIRECTORY}
+    )
     set_property(TEST ${YUNITTEST_ARGS_NAME} PROPERTY ENVIRONMENT "source_root=${YDB_SDK_SOURCE_DIR};build_root=${YDB_SDK_BINARY_DIR};test_split_factor=${SPLIT_FACTOR};test_split_type=${SPLIT_TYPE}")
     return()
   endif()
 
   if (${SPLIT_FACTOR} EQUAL 1)
-  	add_test(NAME ${YUNITTEST_ARGS_NAME} COMMAND ${YUNITTEST_ARGS_TEST_TARGET} ${YUNITTEST_ARGS_TEST_ARG})
+  	add_test(NAME ${YUNITTEST_ARGS_NAME}
+      COMMAND ${YUNITTEST_ARGS_TEST_TARGET} ${YUNITTEST_ARGS_TEST_ARG}
+      WORKING_DIRECTORY ${YUNITTEST_ARGS_WORKING_DIRECTORY}
+    )
   	return()
   endif()
 
@@ -29,8 +35,12 @@ function(add_yunittest)
   math(EXPR LastIdx "${SPLIT_FACTOR} - 1")
   foreach(Idx RANGE ${LastIdx})
     add_test(NAME ${YUNITTEST_ARGS_NAME}_${Idx}
-      COMMAND Python3::Interpreter ${YDB_SDK_SOURCE_DIR}/scripts/split_unittest.py --split-factor ${SPLIT_FACTOR} ${FORK_MODE_ARG} --shard ${Idx}
-       $<TARGET_FILE:${YUNITTEST_ARGS_TEST_TARGET}> ${YUNITTEST_ARGS_TEST_ARG})
+      COMMAND Python3::Interpreter ${YDB_SDK_SOURCE_DIR}/scripts/split_unittest.py
+        --split-factor ${SPLIT_FACTOR} ${FORK_MODE_ARG}
+        --shard ${Idx}
+        $<TARGET_FILE:${YUNITTEST_ARGS_TEST_TARGET}> ${YUNITTEST_ARGS_TEST_ARG}
+      WORKING_DIRECTORY ${YUNITTEST_ARGS_WORKING_DIRECTORY}
+    )
   endforeach()
 endfunction()
 
@@ -59,14 +69,22 @@ endfunction()
 
 function(add_ydb_test)
   set(opts GTEST)
-  set(oneval_args NAME)
-  set(multival_args INCLUDE_DIRS SOURCES LINK_LIBRARIES LABELS)
+  set(oneval_args NAME WORKING_DIRECTORY OUTPUT_DIRECTORY)
+  set(multival_args INCLUDE_DIRS SOURCES LINK_LIBRARIES LABELS TEST_ARG)
   cmake_parse_arguments(YDB_TEST
     "${opts}"
     "${oneval_args}"
     "${multival_args}"
     ${ARGN}
   )
+
+  if (YDB_TEST_WORKING_DIRECTORY AND NOT EXISTS "${YDB_TEST_WORKING_DIRECTORY}")
+    file(MAKE_DIRECTORY "${YDB_TEST_WORKING_DIRECTORY}")
+  endif()
+
+  if (YDB_TEST_OUTPUT_DIRECTORY AND NOT EXISTS "${YDB_TEST_OUTPUT_DIRECTORY}")
+    file(MAKE_DIRECTORY "${YDB_TEST_OUTPUT_DIRECTORY}")
+  endif()
 
   add_executable(${YDB_TEST_NAME})
   target_include_directories(${YDB_TEST_NAME} PRIVATE ${YDB_TEST_INCLUDE_DIRS})
@@ -96,56 +114,63 @@ function(add_ydb_test)
 
   set_property(
     TARGET
-    ${YDB_TEST_NAME}
+      ${YDB_TEST_NAME}
     PROPERTY
-    SPLIT_FACTOR
-    1
+      SPLIT_FACTOR
+      1
   )
   if (YDB_TEST_GTEST)
     add_yunittest(
       NAME
-      ${YDB_TEST_NAME}
+        ${YDB_TEST_NAME}
       TEST_TARGET
-      ${YDB_TEST_NAME}
+        ${YDB_TEST_NAME}
+      TEST_ARG
+        ${YDB_TEST_TEST_ARG}
+      WORKING_DIRECTORY
+        ${YDB_TEST_WORKING_DIRECTORY}
     )
   else()
     add_yunittest(
       NAME
-      ${YDB_TEST_NAME}
+        ${YDB_TEST_NAME}
       TEST_TARGET
-      ${YDB_TEST_NAME}
+        ${YDB_TEST_NAME}
       TEST_ARG
-      --print-before-suite
-      --print-before-test
-      --fork-tests
-      --print-times
-      --show-fails
+        --print-before-suite
+        --print-before-test
+        --fork-tests
+        --print-times
+        --show-fails
+        ${YDB_TEST_TEST_ARG}
+      WORKING_DIRECTORY
+        ${YDB_TEST_WORKING_DIRECTORY}
     )
   endif()
 
   set_yunittest_property(
     TEST
-    ${YDB_TEST_NAME}
+      ${YDB_TEST_NAME}
     PROPERTY
-    LABELS
-    MEDIUM
-    ${YDB_TEST_LABELS}
+      LABELS
+      MEDIUM
+      ${YDB_TEST_LABELS}
   )
 
   set_yunittest_property(
     TEST
-    ${YDB_TEST_NAME}
+      ${YDB_TEST_NAME}
     PROPERTY
-    PROCESSORS
-    1
+      PROCESSORS
+      1
   )
 
   set_yunittest_property(
     TEST
-    ${YDB_TEST_NAME}
+      ${YDB_TEST_NAME}
     PROPERTY
-    TIMEOUT
-    600
+      TIMEOUT
+      600
   )
 
   vcs_info(${YDB_TEST_NAME})

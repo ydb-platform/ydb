@@ -40,6 +40,26 @@
       "displayName": "Default Release Config",
       "description": "Default release build configuration using Ninja generator and Clang compiler",
       "binaryDir": "${sourceDir}/../build"
+    },
+    {
+      "name": "release-test",
+      "inherits": "release",
+      "displayName": "Default Release Test Config",
+      "description": "Default release build configuration with all tests and examples",
+      "cacheVariables": {
+        "YDB_SDK_TESTS": "TRUE",
+        "YDB_SDK_EXAMPLES": "TRUE"
+      }
+    },
+    {
+      "name": "release-test-with-ccache-basedir",
+      "inherits": "release-test",
+      "displayName": "Release Test Config CCACHE_BASEDIR Case",
+      "description": "Only for the case when using CCACHE_BASEDIR",
+      "cacheVariables": {
+        "ARCADIA_ROOT": "../ydb-cpp-sdk",
+        "ARCADIA_BUILD_ROOT": "."
+      }
     }
   ],
   "buildPresets": [
@@ -51,15 +71,20 @@
   ],
   "testPresets": [
     {
-      "name": "release",
-      "configurePreset": "release",
-      "displayName": "Default Release Tests",
+      "name": "common",
+      "hidden": true,
       "output": {
         "outputOnFailure": true
       },
       "execution": {
         "timeout": 1200
-      },
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "common",
+      "configurePreset": "release-test",
+      "displayName": "Default Release Tests",
       "environment": {
         "YDB_ENDPOINT": "localhost:2136",
         "YDB_DATABASE": "/local"
@@ -67,34 +92,24 @@
     },
     {
       "name": "release-unit",
-      "configurePreset": "release",
+      "inherits": "common",
+      "configurePreset": "release-test",
       "displayName": "Default Unit Release Tests",
       "filter" : {
         "include": {
           "label": "unit"
         }
-      },
-      "output": {
-        "outputOnFailure": true
-      },
-      "execution": {
-        "timeout": 1200
       }
     },
     {
       "name": "release-integration",
-      "configurePreset": "release",
+      "inherits": "common",
+      "configurePreset": "release-test",
       "displayName": "Default Integration Release Tests",
-      "output": {
-        "outputOnFailure": true
-      },
       "filter" : {
         "include": {
           "label": "integration"
         }
-      },
-      "execution": {
-        "timeout": 1200
       },
       "environment": {
         "YDB_ENDPOINT": "localhost:2136",

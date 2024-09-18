@@ -3,13 +3,15 @@ add_executable(basic_example)
 target_link_libraries(basic_example PUBLIC
   yutil
   getopt
-  YDB-CPP-SDK::Table
+  YDB-CPP-SDK::Query
+  YDB-CPP-SDK::Params
+  YDB-CPP-SDK::Driver
 )
 
 target_sources(basic_example PRIVATE
-  ${YDB_SDK_SOURCE_DIR}/examples/basic_example/main.cpp
-  ${YDB_SDK_SOURCE_DIR}/examples/basic_example/basic_example_data.cpp
-  ${YDB_SDK_SOURCE_DIR}/examples/basic_example/basic_example.cpp
+  main.cpp
+  basic_example_data.cpp
+  basic_example.cpp
 )
 
 vcs_info(basic_example)

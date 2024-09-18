@@ -280,6 +280,40 @@ struct TUdfCachedInfo {
     bool IsStrict = false;
 };
 
+const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
+const TString NowKey = "Now";
+const TString RandomKey = "Random";
+const TString RandomNumberKey = "RandomNumber";
+const TString RandomUuidKey = "RandomUuid";
+
+template <typename T>
+inline TString SerializeBinary(const T& value) {
+    return TString((const char*)&value, sizeof(T));
+}
+
+template <typename T>
+inline T DeserializeBinary(const TString& value) {
+    return *(const T*)value.Data();
+}
+
+template <typename T>
+inline TString GetRandomKey();
+
+template <>
+inline TString GetRandomKey<ui64>() {
+    return RandomNumberKey;
+}
+
+template <>
+inline TString GetRandomKey<double>() {
+    return RandomKey;
+}
+
+template <>
+inline TString GetRandomKey<TGUID>() {
+    return RandomUuidKey;
+}
+
 struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
@@ -369,17 +403,41 @@ struct TTypeAnnotationContext: public TThrRefBase {
     T GetRandom() const noexcept;
 
     template <typename T>
-    T GetCachedRandom() noexcept {
+    T GetCachedRandom() {
         auto& cached = std::get<std::optional<T>>(CachedRandom);
         if (!cached) {
-            cached = GetRandom<T>();
+            if (QContext.CanRead()) {
+                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, GetRandomKey<T>()}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                cached = DeserializeBinary<T>(item->Value);
+            } else {
+                cached = GetRandom<T>();
+                if (QContext.CanWrite()) {
+                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, GetRandomKey<T>()}, SerializeBinary<T>(*cached)).GetValueSync();
+                }
+            }
         }
         return *cached;
     }
 
-    ui64 GetCachedNow() noexcept {
+    ui64 GetCachedNow() {
         if (!CachedNow) {
-            CachedNow = TimeProvider->Now().GetValue();
+            if (QContext.CanRead()) {
+                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, NowKey}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                CachedNow = DeserializeBinary<ui64>(item->Value);
+            } else {
+                CachedNow = TimeProvider->Now().GetValue();
+                if (QContext.CanWrite()) {
+                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                }
+            }
         }
         return *CachedNow;
     }

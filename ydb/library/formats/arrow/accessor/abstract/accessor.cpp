@@ -1,12 +1,10 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/permutations.h>
-#include <ydb/core/formats/arrow/save_load/saver.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/formats/arrow/splitter/simple.h>
-#include <ydb/core/formats/arrow/switch/compare.h>
-#include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/permutations.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -47,7 +45,7 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, con
 
 NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(
     const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const {
-    AFL_VERIFY(position < GetRecordsCount());
+    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records", GetRecordsCount())("current", chunkCurrent ? chunkCurrent->DebugString() : Default<TString>());
     std::optional<TCommonChunkAddress> address;
 
     if (IsDataOwner()) {

@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {

@@ -214,10 +214,12 @@ private:
                 result.ConstructInPlace(description);
                 return "";
             } catch (const NYql::TCodeLineException& ex) {
+                LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
+                LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();

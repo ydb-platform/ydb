@@ -37,4 +37,8 @@ ADDINCL(
     GLOBAL contrib/restricted/boost/asio/include
 )
 
+NO_COMPILER_WARNINGS()
+
+NO_UTIL()
+
 END()

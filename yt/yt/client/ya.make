@@ -51,6 +51,7 @@ SRCS(
     api/rpc_proxy/timestamp_provider.cpp
     api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
+    api/rpc_proxy/row_batch_reader.cpp
     api/rpc_proxy/row_stream.cpp
     api/rpc_proxy/wire_row_stream.cpp
 

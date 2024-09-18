@@ -317,15 +317,9 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
 void RunAsDaemon() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading commands" << colors.Default() << Endl;
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization finished" << colors.Default() << Endl;
     while (true) {
-        TString command;
-        Cin >> command;
-
-        if (command == "exit") {
-            break;
-        }
-        Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid command '" << command << "'" << colors.Default() << Endl;
+        pause();
     }
 }
 

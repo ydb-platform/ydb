@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 COALESCE(T?, ..., T)->T
 COALESCE(T?, ..., T?)->T?
 ```
@@ -15,20 +15,20 @@ COALESCE(T?, ..., T?)->T?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT COALESCE(
   maybe_empty_column,
   "it's empty!"
 ) FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT
   maybe_empty_column ?? "it's empty!"
 FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT NVL(
   maybe_empty_column,
   "it's empty!"

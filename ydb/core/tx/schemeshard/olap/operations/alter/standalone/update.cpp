@@ -1,7 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
-#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 

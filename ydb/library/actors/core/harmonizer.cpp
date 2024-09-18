@@ -625,6 +625,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
                 i64 threadCount = pool.GetFullThreadCount();
                 if (hasSharedThread[poolIdx] && !hasSharedThreadWhichWasNotBorrowed[poolIdx]) {
                     Shared->ReturnOwnHalfThread(poolIdx);
+                    overbooked -= 0.5;
                 }
                 while (threadCount > pool.DefaultFullThreadCount) {
                     pool.SetFullThreadCount(--threadCount);
@@ -809,6 +810,8 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     if (poolInfo.BasicPool) {
         poolInfo.WaitingStats.reset(new TWaitingStats<ui64>());
         poolInfo.MovingWaitingStats.reset(new TWaitingStats<double>());
+    } else {
+        poolInfo.DefaultThreadCount = 0;
     }
     PriorityOrder.clear();
 }

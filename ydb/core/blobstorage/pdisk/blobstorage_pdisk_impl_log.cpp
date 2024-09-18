@@ -21,6 +21,7 @@ public:
         , CommonLogger(commonLogger)
         , CompletionLogWrite(completionLogWrite)
     {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
         Orbit = std::move(completionLogWrite->Orbit);
     }
 
@@ -707,8 +708,10 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 // Common log writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TPDisk::ProcessLogWriteQueueAndCommits() {
-    if (JointLogWrites.empty())
+    if (JointLogWrites.empty()) {
+        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
         return;
+    }
 
     NHPTimer::STime now = HPNow();
     for (TLogWrite *logCommit : JointCommits) {
@@ -748,6 +751,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
                 double(logWrite->Cost) / 1000000.0, HPSecondsFloat(logWrite->Deadline),
                 logWrite->Owner, logWrite->IsFast, logWrite->PriorityClass);
     }
+    LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
     TReqId reqId = JointLogWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
         this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));
@@ -875,8 +879,8 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
         P_LOG(PRI_ERROR, BPD70, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,
                     NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str()));
-        evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         Y_ABORT_UNLESS(evLog.Result.Get());
+        evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         return;
     }
     if (!CommonLogger->NextChunks.empty()) {

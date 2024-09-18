@@ -1910,7 +1910,9 @@ namespace {
             case TExprNode::Lambda:
                 {
                     const auto prevFrame = ctx.CurrentFrame;
-                    ctx.CurrentFrame = &ctx.Frames[ctx.LambdaFrames.find(&node)->second];
+                    const auto it = ctx.LambdaFrames.find(&node);
+                    YQL_ENSURE(it != ctx.LambdaFrames.end());
+                    ctx.CurrentFrame = &ctx.Frames[it->second];
                     YQL_ENSURE(node.ChildrenSize() > 0U);
                     const auto& args = node.Head();
                     TSmallVec<TAstNode*> argsChildren;

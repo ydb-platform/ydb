@@ -1,6 +1,6 @@
 ## Data types accepting NULL
 
-Any typed data in YQL, including table columns, can be either non-nullable (guaranteed value) or nullable (empty value denoted as `NULL`). Data types that can include `NULL` values are called _optional_ or, in SQL terms, _nullable_.
+Any typed data in YQL, including table columns, can be either non-nullable (guaranteed value) or nullable (empty value denoted as `NULL`). Data types that can include `NULL` values are called *optional* or, in SQL terms, *nullable*.
 
 Optional data types in the [text format](../type_string.md) use the question mark at the end (for example, `String?`) or the notation `Optional<...>`.
 The following operations are most often performed on optional data types:
@@ -78,7 +78,7 @@ CREATE TABLE t (
 
 After that, write operations to table `t` will only be executed if the values to be inserted into the `key` and `value` columns do not contain `NULL` values.
 
-### Example of the interaction between the NOT NULL constraint and YQL functions.
+### Example of the interaction between the NOT NULL constraint and YQL functions
 
 Many of the YQL functions have optional types as return values. Since YQL is a strongly-typed language, a query like
 
@@ -92,4 +92,5 @@ SELECT CAST('q' AS Utf8);
 ```
 
 cannot be executed. The reason for this is the type mismatch between the column `c`, which has the type `Utf8`, and the result of the `CAST` function, which has the type `Optional<Utf8>`. To make the query work correctly in such scenarios, it is necessary to use the [COALESCE](../../builtins/basic.md#coalesce) function, whose argument can specify a fallback value to insert into the table in case the function (in the example, CAST) returns an empty `Optional`. If, in the case of an empty `Optional`, the insertion should not be performed and an error should be returned, the [UNWRAP](../../builtins/basic.md#optional-ops) function can be used to unpack the contents of the optional type.
+
 {% endif %}

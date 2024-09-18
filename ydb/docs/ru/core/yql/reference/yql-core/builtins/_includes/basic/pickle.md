@@ -6,7 +6,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 Pickle(T)->String
 StablePickle(T)->String
 Unpickle(Type<T>, String)->T
@@ -14,7 +14,7 @@ Unpickle(Type<T>, String)->T
 
 ### Примеры
 
-``` yql
+```yql
 SELECT *
 FROM my_table
 WHERE Digest::MurMurHash32(

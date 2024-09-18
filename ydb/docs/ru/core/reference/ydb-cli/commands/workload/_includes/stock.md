@@ -63,9 +63,11 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 ## Запуск нагрузочного теста {#run}
 
 Для запуска нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run [workload type...] [global workload options...] [specific workload options...]
 ```
+
 В течение теста на экран выводится статистика по нагрузке для каждого временного окна.
 
 * `workload type` — [виды нагрузки](#workload_types).
@@ -92,7 +94,6 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 `--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../../../../dev/timeouts.md).
 `--window` | - | Длительность окна сбора статистики в секундах. Значение по умолчанию: 1.
 
-
 ## Нагрузка user-hist {#get-customer-history}
 
 Данный вид нагрузки читает заданное количество заказов покупателя с id = 10 000.
@@ -103,10 +104,11 @@ YQL запрос:
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
-SELECT id, customer, created FROM orders view ix_cust
-    WHERE customer = 'Name10000'
-    ORDER BY customer DESC, created DESC
-    LIMIT $limit;
+SELECT id, customer, created
+FROM orders VIEW ix_cust
+WHERE customer = 'Name10000'
+ORDER BY customer DESC, created DESC
+LIMIT $limit;
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
@@ -134,10 +136,11 @@ YQL запрос:
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
-SELECT id, customer, created FROM orders view ix_cust
-    WHERE customer = $cust
-    ORDER BY customer DESC, created DESC
-    LIMIT $limit;
+SELECT id, customer, created
+FROM orders VIEW ix_cust
+WHERE customer = $cust
+ORDER BY customer DESC, created DESC
+LIMIT $limit;
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
@@ -150,6 +153,7 @@ SELECT id, customer, created FROM orders view ix_cust
 * `specific workload options` - [параметры конкретного вида нагрузки](#random_customer_history_options)
 
 ### Параметры для rand-user-hist {#random_customer_history_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--limit <значение>` | `-l <значение>` | Необходимое количество заказов. Значение по умолчанию: 10.

@@ -159,6 +159,8 @@ SRCS(
     finish_propose_unit.cpp
     finish_propose_write_unit.cpp
     follower_edge.cpp
+    incr_restore_helpers.cpp
+    incr_restore_scan.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
@@ -205,6 +207,7 @@ SRCS(
     store_scheme_tx_unit.cpp
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
+    stream_scan_common.cpp
     upload_stats.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp
@@ -302,6 +305,7 @@ RECURSE_FOR_TESTS(
     ut_erase_rows
     ut_followers
     ut_incremental_backup
+    ut_incremental_restore_scan
     ut_init
     ut_keys
     ut_kqp

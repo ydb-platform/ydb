@@ -29,6 +29,16 @@ class LoadSuiteBase:
             result = stats.get(field)
             return float(result) / 1e3 if result is not None else None
 
+        def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
+            if plan.plan is not None:
+                allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
+            if plan.table is not None:
+                allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
+            if plan.ast is not None:
+                allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+            if plan.svg is not None:
+                allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+
         test = f'Query{query_num:02d}'
         allure_test_description(self.suite, test, refference_set=self.refference)
         allure_listener = next(filter(lambda x: isinstance(x, AllureListener), plugin_manager.get_plugin_manager().get_plugins()))
@@ -47,19 +57,16 @@ class LoadSuiteBase:
             stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
+
+        if result.explain_plan is not None:
+            with allure.step('Explain'):
+                _attach_plans(result.explain_plan)
+
         if result.plans is not None:
             for i in range(self.iterations):
                 try:
                     with allure.step(f'Iteration {i}'):
-                        plan = result.plans[i]
-                        if plan.plan is not None:
-                            allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
-                        if plan.table is not None:
-                            allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
-                        if plan.ast is not None:
-                            allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
-                        if plan.svg is not None:
-                            allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+                        _attach_plans(result.plans[i])
                         if i in result.errors_by_iter:
                             pytest.fail(result.errors_by_iter[i])
                 except BaseException:

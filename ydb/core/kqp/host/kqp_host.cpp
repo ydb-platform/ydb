@@ -1142,10 +1142,10 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, settings] (TExprContext& ctx) mutable {
-                return PrepareQueryInternal(query, nullptr, EKikimrQueryType::Script, settings, ctx);
+            [this, &query, settings, expr] (TExprContext& ctx) mutable {
+                return PrepareQueryInternal(query, expr, EKikimrQueryType::Script, settings, ctx);
             });
     }
 
@@ -1231,7 +1231,19 @@ private:
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
                 .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax());
-            auto astRes = ParseQuery(query.Text, isSql, sqlVersion, TypesCtx->DeprecatedSQL, ctx, settingsBuilder, result.KeepInCache, result.CommandTagName);
+            NSQLTranslation::TTranslationSettings effectiveSettings;
+            auto astRes = ParseQuery(
+                query.Text,
+                isSql,
+                sqlVersion,
+                TypesCtx->DeprecatedSQL,
+                ctx,
+                settingsBuilder,
+                result.KeepInCache,
+                result.CommandTagName,
+                &effectiveSettings
+            );
+            SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
             if (astRes.ActualSyntaxType == NYql::ESyntaxType::Pg) {
                 SessionCtx->Config().IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
             }

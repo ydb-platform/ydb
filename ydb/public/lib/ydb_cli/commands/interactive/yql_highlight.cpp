@@ -83,11 +83,14 @@ namespace NYdb {
                 },
                 .string = rgb666(3, 0, 0),
                 .number = Color::BRIGHTGREEN,
+                .comment = rgb666(2, 2, 2),
                 .unknown = Color::DEFAULT,
             };
         }
 
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Debug() {
+            using replxx::color::rgb666;
+
             return {
                 .keyword = Color::BLUE,
                 .operation = Color::GRAY,
@@ -99,6 +102,7 @@ namespace NYdb {
                 },
                 .string = Color::GREEN,
                 .number = Color::BRIGHTGREEN,
+                .comment = rgb666(2, 2, 2),
                 .unknown = Color::DEFAULT,
             };
         }
@@ -161,6 +165,9 @@ namespace NYdb {
             }
             if (IsKeyword(token)) {
                 return Coloring.keyword;
+            }
+            if (IsComment(token)) {
+                return Coloring.comment;
             }
             return Coloring.unknown;
         }
@@ -530,6 +537,10 @@ namespace NYdb {
                 default:
                     return false;
             }
+        }
+
+        bool YQLHighlight::IsComment(const antlr4::Token* token) const {
+            return token->getType() == TOKEN(COMMENT);
         }
 
     } // namespace NConsoleClient

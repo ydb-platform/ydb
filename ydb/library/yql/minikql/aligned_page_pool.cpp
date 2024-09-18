@@ -28,7 +28,12 @@ static_assert(MaxMidSize == 64 * 1024 * 1024, "Upper memory block 64 Mb");
 namespace {
 
 template<typename T, bool SysAlign>
+class TGlobalPools;
+
+template<typename T, bool SysAlign>
 class TGlobalPagePool {
+    friend class TGlobalPools<T, SysAlign>;
+
 public:
     TGlobalPagePool(size_t pageSize)
         : PageSize(pageSize)
@@ -51,15 +56,6 @@ public:
         return nullptr;
     }
 
-    void PushPage(void* addr) {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-        FreePage(addr);
-#else
-        AtomicIncrement(Count);
-        Pages.Enqueue(addr);
-#endif
-    }
-
     ui64 GetPageCount() const {
         return RelaxedLoad(&Count);
     }
@@ -73,6 +69,18 @@ public:
     }
 
 private:
+
+    size_t PushPage(void* addr) {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        FreePage(addr);
+        return GetPageSize();
+#else
+        AtomicIncrement(Count);
+        Pages.Enqueue(addr);
+        return 0;
+#endif
+    }
+
     void FreePage(void* addr) {
         auto res = T::Munmap(addr, PageSize);
         Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
@@ -95,9 +103,52 @@ public:
         return *Pools[index];
     }
 
+    const TGlobalPagePool<T, SysAlign>& Get(ui32 index) const {
+        return *Pools[index];
+    }
+
     TGlobalPools()
     {
         Reset();
+    }
+
+    void* DoMmap(size_t size) {
+        void* res = T::Mmap(size);
+        TotalMmappedBytes += size;
+        return res;
+    }
+
+    void PushPage(size_t level, void* addr) {
+        auto& pool = Get(level);
+        size_t free = pool.PushPage(addr);
+        if (Y_UNLIKELY(free > 0)) {
+            i64 prev = TotalMmappedBytes.fetch_sub(free);
+            Y_DEBUG_ABORT_UNLESS(prev >= 0);
+        }
+    }
+
+    void DoMunmap(void* addr, size_t size) {
+        if (Y_UNLIKELY(0 != T::Munmap(addr, size))) {
+            ythrow yexception() << "Munmap(0x"
+                << IntToString<16>(reinterpret_cast<uintptr_t>(addr))
+                << ", " << size << ") failed: " << LastSystemErrorText();
+        }
+
+        i64 prev = TotalMmappedBytes.fetch_sub(size);
+        Y_DEBUG_ABORT_UNLESS(prev >= 0);
+    }
+
+    i64 GetTotalMmappedBytes() const {
+        return TotalMmappedBytes.load();
+    }
+
+    i64 GetTotalFreeListBytes() const {
+        i64 bytes = 0;
+        for (ui32 i = 0; i <= MidLevels; ++i) {
+            bytes += Get(i).GetSize();
+        }
+
+        return bytes;
     }
 
     void Reset()
@@ -111,6 +162,7 @@ public:
 
 private:
     TVector<THolder<TGlobalPagePool<T, SysAlign>>> Pools;
+    std::atomic<i64> TotalMmappedBytes{0};
 };
 
 } // unnamed
@@ -225,7 +277,7 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
                    AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes, AllPages.size());
 
     for (auto &ptr : AllPages) {
-        TGlobalPools<T, false>::Instance().Get(0).PushPage(ptr);
+        TGlobalPools<T, false>::Instance().PushPage(0, ptr);
     }
 
     if (Counters.TotalBytesAllocatedCntr) {
@@ -246,7 +298,7 @@ void TAlignedPagePoolImpl<T>::ReleaseFreePages() {
 
     for (; !FreePages.empty(); FreePages.pop()) {
         AllPages.erase(FreePages.top());
-        TGlobalPools<T, false>::Instance().Get(0).PushPage(FreePages.top());
+        TGlobalPools<T, false>::Instance().PushPage(0, FreePages.top());
     }
 }
 
@@ -398,11 +450,13 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         }
     }
 
+    auto& globalPool = TGlobalPools<T, false>::Instance();
+
     if (size > POOL_PAGE_SIZE && size <= MaxMidSize) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level >= 1 && level <= MidLevels);
-        if (res = TGlobalPools<T, false>::Instance().Get(level).GetPage()) {
+        if (res = globalPool.Get(level).GetPage()) {
             TotalAllocated += size;
             if (AllocNotifyCallback) {
                 AllocNotifyCurrentBytes += size;
@@ -418,7 +472,7 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
 
     if (!res) {
         auto allocSize = size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE;
-        void* mem = T::Mmap(allocSize);
+        void* mem = globalPool.DoMmap(allocSize);
         if (Y_UNLIKELY(MAP_FAILED == mem)) {
             ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: " << LastSystemErrorText();
         }
@@ -427,11 +481,7 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         const size_t off = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
         if (Y_UNLIKELY(off)) {
             // unmap prefix
-            if (Y_UNLIKELY(0 != T::Munmap(mem, off))) {
-                ythrow yexception() << "Munmap(0x"
-                    << IntToString<16>(reinterpret_cast<uintptr_t>(mem))
-                    << ", " << off << ") failed: " << LastSystemErrorText();
-            }
+            globalPool.DoMunmap(mem, off);
         }
         // Extra space is also page-aligned. Put it to the free page list
         auto alignedSize = AlignUp(size, POOL_PAGE_SIZE);
@@ -445,23 +495,15 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         }
         if (size != alignedSize) {
             // unmap unaligned hole
-            if (Y_UNLIKELY(0 != T::Munmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size))) {
-                ythrow yexception() << "Munmap(0x"
-                    << IntToString<16>(reinterpret_cast<uintptr_t>(reinterpret_cast<ui8*>(res)+size))
-                    << ", " << alignedSize - size
-                    << ") failed: " << LastSystemErrorText();
-            }
+            globalPool.DoMunmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size);
         }
+
         if (tail) {
             // unmap suffix
             Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
-            if (Y_UNLIKELY(0 != T::Munmap(extraPage, tail))) {
-                ythrow yexception() << "Munmap(0x"
-                    << IntToString<16>(reinterpret_cast<uintptr_t>(extraPage))
-                    << ", " << tail
-                    << ") failed: " << LastSystemErrorText();
-            }
+            globalPool.DoMunmap(extraPage, tail);
         }
+
         auto extraSize = extraPages * POOL_PAGE_SIZE;
         auto totalSize = size + extraSize;
         TotalAllocated += totalSize;
@@ -489,9 +531,9 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
     if (size <= MaxMidSize) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level >= 1 && level <= MidLevels);
-        TGlobalPools<T, false>::Instance().Get(level).PushPage(ptr);
+        TGlobalPools<T, false>::Instance().PushPage(level, ptr);
     } else {
-        Y_ABORT_UNLESS(!T::Munmap(ptr, size));
+        TGlobalPools<T, false>::Instance().DoMunmap(ptr, size);
     }
 
     Y_DEBUG_ABORT_UNLESS(TotalAllocated >= size);
@@ -558,17 +600,19 @@ void* GetAlignedPage(ui64 size) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;
     }
 
+    auto& pool = TGlobalPools<TMmap, true>::Instance();
+
     if (size <= MaxMidSize) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
-        if (auto res = TGlobalPools<TMmap, true>::Instance().Get(level).GetPage()) {
+        if (auto res = pool.Get(level).GetPage()) {
             return res;
         }
     }
 
     auto allocSize = Max<ui64>(MaxMidSize, size);
-    void* mem = TMmap::Mmap(allocSize);
+    void* mem = pool.DoMmap(allocSize);
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
         ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText();
     }
@@ -577,11 +621,10 @@ void* GetAlignedPage(ui64 size) {
         // push extra allocated pages to cache
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
-        auto& pool = TGlobalPools<TMmap, true>::Instance().Get(level);
         ui8* ptr = (ui8*)mem + size;
         ui8* const end = (ui8*)mem + MaxMidSize;
         while (ptr < end) {
-            pool.PushPage(ptr);
+            pool.PushPage(level, ptr);
             ptr += size;
         }
     }
@@ -600,16 +643,30 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
-        TGlobalPools<TMmap, true>::Instance().Get(level).PushPage(mem);
+        TGlobalPools<TMmap, true>::Instance().PushPage(level, mem);
         return;
     }
 
-    if (Y_UNLIKELY(0 != TMmap::Munmap(mem, size))) {
-        ythrow yexception() << "Munmap(0x"
-            << IntToString<16>(reinterpret_cast<uintptr_t>(mem))
-            << ", " << size << ") failed: " << LastSystemErrorText();
-    }
+    TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
 }
+
+template<typename TMmap>
+i64 GetTotalMmapedBytes() {
+    return TGlobalPools<TMmap, true>::Instance().GetTotalMmappedBytes() + TGlobalPools<TMmap, false>::Instance().GetTotalMmappedBytes();
+}
+
+template<typename TMmap>
+i64 GetTotalFreeListBytes() {
+    return TGlobalPools<TMmap, true>::Instance().GetTotalFreeListBytes() + TGlobalPools<TMmap, false>::Instance().GetTotalFreeListBytes();
+}
+
+template i64 GetTotalMmapedBytes<>();
+template i64 GetTotalMmapedBytes<TFakeAlignedMmap>();
+template i64 GetTotalMmapedBytes<TFakeUnalignedMmap>();
+
+template i64 GetTotalFreeListBytes<>();
+template i64 GetTotalFreeListBytes<TFakeAlignedMmap>();
+template i64 GetTotalFreeListBytes<TFakeUnalignedMmap>();
 
 template void* GetAlignedPage<>(ui64);
 template void* GetAlignedPage<TFakeAlignedMmap>(ui64);

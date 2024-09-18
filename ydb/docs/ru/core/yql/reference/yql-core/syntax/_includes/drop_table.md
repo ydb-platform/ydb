@@ -6,6 +6,6 @@
 
 ## Примеры
 
-``` yql
+```yql
 DROP TABLE my_table;
 ```

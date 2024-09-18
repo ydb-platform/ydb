@@ -6,7 +6,7 @@
 
 ### Пример
 
-``` yql
+```yql
 SELECT
   key,
   COUNT(DISTINCT value) AS count -- топ-3 ключей по количеству уникальных значений

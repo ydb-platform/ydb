@@ -231,6 +231,11 @@ def on_add_classpath_clash_check(unit, *args):
         unit.onjava_test_deps(jdeps_val)
 
 
+def on_add_detekt_report_check(unit, *args):
+    if unit.get('WITH_KOTLIN_VALUE') == 'yes' and unit.get('WITH_KOTLINC_PLUGIN_DETEKT') == 'yes':
+        unit.onadd_check(['detekt.report'] + list(args))
+
+
 # Ymake java modules related macroses
 
 

@@ -693,6 +693,39 @@ def govet(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@df.with_fields(
+    CHECK_FIELDS_BASE
+    + (
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
+        df.TestFiles.flat_args_wo_first,
+        df.ModuleLang.value,
+    )
+)
+def detekt_report(fields, unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+
+    dart_record = create_dart_record(fields, unit, flat_args, spec_args)
+
+    data = dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
 def onadd_check(unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
@@ -727,6 +760,8 @@ def onadd_check(unit, *args):
         gofmt(unit, *args)
     elif check_type == "govet":
         govet(unit, *args)
+    elif check_type == "detekt.report":
+        detekt_report(unit, *args)
 
 
 def on_register_no_check_imports(unit):

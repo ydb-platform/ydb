@@ -1167,7 +1167,9 @@ private:
                     if (ex.Code != TIssuesIds::KIKIMR_BAD_REQUEST) {
                         throw ex;
                     }
-                    Issues.AddIssue(ExceptionToIssue(ex));
+
+                    LOG_CORO_D(ex.what());
+                    Issues.AddIssue(ex.GetRawMessage());
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 }

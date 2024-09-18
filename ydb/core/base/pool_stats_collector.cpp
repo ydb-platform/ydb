@@ -32,15 +32,21 @@ private:
         void Init(::NMonitoring::TDynamicCounters* group) {
             CounterGroup = group->GetSubgroup("subsystem", "mkqlalloc");
             TotalBytes = CounterGroup->GetCounter("GlobalPoolTotalBytes", false);
+            TotalMmapped = CounterGroup->GetCounter("TotalMmappedBytes", false);
+            TotalFreeList = CounterGroup->GetCounter("TotalFreeListBytes", false);
         }
 
         void Update() {
             *TotalBytes = TAlignedPagePool::GetGlobalPagePoolSize();
+            *TotalMmapped = ::NKikimr::GetTotalMmapedBytes();
+            *TotalFreeList = ::NKikimr::GetTotalFreeListBytes();
         }
 
     private:
         TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TotalMmapped;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TotalFreeList;
     };
 
     void OnWakeup(const TActorContext &ctx) override {

@@ -11,7 +11,7 @@
     1. Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
 
         {% include [fq-connector-go-install-variants](./_includes/fq-connector-go-install-variants.md) %}
-        
+
     1. Составьте конфигурационный файл fq-connector-go ([документация по конфигурации](../../deploy/manual/connector.md#fq-connector-go-config)):
         1. `ydb_fq_connector_config`: укажите локальный путь до конфигурационного файла fq-connector-go.
     1. `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.

@@ -13,7 +13,7 @@
 * SSD-диски для пользовательских данных, размером от 120 GB.
 * Доступ по SSH.
 * Сетевая связность машин в кластере.
-* OS: Ubuntu 18+, Debian 9+. 
+* OS: Ubuntu 18+, Debian 9+.
 * Доступ в интернет для обновления репозиториев и скачивания нужных пакетов.
 
 {% endnote %}
@@ -26,7 +26,7 @@
 
 {% endcut %}
 
-Для работы с проектом на локальной (промежуточной или инсталляционной) машине понадобится: Python 3 версии 3.10+ и Ansible core не ниже версии 2.15.2. Ansible можно установить и запустить глобально (устанавливается в систему) или в виртуальном окружении. Если Ansible уже установлен – можно переходить к шагу [«Настройка Ansible проекта»](#ansible-project-setup), если Ansible ещё не установлен, установите его одним из предложенных способов:   
+Для работы с проектом на локальной (промежуточной или инсталляционной) машине понадобится: Python 3 версии 3.10+ и Ansible core не ниже версии 2.15.2. Ansible можно установить и запустить глобально (устанавливается в систему) или в виртуальном окружении. Если Ansible уже установлен – можно переходить к шагу [«Настройка Ansible проекта»](#ansible-project-setup), если Ansible ещё не установлен, установите его одним из предложенных способов:
 
 {% list tabs %}
 
@@ -85,12 +85,12 @@
 Для запуска [федеративных запросов](../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../concepts/federated_query/architecture.md#connectors) [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go).
 
 Если необходимо развернуть fq-connector-go, внесите следующие изменения в разделе `vars` инвентори-файла:
-  
+
   * `ydb_install_fq_connector` - установите в `true`
   * Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:
 
     {% include [fq-connector-go-install-variants](./_includes/fq-connector-go-install-variants.md) %}
-    
+
   * `ydb_fq_connector_dir`: укажите директорию, в которую fq-connector-go будет установлен на сервере.
   * (Опционально) `ydb_fq_connector_multislot`: установите в `true`, чтобы использовать [функцию multislot развертывания](./fq-deployment.md#multislot) (доступно только для {{ ydb-short-name }} версии 24.3.3 или старше)
 
@@ -107,7 +107,7 @@
       - static-node-1.ydb-cluster.com
       - static-node-2.ydb-cluster.com
       - static-node-3.ydb-cluster.com
-    ``` 
+    ```
 
 Значение переменной `ydb_database_groups` в разделе `vars` имеет фиксированное значение, которое привязано к типу избыточности и не зависит от размера кластера:
 
@@ -161,7 +161,7 @@
 
 Дефолтный конфигурационный файл {{ ydb-short-name }} уже содержит почти все необходимые настройки для развёртывания кластера. Необходимо заменить стандартные FQDN хостов на актуальные FQDN в разделах `hosts` и `blob_storage_config`:
 
-* Раздел `hosts`:  
+* Раздел `hosts`:
   ```yaml
   ...
   hosts:
@@ -171,8 +171,8 @@
         body: 1
         data_center: 'zone-a'
         rack: '1'
-  ...    
-  ```  
+  ...
+  ```
 * Раздел `blob_storage_config`:
   ```yaml
   ...
@@ -181,7 +181,7 @@
       - node_id: static-node-1.ydb-cluster.com #FQDN ВМ
         pdisk_category: SSD
         path: /dev/disk/by-partlabel/ydb_disk_1
-  ...        
+  ...
   ```
 
 Если [включено развертывание fq-connector-go](#inventory-edit-fq-connector-go):
@@ -198,7 +198,7 @@
 
 Если [включено развертывание fq-connector-go](#inventory-edit-fq-connector-go), может потребоваться изменить его конфигурационный файл. Конфигурационный файл находится по пути `files/fq-connector-go/config.yaml`. Его описание можно найти [в этой статье](../../deploy/manual/connector.md#fq-connector-go-config).
 
-## Развёртывание кластера {{ ydb-short-name }} { #erasure-setup } 
+## Развёртывание кластера {{ ydb-short-name }} { #erasure-setup }
 
 {% note info %}
 
@@ -258,7 +258,7 @@
 
 ## Тестирование кластера { #testing }
 
-Протестировать кластер можно с помощью встроенных в YDB CLI нагрузочных тестов. Для этого скачайте на машину, на которой установлен Ansible, YDB CLI версии [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb). Например, с помощью wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`. 
+Протестировать кластер можно с помощью встроенных в YDB CLI нагрузочных тестов. Для этого скачайте на машину, на которой установлен Ansible, YDB CLI версии [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb). Например, с помощью wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`.
 
 Сделайте скачанный бинарный файл исполняемым – `chmod +x ydb` и создайте [профиль](../../reference/ydb-cli/profile/index.md) подключения к YDB:
 ```shell

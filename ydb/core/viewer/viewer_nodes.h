@@ -2360,6 +2360,7 @@ public:
                 )___");
         node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
         return node;
+    }
 };
 
 }

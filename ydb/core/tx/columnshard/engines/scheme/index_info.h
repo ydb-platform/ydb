@@ -121,8 +121,28 @@ private:
 
         }
 
-        bool operator<(const TNameInfo& item) const {
-            return Name < item.Name;
+        static std::vector<TNameInfo> BuildColumnNames(const TColumns& columns) {
+            std::vector<TNameInfo> result;
+            for (auto&& i : columns) {
+                result.emplace_back(TNameInfo(i.second.Name, i.first, 0));
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.ColumnId < r.ColumnId;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            ui32 idx = 0;
+            for (auto&& i : result) {
+                i.ColumnIdx = idx++;
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.Name < r.Name;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            return result;
         }
     };
 
@@ -247,10 +267,7 @@ public:
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
-        for (auto&& i : columns) {
-            result.ColumnNames.emplace_back(i.second.Name, i.first, result.ColumnNames.size());
-        }
-        std::sort(result.ColumnNames.begin(), result.ColumnNames.end());
+        result.ColumnNames = TNameInfo::BuildColumnNames(columns);
         for (auto&& i : pkNames) {
             const ui32 columnId = result.GetColumnIdVerified(i);
             result.PKColumnIds.emplace_back(columnId);

@@ -228,19 +228,14 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     THashMap<ui32, NTable::TColumn> columns;
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Columns");
-        ColumnNames.clear();
         for (const auto& col : schema.GetColumns()) {
             const ui32 id = col.GetId();
             const TString& name = cache->GetStringCache(col.GetName());
             const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, cache->GetStringCache(typeInfoMod.TypeMod), notNull);
-            if (ColumnNames.size()) {
-                AFL_VERIFY(ColumnNames.back().GetColumnId() < id);
-            }
-            ColumnNames.emplace_back(name, id, ColumnNames.size());
         }
-        std::sort(ColumnNames.begin(), ColumnNames.end());
+        ColumnNames = TNameInfo::BuildColumnNames(columns);
     }
     PKColumnIds.clear();
     for (const auto& keyName : schema.GetKeyColumnNames()) {
@@ -378,6 +373,10 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
                 ColumnFeatures.emplace_back(BuildDefaultColumnFeatures(cId, columns, operators));
             }
         }
+        const auto pred = [](const std::shared_ptr<TColumnFeatures>& l, const std::shared_ptr<TColumnFeatures>& r) {
+            return l->GetColumnId() < r->GetColumnId();
+        };
+        std::sort(ColumnFeatures.begin(), ColumnFeatures.end(), pred);
     }
 }
 

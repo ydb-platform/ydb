@@ -76,7 +76,7 @@ class TestAlterTiering(BaseTestSet):
             rows_written += 1000
             i += 1
             if rows_written > 100000 and i % 10 == 0:
-                scan_result = sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path('store/table')}` WHERE writer == {writer_id}')
+                scan_result = sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path("store/table")}` WHERE writer == {writer_id}')
                 assert scan_result.result_set.rows[0][0] == rows_written
 
     def _change_tiering_rule(self, ctx: TestContext, table: str, tiering_rules: Iterable[str], duration: datetime.timedelta):
@@ -148,5 +148,5 @@ class TestAlterTiering(BaseTestSet):
 
         sth.execute_scheme_query(AlterTable('store/table').set_ttl('P1D', 'timestamp'))
 
-        while sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path('store/table')}`').result_set.rows[0][0]:
+        while sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path("store/table")}`').result_set.rows[0][0]:
             time.sleep(10)

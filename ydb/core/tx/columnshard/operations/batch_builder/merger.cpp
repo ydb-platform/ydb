@@ -1,6 +1,6 @@
 #include "merger.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
 

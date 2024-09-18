@@ -11,6 +11,7 @@ RECURSE(
     chunks_limiter
     dynumber
     folder_service
+    formats
     grpc
     http_proxy
     keys

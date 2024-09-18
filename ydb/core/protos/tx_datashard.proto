@@ -7,7 +7,7 @@ import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/core/protos/kqp.proto";
-import "ydb/core/formats/arrow/protos/ssa.proto";
+import "ydb/library/formats/arrow/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";

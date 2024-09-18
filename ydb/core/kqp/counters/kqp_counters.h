@@ -101,6 +101,7 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
+    void ReportMetadataLatency(TDuration duration);
     void ReportRecompileRequestGet();
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
@@ -207,6 +208,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
     NMonitoring::THistogramPtr CompileCpuTime;
+    NMonitoring::THistogramPtr MetadataLatency;
     NMonitoring::THistogramPtr YdbCompileDuration;
 };
 

@@ -147,6 +147,10 @@ void TKqpCountersBase::Init() {
     QueryLatencies[NKikimrKqp::QUERY_ACTION_ROLLBACK_TX] = KqpGroup->GetHistogram(
         "Query/RollbackTxLatencyMs", NMonitoring::ExponentialHistogram(10, 2, 1));
 
+    // Metadata Latency
+    MetadataLatency = KqpGroup->GetHistogram(
+        "Query/MetadataLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+
     YdbQueryExecuteLatency = YdbGroup->GetNamedHistogram("name",
         "table.query.execution.latency_milliseconds", NMonitoring::ExponentialHistogram(20, 2, 1));
 
@@ -424,6 +428,9 @@ void TKqpCountersBase::ReportQueryLatency(NKikimrKqp::EQueryAction action, const
     }
 }
 
+void TKqpCountersBase::ReportMetadataLatency(const TDuration& duration) {
+    MetadataLatency->Collect(duration.MilliSeconds());
+}
 
 void TKqpCountersBase::ReportTransaction(const TKqpTransactionInfo& txInfo) {
     switch (txInfo.Status) {

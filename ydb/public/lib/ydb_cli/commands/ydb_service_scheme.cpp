@@ -1,5 +1,10 @@
 #include "ydb_service_scheme.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
@@ -247,10 +252,10 @@ int TCommandDescribe::Run(TConfig& config) {
         return TryTopicConsumerDescribeOrFail(driver, result);
     }
     ThrowOnError(result);
-    return PrintPathResponse(driver, result);
+    return PrintPathResponse(driver, result, config);
 }
 
-int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result) {
+int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result, TConfig& config) {
     NScheme::TSchemeEntry entry = result.GetEntry();
     Cout << "<" << EntryTypeToString(entry.Type) << "> " << entry.Name << Endl;
     switch (entry.Type) {
@@ -265,6 +270,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
         return DescribeReplication(driver);
+    case NScheme::ESchemeEntryType::View:
+        return DescribeView(config);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -541,6 +548,50 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     ThrowOnError(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
+}
+
+int TCommandDescribe::PrintViewResponsePretty(const NKikimrSchemeOp::TViewDescription& desc) const {
+    Cout << Endl << "Query text: " << desc.GetQueryText() << Endl;
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeView(TConfig& config) {
+    const NKikimr::NGRpcProxy::TGrpcError* transportError = nullptr;
+    NKikimrClient::TResponse response;
+    {
+        auto clientConfig = NYdbGrpc::TGRpcClientConfig(config.Address);
+        if (config.EnableSsl) {
+            clientConfig.EnableSsl = config.EnableSsl;
+            clientConfig.SslCredentials.pem_root_certs = config.CaCerts;
+        }
+        NKikimr::NGRpcProxy::TGRpcClient client(clientConfig);
+
+        NKikimrClient::TSchemeDescribe request;
+        request.SetPath(Path);
+        if (config.SecurityToken) {
+            request.SetSecurityToken(config.SecurityToken);
+        }
+
+        client.SchemeDescribe(request,
+            [&transportError, &response](const NKikimr::NGRpcProxy::TGrpcError* te, const NKikimrClient::TResponse& r) {
+                if (te) {
+                    transportError = te;
+                } else {
+                    response = r;
+                }
+            }
+        );
+    }
+    if (transportError) {
+        throw yexception() << "grpc transport error message: " << transportError->first
+            << ", code: " << transportError->second;
+    }
+    if (response.status() != NKikimr::NMsgBusProxy::MSTATUS_OK) {
+        throw yexception() << "scheme describe error status: " << response.status()
+            << ", issues: " << NYql::IssuesFromMessageAsString(response.issues());
+    }
+
+    return PrintViewResponsePretty(response.GetPathDescription().GetViewDescription());
 }
 
 namespace {

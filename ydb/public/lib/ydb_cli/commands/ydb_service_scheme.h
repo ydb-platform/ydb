@@ -13,6 +13,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
+namespace NKikimrSchemeOp {
+    class TViewDescription;
+}
+
 namespace NYdb {
 
 namespace NTopic {
@@ -84,7 +88,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result);
+    int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result, TConfig& config);
     int DescribeEntryDefault(NScheme::TSchemeEntry entry);
     int DescribeTable(TDriver& driver);
     int DescribeColumnTable(TDriver& driver);
@@ -99,6 +103,9 @@ private:
 
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+
+    int DescribeView(TConfig& config);
+    int PrintViewResponsePretty(const NKikimrSchemeOp::TViewDescription& result) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;

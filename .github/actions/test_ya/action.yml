@@ -541,7 +541,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         git fetch origin ${{github.event.pull_request.base.sha}} ${{github.event.pull_request.head.sha}}
-        python3 .github/scripts/tests/show_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
+        python3 .github/scripts/tests/get_muted_tests.py --output_folder $PUBLIC_DIR/mute_info/
         FILE_PATH=$PUBLIC_DIR/mute_info/1_new_muted_tests.txt
         SEPARATOR=""
         if [ -f "$FILE_PATH" ]; then

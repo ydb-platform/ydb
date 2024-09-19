@@ -332,23 +332,20 @@ namespace NKikimr::NBsController {
             if (!suppressFailModelChecking) {
                 THashSet<TGroupId> groupsToCheck;
                 for (auto&& [base, overlay] : state.VSlots.Diff()) {
-                    if (base && overlay->second) {
+                if (base && base->second->Group) {
+                    if (!overlay->second || !overlay->second->Group) {
+                        // Disk moved or became inactive
+                        groupsToCheck.emplace(overlay->second->GroupId);
+                    } else {
                         const NKikimrBlobStorage::EVDiskStatus prevStatus = base->second->GetStatus();
                         const NKikimrBlobStorage::EVDiskStatus curStatus = overlay->second->GetStatus();
-                        
-                        // Check groups whose vdisks status has changed to ERROR
-                        if (prevStatus != NKikimrBlobStorage::EVDiskStatus::ERROR && curStatus == NKikimrBlobStorage::EVDiskStatus::ERROR) {
-                            groupsToCheck.emplace(overlay->second->GroupId);
-                        }
 
-                        if (overlay->second->Mood == TMood::Donor) {
-                            // If vdisk is being moved, check the group
+                        if (prevStatus != NKikimrBlobStorage::EVDiskStatus::ERROR && curStatus == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                            // VDisk's status has changed to ERROR
                             groupsToCheck.emplace(overlay->second->GroupId);
                         }
-                    } else if (base) {
-                        // If vdisk is being moved, check the group
-                        groupsToCheck.emplace(base->second->GroupId);
                     }
+                }
                 }
                 for (TGroupId groupId : state.GroupFailureModelChanged) {
                     if (!groupsToCheck.contains(groupId)) {

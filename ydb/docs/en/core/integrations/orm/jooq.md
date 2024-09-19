@@ -62,7 +62,7 @@ An example using the `maven` plugin:
 
 Example of generated classes from [YQL tutorial](../../dev/yql-tutorial/create_demo_tables.md) (full file contents are [available on GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq/src/main/java/ydb/default_schema)):
 
-```
+```text
 ydb/DefaultCatalog.java
 ydb/default_schema
 ydb/default_schema/tables

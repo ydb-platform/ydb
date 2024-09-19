@@ -4,9 +4,9 @@
 
 JOOQ — это библиотека для Java, которая позволяет создавать типобезопасные SQL-запросы путём генерации Java-классов из схемы базы данных и использования удобных конструкторов запросов.
 
-## Генерация Java классов
+## Генерация Java-классов
 
-Генерировать Java классы можно любыми инструментами представленными на [официальном сайте JOOQ](https://www.jooq.org/doc/latest/manual/code-generation/codegen-configuration/), используя две зависимости {{ ydb-short-name }} JDBC Driver и расширение JOOQ для {{ ydb-short-name }}. Также требуется указать два параметра:
+Генерировать Java-классы можно с помощью любых инструментов, представленных на [официальном сайте JOOQ](https://www.jooq.org/doc/latest/manual/code-generation/codegen-configuration/), используя две зависимости: {{ ydb-short-name }} JDBC Driver и расширение JOOQ для {{ ydb-short-name }}. Также необходимо указать два параметра:
 
 - `database.name`: `tech.ydb.jooq.codegen.YdbDatabase` (обязательная настройка)
 - `strategy.name`: `tech.ydb.jooq.codegen.YdbGeneratorStrategy` (рекомендуется к использованию)

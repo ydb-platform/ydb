@@ -59,8 +59,8 @@ NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
 
 class TPartitionCounterWrapper {
 private:
-    bool DoSave;
-    bool DoReport;
+    bool DoSave = false;
+    bool DoReport = false;
     TMaybe<NKikimr::NPQ::TMultiCounter> Counter;
     ui64 CounterValue = 0;
     bool Inited = false;

@@ -22,9 +22,9 @@ SELECT * FROM users;
 ```
 email | name | user_id
 ----- | ----- | -----
-alice@example.com | Alice | 1
-bob@example.com | Bob | 2
-John@example.com | John | 3
+`alice@example.com` | Alice | 1
+`bob@example.com` | Bob | 2
+`john@example.com` | John | 3
 
 Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной целочисленной колонкой:
 ``` yql

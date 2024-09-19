@@ -77,6 +77,10 @@ const std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
     return items;
 }
 
+bool IsOptionalOrNull(const TType* type) {
+    return type->IsOptional() || type->IsNull() || type->IsPg();
+}
+
 const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
     TRuntimeNode& leftArg, TType* leftTuple, const TRuntimeNode& dictNode
@@ -122,6 +126,7 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
         for (const auto& payloadItem : payloadItems) {
             MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
             const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
+                                : IsOptionalOrNull(payloadItem) ? payloadItem
                                 : pgmBuilder.NewOptionalType(payloadItem);
             dictBlockItems.emplace_back(pgmBuilder.NewBlockType(itemType, TBlockType::EShape::Many));
         }

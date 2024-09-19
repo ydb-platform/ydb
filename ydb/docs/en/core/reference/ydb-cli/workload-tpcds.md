@@ -1,12 +1,12 @@
 # TPC-DS workload
 
-The workload is based on the TPC-DS [documentation](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), and the queries and table schemas are adapted for {{ ydb-short-name }}.
+The workload is based on the TPC-DS [documentation](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
 
-The test generates a typical workload in the decision support area.
+This benchmark generates a workload typical for decision support systems.
 
 ## Common command options
 
-All commands support the common option `--path`, which specifies the path to the directory with tables in the database:
+All commands support the common option `--path`, which specifies the path to the directory containing benchmark tables in the database:
 
 ```bash
 {{ ydb-cli }} workload tpcds --path tpcds/s1 ...
@@ -14,9 +14,9 @@ All commands support the common option `--path`, which specifies the path to the
 
 ### Available options { #common_options }
 
-Option name | Option description
----|---
-`--path` or `-p` | Path to the directory with tables. Default value is `/`
+Name | Description | Default value
+---|---|---
+`--path` or `-p` | Path to the directory with tables. | `/`
 
 ## Initializing the load test {#init}
 
@@ -26,7 +26,7 @@ Before running the benchmark, create a table:
 {{ ydb-cli }} workload tpcds --path tpcds/s1 init
 ```
 
-See the description of the command to run the load:
+See the command description to run the load:
 
 ```bash
 {{ ydb-cli }} workload tpcds init --help
@@ -36,13 +36,13 @@ See the description of the command to run the load:
 
 ## Loading data into the table { #load }
 
-Load data into the table. The data will be generated directly by {{ ydb-cli }}:
+The data will be generated and loaded into the table directly by {{ ydb-short-name }} CLI:
 
 ```bash
 {{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
 ```
 
-See the description of the command to load the data:
+See the command description:
 
 ```bash
 {{ ydb-cli }} workload tpcds import --help
@@ -50,14 +50,14 @@ See the description of the command to load the data:
 
 ### Available options {#load_files_options}
 
-Option name | Option description
----|---
-`--scale <value>` | Data scale. Powers of ten are usually used.
-`--tables <value>` | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`. All tables are created by default.
-`--proccess-count <value>` or `-C <value>` | Data generation can be split into several processes, this parameter specifies the number of processes. Default value: 1.
-`--proccess-index <value>` or `-i <value>` | Data generation can be split into several processes, this parameter specifies the process number. Default value: 0.
-`--state <path>` | Path to the download state file. If the download was interrupted for some reason, the download will be continued from the same place when it is started again.
-`--clear-state` | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning.
+| Name                                  | Description                                                                                                                                                    | Default value |
+|---------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `--scale <value>`                     | Data scale. Typically, powers of ten are used.                                                                                                                  |               |
+| `--tables <value>`                    | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.                           | All tables    |
+| `--process-count <value>` or `-C <value>` | Specifies the number of processes for parallel data generation.                                                                                                  | `1`           |
+| `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                                              | `0`           |
+| `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.                                |               |
+| `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                             |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -71,7 +71,7 @@ Run the load:
 
 During the benchmark, load statistics are displayed for each request.
 
-See the description of the command to run the load:
+See the command description:
 
 ```bash
 {{ ydb-cli }} workload tpcds run --help
@@ -81,13 +81,13 @@ See the description of the command to run the load:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-Option name | Option description
----|---
-`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. No default value.
+Name | Description | Default value 
+---|---|---
+`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |
 
-## Test data cleaning { #clean }
+## Test data cleanup { #cleanup }
 
-Run cleaning:
+Run cleanup:
 
 ```bash
 {{ ydb-cli }} workload clickbench --path clickbench/hits clean

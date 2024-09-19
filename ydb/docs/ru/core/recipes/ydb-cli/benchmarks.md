@@ -2,11 +2,13 @@
 
 В {{ ydb-short-name }} встроен инструментарий для проведения нагрузочного тестирования несколькими стандартными бенчмарками:
 
-  * [TPC-H](https://tpc.org/tpch/)
-  * [TPC-DS](https://tpc.org/tpcds/)
-  * [ClickBench](https://benchmark.clickhouse.com/)
+| Бенчмаркам                           | Справка                                                  |
+|--------------------------------------|----------------------------------------------------------|
+| [TPC-H](https://tpc.org/tpch/)       | [tpch](../../reference/ydb-cli/workload-tpch.md)|
+| [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
+| [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
 
-Работают сходным образом, детальное описание для каждого см. в соответствующих разделах, ссылки ниже.
+Работают сходным образом, детальное описание для каждого см. в соответствующих разделах, ссылки выше.
 Все команды для работы с бенчмарками собраны в соответствующие группы, при этом для всех команд единым образом задается путь в БД:
 
 ```bash
@@ -17,11 +19,11 @@
 
 Нагрузочное тестирование можно разбить на 3 этапа:
 
-  1. Подготовка данных
-  1. Тестирование
-  1. Очистка
+  1. [Подготовка данных](#data-preparation)
+  1. [Тестирование](#testing)
+  1. [Очистка](#cleanup)
 
-## Подготовка данных
+## Подготовка данных {#data-preparation}
 
 Состоит из двух этапов, это инициализация таблиц и наполнение их данными.
 
@@ -64,7 +66,7 @@
 {{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
 ```
 
-## Тестирование
+## Тестирование {#testing}
 
 Непосредственно тестирование выполняется командой `run`. Её поведение практически одинаково для разных бенчмарков, хотя некоторые различия всё-таки присутствуют.
 
@@ -83,7 +85,7 @@
 [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
 [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
 
-## Очистка
+## Очистка {#cleanup}
 
 После выполнения всего необходимого тестирования данные могут быть удалены из БД.
 Сделано это может быть при помощи команды `clean`:
@@ -95,6 +97,6 @@
 ```
 
 Подробное описание см. в соответствующих разделах:
-[clickbench clean](../../reference/ydb-cli/workload-click-bench.md#clean)
-[tpch clean](../../reference/ydb-cli/workload-tpch.md#clean)
-[tpcds clean](../../reference/ydb-cli/workload-tpcds.md#clean)
+[clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
+[tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
+[tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)

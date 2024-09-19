@@ -8,17 +8,17 @@ The dataset for this benchmark was obtained from an actual traffic recording of 
 
 ## Common command options
 
-All commands support a common option `--path`, which specifies the path to a table in the database:
+All commands support the common option `--path`, which specifies the path to a table in the database:
 
 ```bash
 {{ ydb-cli }} workload clickbench --path clickbench/hits ...
 ```
 
-### Available options { #common_options }
+### Available options {#common_options}
 
-Option name | Option description
----|---
-`--path` or `-p` | Path to the table. Default value is `clickbench/hits`
+| Name          | Description                                                       | Default value             |
+|----------------------|---------------------------------------------------------------------------|---------------------------|
+| `--path` or `-p`     | Specifies the table path.                                           | `clickbench/hits`         |
 
 ## Initializing a load test { #init }
 
@@ -36,36 +36,33 @@ See the description of the command to init the data load:
 
 ### Available parameters { #init_options }
 
-Option name | Option description
----|---
-`--store <value>` | Table storage type. Possible values: `row`, `column`, `external-s3`. Default value is `row`.
-`--external-s3-prefix <value>` | Only relevant for external tables. Root path to the dataset in S3 storage.
-`--external-s3-endpoint <value>` or `-e <value>` | Only relevant for external tables. Link to S3 Bucket with data.
-
-`--string` | Use `String` type for text fields. `Utf8` is used by default.
-
-`--datetime` | Use `Date`, `Datetime` and `Timestamp` type for time-related fields. `Date32`, `Datetime64` and `Timestamp64` are used by default.
-
-`--clear` | If the table at the specified path has already been created, it will be deleted.
+| Name          | Description                                                       | Default value             |
+|--------------------------------------------------|---------------------------------------------------------------------------|----------------------------|
+| `--store <value>`                                | Table storage type. Possible values: `row`, `column`, `external-s3`.      | `row`.                     |
+| `--external-s3-prefix <value>`                   | Only relevant for external tables. Root path to the dataset in S3 storage.|                            |
+| `--external-s3-endpoint <value>` or `-e <value>` | Only relevant for external tables. Link to S3 Bucket with data.           |                            |
+| `--string`                                       | Use `String` type for text fields. `Utf8` is used by default.             |                            |
+| `--datetime`                                     | Use `Date`, `Datetime` and `Timestamp` type for time-related fields.      |`Date32`, `Datetime64` and `Timestamp64`|
+| `--clear`                                        | If the table at the specified path has already been created, it will be deleted.|                      |
 
 ## Loading data into a table { #load }
 
-Load data into a table. To do this, download the archive with the data, then load the data into the table:
+Download the data archive, then load the data into the table:
 
 ```bash
 wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 {{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz
 ```
 
-You can use both unpacked and packed csv and tsv files, as well as directories with such files, as source files.
+For source files, you can use CSV and TSV files, as well as directories containing such files. They can be either compressed or not.
 
 ### Available parameters { #load_files_options }
 
-Option name | Option description
----|---
-`--input <path>` or `-i <path>` | Path to source data files. Both unpacked and packed csv and tsv files, as well as directories with such files, are supported. The data can be downloaded from the official ClickBench website: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). To speed up the download, you can split these files into smaller parts, in which case the parts will be downloaded in parallel.
-`--state <path>` | Path to the download state file. If the download was interrupted for some reason, the download will continue from the same place when restarted.
-`--clear-state` | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning.
+| Name                      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--input <path>` or `-i <path>` | Path to the source data files. Both unpacked and packed CSV and TSV files, as well as directories containing such files, are supported. Data can be downloaded from the official ClickBench website: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). To speed up the process, these files can be split into smaller parts, allowing parallel downloads. |
+| `--state <path>`           | Path to the download state file. If the download is interrupted, it will resume from the same point when restarted.                                                                                                                                                                                                                                                                                                                                           |
+| `--clear-state`            | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                                                                                                                                                                                                                                                                                                                          |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -79,7 +76,7 @@ Run the load:
 
 During the test, load statistics are displayed for each request.
 
-See the description of the command to run the load:
+See the command description to run the load:
 
 ```bash
 {{ ydb-cli }} workload clickbench run --help
@@ -89,15 +86,15 @@ See the description of the command to run the load:
 
 ### ClickBench-specific options { #run_clickbench_options }
 
-Option name | Option description
+Name | Description | Default value
 ---|---
-`--ext-queries <queries>` or `-q <queries>` | External queries to perform the load, separated by semicolons. Not required by default.
-`--ext-queries-file <name>` | The name of the file in which external queries to perform the load can be specified, separated by semicolons. Not required by default.
-`--ext-query-dir <name>` | Directory with external queries to perform the load. Queries must be located in files named `q[0-42].sql`. No default value.
-`--ext-results-dir <name>` | Directory with external query results for comparison. Results must be located in files named `q[0-42].sql`. No default value.
-`--check-cannonical` or `-c` | Use special deterministic inner queries and check the results against canonical ones.
+`--ext-queries <queries>` or `-q <queries>` | External queries to execute during the load, separated by semicolons. |
+`--ext-queries-file <name>` | Name of the file containing external queries to execute during the load, separated by semicolons. |
+`--ext-query-dir <name>` | Directory containing external queries for the load. Queries should be in files named `q[0-42].sql`. |
+`--ext-results-dir <name>` | Directory containing external query results for comparison. Results should be in files named `q[0-42].sql`. |
+`--check-canonical` or `-c` | Use special deterministic internal queries and compare the results against canonical ones. |
 
-## Clean test data { #clean }
+## Cleanup test data { #cleanup }
 
 Run cleanup:
 

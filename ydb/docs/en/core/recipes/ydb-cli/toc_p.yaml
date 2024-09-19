@@ -1,5 +1,5 @@
 items:
 - name: Convert table type
   href: convert-table-type.md
-- name: Нагрузочное тестирование
+- name: Benchmarks
   href: benchmarks.md

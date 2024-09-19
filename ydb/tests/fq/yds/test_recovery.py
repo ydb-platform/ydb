@@ -159,6 +159,7 @@ class TestRecovery(TestYdsBase):
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
         )
+
         # restart node with CA
         node_to_restart = None
         for node_index in kikimr.control_plane.kikimr_cluster.nodes:

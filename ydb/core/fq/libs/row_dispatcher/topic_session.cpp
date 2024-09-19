@@ -113,7 +113,6 @@ private:
         NFq::NRowDispatcherProto::TEvStartSession Settings;
         NActors::TActorId ReadActorId;
         std::unique_ptr<TJsonFilter> Filter;        // empty if no predicate
-        ui64 EventQueueId = 0;
         TQueue<std::pair<ui64, TString>> Buffer;
         ui64 UsedSize = 0;
         bool DataArrivedSent = false;
@@ -559,7 +558,6 @@ void TTopicSession::SendData(ClientsInfo& info) {
     event->Record.SetNextMessageOffset(*info.NextMessageOffset);
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
     event->ReadActorId = info.ReadActorId;
-    
     while (!info.Buffer.empty()) {
         const auto& [offset, json] = info.Buffer.front();
         info.UsedSize -= json.size();
@@ -735,9 +733,9 @@ void TTopicSession::PrintInternalState() {
     str << "Clients:\n";
     str << "UsedSize: " << UsedSize << "\n";
     for (auto& [readActorId, info] : Clients) {
-        str << "    read actor id " << readActorId << ", queue id " << info.EventQueueId 
-            << ", buffer size " << info.Buffer.size() << ", used size: " << info.UsedSize
-            << ", data arrived sent " << info.DataArrivedSent << "\n";
+        str << "    read actor id " << readActorId << ", buffer size " << info.Buffer.size() 
+        << ", used size: " << info.UsedSize << ", data arrived sent " << info.DataArrivedSent 
+        << ", next offset " << info.NextMessageOffset << "\n";
     }
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
 }

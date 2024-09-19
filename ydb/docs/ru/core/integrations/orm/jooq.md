@@ -60,7 +60,7 @@ JOOQ — это библиотека для Java, которая позволя�
 </plugin>
 ```
 
-Пример сгенерированных классов из [туториал по YQL](../../dev/yql-tutorial/create_demo_tables.md) (сгенерированные классы доступны по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq/src/main/java/ydb/default_schema)):
+Пример сгенерированных классов из [туториала по YQL](../../dev/yql-tutorial/create_demo_tables.md) (их полный код [доступен на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq/src/main/java/ydb/default_schema)):
 
 ```
 ydb/DefaultCatalog.java

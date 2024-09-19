@@ -71,7 +71,6 @@ namespace NKikimr::NEvWrite {
     void TShardWriter::Bootstrap() {
         SendWriteRequest();
         Become(&TShardWriter::StateMain);
-        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
     void TShardWriter::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -139,7 +138,6 @@ namespace NKikimr::NEvWrite {
     
     void TShardWriter::HandleTimeout(const TActorContext& /*ctx*/) {
         RetryWriteRequest(false);
-        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
     bool TShardWriter::RetryWriteRequest(const bool delayed) {

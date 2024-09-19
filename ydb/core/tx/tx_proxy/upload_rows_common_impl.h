@@ -278,7 +278,7 @@ public:
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
         , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
-        , ImmediateWrite(AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert())
+        , ImmediateWrite(AppData()->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert())
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Span(std::move(span))
     {}

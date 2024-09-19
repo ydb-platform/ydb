@@ -152,6 +152,10 @@ public:
         return IsFinished_;
     }
 
+    NUdf::TUnboxedValue* GetRawInputFields() {
+        return Inputs_.data();
+    }
+
 private:
     void AddItem(const TBlockItem& item, size_t idx) {
         Builders_[idx]->Add(item);

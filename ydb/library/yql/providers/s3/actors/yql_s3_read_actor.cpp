@@ -1164,11 +1164,11 @@ private:
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 } catch (const TCodeLineException& ex) {
-                    if (ex.Code != TIssuesIds::KIKIMR_BAD_REQUEST) {
+                    LOG_CORO_D(ex.what());
+                    
+                    if (ex.Code != NFq::TIssuesIds::BAD_REQUEST) {
                         throw ex;
                     }
-
-                    LOG_CORO_D(ex.what());
                     Issues.AddIssue(ex.GetRawMessage());
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();

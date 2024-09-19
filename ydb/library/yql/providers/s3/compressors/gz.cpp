@@ -48,7 +48,7 @@ bool TReadBuffer::nextImpl() {
 
         switch (const auto code = inflate(&Z_, Z_SYNC_FLUSH)) {
             case Z_NEED_DICT:
-                ythrow TCodeLineException(TIssuesIds::UNEXPECTED) << "Need dict.";
+                ythrow TCodeLineException(NFq::TIssuesIds::UNEXPECTED) << "Need dict.";
             case Z_STREAM_END:
                 YQL_ENSURE(inflateReset(&Z_) == Z_OK, "Inflate reset error: " << GetErrMsg(Z_));
                 [[fallthrough]];
@@ -59,7 +59,7 @@ bool TReadBuffer::nextImpl() {
                 }
                 break;
             default:
-                ythrow TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << GetErrMsg(Z_) << ", code: " << code;
+                ythrow TCodeLineException(NFq::TIssuesIds::BAD_REQUEST) << GetErrMsg(Z_) << ", code: " << code;
         }
     }
 }
@@ -116,7 +116,7 @@ private:
             Z_.avail_out = OutputBufferSize;
 
             const auto code = deflate(&Z_, done ? Z_FINISH : Z_BLOCK);
-            YQL_ENSURE_CODELINE((done ? Z_STREAM_END : Z_OK) == code, TIssuesIds::KIKIMR_BAD_REQUEST, "code: " << code << ", error: " << GetErrMsg(Z_));
+            YQL_ENSURE_CODELINE((done ? Z_STREAM_END : Z_OK) == code, NFq::TIssuesIds::BAD_REQUEST, "code: " << code << ", error: " << GetErrMsg(Z_));
 
             if (const auto size = OutputBufferSize - Z_.avail_out)
                 TOutputQueue::Push(TString(OutputBuffer.get(), size));

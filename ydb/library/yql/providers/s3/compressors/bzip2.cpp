@@ -59,7 +59,7 @@ bool TReadBuffer::nextImpl() {
 
                 break;
             default:
-                ythrow TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Bzip error: " << code;
+                ythrow TCodeLineException(NFq::TIssuesIds::BAD_REQUEST) << "Bzip error: " << code;
         }
     }
 }

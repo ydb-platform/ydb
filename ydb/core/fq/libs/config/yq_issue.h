@@ -6,12 +6,12 @@
 
 namespace NFq {
 
-NYql::TIssue MakeFatalIssue(NYql::TIssueCode id, const TString& message);
+NYql::TIssue MakeFatalIssue(TIssuesIds::EIssueCode id, const TString& message);
 
-NYql::TIssue MakeErrorIssue(NYql::TIssueCode id, const TString& message);
+NYql::TIssue MakeErrorIssue(TIssuesIds::EIssueCode id, const TString& message);
 
-NYql::TIssue MakeWarningIssue(NYql::TIssueCode id, const TString& message);
+NYql::TIssue MakeWarningIssue(TIssuesIds::EIssueCode id, const TString& message);
 
-NYql::TIssue MakeInfoIssue(NYql::TIssueCode id, const TString& message);
+NYql::TIssue MakeInfoIssue(TIssuesIds::EIssueCode id, const TString& message);
 
 }

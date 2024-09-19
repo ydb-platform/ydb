@@ -73,10 +73,10 @@ bool TReadBuffer::nextImpl() {
                 SubstreamFinished_ = true;
                 break;
             case BROTLI_DECODER_RESULT_ERROR:
-                ythrow TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Brotli decoder failed to decompress buffer: "
+                ythrow TCodeLineException(NFq::TIssuesIds::BAD_REQUEST) << "Brotli decoder failed to decompress buffer: "
                                     << BrotliDecoderErrorString(BrotliDecoderGetErrorCode(DecoderState_));
             case BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT:
-                YQL_ENSURE_CODELINE(availableOut != OutBuffer.size(),TIssuesIds::KIKIMR_BAD_REQUEST, "Buffer passed to read in Brotli decoder is too small");
+                YQL_ENSURE_CODELINE(availableOut != OutBuffer.size(),NFq::TIssuesIds::BAD_REQUEST, "Buffer passed to read in Brotli decoder is too small");
                 break;
             default:
                 break;
@@ -85,7 +85,7 @@ bool TReadBuffer::nextImpl() {
     } while (!decompressedSize && result == BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT && !InputExhausted_);
 
     if (!SubstreamFinished_ && !decompressedSize) {
-        ythrow TCodeLineException(TIssuesIds::KIKIMR_BAD_REQUEST) << "Input stream is incomplete";
+        ythrow TCodeLineException(NFq::TIssuesIds::BAD_REQUEST) << "Input stream is incomplete";
     }
 
     if (decompressedSize > 0)
@@ -99,7 +99,7 @@ bool TReadBuffer::nextImpl() {
 void TReadBuffer::InitDecoder() {
     DecoderState_ = BrotliDecoderCreateInstance(&TAllocator::Allocate, &TAllocator::Deallocate, nullptr);
     if (!DecoderState_) {
-        ythrow TCodeLineException(TIssuesIds::UNEXPECTED) << "Brotli decoder initialization failed";
+        ythrow TCodeLineException(NFq::TIssuesIds::UNEXPECTED) << "Brotli decoder initialization failed";
     }
 }
 

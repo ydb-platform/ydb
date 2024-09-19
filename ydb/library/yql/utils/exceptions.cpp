@@ -4,7 +4,7 @@
 
 namespace NYql {
 
-TCodeLineException::TCodeLineException(TIssueCode code)
+TCodeLineException::TCodeLineException(NFq::TIssuesIds::EIssueCode code)
     : SourceLocation("", 0)
     , Code(code)
 {}

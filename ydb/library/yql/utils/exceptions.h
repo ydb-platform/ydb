@@ -1,7 +1,6 @@
 #pragma once
 
 #include <util/generic/yexception.h>
-#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 
 namespace NYql {
 
@@ -10,9 +9,9 @@ struct TCodeLineException: public yexception {
 
     TSourceLocation SourceLocation;
     mutable TString Message;
-    NFq::TIssuesIds::EIssueCode Code;
+    ui32 Code;
 
-    TCodeLineException(NFq::TIssuesIds::EIssueCode code);
+    TCodeLineException(ui32 code);
 
     TCodeLineException(const TSourceLocation& sl, const TCodeLineException& t);
 

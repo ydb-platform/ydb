@@ -3,7 +3,7 @@
 #include <util/generic/size_literals.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/exceptions.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
 namespace NYql {
@@ -36,13 +36,13 @@ bool TReadBuffer::nextImpl() {
             zIn.pos = Offset_ = 0;
             if (!zIn.size) {
                 // end of stream, need to check that there is no uncompleted blocks
-                YQL_ENSURE_CODELINE(!returnCode, NFq::TIssuesIds::BAD_REQUEST, "Incomplete block.");
+                YQL_ENSURE_CODELINE(!returnCode, NYql::NDqProto::StatusIds::BAD_REQUEST, "Incomplete block.");
                 Finished_ = true;
                 break;
             }
         }
         returnCode = ::ZSTD_decompressStream(ZCtx_, &zOut, &zIn);
-        YQL_ENSURE_CODELINE(!::ZSTD_isError(returnCode), NFq::TIssuesIds::BAD_REQUEST, "Decompress failed: " << ::ZSTD_getErrorName(returnCode));
+        YQL_ENSURE_CODELINE(!::ZSTD_isError(returnCode), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompress failed: " << ::ZSTD_getErrorName(returnCode));
         if (!returnCode) {
             // The frame is over, prepare to (maybe) start a new frame
             ::ZSTD_initDStream(ZCtx_);
@@ -67,7 +67,7 @@ public:
         : ZCtx_(::ZSTD_createCStream())
     {
         const auto ret = ::ZSTD_initCStream(ZCtx_, level);
-        YQL_ENSURE_CODELINE(!::ZSTD_isError(ret), NFq::TIssuesIds::BAD_REQUEST, "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
+        YQL_ENSURE_CODELINE(!::ZSTD_isError(ret), NYql::NDqProto::StatusIds::BAD_REQUEST, "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
     }
 
     ~TCompressor() {

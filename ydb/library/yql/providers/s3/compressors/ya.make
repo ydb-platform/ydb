@@ -9,6 +9,7 @@ PEERDIR(
     contrib/libs/zstd
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/utils
+    ydb/library/yql/dq/actors/protos
 )
 
 ADDINCL(

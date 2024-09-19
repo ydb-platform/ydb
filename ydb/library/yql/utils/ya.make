@@ -43,7 +43,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/fq/libs/config/protos
     ydb/library/actors/util
     ydb/library/yql/core/issue/protos
     library/cpp/digest/md5

@@ -1165,12 +1165,8 @@ private:
                     RetryStuff->Cancel();
                 } catch (const TCodeLineException& ex) {
                     LOG_CORO_D(ex.what());
-                    
-                    if (ex.Code != NFq::TIssuesIds::BAD_REQUEST) {
-                        throw ex;
-                    }
                     Issues.AddIssue(ex.GetRawMessage());
-                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
                     RetryStuff->Cancel();
                 }
             }

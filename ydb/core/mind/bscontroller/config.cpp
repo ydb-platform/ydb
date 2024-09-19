@@ -332,20 +332,20 @@ namespace NKikimr::NBsController {
             if (!suppressFailModelChecking) {
                 THashSet<TGroupId> groupsToCheck;
                 for (auto&& [base, overlay] : state.VSlots.Diff()) {
-                if (base && base->second->Group) {
-                    if (!overlay->second || !overlay->second->Group) {
-                        // Disk moved or became inactive
-                        groupsToCheck.emplace(overlay->second->GroupId);
-                    } else {
-                        const NKikimrBlobStorage::EVDiskStatus prevStatus = base->second->GetStatus();
-                        const NKikimrBlobStorage::EVDiskStatus curStatus = overlay->second->GetStatus();
+                    if (base && base->second->Group) {
+                        if (!overlay->second || !overlay->second->Group) {
+                            // Disk moved or became inactive
+                            groupsToCheck.emplace(base->second->GroupId);
+                        } else {
+                            const NKikimrBlobStorage::EVDiskStatus prevStatus = base->second->GetStatus();
+                            const NKikimrBlobStorage::EVDiskStatus curStatus = overlay->second->GetStatus();
 
-                        if (prevStatus != NKikimrBlobStorage::EVDiskStatus::ERROR && curStatus == NKikimrBlobStorage::EVDiskStatus::ERROR) {
-                            // VDisk's status has changed to ERROR
-                            groupsToCheck.emplace(overlay->second->GroupId);
+                            if (prevStatus != NKikimrBlobStorage::EVDiskStatus::ERROR && curStatus == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                                // VDisk's status has changed to ERROR
+                                groupsToCheck.emplace(overlay->second->GroupId);
+                            }
                         }
                     }
-                }
                 }
                 for (TGroupId groupId : state.GroupFailureModelChanged) {
                     if (!groupsToCheck.contains(groupId)) {

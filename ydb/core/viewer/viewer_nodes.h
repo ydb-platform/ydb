@@ -155,6 +155,8 @@ class TJsonNodes : public TViewerPipeClient {
         TString Database;
         ui32 MissingDisks = 0;
         float DiskSpaceUsage = 0; // the highest
+        float CpuUsage = 0; // total, normalized
+        float LoadAverage = 0; // normalized
         bool Problems = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -249,6 +251,22 @@ class TJsonNodes : public TViewerPipeClient {
                         }
                     }
                 }
+            }
+        }
+
+        void CalcCpuUsage() {
+            float usage = 0;
+            int threads = 0;
+            for (const auto& pool : SystemState.GetPoolStats()) {
+                usage += pool.GetUsage() * pool.GetThreads();
+                threads += pool.GetThreads();
+            }
+            CpuUsage = usage / threads;
+        }
+
+        void CalcLoadAverage() {
+            if (SystemState.GetNumberOfCpus() && SystemState.LoadAverageSize() > 0) {
+                LoadAverage = SystemState.GetLoadAverage(0) / SystemState.GetNumberOfCpus();
             }
         }
 
@@ -434,6 +452,14 @@ class TJsonNodes : public TViewerPipeClient {
                     return {};
             }
         }
+
+        void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState) {
+            SystemState.MergeFrom(systemState);
+            Cleanup();
+            CalcDatabase();
+            CalcCpuUsage();
+            CalcLoadAverage();
+        }
     };
 
     struct TNodeGroup {
@@ -494,6 +520,10 @@ class TJsonNodes : public TViewerPipeClient {
         { ENodeFields::Uptime, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Version, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::NodeName, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::CPU, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::Memory, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::LoadAverage, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::Database, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Missing, TFieldsType().set(+ENodeFields::PDisks) },
     };
 
@@ -996,43 +1026,69 @@ public:
             switch (SortBy) {
                 case ENodeFields::NodeId:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetNodeId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::HostName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetHostName(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::NodeName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetNodeName(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::DC:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetDataCenterId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Rack:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetRackId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Version:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetVersion(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Uptime:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetStartTime(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Memory:
+                    SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetMemoryUsed(); }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::CPU:
+                    SortCollection(NodeView, [](const TNode* node) { return node->CpuUsage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::LoadAverage:
+                    SortCollection(NodeView, [](const TNode* node) { return node->LoadAverage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::Missing:
+                    SortCollection(NodeView, [](const TNode* node) { return node->MissingDisks; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::DiskSpaceUsage:
+                    SortCollection(NodeView, [](const TNode* node) { return node->DiskSpaceUsage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::Database:
+                    SortCollection(NodeView, [](const TNode* node) { return node->Database; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
                 case ENodeFields::SubDomainKey:
-                case ENodeFields::Database:
                 case ENodeFields::DisconnectTime:
                 case ENodeFields::COUNT:
                     break;
             }
-            NeedSort = false;
-            InvalidateNodes();
+            if (!NeedSort) {
+                InvalidateNodes();
+            }
         }
     }
 
@@ -1637,9 +1693,7 @@ public:
                         TNodeId nodeId = systemInfo.GetNodeId();
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->SystemState.MergeFrom(systemInfo);
-                            node->Cleanup();
-                            node->CalcDatabase();
+                            node->MergeFrom(systemInfo);
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -1655,9 +1709,7 @@ public:
                     if (systemState.SystemStateInfoSize() > 0) {
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->SystemState.MergeFrom(systemState.GetSystemStateInfo(0));
-                            node->Cleanup();
-                            node->CalcDatabase();
+                            node->MergeFrom(systemState.GetSystemStateInfo(0));
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -2260,6 +2312,12 @@ public:
                           * `Rack`
                           * `Version`
                           * `Uptime`
+                          * `Memory`
+                          * `CPU`
+                          * `LoadAverage`
+                          * `Missing`
+                          * `DiskSpaceUsage`
+                          * `Database`
                     required: false
                     type: string
                   - name: group

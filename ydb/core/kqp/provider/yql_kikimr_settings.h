@@ -172,6 +172,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
     ui64 DefaultEnableSpillingNodes = 0;
+    bool EnableAntlr4Parser = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

@@ -525,7 +525,7 @@ private:
                                            name.c_str(), typeName.c_str());
                     return false;
                 }
-                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                auto typeInRequest = NScheme::TTypeInfo(typeDesc);
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
@@ -847,7 +847,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {

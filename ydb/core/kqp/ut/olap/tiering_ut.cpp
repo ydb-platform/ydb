@@ -23,6 +23,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+        Sleep(TDuration::Seconds(5));
 
         localHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
@@ -103,6 +104,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+        Sleep(TDuration::Seconds(5));
 
         localHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");

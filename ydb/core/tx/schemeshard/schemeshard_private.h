@@ -211,23 +211,25 @@ struct TEvPrivate {
         TString ObjectId;
         TConclusion<NMetadata::NContainer::TObjectSnapshotBase::TPtr> Result;
 
-        explicit TEvObjectModificationResult(TString typeId, TString objectId, TConclusion<NMetadata::NContainer::TObjectSnapshotBase::TPtr> result)
-            : TypeId(std::move(typeId))
-            , ObjectId(std::move(objectId))
-            , Result(std::move(result)) {
+        explicit TEvObjectModificationResult(
+            const TString& typeId, const TString& objectId, const TConclusion<NMetadata::NContainer::TObjectSnapshotBase::TPtr>& result)
+            : TypeId(typeId)
+            , ObjectId(objectId)
+            , Result(result) {
             if (Result.IsSuccess() && Result.GetResult()) {
-                AFL_VERIFY(Result.GetResult()->GetTypeId() == typeId)("result", Result.GetResult()->GetTypeId())("type_id", typeId);
+                AFL_VERIFY(Result.GetResult()->GetTypeId() == TypeId)("result", Result.GetResult()->GetTypeId())("type_id", TypeId);
             }
         }
     };
     
     struct TEvInitializeObjectMetadata: public TEventLocal<TEvInitializeObjectMetadata, EvInitializeObjectMetadata> {
         TString TypeId;
-        NMetadata::NContainer::TAbstractObjectContainer Snapshot;
+        std::shared_ptr<NMetadata::NContainer::TAbstractObjectContainer> Snapshot;
 
-        explicit TEvInitializeObjectMetadata(TString typeId, NMetadata::NContainer::TAbstractObjectContainer snapshot)
-            : TypeId(std::move(typeId))
+        explicit TEvInitializeObjectMetadata(const TString& typeId, std::shared_ptr<NMetadata::NContainer::TAbstractObjectContainer> snapshot)
+            : TypeId(typeId)
             , Snapshot(std::move(snapshot)) {
+            AFL_VERIFY(Snapshot);
         }
     };
 }; // TEvPrivate

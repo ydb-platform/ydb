@@ -61,8 +61,16 @@ namespace NKqp {
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // TODO: improve code
+        while (true) {
+            auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
+            if (result.GetStatus() == EStatus::GENERIC_ERROR && result.GetIssues().ToOneLineString().equal("TIER metadata hasn't been initialized on scheme shard yet.")) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return;
+        }
     }
 
     TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
@@ -75,8 +83,17 @@ namespace NKqp {
                 }
             ]
         })";
-        auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // TODO: improve code
+        while (true) {
+            auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
+            if (result.GetStatus() == EStatus::GENERIC_ERROR && result.GetIssues().ToOneLineString().equal("TIERING_RULE metadata hasn't been initialized on scheme shard yet.")) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            Cerr << "aboba " << result.GetIssues().ToOneLineString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return ruleName;
+        }
         return ruleName;
     }
 

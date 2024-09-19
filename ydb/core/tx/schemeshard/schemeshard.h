@@ -58,8 +58,6 @@ struct TEvSchemeShard {
         EvPublishTenantResult,  // 271125012
         EvLogin,
         EvLoginResult,
-        EvModifyObject,
-        EvModifyObjectResult,
 
 
         EvBackupDatashard = EvModifySchemeTransaction + 6 * 512,
@@ -70,6 +68,8 @@ struct TEvSchemeShard {
         EvProcessingResponse,   // unused
 
         EvOwnerActorAck,
+        EvModifyObject,
+        EvModifyObjectResult,
 
         EvEnd
     };

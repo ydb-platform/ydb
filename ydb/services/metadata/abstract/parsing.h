@@ -36,8 +36,13 @@ private:
     YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
     TFeatures Features;
     TResetFeatures ResetFeatures;
-    // TODO: Consider adding method MakeGeaturesExtractor, remove FeaturesExtractor from fields
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
+
+private:
+    void InitFeaturesExtractor() {
+        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
+    }
+
 public:
     TObjectSettingsImpl() = default;
 
@@ -45,9 +50,9 @@ public:
         : TypeId(typeId)
         , ObjectId(objectId)
         , Features(features)
-        , ResetFeatures(resetFeatures)
-        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features, ResetFeatures))
-        {}
+        , ResetFeatures(resetFeatures) {
+        InitFeaturesExtractor();
+    }
 
     TFeaturesExtractor& GetFeaturesExtractor() const {
         Y_ABORT_UNLESS(!!FeaturesExtractor);
@@ -88,7 +93,7 @@ public:
                 }
             }
         }
-        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
+        InitFeaturesExtractor();
         return true;
     }
 
@@ -127,6 +132,7 @@ public:
         for (const TString& feature : serialized.GetResetFeatures()) {
             ResetFeatures.emplace(feature);
         }
+        InitFeaturesExtractor();
         return true;
     }
 };

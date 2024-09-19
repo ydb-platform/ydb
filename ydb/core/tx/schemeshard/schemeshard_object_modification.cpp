@@ -34,14 +34,13 @@ void TSchemeShard::Handle(const TEvPrivate::TEvObjectModificationResult::TPtr& e
 void TSchemeShard::Handle(const TEvPrivate::TEvInitializeObjectMetadata::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvInitializeObjectMetadata"
-            << ", at schemeshard: " << TabletID() << ", typeId: " << ev->Get()->TypeId << ", snapshot: " << ev->Get()->Snapshot.DebugString());
+            << ", at schemeshard: " << TabletID() << ", typeId: " << ev->Get()->TypeId << ", snapshot: " << ev->Get()->Snapshot->DebugString());
 
     Execute(CreateTxInitializeObjectMetadata(ev, ctx));
 }
 
 struct TTxStartObjectModification: public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvModifyObject::TPtr Request;
-    std::shared_ptr<NMetadata::NModifications::IObjectModificationCommand> ModifyObjectCommand;
 
     TTxStartObjectModification(TSelf* self, const TEvSchemeShard::TEvModifyObject::TPtr& ev)
         : TRwTxBase(self)
@@ -64,40 +63,50 @@ struct TTxStartObjectModification: public TSchemeShard::TRwTxBase {
         const TString& typeId = Request->Get()->Record.GetSettings().GetType();
         const TString& objectId = Request->Get()->Record.GetSettings().GetObject();
 
+        if (!Self->Objects.IsInitialized(typeId)) {
+            ReplyWithError(TStringBuilder() << typeId << " metadata hasn't been initialized on scheme shard yet.", ctx);
+            return;
+        }
+
         NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
         if (!cBehaviour) {
             ReplyWithError(TStringBuilder() << "Incorrect object type: \"" << typeId << "\"", ctx);
+            return;
         }
         if (!cBehaviour->GetOperationsManager()) {
             ReplyWithError(TStringBuilder() << "Object type \"" << typeId << "\" does not have manager for operations", ctx);
+            return;
         }
         std::shared_ptr<NMetadata::NModifications::TSchemeOperationsManagerBase> manager =
             std::dynamic_pointer_cast<NMetadata::NModifications::TSchemeOperationsManagerBase>(cBehaviour->GetOperationsManager());
         if (!manager) {
             ReplyWithError(TStringBuilder() << "Object type \"" << typeId << "\" does not have manager for scheme operations", ctx);
+            return;
         }
 
         auto buildResult = manager->BuildModificationCommand(Request, *Self, ctx);
         if (buildResult.IsFail()) {
             ReplyWithError(buildResult.GetErrorMessage(), ctx);
+            return;
         }
-        ModifyObjectCommand = std::move(buildResult.GetResult());
+        std::shared_ptr<NMetadata::NModifications::IObjectModificationCommand> modifyObjectCommand = std::move(buildResult.GetResult());
 
         const auto& modification = Self->Objects.OnModificationStarted(typeId, objectId, Request->Sender);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistObjectModificationStarted(db, typeId, objectId, modification.PreviousHistoryInstant, modification.Sender);
-    }
 
-    void DoComplete(const TActorContext& ctx) override {
         // TODO: Delay commit of TX that updates the .metadata table:
         //     1. On Metadata service, create TX
         //     2. Return TEvCommitObjectModification to SS
         //     3. On SS, request commit from Metadata service
         // The purpose is to guarantee that the SS was active between start and commit of TX that update metadata;
         // it will allow invalidating all TXs that may update metadata in future
-        TActivationContext::Send(new IEventHandle(NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()), {},
-            new NMetadata::NProvider::TEvObjectsOperation(std::move(ModifyObjectCommand))));
+        ctx.Send(NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
+            new NMetadata::NProvider::TEvObjectsOperation(std::move(modifyObjectCommand)));
+    }
+
+    void DoComplete(const TActorContext& /*ctx*/) override {
     }
 };
 
@@ -126,7 +135,6 @@ struct TTxCommitObjectModification: public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext& /*ctx*/) override {
-        // Not implemented
     }
 };
 
@@ -202,7 +210,7 @@ struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxInitializeObjectMetadata DoExecute"
                 << ", at schemeshard: " << Self->TabletID() << ", typeId: " << Request->Get()->TypeId
-                << ", snapshot: " << Request->Get()->Snapshot.DebugString());
+                << ", snapshot: " << Request->Get()->Snapshot->DebugString());
 
         TString typeId = Request->Get()->TypeId;
 
@@ -212,7 +220,7 @@ struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
             Self->PersistObjectModificationFinished(db, typeId, objectId);
         }
 
-        Self->Objects.Initialize(typeId, std::move(Request->Get()->Snapshot));
+        Self->Objects.Initialize(typeId, *Request->Get()->Snapshot);
     }
 
     void DoComplete(const TActorContext& /*ctx*/) override {
@@ -250,21 +258,9 @@ void TSchemeShard::PersistObjectModificationFinished(NIceDb::TNiceDb& db, const 
     db.Table<Schema::ObjectModificationsInFly>().Key(typeId, objectId).Delete();
 }
 
-void TSchemeShard::InitializeObjects(const TActorContext& ctx) const {
-    for (const TString& typeId : NMetadata::IClassBehaviour::TFactory::GetRegisteredKeys()) {
-        NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
-        if (cBehaviour && cBehaviour->GetOperationsManager()) {
-            if (auto manager =
-                    dynamic_pointer_cast<NMetadata::NModifications::TSchemeOperationsManagerBase>(cBehaviour->GetOperationsManager())) {
-                InitializeObjectMetadata(typeId, manager, ctx);
-            }
-        }
-    }
-}
-
 class TMetadataInitializer: public TActorBootstrapped<TMetadataInitializer> {
 private:
-    constexpr static const TInstant RetryDelay = TInstant::Seconds(5);
+    constexpr static const TInstant RetryDelay = TInstant::Seconds(1);
 
     TString TypeId;
     std::shared_ptr<NMetadata::NModifications::TSchemeOperationsManagerBase> Manager;
@@ -292,7 +288,8 @@ public:
         std::shared_ptr<NMetadata::NContainer::TSnapshotBase> abstractSnapshot =
             std::dynamic_pointer_cast<NMetadata::NContainer::TSnapshotBase>(snapshot);
         AFL_VERIFY(abstractSnapshot)("snapshot", snapshot->SerializeToString());
-        Send(Owner, MakeHolder<TEvPrivate::TEvInitializeObjectMetadata>(TypeId, abstractSnapshot->GetObjects()));
+        Send(Owner, MakeHolder<TEvPrivate::TEvInitializeObjectMetadata>(
+                        TypeId, std::make_shared<NMetadata::NContainer::TAbstractObjectContainer>(abstractSnapshot->GetObjects())));
     }
 
     void Handle(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -303,7 +300,12 @@ public:
     }
 
     void Handle(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvTableAbsent::TPtr& /*ev*/) {
-        Send(Owner, MakeHolder<TEvPrivate::TEvInitializeObjectMetadata>(TypeId, NMetadata::NContainer::TAbstractObjectContainer()));
+        Send(Owner,
+            MakeHolder<TEvPrivate::TEvInitializeObjectMetadata>(TypeId, std::make_shared<NMetadata::NContainer::TAbstractObjectContainer>()));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& /*ev*/) {
+        StartFetching();
     }
 
     void Bootstrap() {
@@ -325,11 +327,24 @@ public:
             hFunc(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvResult, Handle);
             HFunc(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvError, Handle);
             hFunc(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvTableAbsent, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
             default:
                 AFL_VERIFY(false);
         }
     }
 };
+
+void TSchemeShard::InitializeObjects(const TActorContext& ctx) const {
+    for (const TString& typeId : NMetadata::IClassBehaviour::TFactory::GetRegisteredKeys()) {
+        NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
+        if (cBehaviour && cBehaviour->GetOperationsManager()) {
+            if (auto manager =
+                    dynamic_pointer_cast<NMetadata::NModifications::TSchemeOperationsManagerBase>(cBehaviour->GetOperationsManager())) {
+                InitializeObjectMetadata(typeId, manager, ctx);
+            }
+        }
+    }
+}
 
 void TSchemeShard::InitializeObjectMetadata(const TString& typeId,
     const std::shared_ptr<NMetadata::NModifications::TSchemeOperationsManagerBase>& manager, const TActorContext& ctx) const {

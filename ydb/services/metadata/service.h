@@ -12,7 +12,7 @@ private:
 public:
     TEvObjectsOperation(NModifications::IObjectModificationCommand::TPtr command)
         : Command(command) {
-
+        Y_ABORT_UNLESS(!!Command);
     }
 };
 

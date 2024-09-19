@@ -19,23 +19,21 @@ private:
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(ui64, OriginalCookie);
     YDB_READONLY_DEF(TSideEffectPtr, SideEffect);
-    const TActorContext& Ctx;
 
 private:
     void Reply(TConclusion<TSideEffectPtr> result) {
-        Ctx.Send(
-            Recipient, MakeHolder<NSchemeShard::TEvPrivate::TEvObjectModificationResult>(TypeId, ObjectId, std::move(result)), 0, OriginalCookie);
+        NActors::TActorContext::AsActorContext().Send(
+            Recipient, new NSchemeShard::TEvPrivate::TEvObjectModificationResult(TypeId, ObjectId, std::move(result)), 0, OriginalCookie);
     }
 
 public:
-    TSchemeOperationsController(const TActorId& recipient, const NYql::TObjectSettingsImpl& operation, ui64 originalCookie,
-        TSideEffectPtr sideEffect, const TActorContext& ctx)
+    TSchemeOperationsController(
+        const TActorId& recipient, const NYql::TObjectSettingsImpl& operation, ui64 originalCookie, TSideEffectPtr sideEffect)
         : Recipient(recipient)
         , TypeId(operation.GetTypeId())
         , ObjectId(operation.GetObjectId())
         , OriginalCookie(originalCookie)
-        , SideEffect(std::move(sideEffect))
-        , Ctx(ctx) {
+        , SideEffect(std::move(sideEffect)) {
     }
 
     virtual void OnAlteringProblem(const TString& errorMessage) override {
@@ -60,7 +58,7 @@ protected:
         IOperationsManager::TInternalModificationContext& context, NSchemeShard::TSchemeShard& ss) const = 0;
 
     virtual TConclusion<std::shared_ptr<IObjectModificationCommand>> DoBuildModificationCommand(
-        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const = 0;
+        const NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr& request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const = 0;
 
     static NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> StartSchemeOperation(
         NKikimrSchemeOp::TModifyObjectDescription description, TActorSystem& actorSystem, TDuration livetime);
@@ -89,7 +87,7 @@ protected:
 
 public:
     TConclusion<std::shared_ptr<IObjectModificationCommand>> BuildModificationCommand(
-        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const {
+        const NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr& request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const {
         return DoBuildModificationCommand(request, ss, ctx);
     }
 
@@ -139,17 +137,19 @@ protected:
 
     virtual TYqlConclusionStatus DoPrepare(NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const NYql::TObjectSettingsImpl& /*settings*/,
         const IClassBehaviour::TPtr& /*manager*/, TInternalModificationContext& /*context*/) const override {
-        return TYqlConclusionStatus::Fail("Preparation is not supported for this operation.");
+        return TYqlConclusionStatus::Fail(
+            TStringBuilder() << "Preparing operations is not supported for " << TObject::GetTypeId() << " operations.");
     }
 
     virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
         const ui32 /*nodeId*/, const IClassBehaviour::TPtr& /*manager*/, const TExternalModificationContext& /*context*/) const override {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("Preparation is not supported for this operation."));
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(
+            TStringBuilder() << "Execution of prepared operations is not supported for " << TObject::GetTypeId() << " operations."));
     }
 
-public:
     TConclusion<std::shared_ptr<IObjectModificationCommand>> DoBuildModificationCommand(
-        NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr request, NSchemeShard::TSchemeShard& ss, const TActorContext& ctx) const override {
+        const NSchemeShard::TEvSchemeShard::TEvModifyObject::TPtr& request, NSchemeShard::TSchemeShard& ss,
+        const TActorContext& ctx) const override {
         NYql::TObjectSettingsImpl settings;
         settings.DeserializeFromProto(request->Get()->Record.GetSettings());
 
@@ -180,7 +180,7 @@ public:
         }
 
         IObjectModificationCommand::TPtr modifyObjectCommand;
-        auto controller = std::make_shared<TSchemeOperationsController>(ss.ActorContext().SelfID, settings, request->Cookie, resultObject, ctx);
+        auto controller = std::make_shared<TSchemeOperationsController>(ss.ActorContext().SelfID, settings, request->Cookie, resultObject);
         switch (modificationCtx.GetActivityType()) {
             case EActivityType::Upsert:
                 return std::make_shared<TUpsertObjectCommand<TObject>>(patch.GetResult(), manager, std::move(controller), modificationCtx);

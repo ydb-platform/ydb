@@ -5,12 +5,8 @@ DEFAULT(LLD_VERSION ${CLANG_VER})
 TOOLCHAIN(lld)
 VERSION(${LLD_VERSION})
 
-IF (LLD_VERSION == 14)
-    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld14.json)
-ELSE()
-    # fallback on latest version
-    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
-ENDIF()
+# lld16 is the only supported version at the time
+DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
 
 IF (OS_ANDROID)
     # Use LLD shipped with Android NDK.

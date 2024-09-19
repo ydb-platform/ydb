@@ -179,9 +179,9 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
                 errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
                 return false;
             }
-            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+            typeInfo = NScheme::TTypeInfo(typeDesc);
         } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
-            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Decimal, *decimalType);
+            typeInfo = NScheme::TTypeInfo(*decimalType);
         } else {
             const NScheme::IType* type = typeRegistry->GetType(typeName);
             if (!type || !TOlapColumnAdd::IsAllowedType(type->GetTypeId())) {

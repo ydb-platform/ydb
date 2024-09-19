@@ -22,6 +22,20 @@ def lazy(func):
     return wrapper
 
 
+def cache_by_second_arg(func):
+    result = {}
+
+    def wrapper(arg0, arg1, *args, **kwargs):
+        try:
+            return result[arg1]
+        except KeyError:
+            result[arg1] = func(arg0, arg1, *args, **kwargs)
+
+        return result[arg1]
+
+    return wrapper
+
+
 def pathid(path):
     return six.ensure_str(base64.b32encode(hashlib.md5(six.ensure_binary(path)).digest()).lower().strip(b'='))
 

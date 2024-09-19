@@ -2304,7 +2304,12 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.EndObject();
 
     auto resultPlan =  writer.Str();
-    return AddSimplifiedPlan(resultPlan, optCtx, false);
+    if (!optCtx || optCtx->Config->DisableSimplifiedPlans) {
+        return resultPlan;
+    }
+    else {
+        return AddSimplifiedPlan(resultPlan, optCtx, false);
+    }
 }
 
 } // namespace
@@ -2700,7 +2705,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true);
     auto resultPlan = txWriter.Str();
-    return AddSimplifiedPlan(resultPlan, optCtx, true);
+    if (!optCtx || optCtx->Config->DisableSimplifiedPlans) {
+        return resultPlan;
+    }
+    else {
+        return AddSimplifiedPlan(resultPlan, optCtx, true);
+    }
 }
 
 TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats) {

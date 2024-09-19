@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EIndexAutoChooseMode : int;
@@ -55,7 +56,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
-    NCommon::TConfSetting<TString, false> OptimizerHints;
+    NCommon::TConfSetting<NYql::TOptimizerHints, false> OptimizerHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;

@@ -15,6 +15,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
+    ydb/library/yql/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

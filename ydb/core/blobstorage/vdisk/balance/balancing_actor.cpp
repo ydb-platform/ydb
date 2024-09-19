@@ -89,13 +89,13 @@ namespace NBalancing {
         void ContinueBalancing() {
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
                 PassAway();
                 return;
             }
 
             // ask for repl token to continue balancing
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
             Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
         }
 
@@ -189,11 +189,13 @@ namespace NBalancing {
         }
 
         void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "TEvCompleted"), (Type, ev->Type));
             BatchManager.Handle(ev);
 
             if (StartTime + EPOCH_TIMEOUT < TlsActivationContext->Now()) {
                 Ctx->MonGroup.EpochTimeouts()++;
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
+                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
                 PassAway();
             }
 
@@ -240,7 +242,7 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
             if (ev.Get()->Type == TEvReplToken::EventType) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"));
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
                 ScheduleJobQuant();
             }
         }

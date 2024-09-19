@@ -274,11 +274,11 @@ public:
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
         }
-        if (Action.empty() || Action == "execute-script" || Action == "execute") {
+        if (Action == "execute-script") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
             request.SetKeepSession(false);
-        } else if (Action == "execute-query") {
+        } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);

@@ -49,6 +49,17 @@ class AddInflightExtension(ExtensionPoint):
         kikimr.compute_plane.fq_config['gateways']['s3']['max_inflight'] = kikimr.inflight
         del request.param["inflight"]
 
+class AddAllowConcurrentListingsExtension(ExtensionPoint):
+    def is_applicable(self, request):
+        return (hasattr(request, 'param')
+                and isinstance(request.param, dict)
+                and "allow_concurrent_listings" in request.param)
+
+    def apply_to_kikimr(self, request, kikimr):
+        kikimr.allow_concurrent_listings = request.param["allow_concurrent_listings"]
+        kikimr.compute_plane.fq_config['gateways']['s3']['allow_concurrent_listings'] = kikimr.allow_concurrent_listings
+        del request.param["allow_concurrent_listings"]
+
 
 class AddDataInflightExtension(ExtensionPoint):
     def is_applicable(self, request):

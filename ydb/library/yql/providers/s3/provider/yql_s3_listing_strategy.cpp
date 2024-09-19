@@ -27,6 +27,11 @@ IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& option
 
 namespace {
 
+TString ParseBasePath(const TString& path) {
+    TString basePath = TString{TStringBuf{path}.RBefore('/')};
+    return basePath == path && !basePath.EndsWith('/') ? TString{} : basePath;
+}
+
 using namespace NThreading;
 using namespace NS3Lister;
 
@@ -360,7 +365,7 @@ public:
                         result.ListedObjectSize = listingResult.ListedObjectSize;
                         for (auto& directoryPrefix : listingResult.Directories) {
                             if (directoryPrefix.MatchedGlobs.empty()) {
-                                // We need to list until extra columns are extracted
+                                // We need to list until extra columns are extracteds
                                 queue->push_back(directoryPrefix.Path);
                             } else {
                                 result.Directories.push_back(directoryPrefix);
@@ -497,15 +502,10 @@ public:
         return NextDirectoryListeningChunk;
     }
 
-    static TString ParseBasePath(const TString& path) {
-        TString basePath = TString{TStringBuf{path}.RBefore('/')};
-        return basePath == path && !basePath.EndsWith('/') ? TString{} : basePath;
-    }
-
     void PerformEarlyStop(TListEntries& result, const TString& sourcePrefix) {
         result.Directories.push_back({.Path = ParseBasePath(sourcePrefix)});
         for (auto& directoryPrefix : DirectoryPrefixQueue) {
-            result.Directories.push_back({.Path = directoryPrefix});
+            result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
         }
         DirectoryPrefixQueue.clear();
     }
@@ -524,10 +524,10 @@ public:
             }
         } else {
             for (auto& directoryPrefix : listingResult.Directories) {
-                result.Directories.push_back({.Path = directoryPrefix.Path});
+                result.Directories.push_back({.Path = ParseBasePath(directoryPrefix.Path)});
             }
             for (auto& directoryPrefix : DirectoryPrefixQueue) {
-                result.Directories.push_back({.Path = directoryPrefix});
+                result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
             }
             DirectoryPrefixQueue.clear();
         }
@@ -775,10 +775,10 @@ public:
                 // TODO: add verification
                 auto result = TListEntries{.Objects = Objects, .ListedObjectSize = ListedObjectSize};
                 for (auto& directoryPrefix : DirectoryPrefixQueue) {
-                    result.Directories.push_back({.Path = directoryPrefix});
+                    result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
                 }
                 for (auto& directoryPrefix: InProgressPaths) {
-                    result.Directories.push_back({.Path = directoryPrefix});
+                    result.Directories.push_back({.Path = ParseBasePath(directoryPrefix)});
                 }
                 for (auto& directoryEntry : Directories) {
                     result.Directories.push_back(directoryEntry);

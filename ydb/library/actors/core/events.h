@@ -170,11 +170,9 @@ namespace NActors {
         struct TEvCompleted: public TEventLocal<TEvCompleted, TSystem::Completed> {
             const ui32 Id;
             const ui32 Status;
-            bool NoTxWritten = false;
-            TEvCompleted(ui32 id = 0, ui32 status = 0, const bool noTxWritten = false)
+            TEvCompleted(ui32 id = 0, ui32 status = 0)
                 : Id(id)
                 , Status(status)
-                , NoTxWritten(noTxWritten)
             {
             }
         };

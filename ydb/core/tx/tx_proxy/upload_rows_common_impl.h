@@ -224,6 +224,8 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
+    const bool ImmediateWrite = false;
+
 protected:
     enum class EUploadSource {
         ProtoValues = 0,
@@ -276,6 +278,7 @@ public:
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
         , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
+        , ImmediateWrite(AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert())
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Span(std::move(span))
     {}
@@ -921,8 +924,8 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues,
-            AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert());
+        DoLongTxWriteSameMailbox(
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -949,7 +952,7 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
-        } else if (ev->Get()->NoTxWritten) {
+        } else if (ImmediateWrite) {
             return ReplyWithResult(status, ctx);
         } else {
             CommitLongTx(ctx);

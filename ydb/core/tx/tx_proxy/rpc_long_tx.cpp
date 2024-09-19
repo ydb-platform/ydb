@@ -260,12 +260,12 @@ protected:
         if (!message.empty()) {
             Issues->AddIssue(NYql::TIssue(message));
         }
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status, NoTxWrite));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
         PassAway();
     }
 
     void ReplySuccess() override {
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS, NoTxWrite));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS));
         PassAway();
     }
 

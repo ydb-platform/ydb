@@ -182,7 +182,8 @@ protected:
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
         case NScheme::NTypeIds::Pg:
-            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
+            // TODO: support pg types
+            Y_ABORT("pg types are not supported");
         case NScheme::NTypeIds::Uuid:
             return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
         default:

@@ -9,7 +9,6 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -620,13 +619,8 @@ class TCdcChangeSenderMain
 
         schema.reserve(pqConfig.PartitionKeySchemaSize());
         for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-            if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
-                schema.push_back(NScheme::TTypeInfo(
-                    keySchema.GetTypeId(),
-                    NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
-            } else {
-                schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
-            }
+            // TODO: support pg types
+            schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
         }
 
         TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);

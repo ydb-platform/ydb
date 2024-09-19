@@ -122,6 +122,7 @@ private:
     bool ShowKeyShardBoundaries = false;
     bool ShowStats = false;
     bool ShowPartitionStats = false;
+    TString Database;
 };
 
 class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {

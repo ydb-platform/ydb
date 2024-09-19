@@ -232,6 +232,7 @@ void TCommandDescribe::Config(TConfig& config) {
 
 void TCommandDescribe::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+    Database = config.Database;
     ParseFormats();
     ParsePath(config, 0);
 }
@@ -466,6 +467,13 @@ static TString ProgressOr(const std::optional<float>& value, const U& orValue) {
     }
 }
 
+static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
+    if (value.SkipPrefix(prefix)) {
+        value.Skip(1); // skip '/'
+    }
+    return value;
+}
+
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
@@ -492,6 +500,9 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     }
 
     const auto& connParams = desc.GetConnectionParams();
+    const auto& srcDatabase = connParams.GetDatabase();
+    const auto& dstDatabase = Database;
+
     Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
     Cout << Endl << "Database: " << connParams.GetDatabase();
 
@@ -516,8 +527,8 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
         for (const auto& item : items) {
             auto& row = table.AddRow()
                 .Column(0, item.Id)
-                .Column(1, item.SrcPath)
-                .Column(2, item.DstPath)
+                .Column(1, SkipDatabasePrefix(TStringBuf(item.SrcPath), TStringBuf(srcDatabase)))
+                .Column(2, SkipDatabasePrefix(TStringBuf(item.DstPath), TStringBuf(dstDatabase)))
                 .Column(3, ValueOr(item.SrcChangefeedName, "n/a"));
             if (ShowStats) {
                 row

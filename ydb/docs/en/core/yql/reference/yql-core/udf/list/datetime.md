@@ -21,14 +21,14 @@ If the timezone is not GMT, the components store the local time for the relevant
 
 Conversion from a primitive type to an internal representation. It's always successful on a non-empty input.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::Split(Date{Flags:AutoMap}) -> Resource<TM>```
-* ```DateTime::Split(Datetime{Flags:AutoMap}) -> Resource<TM>```
-* ```DateTime::Split(Timestamp{Flags:AutoMap}) -> Resource<TM>```
-* ```DateTime::Split(TzDate{Flags:AutoMap}) -> Resource<TM>```
-* ```DateTime::Split(TzDatetime{Flags:AutoMap}) -> Resource<TM>```
-* ```DateTime::Split(TzTimestamp{Flags:AutoMap}) -> Resource<TM>```
+* `DateTime::Split(Date{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(Datetime{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(Timestamp{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(TzDate{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(TzDatetime{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(TzTimestamp{Flags:AutoMap}) -> Resource<TM>`
 
 Functions that accept `Resource<TM>` as input, can be called directly from the primitive date/time type. An implicit conversion will be made in this case by calling a relevant `Split` function.
 
@@ -36,16 +36,16 @@ Functions that accept `Resource<TM>` as input, can be called directly from the p
 
 Making a primitive type from an internal representation. It's always successful on a non-empty input.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date```
-* ```DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime```
-* ```DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp```
-* ```DateTime::MakeTzDate(Resource<TM>{Flags:AutoMap}) -> TzDate```
-* ```DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime```
-* ```DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp```
+* `DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date`
+* `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`
+* `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`
+* `DateTime::MakeTzDate(Resource<TM>{Flags:AutoMap}) -> TzDate`
+* `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`
+* `DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp`
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -63,26 +63,26 @@ SELECT
 
 Extracting a component from an internal representation.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::GetYear(Resource<TM>{Flags:AutoMap}) -> Uint16```
-* ```DateTime::GetDayOfYear(Resource<TM>{Flags:AutoMap}) -> Uint16```
-* ```DateTime::GetMonth(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetMonthName(Resource<TM>{Flags:AutoMap}) -> String```
-* ```DateTime::GetWeekOfYear(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetWeekOfYearIso8601(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetDayOfMonth(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetDayOfWeek(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetDayOfWeekName(Resource<TM>{Flags:AutoMap}) -> String```
-* ```DateTime::GetHour(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetMinute(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetSecond(Resource<TM>{Flags:AutoMap}) -> Uint8```
-* ```DateTime::GetMillisecondOfSecond(Resource<TM>{Flags:AutoMap}) -> Uint32```
-* ```DateTime::GetMicrosecondOfSecond(Resource<TM>{Flags:AutoMap}) -> Uint32```
-* ```DateTime::GetTimezoneId(Resource<TM>{Flags:AutoMap}) -> Uint16```
-* ```DateTime::GetTimezoneName(Resource<TM>{Flags:AutoMap}) -> String```
+* `DateTime::GetYear(Resource<TM>{Flags:AutoMap}) -> Uint16`
+* `DateTime::GetDayOfYear(Resource<TM>{Flags:AutoMap}) -> Uint16`
+* `DateTime::GetMonth(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetMonthName(Resource<TM>{Flags:AutoMap}) -> String`
+* `DateTime::GetWeekOfYear(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetWeekOfYearIso8601(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetDayOfMonth(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetDayOfWeek(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetDayOfWeekName(Resource<TM>{Flags:AutoMap}) -> String`
+* `DateTime::GetHour(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetMinute(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetSecond(Resource<TM>{Flags:AutoMap}) -> Uint8`
+* `DateTime::GetMillisecondOfSecond(Resource<TM>{Flags:AutoMap}) -> Uint32`
+* `DateTime::GetMicrosecondOfSecond(Resource<TM>{Flags:AutoMap}) -> Uint32`
+* `DateTime::GetTimezoneId(Resource<TM>{Flags:AutoMap}) -> Uint16`
+* `DateTime::GetTimezoneName(Resource<TM>{Flags:AutoMap}) -> String`
 
-**Examples**
+### Examples
 
 ```yql
 $tm = DateTime::Split(TzDatetime("2019-01-09T00:00:00,Europe/Moscow"));
@@ -99,13 +99,13 @@ SELECT
 
 Updating one or more components in the internal representation. Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
 
-**List of functions**
+### List of functions
 
-```
+```yql
 DateTime::Update( Resource<TM>{Flags:AutoMap}, [ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?
 ```
 
-**Examples**
+### Examples
 
 ```yql
 $tm = DateTime::Split(Timestamp("2019-01-01T01:02:03.456789Z"));
@@ -125,23 +125,23 @@ SELECT
 
 Getting a Timestamp from the number of seconds/milliseconds/microseconds since the UTC epoch. When the Timestamp limits are exceeded, NULL is returned.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp```
-* ```DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp```
-* ```DateTime::FromMicroseconds(Uint64{Flags:AutoMap}) -> Timestamp```
+* `DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp`
+* `DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp`
+* `DateTime::FromMicroseconds(Uint64{Flags:AutoMap}) -> Timestamp`
 
 ## To... {#to}
 
 Getting a number of seconds/milliseconds/microseconds since the UTC Epoch from a primitive type.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::ToSeconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32```
-* ```DateTime::ToMilliseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64```
-* ```DateTime::ToMicroseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64```
+* `DateTime::ToSeconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`
+* `DateTime::ToMilliseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
+* `DateTime::ToMicroseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -151,28 +151,28 @@ SELECT
 
 ## Interval... {#interval}
 
-Conversions between ```Interval``` and various time units.
+Conversions between `Interval` and various time units.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::ToDays(Interval{Flags:AutoMap}) -> Int16```
-* ```DateTime::ToHours(Interval{Flags:AutoMap}) -> Int32```
-* ```DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32```
-* ```DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32```
-* ```DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64```
-* ```DateTime::ToMicroseconds(Interval{Flags:AutoMap}) -> Int64```
-* ```DateTime::IntervalFromDays(Int16{Flags:AutoMap}) -> Interval```
-* ```DateTime::IntervalFromHours(Int32{Flags:AutoMap}) -> Interval```
-* ```DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval```
-* ```DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval```
-* ```DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval```
-* ```DateTime::IntervalFromMicroseconds(Int64{Flags:AutoMap}) -> Interval```
+* `DateTime::ToDays(Interval{Flags:AutoMap}) -> Int16`
+* `DateTime::ToHours(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
+* `DateTime::ToMicroseconds(Interval{Flags:AutoMap}) -> Int64`
+* `DateTime::IntervalFromDays(Int16{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromHours(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromMicroseconds(Int64{Flags:AutoMap}) -> Interval`
 
 AddTimezone doesn't affect the output of ToSeconds() in any way, because ToSeconds() always returns GMT time.
 
 You can also create an Interval from a string literal in the format [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601%23Durations).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -185,22 +185,22 @@ SELECT
 
 Get the start of the period including the date/time. If the result is invalid, NULL is returned. If the timezone is different from GMT, then the period start is in the specified time zone.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::StartOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::StartOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::StartOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::StartOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?```
+* `DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::StartOfMonth(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::StartOfWeek(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::StartOfDay(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::StartOf(Resource<TM>{Flags:AutoMap}, Interval{Flags:AutoMap}) -> Resource<TM>?`
 
 The `StartOf` function is intended for grouping by an arbitrary period within a day. The result differs from the input value only by time components. A period exceeding one day is treated as a day (an equivalent of `StartOfDay`). If a day doesn't include an integer number of periods, the number is rounded to the nearest time from the beginning of the day that is a multiple of the specified period. When the interval is zero, the output is same as the input. A negative interval is treated as a positive one.
 
 The functions treat periods longer than one day in a different manner than the same-name functions in the old library. The time components are always reset to zero (this makes sense, because these functions are mainly used for grouping by the period). You can also specify a time period within a day:
 
-* ```DateTime::TimeOfDay(Resource<TM>{Flags:AutoMap}) -> Interval```
+* `DateTime::TimeOfDay(Resource<TM>{Flags:AutoMap}) -> Interval`
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -233,15 +233,15 @@ SELECT
 Add/subtract the specified number of units to/from the component in the internal representation and update the other fields.
 Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::ShiftYears(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
-* ```DateTime::ShiftQuarters(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
-* ```DateTime::ShiftMonths(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
+* `DateTime::ShiftYears(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`
+* `DateTime::ShiftQuarters(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`
+* `DateTime::ShiftMonths(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?`
 
 If the resulting number of the day in the month exceeds the maximum allowed, then the `Day` field will accept the last day of the month without changing the time (see examples).
 
-**Examples**
+### Examples
 
 ```yql
 $tm1 = DateTime::Split(DateTime("2019-01-31T01:01:01Z"));
@@ -260,9 +260,9 @@ SELECT
 
 Get a string representation of a time using an arbitrary formatting string.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::Format(String) -> (Resource<TM>{Flags:AutoMap}) -> String```
+* `DateTime::Format(String) -> (Resource<TM>{Flags:AutoMap}) -> String`
 
 A subset of specifiers similar to strptime is implemented for the formatting string.
 
@@ -280,7 +280,7 @@ A subset of specifiers similar to strptime is implemented for the formatting str
 
 All other characters in the format string are passed on without changes.
 
-**Examples**
+### Examples
 
 ```yql
 $format = DateTime::Format("%Y-%m-%d %H:%M:%S %Z");
@@ -294,9 +294,9 @@ SELECT
 
 Parse a string into an internal representation using an arbitrary formatting string. Default values are used for empty fields. If errors are raised, NULL is returned.
 
-**List of functions**
+### List of functions
 
-* ```DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?```
+* `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`
 
 Implemented specifiers:
 
@@ -311,7 +311,7 @@ Implemented specifiers:
 * `%b`: A short three-letter case-insensitive English name of the month (Jan).
 * `%B`: A full case-insensitive English name of the month (January).
 
-**Examples**
+### Examples
 
 ```yql
 $parse1 = DateTime::Parse("%H:%M:%S");
@@ -328,14 +328,16 @@ SELECT
 
 For the common formats, wrappers around the corresponding util methods are supported. You can only get TM with components in the UTC timezone.
 
-**List of functions**
+## Parse specific formats
 
-* ```DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::ParseIso8601(String{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::ParseHttp(String{Flags:AutoMap}) -> Resource<TM>?```
-* ```DateTime::ParseX509(String{Flags:AutoMap}) -> Resource<TM>?```
+### List of functions
 
-**Examples**
+* `DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::ParseIso8601(String{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::ParseHttp(String{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::ParseX509(String{Flags:AutoMap}) -> Resource<TM>?`
+
+### Examples
 
 ```yql
 SELECT
@@ -351,7 +353,7 @@ SELECT
 
 ## Standard scenarios
 
-**Conversions between strings and seconds**
+### Conversions between strings and seconds
 
 Converting a string date (in the Moscow timezone) to seconds (in GMT timezone):
 
@@ -410,7 +412,7 @@ SELECT
     SUBSTRING(DateTime::GetDayOfWeekName(AddTimezone(DateTime::FromSeconds(1568581200), "Europe/Moscow")), 0, 3) -- "Mon"
 ```
 
-**Date and time formatting**
+### Date and time formatting
 
 Usually a separate named expression is used to format time, but you can do without it:
 
@@ -430,7 +432,7 @@ SELECT
 ;
 ```
 
-**Converting types**
+### Converting types
 
 This way, you can convert only constants:
 
@@ -448,13 +450,13 @@ SELECT
     CAST("2019-09-16" AS Date) -- 2019-09-16
 ```
 
-**Converting time to date**
+### Converting time to date
 
 A CAST to Date or TzDate outputs a GMT date for a midnight, local time (for example, for Moscow time 2019-10-22 00:00:00, the date 2019-10-21 is returned). To get a date in the local timezone, you can use DateTime::Format.
 
 ```yql
 $x = DateTime("2019-10-21T21:00:00Z");
-select
+SELECT
     AddTimezone($x, "Europe/Moscow"), -- 2019-10-22T00:00:00,Europe/Moscow
     cast($x as TzDate), -- 2019-10-21,GMT
     cast(AddTimezone($x, "Europe/Moscow") as TzDate), -- 2019-10-21,Europe/Moscow
@@ -476,10 +478,9 @@ At the same time, values with a negative timezone offset are converted correctly
 ```yql
 SELECT CAST(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate);
 /* 1970-01-01,America/Los_Angeles */
-
 ```
 
-**Daylight saving time**
+### Daylight saving time
 
 Please note that daylight saving time depends on the year:
 

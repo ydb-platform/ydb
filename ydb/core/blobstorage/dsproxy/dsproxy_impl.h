@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "dsproxy.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
+
 namespace NKikimr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -119,8 +121,12 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     bool HasInvalidGroupId() const { return GroupId.GetRawId() == Max<ui32>(); }
     void ProcessInitQueue();
 
+    // Acceleration parameters
     TMemorizableControlWrapper SlowDiskThreshold;
     TMemorizableControlWrapper PredictedDelayMultiplier;
+    TMemorizableControlWrapper MaxNumOfSlowDisks;
+
+    TMemorizableControlWrapper LongRequestThresholdMs;
 
     TAccelerationParams GetAccelerationParams();
 

@@ -15,6 +15,7 @@
 
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
@@ -979,9 +980,9 @@ void TestReadRangeMovies(NKikimrDataEvents::EDataFormat format) {
         {TCell::Make(3u), TCell(s3.data(), s3.size()), TCell::Make(8u)}
     },
     {
-        NScheme::TTypeIdOrder(NScheme::NTypeIds::Uint32),
-        NScheme::TTypeIdOrder(NScheme::NTypeIds::String),
-        NScheme::TTypeIdOrder(NScheme::NTypeIds::Uint32)
+        NScheme::TTypeInfoOrder(NScheme::NTypeIds::Uint32),
+        NScheme::TTypeInfoOrder(NScheme::NTypeIds::String),
+        NScheme::TTypeInfoOrder(NScheme::NTypeIds::Uint32)
     });
 }
 

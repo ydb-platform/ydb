@@ -385,6 +385,13 @@ private:
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
 
+        ADD_COUNTER(SpillingComputeWriteBytes)
+        ADD_COUNTER(SpillingChannelWriteBytes)
+        ADD_COUNTER(SpillingComputeReadTimeUs)
+        ADD_COUNTER(SpillingComputeWriteTimeUs)
+        ADD_COUNTER(SpillingChannelReadTimeUs)
+        ADD_COUNTER(SpillingChannelWriteTimeUs)
+
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
 

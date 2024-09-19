@@ -36,7 +36,7 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
         if (NKqp::StructHoldsPgType(*rowType, i)) {
             auto pgTypeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
             MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetTypeDesc()),
+                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetPgTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetPgTypeDesc()),
                 "Key column type mismatch, column: " << name
             );
         } else {

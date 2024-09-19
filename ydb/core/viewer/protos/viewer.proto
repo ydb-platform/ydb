@@ -334,6 +334,7 @@ message TClusterInfo {
     repeated string Versions = 46;
     map<string, uint32> MapVersions = 47;
     map<string, uint32> MapNodeStates = 48;
+    map<string, uint32> MapNodeRoles = 49;
     repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 50;
     repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
     uint64 Hosts = 60;
@@ -441,19 +442,19 @@ message TStorageGroupInfo {
     string Kind = 7;
     string MediaType = 8;
     string ErasureSpecies = 9;
-    uint64 AllocationUnits = 10;
+    optional uint64 AllocationUnits = 10;
     string State = 11;
-    uint64 MissingDisks = 12; // Degraded
-    uint64 Used = 13;
-    uint64 Limit = 14;
-    uint64 Available = 15;
-    float Usage = 16;
-    uint64 Read = 17;
-    uint64 Write = 18;
-    float DiskSpaceUsage = 19;
-    uint64 LatencyPutTabletLog = 20;
-    uint64 LatencyPutUserData = 21;
-    uint64 LatencyGetFast = 22;
+    optional uint64 MissingDisks = 12; // Degraded
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -729,13 +730,14 @@ message TQueryAutocomplete {
             EAutocompleteType Type = 2;
             string Parent = 3;
         }
-        uint32 Total = 1;
+        optional uint32 Total = 1;
         repeated TEntity Entities = 2;
     }
 
     bool Success = 1;
     TResult Result = 2;
     repeated string Error = 3;
+    uint32 Version = 4;
 }
 
 message TPDiskInfoWhiteboard {

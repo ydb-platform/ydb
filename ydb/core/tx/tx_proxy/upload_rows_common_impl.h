@@ -43,7 +43,8 @@ private:
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
-    NMonitoring::THistogramPtr PackageSize;
+    NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
+    NMonitoring::THistogramPtr PackageSizeCountByRecords;
 
     NMonitoring::THistogramPtr PreparingDuration;
     NMonitoring::THistogramPtr WritingDuration;
@@ -108,7 +109,8 @@ public:
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
-        PackageSize->Collect(rowsCount);
+        PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
+        PackageSizeCountByRecords->Collect(rowsCount);
     }
 
     void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;
@@ -469,7 +471,7 @@ private:
                 if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
                     ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
                 } else {
-                    auto* typeDesc = typeInfo.GetTypeDesc();
+                    auto typeDesc = typeInfo.GetPgTypeDesc();
                     auto* pg = ydbType.mutable_pg_type();
                     pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                     pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
@@ -517,7 +519,7 @@ private:
                 }
             } else if (typeInProto.has_pg_type()) {
                 const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errorMessage = Sprintf("Unknown pg type for column %s: %s",
                                            name.c_str(), typeName.c_str());
@@ -845,7 +847,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {

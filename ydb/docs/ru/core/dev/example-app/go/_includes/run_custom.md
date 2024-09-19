@@ -4,7 +4,7 @@
 
 Выполните команду по следующему образцу:
 
-``` bash
+```bash
 ( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-examples && \
 go run ./basic -ydb="<endpoint>?database=<database>" )
 ```
@@ -18,7 +18,7 @@ go run ./basic -ydb="<endpoint>?database=<database>" )
 
 Например:
 
-``` bash
+```bash
 ( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
 go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocation" )
 ```

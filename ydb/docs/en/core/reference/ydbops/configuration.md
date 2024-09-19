@@ -2,7 +2,6 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-
 `ydbops` can be run by specifying all the necessary command line arguments on the command invocation. However, it has two features that allow to avoid repeating the commonly used arguments:
 
 - [Config file](#config-file)
@@ -20,6 +19,7 @@ Default configuration file location follows the same convention as {{ ydb-short-
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
 
 ### Examples
+
 Calling the `ydbops restart` command without a profile:
 
 ```bash

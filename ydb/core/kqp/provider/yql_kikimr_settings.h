@@ -55,9 +55,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
-    NCommon::TConfSetting<TString, false> OptCardinalityHints;
-    NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
-    NCommon::TConfSetting<TString, false> OptJoinOrderHints;
+    NCommon::TConfSetting<TString, false> OptimizerHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -167,6 +165,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
+    bool EnableHtapTx = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpillingGenericQuery = false;
     ui32 DefaultCostBasedOptimizationLevel = 4;

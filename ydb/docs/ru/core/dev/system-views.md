@@ -59,7 +59,7 @@
 
 Топ-5 самых загруженных партиций среди всех таблиц базы данных:
 
-```sql
+```yql
 SELECT
     Path,
     PartIdx,
@@ -71,7 +71,7 @@ LIMIT 5
 
 Список таблиц базы с размерами и нагрузкой в моменте:
 
-```sql
+```yql
 SELECT
     Path,
     COUNT(*) as Partitions,
@@ -81,6 +81,7 @@ SELECT
 FROM `.sys/partition_stats`
 GROUP BY Path
 ```
+
 ## Топы запросов {#top-queries}
 
 Следующие системные таблицы хранят данные для анализа потока пользовательских запросов:
@@ -136,7 +137,7 @@ GROUP BY Path
 
 Топ запросов по времени выполнения за последнюю минуту их отправки:
 
-```sql
+```yql
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 $last = (
     SELECT
@@ -154,7 +155,7 @@ WHERE IntervalEnd IN $last
 
 Запросы, прочитавшие больше всего байт, в разбивке по минутам:
 
-```sql
+```yql
 SELECT
     IntervalEnd,
     QueryText,
@@ -214,7 +215,7 @@ WHERE Rank = 1
 
 Топ-10 запросов за последние 6 часов по общему количеству записанных строк в минутном интервале:
 
-```sql
+```yql
 SELECT
     SumUpdateRows,
     Count,
@@ -226,7 +227,7 @@ ORDER BY SumUpdateRows DESC LIMIT 10
 
 Недавние запросы, прочитавшие больше всего байт за минуту:
 
-```sql
+```yql
 SELECT
     IntervalEnd,
     SumReadBytes,
@@ -238,8 +239,8 @@ FROM `.sys/query_metrics_one_minute`
 WHERE SumReadBytes > 0
 ORDER BY IntervalEnd DESC, SumReadBytes DESC
 LIMIT 100
-
 ```
+
 ## История перегруженных партиций {#top-overload-partitions}
 
 Следующие системные таблицы хранят историю моментов высокой нагрузки на отдельные партиции таблиц БД:

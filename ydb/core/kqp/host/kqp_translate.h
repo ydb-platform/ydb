@@ -91,7 +91,8 @@ NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceCon
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName);
+    NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
+    NSQLTranslation::TTranslationSettings* effectiveSettings = nullptr);
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 

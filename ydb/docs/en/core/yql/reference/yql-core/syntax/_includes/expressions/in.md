@@ -18,7 +18,7 @@ The `COMPACT` modifier must be used with care. Since the hash table is built in-
 Since YQL imposes a limit on the query size in bytes (it's about 1Mb), add large lists of values to your query by URLs and use the [ParseFile](../../../builtins/basic.md#parsefile) function.
 {% endif %}
 
-**Examples**
+### Examples
 
 ```yql
 SELECT column IN (1, 2, 3)

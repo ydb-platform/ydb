@@ -290,6 +290,9 @@ message TBlobStorageConfig {
         // filled in by config parser, not by user; required for automatic static group creation
         repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
         optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
+
+        // generation of the distconf section; when set, one can automatically apply in-filesystem config
+        optional uint64 Generation = 8;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
@@ -1319,15 +1322,30 @@ message TImmediateControlsConfig {
 
     message TDSProxyControls {
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
-            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, actual value is divided by 1000",
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 2000 }];
         optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
-            Description: "Predicted time of VDisk's response is multiplied by this value divided by 1000",
+            Description: "Predicted time of VDisk's response multiplier, promille",
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 LongRequestThresholdMs = 3 [(ControlOptions) = {
+            Description: "The amount of time (ms) to process DSProxy request, beyond which request is considered long and being reported to log",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 50000 }];
+        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
+            Description: "Delay (ms) between reports of long requests for one handle class",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60000 }];
+        optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
     }
 
     message TPDiskControls {

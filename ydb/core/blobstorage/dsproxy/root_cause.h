@@ -18,12 +18,12 @@ struct TRootCause {
         bool IsAccelerate;
 
         TRootCauseItem(ui64 causeIdx, ui64 startCycles, bool isAccelerate)
-                : CauseIdx(causeIdx)
-                , StartCycles(startCycles)
-                , TransferCycles(startCycles)
-                , VDiskReplyCycles(startCycles)
-                , IsAccelerate(isAccelerate) {
-        }
+            : CauseIdx(causeIdx)
+            , StartCycles(startCycles)
+            , TransferCycles(startCycles)
+            , VDiskReplyCycles(startCycles)
+            , IsAccelerate(isAccelerate)
+        {}
     };
     static constexpr ui64 InvalidCauseIdx = 255;
 

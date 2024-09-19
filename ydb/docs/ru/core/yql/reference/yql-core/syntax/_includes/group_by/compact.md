@@ -4,8 +4,9 @@
 
 В отличие от обычного GROUP BY, отключается стадия Map-side combiner и дополнительные Reduce для каждого поля с [DISTINCT](../../group_by.md#distinct) агрегацией.
 
-**Пример:**
-``` yql
+### Пример
+
+```yql
 SELECT
   key,
   COUNT(DISTINCT value) AS count -- топ-3 ключей по количеству уникальных значений

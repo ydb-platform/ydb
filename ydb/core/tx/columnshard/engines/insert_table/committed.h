@@ -56,27 +56,24 @@ private:
     YDB_READONLY(ui64, SchemaVersion, 0);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(bool, IsDelete, false);
-    YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
-    YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
+    NArrow::TReplaceKey First;
+    NArrow::TReplaceKey Last;
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
 
 public:
+    const NArrow::TReplaceKey& GetFirst() const {
+        return First;
+    }
+    const NArrow::TReplaceKey& GetLast() const {
+        return Last;
+    }
+
     ui64 GetSize() const {
         return BlobRange.Size;
     }
 
-    const NArrow::TReplaceKey& GetFirstVerified() const {
-        Y_ABORT_UNLESS(First);
-        return *First;
-    }
-
-    const NArrow::TReplaceKey& GetLastVerified() const {
-        Y_ABORT_UNLESS(Last);
-        return *Last;
-    }
-
     TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const ui64 recordsCount,
-        const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last, const bool isDelete,
+        const NArrow::TReplaceKey& first, const NArrow::TReplaceKey& last, const bool isDelete,
         const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
         , WriteInfo(snapshot)
@@ -89,7 +86,7 @@ public:
     }
 
     TCommittedBlob(const TBlobRange& blobRange, const TInsertWriteId writeId, const ui64 schemaVersion, const ui64 recordsCount,
-        const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last, const bool isDelete,
+        const NArrow::TReplaceKey& first, const NArrow::TReplaceKey& last, const bool isDelete,
         const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
         , WriteInfo(writeId)

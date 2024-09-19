@@ -4,7 +4,7 @@
 Поведение идентично последовательному исполнению `UNION ALL` и `SELECT DISTINCT *`.
 См. [UNION ALL](../../select/union.md#union-all) для информации о деталях поведения.
 
-**Примеры**
+### Примеры
 
 ```yql
 SELECT key FROM T1

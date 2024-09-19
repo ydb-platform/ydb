@@ -8,7 +8,7 @@
 
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/formats/arrow/transformer/abstract.h>
+#include <ydb/library/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -106,14 +106,51 @@ public:
 struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
-    using TColumnNames = THashMap<TString, ui32>;
 
-    TColumnNames ColumnNames;
+    class TNameInfo {
+    private:
+        YDB_READONLY_DEF(TString, Name);
+        YDB_READONLY(ui32, ColumnId, 0);
+        YDB_READONLY(ui32, ColumnIdx, 0);
+    public:
+        TNameInfo(const TString& name, const ui32 columnId, const ui32 columnIdx)
+            : Name(name)
+            , ColumnId(columnId)
+            , ColumnIdx(columnIdx)
+        {
+
+        }
+
+        static std::vector<TNameInfo> BuildColumnNames(const TColumns& columns) {
+            std::vector<TNameInfo> result;
+            for (auto&& i : columns) {
+                result.emplace_back(TNameInfo(i.second.Name, i.first, 0));
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.ColumnId < r.ColumnId;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            ui32 idx = 0;
+            for (auto&& i : result) {
+                i.ColumnIdx = idx++;
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.Name < r.Name;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            return result;
+        }
+    };
+
+    std::vector<TNameInfo> ColumnNames;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
 
-    THashMap<ui32, ui32> IdIntoIndex;
-    THashMap<ui32, std::shared_ptr<TColumnFeatures>> ColumnFeatures;
+    std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
@@ -127,32 +164,40 @@ private:
         const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const;
 
 public:
-    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+    std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
+        AFL_VERIFY(columnIndex < ColumnFeatures.size());
+        return ColumnFeatures[columnIndex]->GetPKColumnIndex();
+    }
 
-    bool IsNullableVerified(const std::string& fName) const {
-        return IsNullableVerified(GetColumnIdVerified(fName));
+    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+    bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
+        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        return ColumnFeatures[colIndex]->GetIsNullable();
     }
 
     bool IsNullableVerified(const ui32 colId) const {
-        auto it = ColumnFeatures.find(colId);
-        if (it == ColumnFeatures.end()) {
-            AFL_VERIFY(IIndexInfo::IsSpecialColumn(colId));
-            return IIndexInfo::IsNullableVerified(colId);
-        }
-        return it->second->GetIsNullable();
+        return GetColumnFeaturesVerified(colId).GetIsNullable();
     }
 
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
     std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
+    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const;
+
 
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
-        auto it = ColumnFeatures.find(columnId);
-        AFL_VERIFY(it != ColumnFeatures.end());
-        return *it->second;
+        return *ColumnFeatures[GetColumnIndexVerified(columnId)];
+    }
+
+    const std::shared_ptr<TColumnFeatures>& GetColumnFeaturesOptional(const ui32 columnId) const {
+        if (auto idx = GetColumnIndexOptional(columnId)) {
+            return ColumnFeatures[*idx];
+        } else {
+            return Default<std::shared_ptr<TColumnFeatures>>();
+        }
     }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
@@ -167,7 +212,7 @@ public:
             result.emplace(portionTierName);
         } else {
             for (auto&& i : ColumnFeatures) {
-                result.emplace(i.second->GetOperator()->GetStorageId());
+                result.emplace(i->GetOperator()->GetStorageId());
             }
         }
         return result;
@@ -187,9 +232,7 @@ public:
         if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
             return specialTier;
         } else {
-            auto it = ColumnFeatures.find(columnId);
-            AFL_VERIFY(it != ColumnFeatures.end());
-            return it->second->GetOperator()->GetStorageId();
+            return GetColumnFeaturesVerified(columnId).GetOperator()->GetStorageId();
         }
     }
 
@@ -208,7 +251,7 @@ public:
            << "name=" << Name << ";"
            << ")";
         for (auto&& i : ColumnFeatures) {
-            sb << GetColumnName(i.first) << ":" << i.second->DebugString() << ";";
+            sb << i->GetColumnName() << ":" << i->DebugString() << ";";
         }
         return sb;
     }
@@ -224,13 +267,10 @@ public:
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
-        for (auto&& i : columns) {
-            result.ColumnNames[i.second.Name] = i.first;
-        }
+        result.ColumnNames = TNameInfo::BuildColumnNames(columns);
         for (auto&& i : pkNames) {
-            auto it = result.ColumnNames.find(i);
-            AFL_VERIFY(it != result.ColumnNames.end());
-            result.PKColumnIds.emplace_back(it->second);
+            const ui32 columnId = result.GetColumnIdVerified(i);
+            result.PKColumnIds.emplace_back(columnId);
         }
         result.SetAllKeys(operators, columns);
         return result;
@@ -238,18 +278,14 @@ public:
 
     std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
         const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
-        auto itCurrent = ColumnFeatures.find(columnId);
-        auto itPred = sourceIndexInfo.ColumnFeatures.find(columnId);
-        AFL_VERIFY(itCurrent != ColumnFeatures.end());
-        AFL_VERIFY(itPred != sourceIndexInfo.ColumnFeatures.end());
-        return itCurrent->second->ActualizeColumnData(source, *itPred->second);
+        return GetColumnFeaturesVerified(columnId).ActualizeColumnData(source, sourceIndexInfo.GetColumnFeaturesVerified(columnId));
     }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool HasColumnId(const ui32 columnId) const {
-        return ColumnFeatures.contains(columnId);
+        return !!GetColumnIndexOptional(columnId);
     }
 
     bool HasColumnName(const std::string& columnName) const {
@@ -342,14 +378,19 @@ public:
         return result;
     }
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    std::optional<ui32> GetColumnIndexOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
-    TString GetColumnName(ui32 id, bool required = true) const;
+    TString GetColumnName(const ui32 id, bool required = true) const;
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    ui32 GetColumnIdByIndexVerified(const ui32 index) const {
+        AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
+        return SchemaColumnIdsWithSpecials[index];
+    }
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;

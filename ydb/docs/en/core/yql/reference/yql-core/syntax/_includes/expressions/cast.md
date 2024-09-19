@@ -9,7 +9,7 @@ For more information about casting rules, see [here](../../../types/cast.md).
 
 {% include [decimal_args](../../../_includes/decimal_args.md) %}
 
-**Examples**
+### Examples
 
 {% include [cast_examples](../../../_includes/cast_examples.md) %}
 

@@ -59,14 +59,14 @@ NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
 
 class TPartitionCounterWrapper {
 private:
-    bool DoSave;
-    bool DoReport;
+    bool DoSave = false;
+    bool DoReport = false;
     TMaybe<NKikimr::NPQ::TMultiCounter> Counter;
     ui64 CounterValue = 0;
     bool Inited = false;
 
 public:
-    TPartitionCounterWrapper();
+    TPartitionCounterWrapper() = default;
     explicit TPartitionCounterWrapper(NKikimr::NPQ::TMultiCounter&& counter, bool isSupportivePartition, bool doReport = true);
     void Setup(bool isSupportivePartition, bool doReport, NKikimr::NPQ::TMultiCounter&& counter);
     void Inc(ui64 value);

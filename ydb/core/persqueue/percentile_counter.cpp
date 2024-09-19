@@ -131,12 +131,6 @@ NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
     return NKikimr::NPQ::TPercentileCounter(counters->GetSubgroup("sensor", name), aggr, {}, "Duration", buckets, true, false);
 }
 
-TPartitionCounterWrapper::TPartitionCounterWrapper()
-    : DoSave(false)
-    , DoReport(false)
-{
-}
-
 TPartitionCounterWrapper::TPartitionCounterWrapper(NKikimr::NPQ::TMultiCounter&& counter, bool isSupportivePartition, bool doReport) {
     Setup(isSupportivePartition, doReport, std::move(counter));
 }

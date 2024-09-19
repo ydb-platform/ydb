@@ -55,14 +55,38 @@ const TRuntimeNode MakeDict(TProgramBuilder& pgmBuilder,
         });
 }
 
+// XXX: Copy-pasted from program builder sources. Adjusted on demand.
+const std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
+    Y_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    std::vector<TType*> items;
+    items.reserve(wideComponents.size());
+    // XXX: Declare these variables outside the loop body to use for the last
+    // item (i.e. block length column) in the assertions below.
+    bool isScalar;
+    TType* itemType;
+    for (const auto& wideComponent : wideComponents) {
+        auto blockType = AS_TYPE(TBlockType, wideComponent);
+        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+        itemType = blockType->GetItemType();
+        items.push_back(blockType);
+    }
+
+    Y_ENSURE(isScalar, "Last column should be scalar");
+    Y_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+    return items;
+}
+
 const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
     TRuntimeNode& leftArg, TType* leftTuple, const TRuntimeNode& dictNode
 ) {
+    // 1. Make left argument node.
     const auto tupleType = AS_TYPE(TTupleType, leftTuple);
     const auto listTupleType = pgmBuilder.NewListType(leftTuple);
     leftArg = pgmBuilder.Arg(listTupleType);
 
+    // 2. Make left wide stream node.
     const auto leftWideStream = pgmBuilder.FromFlow(pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
         [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
             TRuntimeNode::TList wide;
@@ -73,8 +97,52 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
             return wide;
         }));
 
+    // 3. Calculate the resulting join type.
+    const auto leftStreamItems = ValidateBlockStreamType(leftWideStream.GetStaticType());
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    TVector<TType*> returnJoinItems;
+    for (size_t i = 0; i < leftStreamItems.size(); i++) {
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        returnJoinItems.push_back(leftStreamItems[i]);
+    }
+
+    const auto payloadType = AS_TYPE(TDictType, dictNode.GetStaticType())->GetPayloadType();
+    const auto payloadItemType = payloadType->IsList()
+                               ? AS_TYPE(TListType, payloadType)->GetItemType()
+                               : payloadType;
+    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers to ease the processing of the dict payload in wide context.
+        Y_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
+        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
+        TVector<TType*> dictBlockItems;
+        dictBlockItems.reserve(payloadItems.size());
+        for (const auto& payloadItem : payloadItems) {
+            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
+            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
+                                : pgmBuilder.NewOptionalType(payloadItem);
+            dictBlockItems.emplace_back(pgmBuilder.NewBlockType(itemType, TBlockType::EShape::Many));
+        }
+        // Block length column has to be the last column in wide block stream item,
+        // so all contents of the dict payload should be appended to the resulting
+        // wide type before the block size column.
+        const auto blockLenPos = std::prev(returnJoinItems.end());
+        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
+    } else {
+        // XXX: This is the contract ensured by the expression compiler and
+        // optimizers for join types that don't require the right (i.e. dict) part.
+        Y_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
+    }
+    TType* returnJoinType = pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(returnJoinItems));
+
+    // 4. Build BlockMapJoinCore node.
     const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideStream, dictNode, joinKind,
-                                                      leftKeyColumns, leftKeyDrops);
+                                                      leftKeyColumns, leftKeyDrops,
+                                                      returnJoinType);
+
+    // 5. Build the root node with list of tuples.
     const auto joinItems = GetWideComponents(AS_TYPE(TStreamType, joinNode.GetStaticType()));
     const auto resultType = AS_TYPE(TTupleType, pgmBuilder.NewTupleType(joinItems));
 

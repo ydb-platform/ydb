@@ -1882,6 +1882,31 @@ private:
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
+            std::map<ui32, std::pair<double, ui32>> externalSources;
+            if (!ResourceSnapshot.empty())
+            {
+                // collect Source stages costs
+                for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+                    auto& stage = tx.Body->GetStages(stageIdx);
+                    if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                        if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
+                            externalSources.emplace(stageIdx, std::make_pair<double, ui32>(stage.GetStageCost(), 0));
+                        }
+                    }
+                }
+                // assign task counts
+                if (!externalSources.empty()) {
+                    ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
+                    ui32 maxTotalTaskCount = maxStageTaskCount * 2;
+                    double totalCost = 0.0;
+                    for (auto& externalSource : externalSources) {
+                        totalCost += externalSource.second.first;
+                    }
+                    for (auto& externalSource : externalSources) {
+                        externalSource.second.second = std::max<ui32>(std::min(static_cast<ui32>(maxTotalTaskCount * externalSource.second.first / totalCost), maxStageTaskCount), 1) * ResourceSnapshot.size();
+                    }
+                }
+            }
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -1927,8 +1952,10 @@ private:
                                 UnknownAffectedShardCount = true;
                             }
                             break;
-                        case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot);
+                        case NKqpProto::TKqpSource::kExternalSource: {
+                            auto it = externalSources.find(stageIdx);
+                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot, it == externalSources.end() ? 0 : it->second.second);
+                        }
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");

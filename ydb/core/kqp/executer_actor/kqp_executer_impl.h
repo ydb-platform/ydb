@@ -924,7 +924,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -936,6 +936,10 @@ protected:
         ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
 
         auto taskCountHint = stage.GetTaskCount();
+        if (taskCountHint == 0) {
+            taskCountHint = scheduledTaskCount;
+        }
+
         if (taskCountHint) {
             if (taskCount > taskCountHint) {
                 taskCount = taskCountHint;

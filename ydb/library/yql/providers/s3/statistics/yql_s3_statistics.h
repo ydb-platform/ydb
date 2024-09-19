@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/core/yql_statistics.h>
+#include <map>
 
 namespace NYql {
 
@@ -13,6 +14,7 @@ struct TS3ProviderStatistics : public IProviderStatistics {
     double PrunedDecodedRowAvgSize = 0.0;
     TString Format;
     TString Compression;
+    std::unordered_map<ui64, double> Costs;
 };
 
 } // namespace NYql

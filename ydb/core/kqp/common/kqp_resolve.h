@@ -49,8 +49,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
             column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
         } else {
-            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
-                NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
+            column.Type = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
         }
         column.NotNull = phyColumn.GetNotNull();
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();

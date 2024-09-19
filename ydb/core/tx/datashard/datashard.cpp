@@ -1092,6 +1092,8 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         if (!--rIt->second) {
             ChangeQueueReservations.erase(rIt);
         }
+
+        SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
     }
 
     UpdateChangeExchangeLag(AppData()->TimeProvider->Now());
@@ -1099,12 +1101,24 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
-    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
 
     CheckChangesQueueNoOverflow();
 }
 
 void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie, bool afterMove) {
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        Y_ABORT_UNLESS(!afterMove);
+
+        ChangeQueueReservedCapacity -= it->second;
+        it->second = records.size();
+        ChangeQueueReservedCapacity += it->second;
+        if (!it->second) {
+            ChangeQueueReservations.erase(it);
+        }
+
+        SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
+    }
+
     if (!records) {
         return;
     }
@@ -1140,22 +1154,15 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         ChangesQueueBytes += record.BodySize;
     }
 
-    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
-        Y_ABORT_UNLESS(!afterMove);
-        ChangeQueueReservedCapacity -= it->second;
-        ChangeQueueReservedCapacity += records.size();
-    }
-
     UpdateChangeExchangeLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
-    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
 
     Y_ABORT_UNLESS(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
 }
 
-ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
+ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) const {
     const ui64 sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
     if (sizeLimit < ChangesQueue.size()) {
         return 0;

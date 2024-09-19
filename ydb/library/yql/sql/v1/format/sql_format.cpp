@@ -1549,11 +1549,27 @@ private:
 
         NewLine();
         PushCurrentIndent();
-        Visit(msg.GetRule_alter_backup_collection_actions3().GetRule_alter_backup_collection_action1());
-        for (const auto& action : msg.GetRule_alter_backup_collection_actions3().GetBlock2()) {
-            Visit(action.GetToken1()); // comma
-            NewLine();
-            Visit(action.GetRule_alter_backup_collection_action2());
+        switch (msg.GetBlock3().Alt_case()) {
+        case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
+            Visit(msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetRule_alter_backup_collection_action1());
+            for (const auto& action : msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetBlock2()) {
+                Visit(action.GetToken1()); // comma
+                NewLine();
+                Visit(action.GetRule_alter_backup_collection_action2());
+            }
+            break;
+        }
+        case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
+            Visit(msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetRule_alter_backup_collection_entry1());
+            for (const auto& entry : msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetBlock2()) {
+                Visit(entry.GetToken1()); // comma
+                NewLine();
+                Visit(entry.GetRule_alter_backup_collection_entry2());
+            }
+            break;
+        }
+        default:
+            ythrow yexception() << "Alt is not supported";
         }
 
         PopCurrentIndent();

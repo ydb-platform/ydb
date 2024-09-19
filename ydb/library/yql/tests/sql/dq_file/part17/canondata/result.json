@@ -1150,6 +1150,9 @@
             "checksum": "48ff67f012e7d63c01fdc6c4f6e5c7de",
             "size": 39988,
             "uri": "https://{canondata_backend}/1031349/fade0e1ab4ddcf96add4ba75388b76b0ae6970f8/resource.tar.gz#test.test_insert-multiappend_sorted-default.txt-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_insert-multiappend_sorted-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[insert-multiappend_sorted-default.txt-Debug]": [
@@ -1166,7 +1169,11 @@
             "uri": "https://{canondata_backend}/1031349/fade0e1ab4ddcf96add4ba75388b76b0ae6970f8/resource.tar.gz#test.test_insert-multiappend_sorted-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[insert-multiappend_sorted-default.txt-Results]": [],
+    "test.test[insert-multiappend_sorted-default.txt-Results]": [
+        {
+            "uri": "file://test.test_insert-multiappend_sorted-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[insert_monotonic-truncate_fail--Results]": [
         {
             "uri": "file://test.test_insert_monotonic-truncate_fail--Results_/extracted"

@@ -29,7 +29,7 @@ NScheme::TTypeInfo BuildTypeInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& pr
     if (typeId != NKikimr::NScheme::NTypeIds::Pg) {
         return NScheme::TTypeInfo(typeId);
     } else {
-        return NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(proto.GetTypeInfo().GetPgTypeId()));
+        return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(proto.GetTypeInfo().GetPgTypeId()));
     }
 }
 

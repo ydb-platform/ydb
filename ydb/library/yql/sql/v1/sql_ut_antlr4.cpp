@@ -6702,24 +6702,6 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
-    Y_UNIT_TEST(CreateViewNoSecurityInvoker) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
-                CREATE VIEW TheView AS SELECT 1;
-            )"
-        );
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "mismatched input 'AS' expecting WITH");
-    }
-
-    Y_UNIT_TEST(CreateViewSecurityInvokerTurnedOff) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
-                CREATE VIEW TheView WITH (security_invoker = FALSE) AS SELECT 1;
-            )"
-        );
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "SECURITY_INVOKER option must be explicitly enabled");
-    }
-
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -7040,8 +7022,63 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    STORAGE="local",
+                    TAG="test" -- for testing purposes, not a real thing
+                )
+                    DATABASE;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('type 'database)"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateBackupCollectionWithTables) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection WITH (
+                    STORAGE="local",
+                    TAG="test" -- for testing purposes, not a real thing
+                )
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"someTable")))#"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"prefix/anotherTable")))#"));
             }
         };
 
@@ -7056,6 +7093,21 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
                 USE plato;
                 CREATE BACKUP COLLECTION TestCollection;
             )sql" , "<main>:3:55: Error: mismatched input ';' expecting WITH\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection TABLE;
+            )sql" , "<main>:3:56: Error: mismatched input 'TABLE' expecting WITH\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
+            )sql" , "<main>:3:56: Error: mismatched input 'DATABASE' expecting WITH\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
+            )sql" , "<main>:3:56: Error: mismatched input 'DATABASE' expecting WITH\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
@@ -7085,9 +7137,35 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"storage" '"remote") '('"tag1" '"123"))))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"tag2" '"tag3")))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('settings '('('"storage" '"remote") '('"tag1" '"123"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AlterBackupCollectionEntries) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER BACKUP COLLECTION TestCollection
+                    DROP TABLE `test`,
+                    ADD DATABASE;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('alterEntries)#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('type 'table) '('path '"test") '('action 'drop)))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('type 'database) '('action 'add)))#");
             }
         };
 
@@ -7106,8 +7184,8 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
             }
         };
 

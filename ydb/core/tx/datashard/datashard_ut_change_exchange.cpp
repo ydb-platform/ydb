@@ -3144,6 +3144,63 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(InitialScanEnqueuesZeroRecords) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetChangesQueueItemsLimit(2)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30),
+            (4, 40);
+        )");
+
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime, [&](auto& ev) {
+            ev->Get()->Record.MutableLimits()->SetBatchMaxRows(1);
+            return true;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        runtime.WaitFor("Scan request", [&]{ return blockScanRequest.size(); });
+        runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            ev->Get()->Record.MutableLimits()->SetBatchMaxRows(1);
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )");
+
+        blockScanRequest.Unblock().Stop();
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":100},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":200},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"update":{"value":300},"key":[3]})",
+            R"({"update":{"value":40},"key":[4]})",
+        });
+    }
+
     Y_UNIT_TEST(InitialScanRacyProgressAndDrop) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

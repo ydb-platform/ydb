@@ -49,6 +49,7 @@ class AddInflightExtension(ExtensionPoint):
         kikimr.compute_plane.fq_config['gateways']['s3']['max_inflight'] = kikimr.inflight
         del request.param["inflight"]
 
+
 class AddAllowConcurrentListingsExtension(ExtensionPoint):
     def is_applicable(self, request):
         return (hasattr(request, 'param')

@@ -742,8 +742,7 @@ private:
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
             for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
                 for (NYql::NDqProto::TTaskInput& taskInput : *task.MutableInputs()) {
-                    if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource 
-                        && taskInput.GetSource().GetType() == "PqSource") {
+                    if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == "PqSource") {
                         google::protobuf::Any& settingsAny = *taskInput.MutableSource()->MutableSettings();
                         YQL_ENSURE(settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>());
                         NYql::NPq::NProto::TDqPqTopicSource srcDesc;

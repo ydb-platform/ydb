@@ -186,8 +186,6 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
 
-        if not binary_paths:
-            binary_paths = [kikimr_driver_path()]
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
         if nodes is None:
@@ -526,7 +524,10 @@ class KikimrConfigGenerator(object):
         return self.__output_path
 
     def get_binary_path(self, node_id):
-        return self.__binary_paths[node_id % len(self.__binary_paths)]
+        binary_paths = self.__binary_paths
+        if not binary_paths:
+            binary_paths = [kikimr_driver_path()]
+        return binary_paths[node_id % len(binary_paths)]
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:

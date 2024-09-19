@@ -232,14 +232,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     modifyScheme.SetWorkingDir(path.Parent().PathString());
     modifyScheme.MutableLockConfig()->SetName(path.LeafName());
 
-    if (buildInfo.IsBuildIndex()) {
-        buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
-    } else if (buildInfo.IsBuildColumns()) {
-        buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
-    } else {
-        Y_ABORT("Unknown operation kind while building LockPropose");
-    }
-
     return propose;
 }
 

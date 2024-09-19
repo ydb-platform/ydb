@@ -2988,30 +2988,29 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     bool CancelRequested = false;
 
-    TTxId AlterMainTableTxId = TTxId();
-    NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     bool AlterMainTableTxDone = false;
-
-    TTxId LockTxId = TTxId();
-    NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
     bool LockTxDone = false;
-
-    TTxId InitiateTxId = TTxId();
-    NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
     bool InitiateTxDone = false;
+    bool ApplyTxDone = false;
+    bool UnlockTxDone = false;
+
+    bool BillingEventIsScheduled = false;
+
+    TTxId AlterMainTableTxId = TTxId();
+    TTxId LockTxId = TTxId();
+    TTxId InitiateTxId = TTxId();
+    TTxId ApplyTxId = TTxId();
+    TTxId UnlockTxId = TTxId();
+
+    NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
 
-    TTxId ApplyTxId = TTxId();
-    NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
-    bool ApplyTxDone = false;
-
-    TTxId UnlockTxId = TTxId();
-    NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
-    bool UnlockTxDone = false;
-
-    bool BillingEventIsScheduled = false;
     TDuration ReBillPeriod = TDuration::Seconds(10);
 
     struct TShardStatus {

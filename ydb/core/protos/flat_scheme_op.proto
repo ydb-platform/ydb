@@ -33,7 +33,7 @@ message TMkDir {
 
 enum EDropWaitPolicy {
     EDropFailOnChanges = 0;
-    EDropAbortChanges = 1; //depricated
+    EDropAbortChanges = 1; //deprecated
     EDropWaitChanges = 2;
 }
 

@@ -43,6 +43,7 @@ public:
         auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
         if (!queryIt.second) {
             EraseByUid(compileResult->Uid);
+            QueryIndex.erase(query);
         }
         Y_ENSURE(queryIt.second);
     }
@@ -785,6 +786,12 @@ private:
             auto query = request.Query ? *request.Query : *compileResult->Query;
             if (compileResult) {
                 query.UserSid = compileResult->Query->UserSid;
+                if (query != *compileResult->Query) {
+                    LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "queryId in recompile request and queryId in cache are different"
+                      << ", queryId in request: " << query.SerializeToString()
+                      << ", queryId in cache: " << compileResult->Query->SerializeToString()
+                    );
+                }
             }
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,

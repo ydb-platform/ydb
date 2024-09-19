@@ -677,7 +677,7 @@ backup_collection_settings: backup_collection_settings_entry (COMMA backup_colle
 backup_collection_settings_entry: an_id EQUALS table_setting_value;
 
 backup_stmt: BACKUP object_ref (INCREMENTAL)?;
-restore_stmt: RESTORE object_ref (AT_keyword STRING_VALUE)?;
+restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -901,10 +901,10 @@ define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_c
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? PARALLEL? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
+table_ref: (cluster_expr DOT)? AT_lexeme? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
 
 table_key: id_table_or_type (VIEW view_name)?;
-table_arg: AT? named_expr (VIEW view_name)?;
+table_arg: AT_lexeme? named_expr (VIEW view_name)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
@@ -913,7 +913,7 @@ table_hint:
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
-simple_table_ref_core: object_ref | AT? bind_parameter;
+simple_table_ref_core: object_ref | AT_lexeme? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
@@ -1154,9 +1154,9 @@ cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
 
 id_or_type: id | type_id;
 opt_id_prefix_or_type: (an_id_or_type DOT)?;
-id_or_at: AT? an_id_or_type;
+id_or_at: AT_lexeme? an_id_or_type;
 id_table_or_type: an_id_table | type_id;
-id_table_or_at: AT? id_table_or_type;
+id_table_or_at: AT_lexeme? id_table_or_type;
 
 keyword:
     keyword_compat
@@ -1253,7 +1253,7 @@ keyword_as_compat:
   | ARRAY
   | ASC
   | ASYNC
-  | AT_keyword
+  | AT
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
@@ -1471,7 +1471,7 @@ keyword_compat: (
   | ARRAY
   | ASC
   | ASYNC
-  | AT_keyword
+  | AT
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
@@ -1729,7 +1729,7 @@ LPAREN:        '(';
 RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
-AT:            '@';
+AT_lexeme:     '@';
 DOUBLE_AT:     '@@';
 DOLLAR:        '$';
 QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
@@ -1787,7 +1787,7 @@ ASC: A S C;
 ASSUME: A S S U M E;
 ASYMMETRIC: A S Y M M E T R I C;
 ASYNC: A S Y N C;
-AT_keyword: A T;
+AT: A T;
 ATTACH: A T T A C H;
 ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
@@ -2068,7 +2068,7 @@ fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
+fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT_lexeme?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 

@@ -33,7 +33,7 @@ protected:
     TString Query;
     TString QueryFile;
     TString Syntax;
-    TString ResultsTtl = "86400";
+    TDuration ResultsTtl = TDuration::Days(1);
     bool AsyncWait = false;
     // Operation status object. May be received either form ExecuteQueryScriptResponse or from OperationService explicitly
     std::optional<NQuery::TScriptExecutionOperation> Operation = std::nullopt;

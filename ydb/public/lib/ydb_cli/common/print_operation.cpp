@@ -325,7 +325,7 @@ namespace {
                 Cout << table;
             }
             if (operations.NextPageToken()) {
-                Cout << Endl << "Next page token: \"" << operations.NextPageToken() << "\"" << Endl;
+                Cout << Endl << "To view next page add this option to command: --page-token \"" << operations.NextPageToken() << "\"" << Endl;
             }
             break;
 

@@ -32,7 +32,7 @@ void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& 
         .Hidden();
     config.Opts->AddLongOption("results-ttl", "Amount of time to store script execution results on server "
         "(for async operations only). By default it is 86400s (24 hours).")
-        .RequiredArgument("SECONDS").DefaultValue("86400").StoreResult(&ResultsTtl);
+        .RequiredArgument("SECONDS").StoreResult(&ResultsTtl);
 }
 
 void TCommandExecuteSqlBase::DeclareCommonOutputOptions(TClientCommand::TConfig& config) {
@@ -69,9 +69,7 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TDriver& driver, NQuery::TQueryCl
     settings.ExecMode(NQuery::EExecMode::Execute);
     settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::None));
 
-    if (ResultsTtl) {
-        settings.ResultsTtl(TDuration::Seconds(FromString<ui64>(ResultsTtl)));
-    }
+    settings.ResultsTtl(ResultsTtl);
 
     // Execute query without parameters
     Operation = queryClient.ExecuteScript(
@@ -466,7 +464,7 @@ int TCommandSqlAsyncGet::Run(TConfig& config) {
         PrintOperation(operation, OutputFormat);
         const auto& metadata = operation.Metadata();
         Cout << "Script syntax: " << metadata.ScriptContent.Syntax << Endl;
-        Cout << "Script text: \"" << metadata.ScriptContent.Text << "\"" << Endl;
+        Cout << "Script text: \"" << metadata.ScriptContent.Text << "\"" << Endl << Endl;
     };
     switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:

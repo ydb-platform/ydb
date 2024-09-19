@@ -205,6 +205,12 @@ struct TTxCompleteObjectModification: public TSchemeShard::TRwTxBase {
 struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
     TEvPrivate::TEvInitializeObjectMetadata::TPtr Request;
 
+    static bool IsModificationCompleted(
+        const TObjectsInfo::TModificationInfo& modification, std::shared_ptr<NMetadata::NContainer::TObjectSnapshotBase> snapshot) {
+        const TInstant lastHistoryInstant = snapshot ? snapshot->GetLastHistoryInstant() : TInstant::Zero();
+        return modification.PreviousHistoryInstant != lastHistoryInstant;
+    }
+
     TTxInitializeObjectMetadata(TSelf* self, const TEvPrivate::TEvInitializeObjectMetadata::TPtr& ev)
         : TRwTxBase(self)
         , Request(ev) {
@@ -228,7 +234,7 @@ struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
         for (const TString& objectId : Self->Objects.ListObjectsUnderModification(typeId)) {
             const TObjectsInfo::TModificationInfo* modification = Self->Objects.FindModification(typeId, objectId);
             AFL_VERIFY(modification);
-            if (modification->PreviousHistoryInstant == currentObjects.FindObjectAbstract(objectId)->GetLastHistoryInstant()) {
+            if (IsModificationCompleted(*modification, currentObjects.FindObjectAbstract(objectId))) {
                 ctx.Send(modification->Sender, new TEvSchemeShard::TEvModifyObjectResult("Transaction was invalidated."));
             } else {
                 ctx.Send(modification->Sender, new TEvSchemeShard::TEvModifyObjectResult());

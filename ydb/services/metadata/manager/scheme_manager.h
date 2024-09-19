@@ -12,28 +12,28 @@ namespace NKikimr::NMetadata::NModifications {
 
 class TSchemeOperationsController: public IAlterController {
 private:
-    using TSideEffectPtr = std::shared_ptr<NContainer::TObjectSnapshotBase>;
+    using TResultSnapshot = std::shared_ptr<NContainer::TObjectSnapshotBase>;
 
     YDB_READONLY_DEF(TActorId, Recipient);
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(ui64, OriginalCookie);
-    YDB_READONLY_DEF(TSideEffectPtr, SideEffect);
+    YDB_READONLY_DEF(TResultSnapshot, ResultSnapshot);
 
 private:
-    void Reply(TConclusion<TSideEffectPtr> result) {
+    void Reply(TConclusion<TResultSnapshot> result) {
         NActors::TActorContext::AsActorContext().Send(
             Recipient, new NSchemeShard::TEvPrivate::TEvObjectModificationResult(TypeId, ObjectId, std::move(result)), 0, OriginalCookie);
     }
 
 public:
     TSchemeOperationsController(
-        const TActorId& recipient, const NYql::TObjectSettingsImpl& operation, ui64 originalCookie, TSideEffectPtr sideEffect)
+        const TActorId& recipient, const NYql::TObjectSettingsImpl& operation, ui64 originalCookie, TResultSnapshot resultSnapshot)
         : Recipient(recipient)
         , TypeId(operation.GetTypeId())
         , ObjectId(operation.GetObjectId())
         , OriginalCookie(originalCookie)
-        , SideEffect(std::move(sideEffect)) {
+        , ResultSnapshot(std::move(resultSnapshot)) {
     }
 
     virtual void OnAlteringProblem(const TString& errorMessage) override {
@@ -41,10 +41,10 @@ public:
     }
 
     virtual void OnAlteringFinished(TInstant historyInstant) override {
-        AFL_VERIFY(SideEffect);
-        // TODO: Consider renaming LastHistoryInstant -> HistoryInstant
-        SideEffect->SetLastHistoryInstant(historyInstant);
-        Reply(std::move(SideEffect));
+        if (ResultSnapshot) {
+            ResultSnapshot->SetLastHistoryInstant(historyInstant);
+        }
+        Reply(std::move(ResultSnapshot));
     }
 };
 

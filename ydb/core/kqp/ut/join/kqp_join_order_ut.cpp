@@ -100,7 +100,7 @@ void PrintPlan(const TString& plan) {
 class TChainTester {
 public:
     TChainTester(size_t chainSize)
-        : Kikimr(GetKikimrWithJoinSettings())
+        : Kikimr(GetKikimrWithJoinSettings(false, GetStats(chainSize)))
         , TableClient(Kikimr.GetTableClient())
         , Session(TableClient.CreateSession().GetValueSync().GetSession())
         , ChainSize(chainSize)
@@ -110,6 +110,21 @@ public:
     void Test() {
         CreateTables();
         JoinTables();
+    }
+
+    static TString GetStats(size_t chainSize) {
+        srand(228);
+        NJson::TJsonValue stats;
+        for (size_t i = 0; i < chainSize; ++i) {
+            ui64 nRows = rand();
+            NJson::TJsonValue tableStat;
+            tableStat["n_rows"] = nRows;
+            tableStat["byte_size"] = nRows * 10;
+
+            TString table = Sprintf("/Root/table_%ld", i);
+            stats[table] = std::move(tableStat);
+        }
+        return stats.GetStringRobust();
     }
 
 private:
@@ -132,6 +147,17 @@ private:
         TString joinRequest;
 
         joinRequest.append("SELECT * FROM `/Root/table_0` as t0 ");
+
+        srand(228);
+        NJson::TJsonValue stats;
+        for (size_t i = 0; i < ChainSize; ++i) {
+            TString table = Sprintf("/Root/table_%ld", i);
+            int nRows = rand();
+            NJson::TJsonValue tableStat;
+            tableStat[table]["n_rows"] = nRows;
+            tableStat[table]["byte_size"] = nRows * 10;
+            stats.AppendValue(std::move(tableStat));
+        }
 
         for (size_t i = 1; i < ChainSize; ++i) {
             TString table = Sprintf("/Root/table_%ld", i);

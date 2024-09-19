@@ -606,14 +606,8 @@ message TKqpNodeResources {
     optional uint32 AvailableComputeActors = 4; // legacy
     optional uint64 UsedMemory = 5; // legacy
     optional uint64 TotalMemory = 7; // legacy
-    message TTxResources {
-        optional uint64 TxId = 1;
-        optional uint32 ComputeActors = 2;
-        optional uint64 Memory = 3;
-        optional uint32 StartTimestamp = 4;
-    }
-    repeated TTxResources Transactions = 6; // legacy
 
+    reserved 6;
     ////////////////////////////////////////////////////
 
     optional uint32 NodeId = 1;

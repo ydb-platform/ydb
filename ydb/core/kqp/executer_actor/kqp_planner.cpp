@@ -94,10 +94,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , CaFactory_(args.CaFactory_)
     , BlockTrackingMode(args.BlockTrackingMode)
 {
-    if (GUCSettings) {
-        SerializedGUCSettings = GUCSettings->SerializeToString();
-    }
-
     if (!Database) {
         // a piece of magic for tests
         if (const auto& domain = AppData()->DomainsInfo->Domain) {

@@ -1,13 +1,4 @@
 #include "guc_settings.h"
-#include <library/cpp/json/json_reader.h>
-
-TGUCSettings::TGUCSettings(const TString &serialized) {
-    if (!serialized.Empty()) {
-        NJson::TJsonValue gucJson;
-        Y_ENSURE(NJson::ReadJsonTree(serialized, &gucJson), "Error parsing GUCSettings");
-        this->ImportFromJson(gucJson);
-    }
-}
 
 
 void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& runtimeSettings) {
@@ -38,55 +29,29 @@ void TGUCSettings::RollBack() {
     Settings_ = SessionSettings_ = RollbackSettings_;
 }
 
-void TGUCSettings::ExportToJson(NJson::TJsonValue& value) const {
-    NJson::TJsonValue settings(NJson::JSON_MAP);
+void TGUCSettings::ExportToProto(NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value) const {
     for (const auto& setting : Settings_) {
-        settings[setting.first] = setting.second;
+        value.MutableSettings()->insert({setting.first.c_str(), setting.second.c_str()});
     }
-    NJson::TJsonValue rollbackSettings(NJson::JSON_MAP);
     for (const auto& setting : RollbackSettings_) {
-        rollbackSettings[setting.first] = setting.second;
+        value.MutableRollbackSettings()->insert({setting.first.c_str(), setting.second.c_str()});
     }
-    NJson::TJsonValue sessionSettings(NJson::JSON_MAP);
     for (const auto& setting : SessionSettings_) {
-        sessionSettings[setting.first] = setting.second;
+        value.MutableSessionSettings()->insert({setting.first.c_str(), setting.second.c_str()});
     }
-    NJson::TJsonValue gucSettings(NJson::JSON_MAP);
-    gucSettings.InsertValue("settings", std::move(settings));
-    gucSettings.InsertValue("rollback_settings", std::move(rollbackSettings));
-    gucSettings.InsertValue("session_settings", std::move(sessionSettings));
-    value.InsertValue("guc_settings", std::move(gucSettings));
 }
 
-void TGUCSettings::ImportFromJson(const NJson::TJsonValue& value)
+void TGUCSettings::ImportFromProto(const NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value)
 {
-    Settings_.clear();
-    RollbackSettings_.clear();
-    SessionSettings_.clear();
-    if (value.Has("guc_settings")) {
-        auto gucSettings = value["guc_settings"];
-        if (gucSettings.Has("settings")) {
-            for (const auto& [settingName, settingValue] : gucSettings["settings"].GetMapSafe()) {
-                Settings_[settingName] = settingValue.GetStringSafe();
-            }
-        }
-        if (gucSettings.Has("rollback_settings")) {
-            for (const auto& [settingName, settingValue] : gucSettings["rollback_settings"].GetMapSafe()) {
-                RollbackSettings_[settingName] = settingValue.GetStringSafe();
-            }
-        }
-        if (gucSettings.Has("session_settings")) {
-            for (const auto& [settingName, settingValue] : gucSettings["session_settings"].GetMapSafe()) {
-                SessionSettings_[settingName] = settingValue.GetStringSafe();
-            }
-        }
+    for (const auto& [settingName, settingValue] : value.GetSettings()) {
+        Settings_[settingName] = settingValue;
     }
-}
-
-TString TGUCSettings::SerializeToString() const {
-    NJson::TJsonValue gucJson;
-    this->ExportToJson(gucJson);
-    return WriteJson(gucJson);
+    for (const auto& [settingName, settingValue] : value.GetRollbackSettings()) {
+        RollbackSettings_[settingName] = settingValue;
+    }
+    for (const auto& [settingName, settingValue] : value.GetSessionSettings()) {
+         SessionSettings_[settingName] = settingValue;
+    }
 }
 
 bool TGUCSettings::operator==(const TGUCSettings& other) const {

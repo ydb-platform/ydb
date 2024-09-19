@@ -1977,6 +1977,40 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "path exist", result.GetIssues().ToString());
         }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/RowDst` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = ROW) AS
+                SELECT * FROM `/Root/ColSrc`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/RowDst`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/ColDst` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = ROW) AS
+                SELECT * FROM `/Root/RowSrc`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColDst`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 

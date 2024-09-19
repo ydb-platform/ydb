@@ -1104,8 +1104,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TDeferredAtom> features;
-            ParseViewOptions(features, node.GetRule_with_table_settings4());
-            ParseViewQuery(features, node.GetRule_select_stmt6());
+            if (node.HasBlock4()) {
+                if (!ParseObjectFeatures(features, node.GetBlock4().GetRule_create_object_features1().GetRule_object_features2())) {
+                    return false;
+                }
+            }
+            if (!ParseViewQuery(features, node.GetRule_select_stmt6())) {
+                return false;
+            }
 
             const TString objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             constexpr const char* TypeId = "VIEW";

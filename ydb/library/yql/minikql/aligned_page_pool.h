@@ -183,6 +183,8 @@ public:
     void OffloadAlloc(ui64 size);
     void OffloadFree(ui64 size) noexcept;
 
+    static void DoCleanupGlobalFreeList(ui64 targetSize = 4 * 64 * 1024 * 1024);
+
     static ui64 GetGlobalPagePoolSize();
 
     ui64 GetLimit() const noexcept {

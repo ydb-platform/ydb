@@ -76,6 +76,7 @@ def bulk_upsert(table_client, table_path, rows):
 
 def main():
     parser = argparse.ArgumentParser()
+
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument('--build_type',choices=['relwithdebinfo', 'release-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or release-asan')
     parser.add_argument('--branch', default='main',choices=['main'], type=str, help='branch')
@@ -143,10 +144,12 @@ def main():
         
         print(f'last hisotry date: {last_date}')
         # getting history for dates >= last_date
+
         today = datetime.date.today()
         date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
         for date in sorted(date_list):
             query_get_history = f"""
+
         select
             full_name,
             date_base,
@@ -175,7 +178,7 @@ def main():
                 max(run_timestamp) as last_run
             from (
                 select * from (
-                   
+   
                     select distinct
                         full_name,
                         suite_folder,
@@ -196,6 +199,7 @@ def main():
                     where
                         run_timestamp <= Date('{date}') + Interval("P1D")
                         and run_timestamp >= Date('{date}') - {history_for_n_day}*Interval("P1D") 
+
                         and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
                         and build_type = '{build_type}'
                         and branch = '{branch}'

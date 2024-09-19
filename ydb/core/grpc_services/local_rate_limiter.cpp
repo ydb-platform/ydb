@@ -23,6 +23,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
                 onSuccess();
             break;
             case Ydb::StatusIds::TIMEOUT:
+            case Ydb::StatusIds::CANCELLED:
                 onTimeout();
             break;
             default:
@@ -32,7 +33,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
     };
 
     Ydb::RateLimiter::AcquireResourceRequest request;
-    SetDuration(duration, *request.mutable_operation_params()->mutable_operation_timeout());
+    SetDuration(duration * 10, *request.mutable_operation_params()->mutable_operation_timeout());
+    SetDuration(duration, *request.mutable_operation_params()->mutable_cancel_after());
     request.set_coordination_node_path(fullPath.CoordinationNode);
     request.set_resource_path(fullPath.ResourcePath);
     request.set_required(required);
@@ -72,6 +74,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
                     onSuccess();
                 break;
                 case Ydb::StatusIds::TIMEOUT:
+                case Ydb::StatusIds::CANCELLED:
                     onTimeout();
                 break;
                 default:
@@ -82,7 +85,8 @@ TActorId RateLimiterAcquireUseSameMailbox(
 
         const auto& rlPath = maybeRlPath.GetRef();
         Ydb::RateLimiter::AcquireResourceRequest request;
-        SetDuration(duration, *request.mutable_operation_params()->mutable_operation_timeout());
+        SetDuration(duration * 10, *request.mutable_operation_params()->mutable_operation_timeout());
+        SetDuration(duration, *request.mutable_operation_params()->mutable_cancel_after());
         request.set_coordination_node_path(rlPath.CoordinationNode);
         request.set_resource_path(rlPath.ResourcePath);
         request.set_required(required);

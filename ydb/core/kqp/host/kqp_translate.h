@@ -67,6 +67,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetIsEnableAntlr4Parser(bool value) {
+        IsEnableAntlr4Parser = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -79,6 +84,7 @@ private:
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
     bool IsEnablePgSyntax = false;
+    bool IsEnableAntlr4Parser = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};

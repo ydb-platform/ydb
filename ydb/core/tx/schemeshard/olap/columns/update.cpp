@@ -53,8 +53,10 @@ namespace NKikimr::NSchemeShard {
                 errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
                 return false;
             }
-            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-        } else {
+            Type = NScheme::TTypeInfo(typeDesc);
+        } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
+            Type = NScheme::TTypeInfo(*decimalType);
+        }else {
             Y_ABORT_UNLESS(AppData()->TypeRegistry);
             const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
             if (!type) {

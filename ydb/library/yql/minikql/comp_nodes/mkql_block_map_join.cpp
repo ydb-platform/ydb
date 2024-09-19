@@ -154,6 +154,16 @@ public:
         return Inputs_.data();
     }
 
+    size_t GetInputWidth() const {
+        // Mind the last block length column.
+        return InputWidth_ + 1;
+    }
+
+    size_t GetOutputWidth() const {
+        // Mind the last block length column.
+        return OutputWidth_ + 1;
+    }
+
 private:
     void AddItem(const TBlockItem& item, size_t idx) {
         Builders_[idx]->Add(item);
@@ -207,14 +217,11 @@ public:
         const auto keys = KeyTupleCache_.NewArray(ctx, LeftKeyColumns_.size(), items);
         const auto state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_,
                                                             LeftIOMap_, ResultJoinItems_);
-        const size_t inputWidth = LeftStreamItems_.size();
-        const size_t outputWidth = ResultJoinItems_.size();
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(state),
                                                       std::move(Stream_->GetValue(ctx)),
                                                       std::move(Dict_->GetValue(ctx)),
                                                       LeftKeyColumns_,
-                                                      inputWidth, outputWidth,
                                                       std::move(keys), items);
     }
 
@@ -225,7 +232,6 @@ private:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
                      NUdf::TUnboxedValue&& dict, const TVector<ui32>& leftKeyColumns,
-                     size_t inputWidth, size_t outputWidth,
                      NUdf::TUnboxedValue&& keyValue, NUdf::TUnboxedValue* keyItems)
             : TBase(memInfo)
             , BlockState_(blockState)
@@ -233,19 +239,19 @@ private:
             , Dict_(dict)
             , KeyValue_(keyValue)
             , KeyItems_(keyItems)
-            , InputWidth_(inputWidth)
-            , OutputWidth_(outputWidth)
             , LeftKeyColumns_(leftKeyColumns)
             , HolderFactory_(holderFactory)
         {}
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
-            MKQL_ENSURE(width == OutputWidth_,
-                        "The given width doesn't equal to the result type size");
-
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.GetRawInputFields();
+            const size_t inputWidth = blockState.GetInputWidth();
+            const size_t outputWidth = blockState.GetOutputWidth();
+
+            MKQL_ENSURE(width == outputWidth,
+                        "The given width doesn't equal to the result type size");
 
             while (!blockState.HasBlocks()) {
                 while (blockState.IsNotFull() && blockState.NextRow()) {
@@ -263,7 +269,7 @@ private:
                     }
                 }
                 if (blockState.IsNotFull() && !blockState.IsFinished()) {
-                    switch (Stream_.WideFetch(inputFields, InputWidth_)) {
+                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
                     case NUdf::EFetchStatus::Yield:
                         return NUdf::EFetchStatus::Yield;
                     case NUdf::EFetchStatus::Ok:
@@ -284,7 +290,7 @@ private:
 
             const auto sliceSize = blockState.Slice();
 
-            for (size_t i = 0; i < OutputWidth_; i++) {
+            for (size_t i = 0; i < outputWidth; i++) {
                 output[i] = blockState.Get(sliceSize, HolderFactory_, i);
             }
 
@@ -310,8 +316,6 @@ private:
         NUdf::TUnboxedValue KeyValue_;
         NUdf::TUnboxedValue* KeyItems_;
 
-        const size_t InputWidth_;
-        const size_t OutputWidth_;
         const TVector<ui32>& LeftKeyColumns_;
         const THolderFactory& HolderFactory_;
     };
@@ -355,14 +359,11 @@ public:
         const auto keys = KeyTupleCache_.NewArray(ctx, LeftKeyColumns_.size(), items);
         const auto state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_,
                                                             LeftIOMap_, ResultJoinItems_);
-        const size_t inputWidth = LeftStreamItems_.size();
-        const size_t outputWidth = ResultJoinItems_.size();
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(state),
                                                       std::move(Stream_->GetValue(ctx)),
                                                       std::move(Dict_->GetValue(ctx)),
                                                       LeftKeyColumns_,
-                                                      inputWidth, outputWidth,
                                                       std::move(keys), items);
     }
 
@@ -373,7 +374,6 @@ private:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
                      NUdf::TUnboxedValue&& dict, const TVector<ui32>& leftKeyColumns,
-                     size_t inputWidth, size_t outputWidth,
                      NUdf::TUnboxedValue&& keyValue, NUdf::TUnboxedValue* keyItems)
             : TBase(memInfo)
             , BlockState_(blockState)
@@ -384,19 +384,19 @@ private:
             , List_(NUdf::TUnboxedValue::Invalid())
             , Iterator_(NUdf::TUnboxedValue::Invalid())
             , Current_(NUdf::TUnboxedValue::Invalid())
-            , InputWidth_(inputWidth)
-            , OutputWidth_(outputWidth)
             , LeftKeyColumns_(leftKeyColumns)
             , HolderFactory_(holderFactory)
         {}
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
-            MKQL_ENSURE(width == OutputWidth_,
-                        "The given width doesn't equal to the result type size");
-
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             auto* inputFields = blockState.GetRawInputFields();
+            const size_t inputWidth = blockState.GetInputWidth();
+            const size_t outputWidth = blockState.GetOutputWidth();
+
+            MKQL_ENSURE(width == outputWidth,
+                        "The given width doesn't equal to the result type size");
 
             while (!blockState.HasBlocks()) {
                 if (!Iterator_.IsInvalid()) {
@@ -420,7 +420,7 @@ private:
                     continue;
                 }
                 if (blockState.IsNotFull() && !blockState.IsFinished()) {
-                    switch (Stream_.WideFetch(inputFields, InputWidth_)) {
+                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
                     case NUdf::EFetchStatus::Yield:
                         return NUdf::EFetchStatus::Yield;
                     case NUdf::EFetchStatus::Ok:
@@ -441,7 +441,7 @@ private:
 
             const auto sliceSize = blockState.Slice();
 
-            for (size_t i = 0; i < OutputWidth_; i++) {
+            for (size_t i = 0; i < outputWidth; i++) {
                 output[i] = blockState.Get(sliceSize, HolderFactory_, i);
             }
 
@@ -471,8 +471,6 @@ private:
         NUdf::TUnboxedValue Iterator_;
         NUdf::TUnboxedValue Current_;
 
-        const size_t InputWidth_;
-        const size_t OutputWidth_;
         const TVector<ui32>& LeftKeyColumns_;
         const THolderFactory& HolderFactory_;
     };

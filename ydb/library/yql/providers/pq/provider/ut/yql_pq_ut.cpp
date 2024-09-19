@@ -41,9 +41,9 @@
 
 namespace NYql {
 
-NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver) {
+NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, const IPqGateway::TPtr& pqGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
 
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
     return factory;
@@ -120,7 +120,7 @@ bool RunPqProgram(
 
     const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
     NYdb::TDriver driver(driverConfig);
-    auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, false/*spilling*/, CreateAsyncIoFactory(driver));
+    auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, false/*spilling*/, CreateAsyncIoFactory(driver, pqGateway));
 
     auto storage = NYql::CreateAsyncFileStorage({});
     dataProvidersInit.push_back(NYql::GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

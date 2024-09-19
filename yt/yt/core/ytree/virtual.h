@@ -31,11 +31,11 @@ protected:
 
     virtual std::optional<TVirtualCompositeNodeReadOffloadParams> GetReadOffloadParams() const;
 
-    virtual std::vector<TString> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const = 0;
+    virtual std::vector<std::string> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const = 0;
 
     virtual i64 GetSize() const = 0;
 
-    virtual IYPathServicePtr FindItemService(TStringBuf key) const = 0;
+    virtual IYPathServicePtr FindItemService(const std::string& key) const = 0;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override;
 
@@ -74,9 +74,9 @@ public:
     TCompositeMapService();
     ~TCompositeMapService();
 
-    std::vector<TString> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const override;
+    std::vector<std::string> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const override;
     i64 GetSize() const override;
-    IYPathServicePtr FindItemService(TStringBuf key) const override;
+    IYPathServicePtr FindItemService(const std::string& key) const override;
     void ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors) override;
     bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) override;
 

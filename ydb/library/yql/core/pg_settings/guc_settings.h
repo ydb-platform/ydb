@@ -7,12 +7,11 @@
 
 #include <util/generic/hash.h>
 
-#include <library/cpp/json/json_writer.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 class TGUCSettings {
 public:
     TGUCSettings() = default;
-    TGUCSettings(const TString& serialized);
 
     using TPtr = std::shared_ptr<TGUCSettings>;
     void Setup(const std::unordered_map<std::string, std::string>& runtimeSettings);
@@ -20,9 +19,8 @@ public:
     void Set(const std::string&, const std::string&, bool isLocal = false);
     void Commit();
     void RollBack();
-    void ExportToJson(NJson::TJsonValue& value) const;
-    void ImportFromJson(const NJson::TJsonValue& value);
-    TString SerializeToString() const;
+    void ExportToProto(NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value) const;
+    void ImportFromProto(const NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value);
 
     size_t GetHash() const noexcept;
     bool operator==(const TGUCSettings& other) const;

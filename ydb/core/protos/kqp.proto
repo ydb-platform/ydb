@@ -541,6 +541,11 @@ message TEvCancelComputeTasks {
 
 /// KQP Node Events ////////////////////////////////////////////////////////////////////////////////////////////////////
 message TEvStartKqpTasksRequest {
+    message TGUCSettings {
+        map<string, string> Settings = 1;
+        map<string, string> RollbackSettings = 2;
+        map<string, string> SessionSettings = 3;
+    }
     optional uint64 TxId = 1;
     repeated NYql.NDqProto.TDqTask Tasks = 2;
     optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 3;
@@ -548,7 +553,7 @@ message TEvStartKqpTasksRequest {
     optional TKqpSnapshot Snapshot = 5;
     optional bool StartAllOrFail = 6 [default = true];
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
-    optional string SerializedGUCSettings = 8;
+    reserved 8; // (deprecated) SerializedGUCSettings
     optional string SchedulerGroup = 9;
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
@@ -557,6 +562,7 @@ message TEvStartKqpTasksRequest {
 
     optional double PoolMaxCpuShare = 12;
     optional double QueryCpuShare = 16;
+    optional TGUCSettings GUCSettings = 17;
 }
 
 message TEvStartKqpTasksResponse {

@@ -93,10 +93,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
 {
-    if (GUCSettings) {
-        SerializedGUCSettings = GUCSettings->SerializeToString();
-    }
-
     if (!Database) {
         // a piece of magic for tests
         if (const auto& domain = AppData()->DomainsInfo->Domain) {

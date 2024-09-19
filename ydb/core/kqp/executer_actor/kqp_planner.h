@@ -139,7 +139,6 @@ private:
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
     const bool MayRunTasksLocally;
-    TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TIntrusivePtr<NRm::TTxState> TxInfo;

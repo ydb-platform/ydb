@@ -26,21 +26,25 @@ class TColumnShardShardsSplitter : public IShardsSplitter {
             , GranuleShardingVersion(granuleShardingVersion)
         {}
 
-        ui64 GetBytes() const override {
+        virtual ui64 GetBytes() const override {
             return Data.size();
         }
 
-        ui32 GetRowsCount() const override {
+        virtual ui32 GetRowsCount() const override {
             return RowsCount;
         }
 
-        const TString& GetData() const override {
+        virtual const TString& GetData() const override {
             return Data;
         }
 
-        void Serialize(TEvWrite& evWrite) const override {
+        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const override {
             evWrite.SetArrowData(SchemaData, Data);
             evWrite.Record.SetGranuleShardingVersion(GranuleShardingVersion);
+        }
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite) const override {
+            TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(evWrite);
+            writer.AddDataToPayload(Data);
         }
     };
 

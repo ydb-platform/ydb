@@ -11,9 +11,6 @@
 
 namespace NKikimr::NEvWrite {
 
-using TEvWrite = TEvColumnShard::TEvWrite;
-using TEvWriteResult = TEvColumnShard::TEvWriteResult;
-
 class IShardsSplitter {
 public:
     using TPtr = std::shared_ptr<IShardsSplitter>;
@@ -43,7 +40,8 @@ public:
         using TPtr = std::shared_ptr<IShardInfo>;
         virtual ~IShardInfo() {}
 
-        virtual void Serialize(TEvWrite& evWrite) const = 0;
+        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const = 0;
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite) const = 0;
         virtual ui64 GetBytes() const = 0;
         virtual ui32 GetRowsCount() const = 0;
         virtual const TString& GetData() const = 0;

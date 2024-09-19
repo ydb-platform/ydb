@@ -151,6 +151,7 @@ private:
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
     EModificationType ModificationType;
+    const bool ImmediateWrite = false;
 
     static TDuration OverloadTimeout() {
         return TDuration::MilliSeconds(OverloadedDelayMs);
@@ -169,16 +170,18 @@ public:
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWriteResult, Handle);
+            hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(NEvents::TDataEvents::TEvWrite, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void Bootstrap();
 
-    void Handle(TEvWriteResult::TPtr& ev);
+    void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
     void HandleTimeout(const TActorContext& ctx);
 private:
     bool RetryWriteRequest(const bool delayed = true);

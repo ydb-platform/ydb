@@ -217,12 +217,14 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues)
+        std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite)
         : TBase(databaseName, path, TString(), longTxId, dedupId)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
-        , Issues(issues) {
+        , Issues(issues)
+        , NoTxWrite(noTxWrite)
+    {
         Y_ABORT_UNLESS(Issues);
         DataAccessor = std::make_unique<TParsedBatchData>(Batch);
     }
@@ -246,12 +248,12 @@ protected:
         if (!message.empty()) {
             Issues->AddIssue(NYql::TIssue(message));
         }
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status, NoTxWrite));
         PassAway();
     }
 
     void ReplySuccess() override {
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS));
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS, NoTxWrite));
         PassAway();
     }
 
@@ -260,13 +262,15 @@ private:
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     std::shared_ptr<arrow::RecordBatch> Batch;
     std::shared_ptr<NYql::TIssues> Issues;
+    const bool NoTxWrite = false;
 };
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues) {
-    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues));
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite) {
+    return ctx.RegisterWithSameMailbox(
+        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, noTxWrite));
 }
 
 //

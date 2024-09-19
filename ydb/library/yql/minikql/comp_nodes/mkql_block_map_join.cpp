@@ -30,7 +30,7 @@ public:
                     const TVector<TType*>& inputItems,
                     const TVector<ui32>& leftIOMap,
                     const TVector<TType*> outputItems,
-                    NUdf::TUnboxedValue**const fields)
+                    NUdf::TUnboxedValue**const fields = nullptr)
         : TBlockState(memInfo, outputItems.size())
         , InputWidth_(inputItems.size() - 1)
         , OutputWidth_(outputItems.size() - 1)
@@ -41,7 +41,8 @@ public:
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         MaxLength_ = CalcMaxBlockLength(outputItems);
         for (size_t i = 0; i < inputItems.size(); i++) {
-            fields[i] = &Inputs_[i];
+            if (fields != nullptr)
+                fields[i] = &Inputs_[i];
             const TType* blockItemType = AS_TYPE(TBlockType, inputItems[i])->GetItemType();
             Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
@@ -55,7 +56,7 @@ public:
     }
 
     void CopyRow() {
-        // Copy items from the "left" flow.
+        // Copy items from the "left" stream.
         // Use the mapping from input fields to output ones to
         // produce a tight loop to copy row items.
         for (size_t i = 0; i < LeftIOMap_.size(); i++) {
@@ -66,7 +67,7 @@ public:
 
     void MakeRow(const NUdf::TUnboxedValuePod& value) {
         size_t builderIndex = 0;
-        // Copy items from the "left" flow.
+        // Copy items from the "left" stream.
         // Use the mapping from input fields to output ones to
         // produce a tight loop to copy row items.
         for (size_t i = 0; i < LeftIOMap_.size(); i++, builderIndex++) {
@@ -74,7 +75,7 @@ public:
         }
         // Convert and append items from the "right" dict.
         // Since the keys are copied to the output only from the
-        // "left" flow, process all values unconditionally.
+        // "left" stream, process all values unconditionally.
         if constexpr (RightRequired) {
             for (size_t i = 0; builderIndex < OutputWidth_; i++) {
                 AddValue(value.GetElement(i), builderIndex++);

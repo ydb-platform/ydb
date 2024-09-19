@@ -37,6 +37,7 @@ private:
         }
 
         void Update() {
+            TAlignedPagePool::DoCleanupGlobalFreeList();
             *TotalBytes = TAlignedPagePool::GetGlobalPagePoolSize();
             *TotalMmapped = ::NKikimr::GetTotalMmapedBytes();
             *TotalFreeList = ::NKikimr::GetTotalFreeListBytes();

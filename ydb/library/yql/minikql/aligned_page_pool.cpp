@@ -118,6 +118,24 @@ public:
         return res;
     }
 
+    void DoCleanupFreeList(ui64 targetSize) {
+        for(ui32 level = 0; level <= MidLevels; ++level) {
+            auto& p = Get(level);
+            const size_t pageSize = p.GetPageSize();
+
+            while(p.GetSize() >= targetSize) {
+                void* page = p.GetPage();
+
+                if (!page)
+                    break;
+
+                p.FreePage(page);
+                i64 prev = TotalMmappedBytes.fetch_sub(pageSize);
+                Y_DEBUG_ABORT_UNLESS(prev >= 0);
+            }
+        }
+    }
+
     void PushPage(size_t level, void* addr) {
         auto& pool = Get(level);
         size_t free = pool.PushPage(addr);
@@ -542,6 +560,14 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
         (*Counters.TotalBytesAllocatedCntr) -= size;
     }
 }
+
+
+template<typename T>
+void TAlignedPagePoolImpl<T>::DoCleanupGlobalFreeList(ui64 targetSize) {
+    TGlobalPools<T, true>::Instance().DoCleanupFreeList(targetSize);
+    TGlobalPools<T, false>::Instance().DoCleanupFreeList(targetSize);
+}
+
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::UpdateMemoryYellowZone() {

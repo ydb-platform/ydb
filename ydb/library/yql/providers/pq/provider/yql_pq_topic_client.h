@@ -33,8 +33,8 @@ public:
 
 class TNativeTopicClient : public ITopicClient {
 public:
-    TNativeTopicClient(NYdb::TDriver&& driver, const NYdb::NTopic::TTopicClientSettings& settings = {}):
-        Driver_(std::move(driver)), Client_(Driver_, settings) {}
+    TNativeTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings = {}):
+        Driver_(driver), Client_(Driver_, settings) {}
 
     NYdb::TAsyncStatus CreateTopic(const TString& path, const NYdb::NTopic::TCreateTopicSettings& settings = {}) override {
         return Client_.CreateTopic(path, settings);

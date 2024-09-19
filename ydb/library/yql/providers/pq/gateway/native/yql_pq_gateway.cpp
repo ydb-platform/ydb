@@ -40,7 +40,7 @@ public:
         const TString& database,
         bool secure) override;
 
-    ITopicClient::TPtr GetTopicClient(NYdb::TDriver&& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
 
 private:
     void InitClusterConfigs();
@@ -140,8 +140,8 @@ IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {
     return MakeIntrusive<TPqNativeGateway>(services);
 }
 
-ITopicClient::TPtr TPqNativeGateway::GetTopicClient(NYdb::TDriver&& driver, const NYdb::NTopic::TTopicClientSettings& settings = NYdb::NTopic::TTopicClientSettings()) {
-    return MakeIntrusive<TNativeTopicClient>(std::move(driver), settings);
+ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings = NYdb::NTopic::TTopicClientSettings()) {
+    return MakeIntrusive<TNativeTopicClient>(driver, settings);
 }
 
 TPqNativeGateway::~TPqNativeGateway() {

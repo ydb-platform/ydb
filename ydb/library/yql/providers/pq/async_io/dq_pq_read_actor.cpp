@@ -125,7 +125,8 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        i64 bufferSize)
+        i64 bufferSize,
+        const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
@@ -139,6 +140,7 @@ public:
         , ReadParams(std::move(readParams))
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
+        , PqGateway(pqGateway)
     {
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
         TPqMetaExtractor fieldsExtractor;
@@ -247,9 +249,9 @@ public:
         return IngressStats;
     }
 
-    NYdb::NTopic::TTopicClient& GetTopicClient() {
+    ITopicClient& GetTopicClient() {
         if (!TopicClient) {
-            TopicClient = std::make_unique<NYdb::NTopic::TTopicClient>(Driver, GetTopicClientSettings());
+            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
         }
         return *TopicClient;
     }
@@ -291,7 +293,7 @@ private:
             ReadSession->Close(TDuration::Zero());
             ReadSession.reset();
         }
-        TopicClient.reset();
+        TopicClient.Reset();
         TActor<TDqPqReadActor>::PassAway();
     }
 
@@ -640,7 +642,7 @@ private:
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const NPq::NProto::TDqPqTopicSource SourceParams;
     const NPq::NProto::TDqReadTaskParams ReadParams;
-    std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+    ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     NThreading::TFuture<void> EventFuture;
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
@@ -653,6 +655,7 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
+    IPqGateway::TPtr PqGateway;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -668,6 +671,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    IPqGateway::TPtr pqGateway,
     i64 bufferSize
     )
 {
@@ -693,15 +697,16 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        bufferSize
+        bufferSize,
+        pqGateway
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -719,6 +724,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.ComputeActorId,
             args.HolderFactory,
             counters,
+            pqGateway,
             PQReadDefaultFreeSpace);
     });
 

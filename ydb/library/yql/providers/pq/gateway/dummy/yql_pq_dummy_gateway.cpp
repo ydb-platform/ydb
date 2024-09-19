@@ -64,8 +64,8 @@ IPqGateway::TPtr CreatePqFileGateway() {
     return MakeIntrusive<TDummyPqGateway>();
 }
 
-ITopicClient::TPtr TDummyPqGateway::GetTopicClient(NYdb::TDriver&&, const NYdb::NTopic::TTopicClientSettings&) {
-    return MakeIntrusive<TFileTopicClient>();
+ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
+    return MakeIntrusive<TFileTopicClient>(Topics);
 }
 
 void TDummyPqGateway::UpdateClusterConfigs(

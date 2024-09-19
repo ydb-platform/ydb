@@ -204,15 +204,20 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
 };
 
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
-    Y_UNUSED(settings);
+    Y_ENSURE(!settings.Topics_.empty());
+    TString topicPath = settings.Topics_.front().Path_;
 
-    TString filePath = "/home/fedor-miron/ydbwork/ydb/library/yql/tools/dqrun/yq_in.json";
-    ui64 sessionId = 1;
-    TString topicPath = "topicPath";
+    auto topicsIt = Topics_.find(make_pair("pq", topicPath));
+    Y_ENSURE(topicsIt != Topics_.end());
+    auto filePath = topicsIt->second.FilePath;
+    Y_ENSURE(filePath);
+    
+    // TODO
+    ui64 sessionId = 0;
     ui64 partitionId = 0;
 
     return std::make_shared<TFileTopicReadSession>(
-        TFile(filePath, EOpenMode::TEnum::RdOnly),
+        TFile(*filePath, EOpenMode::TEnum::RdOnly),
         MakeIntrusive<TDummyPartitionSession>(sessionId, topicPath, partitionId)
     );
 }

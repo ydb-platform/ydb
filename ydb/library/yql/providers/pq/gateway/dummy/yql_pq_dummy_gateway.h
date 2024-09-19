@@ -57,11 +57,13 @@ public:
         const TString& database,
         bool secure) override;
     
-    ITopicClient::TPtr GetTopicClient(NYdb::TDriver&& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
 
+    using TClusterNPath = std::pair<TString, TString>;
 private:
     mutable TMutex Mutex;
-    THashMap<std::pair<TString, TString>, TDummyTopic> Topics;
+    THashMap<TClusterNPath, TDummyTopic> Topics;
+
     THashSet<TString> OpenedSessions;
 };
 

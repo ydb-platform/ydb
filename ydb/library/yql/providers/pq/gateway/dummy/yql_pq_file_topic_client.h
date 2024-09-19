@@ -1,7 +1,11 @@
+#include "yql_pq_dummy_gateway.h"
+
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 
 namespace NYql {
 struct TFileTopicClient : public ITopicClient {
+    TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics): Topics_(topics) {}
+
     NYdb::TAsyncStatus CreateTopic(const TString& path, const NYdb::NTopic::TCreateTopicSettings& settings = {}) override;
 
     NYdb::TAsyncStatus AlterTopic(const TString& path, const NYdb::NTopic::TAlterTopicSettings& settings = {}) override;
@@ -25,5 +29,8 @@ struct TFileTopicClient : public ITopicClient {
 
     NYdb::TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
         const NYdb::NTopic::TCommitOffsetSettings& settings = {}) override;
+
+private:
+    THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> Topics_;
 };
 }

@@ -278,13 +278,14 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     size_t HTTPmaxTimeSeconds, 
-    size_t maxRetriesCount) {
+    size_t maxRetriesCount,
+    IPqGateway::TPtr pqGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterDqInputTransformLookupActorFactory(*factory);
     if (ytFileServices) {
         RegisterYtLookupActorFactory(*factory, ytFileServices, functionRegistry);
     }
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterDQSolomonReadActorFactory(*factory, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
@@ -969,7 +970,7 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr));
     }
 
-    IPqGateway::TPtr PqGateway;
+    IPqGateway::TPtr pqGateway;
     if (gatewaysConfig.HasPq()) {
         TPqGatewayServices pqServices(
             driver,
@@ -992,16 +993,16 @@ int RunMain(int argc, const char* argv[])
                 }
                 fileGateway->AddDummyTopic(TDummyTopic("pq", TString(topicName), TString(filePath)));
             }
-            PqGateway = std::move(fileGateway);
+            pqGateway = std::move(fileGateway);
         } else {
-            PqGateway = CreatePqNativeGateway(pqServices);
+            pqGateway = CreatePqNativeGateway(pqServices);
         }
 
         for (auto& cluster: gatewaysConfig.GetPq().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{PqProviderName});
         }
 
-        dataProvidersInit.push_back(GetPqDataProviderInitializer(PqGateway, false, dbResolver));
+        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
     }
 
     if (gatewaysConfig.HasSolomon()) {
@@ -1036,7 +1037,7 @@ int RunMain(int argc, const char* argv[])
 
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
-                CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries), threads,
+                CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
                 metricsRegistry, metricsPusherFactory);
         }
 

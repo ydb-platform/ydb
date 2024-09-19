@@ -29,7 +29,7 @@ struct IPqGateway : public TThrRefBase {
     // DS API.
     virtual NThreading::TFuture<TListStreams> ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName = {}) = 0;
     
-    virtual ITopicClient::TPtr GetTopicClient(NYdb::TDriver&& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
+    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
 
     virtual void UpdateClusterConfigs(
         const TString& clusterName,

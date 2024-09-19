@@ -20,11 +20,13 @@ ADDINCL(
     GLOBAL contrib/restricted/abseil-cpp-tstring
 )
 
-IF(Y_ABSL_DONT_USE_DEBUG)
-    CFLAGS(-DY_ABSL_DONT_USE_DEBUG_LIBRARY=1)
-ENDIF()
-
 NO_COMPILER_WARNINGS()
+
+IF (Y_ABSL_DONT_USE_DEBUG)
+    CFLAGS(
+        -DY_ABSL_DONT_USE_DEBUG_LIBRARY=1
+    )
+ENDIF()
 
 SRCS(
     barrier.cc

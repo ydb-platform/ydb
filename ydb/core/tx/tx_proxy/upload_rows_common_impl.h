@@ -224,7 +224,7 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
-    const bool ImmediateWrite = false;
+    bool ImmediateWrite = false;
 
 protected:
     enum class EUploadSource {
@@ -278,13 +278,13 @@ public:
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
         , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
-        , ImmediateWrite(AppData()->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert())
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Span(std::move(span))
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
+        ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }

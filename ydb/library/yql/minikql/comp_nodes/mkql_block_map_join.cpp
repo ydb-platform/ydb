@@ -29,8 +29,7 @@ public:
     TBlockJoinState(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
                     const TVector<TType*>& inputItems,
                     const TVector<ui32>& leftIOMap,
-                    const TVector<TType*> outputItems,
-                    NUdf::TUnboxedValue**const fields = nullptr)
+                    const TVector<TType*> outputItems)
         : TBlockState(memInfo, outputItems.size())
         , InputWidth_(inputItems.size() - 1)
         , OutputWidth_(outputItems.size() - 1)
@@ -41,8 +40,6 @@ public:
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         MaxLength_ = CalcMaxBlockLength(outputItems);
         for (size_t i = 0; i < inputItems.size(); i++) {
-            if (fields != nullptr)
-                fields[i] = &Inputs_[i];
             const TType* blockItemType = AS_TYPE(TBlockType, inputItems[i])->GetItemType();
             Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
             Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));

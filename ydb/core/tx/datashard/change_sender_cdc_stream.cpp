@@ -622,7 +622,6 @@ class TCdcChangeSenderMain
         for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
             if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
                 schema.push_back(NScheme::TTypeInfo(
-                    keySchema.GetTypeId(),
                     NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
             } else {
                 schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));

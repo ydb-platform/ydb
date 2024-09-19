@@ -824,8 +824,14 @@ struct TEnvironmentSetup {
     }
 
     void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,
-            NKikimrBlobStorage::EDecommitStatus decommitStatus) {
+            NKikimrBlobStorage::EDecommitStatus decommitStatus, bool force = false) {
         NKikimrBlobStorage::TConfigRequest request;
+        if (force) {
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreGroupSanityChecks(true);
+        }
         auto *cmd = request.AddCommand();
         auto *ds = cmd->MutableUpdateDriveStatus();
         ds->MutableHostKey()->SetNodeId(nodeId);

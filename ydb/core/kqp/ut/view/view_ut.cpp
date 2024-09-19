@@ -213,6 +213,90 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Cannot divide type String and String");
     }
 
+    Y_UNIT_TEST(ParsingSecurityInvoker) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "TheView";
+        constexpr const char* query = "SELECT 1";
+
+        auto fail = [&](const char* options) {
+            const TString creationQuery = std::format(R"(
+                    CREATE VIEW {} {} AS {};
+                )",
+                path,
+                options,
+                query
+            );
+
+            const auto creationResult = session.ExecuteQuery(
+                creationQuery,
+                NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(!creationResult.IsSuccess(), creationQuery);
+            UNIT_ASSERT_STRING_CONTAINS(
+                creationResult.GetIssues().ToString(), "security_invoker option must be explicitly enabled"
+            );
+        };
+        fail("");
+        fail("WITH security_invoker");
+        fail("WITH security_invoker = false");
+        fail("WITH SECURITY_INVOKER = true"); // option name is case-sensitive
+        fail("WITH (security_invoker)");
+        fail("WITH (security_invoker = false)");
+        fail("WITH (security_invoker = true, security_invoker = false)");
+
+        auto succeed = [&](const char* options) {
+            const TString creationQuery = std::format(R"(
+                    CREATE VIEW {} {} AS {};
+                    DROP VIEW {};
+                )",
+                path,
+                options,
+                query,
+                path
+            );
+            ExecuteQuery(session, creationQuery);
+        };
+        succeed("WITH security_invoker = true");
+        succeed("WITH (security_invoker = true)");
+        succeed("WITH (security_invoker = tRuE)"); // bool parsing is flexible enough
+        succeed("WITH (security_invoker = false, security_invoker = true)");
+
+        {
+            // literal named expression
+            const TString creationQuery = std::format(R"(
+                    $value = "true";
+                    CREATE VIEW {} WITH security_invoker = $value AS {};
+                    DROP VIEW {};
+                )",
+                path,
+                query,
+                path
+            );
+            ExecuteQuery(session, creationQuery);
+        }
+        {
+            // evaluated expression
+            const TString creationQuery = std::format(R"(
+                    $lambda = ($x) -> {{
+                        RETURN CAST($x as String)
+                    }};
+                    $value = $lambda(true);
+
+                    CREATE VIEW {} WITH security_invoker = $value AS {};
+                    DROP VIEW {};
+                )",
+                path,
+                query,
+                path
+            );
+            ExecuteQuery(session, creationQuery);
+        }
+    }
+
     Y_UNIT_TEST(ListCreatedView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         EnableViewsFeatureFlag(kikimr);

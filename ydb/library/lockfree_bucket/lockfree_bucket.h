@@ -19,17 +19,11 @@ public:
     }
 
     bool IsEmpty() {
-        FillBucket();
-        return Tokens.load() <= 0;
+        FillAndTake(0);
+        return Tokens.load(std::memory_order_relaxed) <= 0;
     }
 
     void FillAndTake(ui64 tokens) {
-        FillBucket();
-        TakeTokens(tokens);
-    }
-
-private:
-    void FillBucket() {
         TTime prev = LastUpdate.load(std::memory_order_relaxed);
         TTime now = TTimer::Now();
 
@@ -45,42 +39,22 @@ private:
             }
         }
 
-        ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * TTimer::Duration(prev, now);
-        i64 tokens = Tokens.load(std::memory_order_relaxed);
-
-        if (rawInflow >= TTimer::Resolution) {
-            i64 tokensPlusInflow = tokens + rawInflow / TTimer::Resolution;
-            i64 maxTokens = MaxTokens.load(std::memory_order_relaxed);
-            i64 deltaTokens = std::min(maxTokens, tokensPlusInflow) - tokens;
-            if (deltaTokens <= 0) {
-                // race occured, currentTokens >= maxTokens
-            } else {
-                tokens = Tokens.fetch_add(deltaTokens, std::memory_order_relaxed) + deltaTokens;
-            }
-
-            while (true) {
-                if (tokens <= maxTokens || Tokens.compare_exchange_weak(tokens, maxTokens,
-                        std::memory_order_relaxed, std::memory_order_relaxed)) {
-                    break;
-                }
-            }
-        }
-    }
-
-    void TakeTokens(ui64 tokens) {
         i64 currentTokens = Tokens.load(std::memory_order_relaxed);
-        i64 minTokens = MinTokens.load(std::memory_order_relaxed);
-        i64 deltaTokens = std::max(minTokens, currentTokens - (i64)tokens) - currentTokens;
 
-        if (deltaTokens >= 0) {
-            // race occured, currentTokens <= minTokens
-        } else {
-            currentTokens = Tokens.fetch_add(deltaTokens, std::memory_order_relaxed) + deltaTokens;
-        }
+        ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * TTimer::Duration(prev, now);
+        i64 minTokens = MinTokens.load(std::memory_order_relaxed);
+        i64 maxTokens = MaxTokens.load(std::memory_order_relaxed);
+        Y_DEBUG_ABORT_UNLESS(minTokens <= maxTokens);
 
         while (true) {
-            if (currentTokens >= minTokens || Tokens.compare_exchange_weak(currentTokens, minTokens,
-                    std::memory_order_relaxed, std::memory_order_relaxed)) {
+            i64 newTokens = currentTokens - tokens + rawInflow / TTimer::Resolution;
+            newTokens = std::max(std::min(newTokens, maxTokens), minTokens);
+            if (newTokens == currentTokens) {
+                break;
+            }
+
+            if (Tokens.compare_exchange_weak(currentTokens, newTokens, std::memory_order_relaxed,
+                    std::memory_order_relaxed)) {
                 break;
             }
         }

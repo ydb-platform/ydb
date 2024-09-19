@@ -122,6 +122,8 @@ namespace NSchemeShardUT_Private {
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
 
+        void TestWaitMetadataInitialization(TTestActorRuntime& runtime, const TString& typeId, ui64 schemeShard = TTestTxConfig::SchemeShard);
+
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
         void TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime, const TString& path,

@@ -36,6 +36,8 @@ struct TEvPrivate {
         EvCommitObjectModification,
         EvObjectModificationResult,
         EvInitializeObjectMetadata,
+        EvSubscribeToMetadataInitialization,
+        EvNotifyMetadataInitialized,
         EvEnd
     };
 
@@ -231,6 +233,22 @@ struct TEvPrivate {
             , Snapshot(std::move(snapshot)) {
             AFL_VERIFY(Snapshot);
         }
+    };
+
+    struct TEvSubscribeToMetadataInitialization : public TEventLocal<TEvSubscribeToMetadataInitialization, EvSubscribeToMetadataInitialization> {
+        TString TypeId;
+
+        explicit TEvSubscribeToMetadataInitialization(const TString& typeId)
+            : TypeId(typeId)
+        { }
+    };
+
+    struct TEvNotifyMetadataInitialized : public TEventLocal<TEvNotifyMetadataInitialized , EvNotifyMetadataInitialized> {
+        TString TypeId;
+
+        explicit TEvNotifyMetadataInitialized (const TString& typeId)
+            : TypeId(typeId)
+        { }
     };
 }; // TEvPrivate
 

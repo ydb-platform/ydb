@@ -4759,6 +4759,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvCommitObjectModification, Handle);
         HFuncTraced(TEvPrivate::TEvObjectModificationResult, Handle);
         HFuncTraced(TEvPrivate::TEvInitializeObjectMetadata, Handle);
+        HFuncTraced(TEvPrivate::TEvSubscribeToMetadataInitialization, Handle);
         // } // NObjectModification
 
         // for subscriptions on owners

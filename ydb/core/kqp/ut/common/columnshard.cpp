@@ -1,6 +1,7 @@
 #include "columnshard.h"
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -27,6 +28,10 @@ namespace NKqp {
                 }
             }
         )";
+    }
+
+    ui64 TTestHelper::GetSchemeShardTablet() const {
+        return Tests::TClient::GetPatchedSchemeRoot(Tests::SchemeRoot, Kikimr->GetTestServer().GetSettings().Domain, true);
     }
 
     using namespace NYdb;
@@ -61,21 +66,16 @@ namespace NKqp {
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        // TODO: improve code
-        while (true) {
-            auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`").GetValueSync();
-            if (result.GetStatus() == EStatus::GENERIC_ERROR && result.GetIssues().ToOneLineString().equal("TIER metadata hasn't been initialized on scheme shard yet.")) {
-                Sleep(TDuration::Seconds(1));
-                continue;
-            }
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            return;
-        }
+        auto result =
+            GetSession()
+                .ExecuteSchemeQuery("CREATE OBJECT " + tierName + " (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName(tierName) + "`")
+                .GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     TString TTestHelper::CreateTieringRule(const TString& tierName, const TString& columnName) {
         const TString ruleName = tierName + "_" + columnName;
-        const TString configTieringStr = TStringBuilder() <<  R"({
+        const TString configTieringStr = TStringBuilder() << R"({
             "rules" : [
                 {
                     "tierName" : ")" << tierName << R"(",
@@ -83,17 +83,12 @@ namespace NKqp {
                 }
             ]
         })";
-        // TODO: improve code
-        while (true) {
-            auto result = GetSession().ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName + ", description = `" + configTieringStr + "`)").GetValueSync();
-            if (result.GetStatus() == EStatus::GENERIC_ERROR && result.GetIssues().ToOneLineString().equal("TIERING_RULE metadata hasn't been initialized on scheme shard yet.")) {
-                Sleep(TDuration::Seconds(1));
-                continue;
-            }
-            Cerr << "aboba " << result.GetIssues().ToOneLineString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            return ruleName;
-        }
+        auto result =
+            GetSession()
+                .ExecuteSchemeQuery("CREATE OBJECT IF NOT EXISTS " + ruleName + " (TYPE TIERING_RULE) WITH (defaultColumn = " + columnName +
+                                    ", description = `" + configTieringStr + "`)")
+                .GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         return ruleName;
     }
 
@@ -157,6 +152,24 @@ namespace NKqp {
         while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
             Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
             Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    void TTestHelper::WaitMetadataInitialization(std::vector<TString> typeIds) {
+        TActorId sender = GetRuntime().AllocateEdgeActor();
+
+        for (const TString& typeId : typeIds) {
+            {
+                auto ev = new NSchemeShard::TEvPrivate::TEvSubscribeToMetadataInitialization(typeId);
+                ForwardToTablet(GetRuntime(), GetSchemeShardTablet(), sender, ev);
+                Cerr << "WaitTabletDeletionInHive: waiting until metadata for " << typeId << " is initialized" << Endl;
+            }
+
+            {
+                auto ev = GetRuntime().GrabEdgeEvent<NSchemeShard::TEvPrivate::TEvNotifyMetadataInitialized>(sender);
+                AFL_VERIFY(ev->Get()->TypeId == typeId)("received", ev->Get()->TypeId)("expected", typeId);
+                Cerr << "WaitTabletDeletionInHive: metadata for " << typeId << " is initialized" << Endl;
+            }
         }
     }
 

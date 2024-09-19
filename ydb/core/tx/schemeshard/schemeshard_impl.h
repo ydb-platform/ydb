@@ -1419,6 +1419,7 @@ public:
     void Handle(const TEvPrivate::TEvCommitObjectModification::TPtr& ev, const TActorContext& ctx);
     void Handle(const TEvPrivate::TEvObjectModificationResult::TPtr& ev, const TActorContext& ctx);
     void Handle(const TEvPrivate::TEvInitializeObjectMetadata::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvPrivate::TEvSubscribeToMetadataInitialization::TPtr& ev, const TActorContext& ctx);
 
     NTabletFlatExecutor::ITransaction* CreateTxStartObjectModification(const TEvSchemeShard::TEvModifyObject::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCommitObjectModification(const TEvPrivate::TEvCommitObjectModification::TPtr& ev, const TActorContext& ctx);

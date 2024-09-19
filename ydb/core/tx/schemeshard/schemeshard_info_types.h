@@ -3374,6 +3374,7 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
     NKikimrSchemeOp::TResourcePoolProperties Properties;
 };
 
+// TODO: refactor
 class TObjectsInfo {
 private:
 struct TGlobalObjectId {
@@ -3411,10 +3412,16 @@ public:
         TActorId Sender;
     };
 
+    struct TSubscriber {
+        TActorId Actor;
+        ui64 Cookie;
+    };
+
 private:
     using TSnapshot = NMetadata::NFetcher::ISnapshot;
 
     THashMap<TString, std::shared_ptr<NMetadata::NContainer::TAbstractObjectContainer>> Metadata;
+    THashMap<TString, std::vector<TSubscriber>> SubscribersToInitialization;
     THashMap<TGlobalObjectId, TModificationInfo, TGlobalObjectId::Hasher> ModificationsInFly;
 
 public:
@@ -3470,9 +3477,22 @@ public:
         return IsInitialized(TObject::GetTypeId());
     }
 
-    void Initialize(const TString& typeId, NMetadata::NContainer::TAbstractObjectContainer snapshot) {
+    [[nodiscard]] std::vector<TSubscriber> InitializeAndGetSubscribers(const TString& typeId, NMetadata::NContainer::TAbstractObjectContainer snapshot) {
         AFL_VERIFY(!IsInitialized(typeId));
         Metadata.emplace(typeId, std::make_shared<NMetadata::NContainer::TAbstractObjectContainer>(std::move(snapshot)));
+        
+        auto findSubscribers = SubscribersToInitialization.find(typeId);
+        if (findSubscribers.IsEnd()) {
+            return {};
+        }
+        auto subscribers = std::move(findSubscribers->second);
+        SubscribersToInitialization.erase(findSubscribers);
+        return subscribers;
+    }
+
+    void SubscribeToInitialization(const TString& typeId, const TSubscriber& subscriber) {
+        AFL_VERIFY(!IsInitialized(typeId));
+        SubscribersToInitialization[typeId].emplace_back(subscriber);
     }
 
     template <NMetadata::NModifications::MetadataObject TObject>

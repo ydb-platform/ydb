@@ -39,6 +39,20 @@ void TSchemeShard::Handle(const TEvPrivate::TEvInitializeObjectMetadata::TPtr& e
     Execute(CreateTxInitializeObjectMetadata(ev, ctx));
 }
 
+void TSchemeShard::Handle(const TEvPrivate::TEvSubscribeToMetadataInitialization::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "Handle TEvSubscribeToMetadataInitialization"
+            << ", at schemeshard: " << TabletID() << ", typeId: " << ev->Get()->TypeId);
+
+    const TString& typeId = ev->Get()->TypeId;
+
+    if (Objects.IsInitialized(typeId)) {
+        ctx.Send(ev->Sender, new TEvPrivate::TEvNotifyMetadataInitialized(typeId), 0, ev->Cookie);
+    } else {
+        Objects.SubscribeToInitialization(typeId, TObjectsInfo::TSubscriber(ev->Sender, ev->Cookie));
+    }
+}
+
 // TODO: Rewrite transactions such that in-mem side-effects are applied only on complete
 
 struct TTxStartObjectModification: public TSchemeShard::TRwTxBase {
@@ -224,7 +238,10 @@ struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
             Self->PersistObjectModificationFinished(db, typeId, objectId);
         }
 
-        Self->Objects.Initialize(typeId, std::move(currentObjects));
+        auto subscribers = Self->Objects.InitializeAndGetSubscribers(typeId, std::move(currentObjects));
+        for (auto&& subscriber : subscribers) {
+            ctx.Send(subscriber.Actor, new TEvPrivate::TEvNotifyMetadataInitialized(typeId), 0, subscriber.Cookie);
+        }
     }
 
     void DoComplete(const TActorContext& /*ctx*/) override {

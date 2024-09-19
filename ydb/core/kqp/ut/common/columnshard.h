@@ -67,6 +67,9 @@ namespace NKqp {
         std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
         std::unique_ptr<NYdb::NTable::TSession> Session;
 
+    private:
+        ui64 GetSchemeShardTablet() const;
+
     public:
         TTestHelper(const TKikimrSettings& settings);
         TKikimrRunner& GetKikimr();
@@ -83,6 +86,7 @@ namespace NKqp {
         void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);
         void RebootTablets(const TString& tableName);
         void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
+        void WaitMetadataInitialization(std::vector<TString> typeIds = {"TIERING_RULE"});
     };
 
 }

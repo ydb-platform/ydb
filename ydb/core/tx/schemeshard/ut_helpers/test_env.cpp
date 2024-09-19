@@ -846,6 +846,22 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
 }
 
+void NSchemeShardUT_Private::TTestEnv::TestWaitMetadataInitialization(TTestActorRuntime &runtime, const TString &typeId, ui64 schemeShard) {
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    {
+        auto ev = new TEvPrivate::TEvSubscribeToMetadataInitialization(typeId);
+        ForwardToTablet(runtime, schemeShard, sender, ev);
+        Cerr << "Waiting until metadata for " << typeId << " is initialized" << Endl;
+    }
+
+    {
+        auto ev = runtime.GrabEdgeEvent<TEvPrivate::TEvNotifyMetadataInitialized>(sender);
+        Y_ABORT_UNLESS(ev->Get()->TypeId == typeId);
+        Cerr << "Metadata for " << typeId << " is initialized" << Endl;
+    }
+}
+
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);

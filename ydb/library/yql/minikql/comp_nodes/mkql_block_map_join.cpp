@@ -468,10 +468,9 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
     const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
-    const auto leftFlowNode = callable.GetInput(0);
-    MKQL_ENSURE(leftFlowNode.GetStaticType()->IsFlow(),
-                "Expected WideFlow as a left stream");
-    const auto leftFlowType = AS_TYPE(TFlowType, leftFlowNode);
+    const auto leftType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left stream");
+    const auto leftFlowType = AS_TYPE(TFlowType, leftType);
     MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(),
                 "Expected Multi as a left stream item type");
     const auto leftFlowComponents = GetWideComponents(leftFlowType);

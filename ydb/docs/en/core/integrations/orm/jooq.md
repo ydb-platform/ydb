@@ -199,4 +199,4 @@ spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<schema>://<host>:<port>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
-A complete example of a simple Spring Boot application can be found [here](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq).
+A complete example of a simple Spring Boot application can be found on [GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-jooq).

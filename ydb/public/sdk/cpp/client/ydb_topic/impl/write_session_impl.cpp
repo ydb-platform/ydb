@@ -507,13 +507,107 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
+void TWriteSessionImpl::OnTransactionCommit()
+{
+}
+
+NTable::TCommitTransactionResult MakeCommitTransactionError(EStatus code, NYql::TIssues&& issues)
+{
+    return {TStatus{code, std::move(issues)}, Nothing()};
+}
+
+NTable::TCommitTransactionResult MakeCommitTransactionSuccess()
+{
+    return MakeCommitTransactionError(EStatus::SUCCESS, {});
+}
+
+std::pair<TString, TString> MakeTransactionId(const TTransaction& tx)
+{
+    return {tx.GetSession().GetId(), tx.GetId()};
+}
+
+void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
+{
+    if (!tx) {
+        return;
+    }
+
+    const TTransactionId txId = MakeTransactionId(*tx);
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+    if (txInfo->Subscribed) {
+        return;
+    }
+
+    txInfo->IsActive = true;
+    txInfo->Subscribed = true;
+    txInfo->AllAcksReceived = NThreading::NewPromise<NTable::TCommitTransactionResult>();
+
+    auto callback = [txInfo]() {
+        txInfo->CommitCalled = true;
+
+        if (txInfo->WriteCount == txInfo->AckCount) {
+            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+            return txInfo->AllAcksReceived.GetFuture();
+        }
+
+        if (txInfo->IsActive) {
+            return txInfo->AllAcksReceived.GetFuture();
+        }
+
+        return NThreading::MakeFuture(MakeCommitTransactionError(EStatus::SESSION_EXPIRED, {}));
+    };
+
+    tx->AddPrecommitCallback(std::move(callback));
+}
+
+void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
+{
+    auto p = WrittenInTx.find(seqNo);
+    if (p == WrittenInTx.end()) {
+        return;
+    }
+
+    const TTransactionId& txId = p->second;
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    ++txInfo->AckCount;
+
+    if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
+        txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+    }
+}
+
+auto TWriteSessionImpl::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
+{
+    auto p = Txs.find(txId);
+    if (p == Txs.end()) {
+        TTransactionInfoPtr& txInfo = Txs[txId];
+        txInfo = std::make_shared<TTransactionInfo>();
+        txInfo->Subscribed = false;
+        txInfo->CommitCalled = false;
+        p = Txs.find(txId);
+    }
+    return p->second;
+}
+
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
     with_lock(Lock) {
+        TrySubscribeOnTransactionCommit(message.GetTxPtr());
+
+        ui64 seqNo = GetNextIdImpl(message.SeqNo_);
+
+        if (message.GetTxPtr()) {
+            const auto& txId = MakeTransactionId(*message.GetTxPtr());
+            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+            ++txInfo->WriteCount;
+            WrittenInTx[seqNo] = txId;
+        }
+
         CurrentBatch.Add(
-                GetNextIdImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
+                seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
                 message.GetTxPtr()
         );
@@ -982,6 +1076,8 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ui64 sequenceNumber = ack.seq_no();
 
                 Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
+
+                TrySignalAllAcksReceived(sequenceNumber);
 
                 TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
                 if (ack.has_written_in_tx()) {
@@ -1550,10 +1646,22 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
+        CancelTransactions();
     }
+}
+
+void TWriteSessionImpl::CancelTransactions()
+{
+    for (auto& [_, txInfo] : Txs) {
+        txInfo->IsActive = false;
+        if (txInfo->WriteCount != txInfo->AckCount) {
+            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionError(EStatus::SESSION_EXPIRED, {}));
+        }
+    }
+
+    Txs.clear();
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {

@@ -17,6 +17,8 @@ namespace NYdb::NTable {
 
 namespace NYdb::NTopic {
 
+using TTransaction = NTable::TTransaction;
+
 //! Settings for write session.
 struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     using TSelf = TWriteSessionSettings;
@@ -190,9 +192,9 @@ public:
     FLUENT_SETTING(TMessageMeta, MessageMeta);
 
     //! Transaction id
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<NTable::TTransaction>, Tx);
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransaction>, Tx);
 
-    const NTable::TTransaction* GetTxPtr() const
+    TTransaction* GetTxPtr() const
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }

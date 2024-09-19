@@ -988,7 +988,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
         background
         << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageDark << "'/>" << Endl
+        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
         << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
         << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl;
     }
@@ -1005,29 +1005,29 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         background
             << "<rect x='" << s->IndentX << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.HeaderWidth - s->IndentX - INTERNAL_WIDTH << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         auto x = Config.HeaderWidth + GAP_X;
         background
             << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.SummaryWidth << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         x += Config.SummaryWidth + GAP_X;
         background
             << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.Width - x << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         if (s->Connections.size() > 1) {
             ui32 y = s->OffsetY + s->Height;
             background
                 << "<rect x='" << s->IndentX << "' y='" << y + offsetY
                 << "' width='" << INDENT_X << "' height='" << s->IndentY - y
-                << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+                << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         }
         background
             << "<circle cx='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
             << "' r='" << INTERNAL_WIDTH / 2 - 1
-            << "' stroke='" << Config.Palette.StageDark << "' stroke-width='1' fill='" << Config.Palette.StageLight << "' />" << Endl
+            << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
             << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
             << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
@@ -1205,22 +1205,22 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.HeaderWidth - xx - INTERNAL_WIDTH<< "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 xx = Config.HeaderWidth + GAP_X;
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.SummaryWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 xx += Config.SummaryWidth + GAP_X;
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.Width - xx << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 background
                     << "<circle cx='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
                     << "' cy='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y
                     << "' r='" << std::min(INTERNAL_HEIGHT, INTERNAL_WIDTH) / 2 - 1
-                    << "' stroke='" << Config.Palette.StageDark << "' stroke-width='1' fill='" << Config.Palette.StageLight << "' />" << Endl
+                    << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
                     << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
                     << "px' fill='" << Config.Palette.StageText << "' x='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
                     << "' y='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT / 2
@@ -1411,8 +1411,8 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
 }
 
 TColorPalette::TColorPalette() {
-    StageDark     = "var(--stage-dark, #F2F2F2)";
-    StageLight    = "var(--stage-dark, #D9D9D9";
+    StageMain     = "var(--stage-main, #F2F2F2)";
+    StageClone    = "var(--stage-clone, #D9D9D9";
     StageText     = "var(--stage-text, #262626)";
     StageTextHighlight = "var(--stage-texthl, #EA0703)";
     StageGrid     = "var(--stage-grid, #B2B2B2";
@@ -1434,6 +1434,7 @@ TColorPalette::TColorPalette() {
     ConnectionText= "var(--conn-text, #393939)";
     MinMaxLine    = "var(--minmax-line, #FFDB4D)";
     TextLight     = "var(--text-light, #FFFFFF)";
+    TextInverted  = "var(--text-inv, #FFFFFF)";
     TextSummary   = "var(--text-summary, #262626)";
     SpillingBytesDark   = "var(--spill-dark, #406B61)";
     SpillingBytesMedium = "var(--spill-medium, #599587)";
@@ -1513,8 +1514,8 @@ TString TPlanVisualizer::PrintSvg() {
     for (auto& p : Plans) {
         offsetY += GAP_Y;
         canvas
-            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-            << "px' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+            << "' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
             << p.NodeType << "</text>" << Endl;
 
         canvas
@@ -1574,7 +1575,7 @@ TString TPlanVisualizer::PrintSvg() {
             << "  <rect x='" << x - summary3 << "' y='" << offsetY
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
-            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight << "' x='" << x - 2
+            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
             << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</text>" << Endl
             << "</g>" << Endl;
 
@@ -1631,8 +1632,8 @@ TString TPlanVisualizer::PrintSvg() {
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
             for (auto& p : Plans) {
                 svg
-                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-                    << "px' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>"
+                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+                    << "' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
                     << timeLabel << "</text>" << Endl;
             }
         }

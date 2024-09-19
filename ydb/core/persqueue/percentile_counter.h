@@ -66,7 +66,7 @@ private:
     bool Inited = false;
 
 public:
-    TPartitionCounterWrapper() = default;
+    TPartitionCounterWrapper();
     explicit TPartitionCounterWrapper(NKikimr::NPQ::TMultiCounter&& counter, bool isSupportivePartition, bool doReport = true);
     void Setup(bool isSupportivePartition, bool doReport, NKikimr::NPQ::TMultiCounter&& counter);
     void Inc(ui64 value);

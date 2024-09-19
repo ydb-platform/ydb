@@ -901,10 +901,10 @@ define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_c
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? PARALLEL? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? AT_lexeme? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
+table_ref: (cluster_expr DOT)? COMMAT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
 
 table_key: id_table_or_type (VIEW view_name)?;
-table_arg: AT_lexeme? named_expr (VIEW view_name)?;
+table_arg: COMMAT? named_expr (VIEW view_name)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
@@ -913,7 +913,7 @@ table_hint:
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
-simple_table_ref_core: object_ref | AT_lexeme? bind_parameter;
+simple_table_ref_core: object_ref | COMMAT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
@@ -1154,9 +1154,9 @@ cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
 
 id_or_type: id | type_id;
 opt_id_prefix_or_type: (an_id_or_type DOT)?;
-id_or_at: AT_lexeme? an_id_or_type;
+id_or_at: COMMAT? an_id_or_type;
 id_table_or_type: an_id_table | type_id;
-id_table_or_at: AT_lexeme? id_table_or_type;
+id_table_or_at: COMMAT? id_table_or_type;
 
 keyword:
     keyword_compat
@@ -1729,8 +1729,8 @@ LPAREN:        '(';
 RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
-AT_lexeme:     '@';
-DOUBLE_AT:     '@@';
+COMMAT:        '@';
+DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
 QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
 QUOTE_SINGLE:  '\'';
@@ -2068,7 +2068,7 @@ fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT_lexeme?;
+fragment STRING_MULTILINE: (DOUBLE_COMMAT .* DOUBLE_COMMAT)+ COMMAT?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 

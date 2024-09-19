@@ -352,7 +352,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                         config.MeteringMode);
     Config.SetLocalDC(true);
 
-    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
+    NPersQueue::TTopicNamesConverterFactory factory(Ctx->Runtime->GetAppData(0).PQConfig.GetTopicsAreFirstClassCitizen(), "/Root/PQ", "dc1");
     TopicConverter = factory.MakeTopicConverter(Config);
     TActorId quoterId;
     if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
@@ -1370,6 +1370,11 @@ void TPartitionTxTestHelper::SendWriteInfoResponseImpl(const TActorId& supportiv
     auto iter = this->WriteInfoData.find(supportiveId);
     Y_ABORT_UNLESS(!iter.IsEnd());
     reply->SrcIdInfo = iter->second;
+    reply->BytesWrittenTotal = 1;
+    reply->BytesWrittenGrpc = 1;
+    reply->BytesWrittenUncompressed = 1;
+    reply->MessagesWrittenTotal = 1;
+    reply->MessagesWrittenGrpc = 1;
     SendEvent(reply, supportiveId, partitionId);
 }
 
@@ -2593,6 +2598,51 @@ Y_UNIT_TEST_F(NonConflictingActsBatchOk, TPartitionTxTestHelper) {
     WaitCommitDone(tx3);
 }
 
+Y_UNIT_TEST_F(TxBatchInFederation, TPartitionTxTestHelper) {
+    Ctx->Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+    TTxBatchingTestParams params {.WriterSessions{"src3", "src4"}};
+    Init(std::move(params));
+    ResetBatchCompletion();
+
+    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}});
+    AddAndSendNormalWrite("src3", 7, 12);
+    auto immTx1 = MakeAndSendImmediateTx({{"src4", {1, 7}}});
+    AddAndSendNormalWrite("src4", 7, 12); // Conflict with imm tx = allowed
+    auto immTx2 = MakeAndSendImmediateTx({{"src4", {12, 15}}}); // Immediate txs confilict - allowed;
+    ExpectNoTxPredicateReply();
+    ExpectNoKvRequest();
+    auto tx2 = MakeAndSendWriteTx({{"src-other", {4, 6}}});
+    auto tx3 = MakeAndSendWriteTx({{"src2", {4, 6}}});
+
+    WaitWriteInfoRequest(tx1);
+    WaitWriteInfoRequest(immTx1, true);
+    WaitWriteInfoRequest(immTx2, true);
+    WaitWriteInfoRequest(tx2);
+    WaitWriteInfoRequest(tx3);
+
+    SendWriteInfoResponse(tx3);
+
+    ExpectNoBatchCompletion();
+    SendWriteInfoResponse(tx1);
+    WaitTxPredicateReply(tx1);
+    SendWriteInfoResponse(tx2);
+    WaitTxPredicateReply(tx2);
+    WaitTxPredicateReply(tx3);
+
+    WaitBatchCompletion(5 + 6 + 6); //5 txs and immediate txs + 2 normal writes with 6 messages each;
+
+    SendTxCommit(tx3);
+    SendTxRollback(tx2);
+    ExpectNoKvRequest();
+    SendTxCommit(tx1);
+    WaitKvRequest();
+    SendKvResponse();
+    WaitCommitDone(tx1);
+    WaitImmediateTxComplete(immTx1, true);
+    WaitImmediateTxComplete(immTx2, true);
+    WaitCommitDone(tx3);
+}
+
 Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionTxTestHelper) {
     TTxBatchingTestParams params {.WriterSessions{"src1", "src4"},.EndOffset=1};
     Init(std::move(params));
@@ -3124,6 +3174,8 @@ Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
     EmulateKVTablet();
     WaitImmediateTxComplete(immTx2, true);
 }
+
+
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
     auto* actor = CreatePartition({

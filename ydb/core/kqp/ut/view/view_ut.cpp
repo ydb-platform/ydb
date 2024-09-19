@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         fail("");
         fail("WITH security_invoker");
         fail("WITH security_invoker = false");
-        fail("WITH SECURITY_INVOKER = false"); // option name is case-sensitive
+        fail("WITH SECURITY_INVOKER = true"); // option name is case-sensitive
         fail("WITH (security_invoker)");
         fail("WITH (security_invoker = false)");
         fail("WITH (security_invoker = true, security_invoker = false)");

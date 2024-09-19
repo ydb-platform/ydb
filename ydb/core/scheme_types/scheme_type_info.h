@@ -32,20 +32,16 @@ public:
         //Y_ABORT_UNLESS(NTypeIds::IsParametrizedType(TypeId))
     }
 
-    constexpr TTypeInfo(TTypeId typeId, const NKikimr::NPg::ITypeDesc* typeDesc)
-        : TypeId(typeId)
+    constexpr TTypeInfo(const NKikimr::NPg::ITypeDesc* typeDesc)
+        : TypeId(NTypeIds::Pg)
         , PgTypeDesc(typeDesc)
-    {
-        Y_ABORT_UNLESS(TypeId == NTypeIds::Pg);
-    }
+    {}
 
-    constexpr TTypeInfo(TTypeId typeId, const TDecimalType& decimalType)
-        : TypeId(typeId)
+    constexpr TTypeInfo(const TDecimalType& decimalType)
+        : TypeId(NTypeIds::Decimal)
         // TODO Remove after parametrized decimal in KQP
         , DecimalTypeDesc(decimalType.GetPrecision() == 0 && decimalType.GetScale() == 0 ? TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE) : decimalType)
-    {
-        Y_ABORT_UNLESS(TypeId == NTypeIds::Decimal);
-    }
+    {}
 
     constexpr bool operator==(const TTypeInfo& other) const {
         return TypeId == other.TypeId && RawDesc == other.RawDesc;

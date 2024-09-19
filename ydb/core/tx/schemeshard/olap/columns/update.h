@@ -42,6 +42,8 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui32>, ColumnFamilyId);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
 
+    bool CheckAlterCompressionInPKColumn(IErrorCollector& errors) const;
+
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
         : KeyOrder(keyOrder) {
@@ -51,7 +53,7 @@ public:
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     bool HasColumnFamily() const;
-    bool ApplySerializer(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
+    bool ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool IsKeyColumn() const {
         return !!KeyOrder;

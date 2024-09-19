@@ -39,11 +39,17 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
                 return false;
             }
         }
+        if (column.IsKeyColumn() && ((column.GetColumnFamilyName().has_value() && column.GetColumnFamilyName().value() != "default") ||
+                                        (column.GetColumnFamilyId().has_value() && column.GetColumnFamilyId().value() != 0))) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, "Key column '" + column.GetName() + "' must be in `default` column family");
+            return false;
+        }
         TOlapColumnSchema newColumn(column, nextEntityId++);
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
-        if (newColumn.HasColumnFamily() && !newColumn.ApplySerializer(columnFamilies, errors)) {
+        if (!newColumn.GetSerializer().has_value() && newColumn.HasColumnFamily() &&
+            !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {
             return false;
         }
 
@@ -226,6 +232,11 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         auto* col = GetByName(keyName);
         if (!col) {
             errors.AddError("Unknown key column '" + keyName + "'");
+            return false;
+        }
+        if ((col->GetColumnFamilyName().has_value() && col->GetColumnFamilyName() != "default") ||
+            (col->GetColumnFamilyId().has_value() && col->GetColumnFamilyId().value() != 0)) {
+            errors.AddError("Key column '" + keyName + "' must be in `default` column family");
             return false;
         }
         keyColumnIds.push_back(col->GetId());

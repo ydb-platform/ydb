@@ -153,6 +153,10 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
 }
 
 bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (!ColumnFamilies.Validate(opSchema, errors)) {
+        return false;
+    }
+
     if (!Columns.Validate(opSchema, errors)) {
         return false;
     }

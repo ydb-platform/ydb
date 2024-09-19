@@ -39,7 +39,11 @@ bool TOlapColumnFamiliesDescription::ApplyUpdate(
         for (const auto& family : schemaUpdate.GetAddColumnFamilies()) {
         auto familyName = family.GetName();
         if (!ColumnFamiliesByName.contains(familyName)) {
-            TOlapColumnFamily columFamilyAdd(family, NextColumnFamilyId++);
+            ui32 index = 0;
+            if (family.GetName() != "default") {
+                index = NextColumnFamilyId++;
+            }
+            TOlapColumnFamily columFamilyAdd(family, index);
             Y_ABORT_UNLESS(ColumnFamilies.emplace(columFamilyAdd.GetId(), columFamilyAdd).second);
             Y_ABORT_UNLESS(ColumnFamiliesByName.emplace(columFamilyAdd.GetName(), columFamilyAdd.GetId()).second);
         } else {
@@ -73,4 +77,51 @@ void TOlapColumnFamiliesDescription::Serialize(NKikimrSchemeOp::TColumnTableSche
     }
 }
 
+bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    ui32 lastColumnFamilyId = 0;
+    THashSet<ui32> usedColumnFamilies;
+    for (const auto& familyProto : opSchema.GetColumnFamilies()) {
+        if (familyProto.GetName().Empty()) {
+            errors.AddError("Column family can't have an empty name");
+            return false;
+        }
+
+        const TString& columnFamilyName = familyProto.GetName();
+        auto* family = GetByName(columnFamilyName);
+        if (!family) {
+            errors.AddError("Column family '" + columnFamilyName + "' does not match schema preset");
+            return false;
+        }
+
+        if (familyProto.HasId() && familyProto.GetId() != family->GetId()) {
+            errors.AddError("Column family '" + columnFamilyName + "' has id " + familyProto.GetId() + " that does not match schema preset");
+            return false;
+        }
+
+        if (!usedColumnFamilies.insert(family->GetId()).second) {
+            errors.AddError("Column family '" + columnFamilyName + "' is specified multiple times");
+            return false;
+        }
+
+        if (familyProto.GetId() < lastColumnFamilyId) {
+            errors.AddError("Column family order does not match schema preset");
+            return false;
+        }
+        lastColumnFamilyId = familyProto.GetId();
+
+        if (!familyProto.HasSerializer()) {
+            errors.AddError("Missing Serializer for column family '" + columnFamilyName + "'");
+            return false;
+        }
+    }
+
+    for (const auto& [_, family] : ColumnFamilies) {
+        if (!usedColumnFamilies.contains(family.GetId())) {
+            errors.AddError("Specified schema is missing some schema preset column families");
+            return false;
+        }
+    }
+
+    return true;
+}
 }

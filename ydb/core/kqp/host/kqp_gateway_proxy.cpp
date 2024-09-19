@@ -469,7 +469,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSc
         }
     }
 
-    auto getCodecFromString = [](const TMaybe<TString>& codec) -> TMaybe<NKikimrSchemeOp::EColumnCodec> {
+    auto GetCodecFromString = [](const TMaybe<TString>& codec) -> TMaybe<NKikimrSchemeOp::EColumnCodec> {
         auto codecName = to_lower(codec.GetRef());
         if (codecName == "off") {
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
@@ -494,7 +494,8 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSc
     };
 
     auto schema = tableDesc.MutableSchema();
-    ui32 columnFamilyId = 0;
+    ui32 columnFamilyId = 1;
+    bool IsDefaultColumnFamily = false;
     for (const auto& family : metadata->ColumnFamilies) {
         auto columnFamilyIt = columnFamiliesByName.find(family.Name);
         if (!columnFamilyIt.IsEnd()) {
@@ -502,18 +503,23 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSc
             error = TStringBuilder() << "Duplicate column family `" << family.Name << '`';
             return false;
         }
-        if (!columnFamiliesByName.emplace(family.Name, columnFamilyId).second) {
+        auto familyDescription = schema->AddColumnFamilies();
+        familyDescription->SetName(family.Name);
+        if (familyDescription->GetName() == "default") {
+            familyDescription->SetId(0);
+            IsDefaultColumnFamily = true;
+        } else {
+            familyDescription->SetId(columnFamilyId++);
+        }
+        if (!columnFamiliesByName.emplace(family.Name, familyDescription->GetId()).second) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Can't insert column family in hash map `" << family.Name << '`';
             return false;
         }
-        auto familyDescription = schema->AddColumnFamilies();
-        familyDescription->SetName(family.Name);
-        familyDescription->SetId(columnFamilyId++);
         auto serializer = familyDescription->MutableSerializer();
         serializer->SetClassName("ARROW_SERIALIZER");
         if (family.Compression.Defined()) {
-            auto codec = getCodecFromString(family.Compression.GetRef());
+            auto codec = GetCodecFromString(family.Compression.GetRef());
             if (!codec.Defined()) {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
@@ -526,6 +532,12 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSc
             }
         }
     }
+    if (!metadata->ColumnFamilies.empty() && !IsDefaultColumnFamily) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Missing 'default' column family in the table definition";
+        return false;
+    }
+
     schema->SetNextColumnFamilyId(columnFamilyId);
 
     return true;

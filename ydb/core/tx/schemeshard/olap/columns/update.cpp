@@ -225,7 +225,7 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
         return GetColumnFamilyId().has_value() || GetColumnFamilyName().has_value();
     }
 
-    bool TOlapColumnAdd::ApplySerializer(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
+    bool TOlapColumnAdd::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
         if (GetColumnFamilyId().has_value()) {
             SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
         } else {
@@ -266,21 +266,43 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
             StorageId = *diffColumn.GetStorageId();
         }
         if (diffColumn.GetColumnFamilyId().has_value()) {
+            if (IsKeyColumn()) {
+                auto columnFamily = columnFamilies.GetById(diffColumn.GetColumnFamilyId().value());
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot alter column family `" << columnFamily->GetName() << "` for PK column `" << GetName() << "`");
+                return false;
+            }
+
             ColumnFamilyId = diffColumn.GetColumnFamilyId();
         }
         if (diffColumn.GetColumnFamilyName().has_value()) {
+            if (IsKeyColumn()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                                                                      << "Cannot alter column family `" << diffColumn.GetColumnFamilyName()
+                                                                      << "` for PK column `" << GetName() << "`");
+                return false;
+            }
             ColumnFamilyName = diffColumn.GetColumnFamilyName();
             auto idIt = columnFamilies.GetColumnFamiliesByName().find(ColumnFamilyName.value());
             if (idIt.IsEnd()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot set column family `" << ColumnFamilyName
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot alter column family `" << ColumnFamilyName
                                                                                    << "` for column `" << GetName() << "`. Family not found");
                 return false;
             }
             ColumnFamilyId = idIt->second;
         }
 
-        if (HasColumnFamily() && !ApplySerializer(columnFamilies, errors)) {
-            return false;
+        if (diffColumn.GetSerializer()) {
+            if (GetKeyOrder().has_value()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot alter column family `" << ColumnFamilyName << "` for PK column `" << GetName() << "`");
+                return false;
+            }
+            Serializer = diffColumn.GetSerializer();
+        } else {
+            if (HasColumnFamily() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {
+                return false;
+            }
         }
 
         {
@@ -393,6 +415,7 @@ bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescript
     bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
         TMap<TString, ui32> keyColumnNames;
         for (auto&& pkKey : tableSchema.GetKeyColumnNames()) {
+            Cerr << "Key column: " << pkKey << Endl;
             if (!keyColumnNames.emplace(pkKey, keyColumnNames.size()).second) {
                 errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate key column '" << pkKey << "'");
                 return false;

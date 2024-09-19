@@ -8015,6 +8015,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         return EColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec());
     }
 
+    // Field `Data` is not used in ColumnFamily in ColumnTable
     Y_UNIT_TEST(CreateWithDefaultColumnFamily) {
         TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
         auto tableClient = runner.GetTableClient();
@@ -8436,6 +8437,102 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                     TStringBuilder() << "Wrong codec for column " << columns[i].GetName() << " (must be "
                                      << EColumnCodecToString(columnFamiliesCodec[i]) << ")");
             }
+        }
+    }
+
+    Y_UNIT_TEST(WithoutDefaultColumnFamily) {
+        TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(UnknownColumnFamily) {
+        TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(PrimaryKeyNotDefaultColumnFamily) {
+        TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL FAMILY family1,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AlterColumnFamilyForPrimaryKey) {
+        TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        {
+            auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ))
+                WITH (STORE = COLUMN);)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER COLUMN Key SET FAMILY family1;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
 }

@@ -521,23 +521,8 @@
     "test_ydb_sql.TestExecuteSqlWithParams.test_uint64_and_string": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParams.test_uint64_and_string/result.output"
     },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_ignore_excess_parameters": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_ignore_excess_parameters/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_list": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_list/result.output"
-    },
     "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_script_from_file": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_script_from_file/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_struct": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_struct/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_uint32": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_uint32/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_uint64_and_string": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_uint64_and_string/result.output"
     },
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_csv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_csv_sql_/result.output"

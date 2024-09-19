@@ -177,7 +177,7 @@ var record = ydbDSLContext.selectFrom(SERIES.useIndex(Indexes.TITLE_NAME.name))
         .fetchOne();
 ```
 
-In all other respects, the {{ ydb-short-name }} dialect follows the JOOQ documentation.
+In all other respects, the {{ ydb-short-name }} dialect follows the [JOOQ documentation](https://www.jooq.org/doc/latest/manual/).
 
 ### Spring Boot Configuration
 

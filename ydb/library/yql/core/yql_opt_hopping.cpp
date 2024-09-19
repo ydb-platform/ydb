@@ -1,10 +1,7 @@
 #include "yql_opt_hopping.h"
 
-#include <ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
 #include <util/generic/bitmap.h>
@@ -15,126 +12,120 @@
 using namespace NYql;
 using namespace NYql::NNodes;
 
-namespace {
+namespace NYql::NHopping {
 
-struct TKeysDescription {
-    TVector<TString> PickleKeys;
-    TVector<TString> MemberKeys;
-    TVector<TString> FakeKeys;
-
-    TKeysDescription(const TStructExprType& rowType, const TCoAtomList& keys, const TString& hoppingColumn) {
-        for (const auto& key : keys) {
-            if (key.StringValue() == hoppingColumn) {
-                FakeKeys.emplace_back(key.StringValue());
-                continue;
-            }
-
-            const auto index = rowType.FindItem(key.StringValue());
-            Y_ENSURE(index);
-
-            auto itemType = rowType.GetItems()[*index]->GetItemType();
-            if (RemoveOptionalType(itemType)->GetKind() == ETypeAnnotationKind::Data) {
-                MemberKeys.emplace_back(key.StringValue());
-                continue;
-            }
-
-            PickleKeys.emplace_back(key.StringValue());
+TKeysDescription::TKeysDescription(const TStructExprType& rowType, const TCoAtomList& keys, const TString& hoppingColumn) {
+    for (const auto& key : keys) {
+        if (key.StringValue() == hoppingColumn) {
+            FakeKeys.emplace_back(key.StringValue());
+            continue;
         }
+
+        const auto index = rowType.FindItem(key.StringValue());
+        Y_ENSURE(index);
+
+        auto itemType = rowType.GetItems()[*index]->GetItemType();
+        if (RemoveOptionalType(itemType)->GetKind() == ETypeAnnotationKind::Data) {
+            MemberKeys.emplace_back(key.StringValue());
+            continue;
+        }
+
+        PickleKeys.emplace_back(key.StringValue());
     }
+}
 
-    TExprNode::TPtr BuildPickleLambda(TExprContext& ctx, TPositionHandle pos) const {
-        TCoArgument arg = Build<TCoArgument>(ctx, pos)
-            .Name("item")
-            .Done();
+TExprNode::TPtr TKeysDescription::BuildPickleLambda(TExprContext& ctx, TPositionHandle pos) const {
+    TCoArgument arg = Build<TCoArgument>(ctx, pos)
+        .Name("item")
+        .Done();
 
-        TExprBase body = arg;
+    TExprBase body = arg;
 
-        for (const auto& key : PickleKeys) {
-            const auto member = Build<TCoMember>(ctx, pos)
-                    .Name().Build(key)
-                    .Struct(arg)
-                .Done()
-                .Ptr();
-
-            body = Build<TCoReplaceMember>(ctx, pos)
-                .Struct(body)
+    for (const auto& key : PickleKeys) {
+        const auto member = Build<TCoMember>(ctx, pos)
                 .Name().Build(key)
-                .Item(ctx.NewCallable(pos, "StablePickle", { member }))
-                .Done();
-        }
-
-        return Build<TCoLambda>(ctx, pos)
-            .Args({arg})
-            .Body(body)
+                .Struct(arg)
             .Done()
             .Ptr();
+
+        body = Build<TCoReplaceMember>(ctx, pos)
+            .Struct(body)
+            .Name().Build(key)
+            .Item(ctx.NewCallable(pos, "StablePickle", { member }))
+            .Done();
     }
 
-    TExprNode::TPtr BuildUnpickleLambda(TExprContext& ctx, TPositionHandle pos, const TStructExprType& rowType) {
-        TCoArgument arg = Build<TCoArgument>(ctx, pos)
-            .Name("item")
-            .Done();
+    return Build<TCoLambda>(ctx, pos)
+        .Args({arg})
+        .Body(body)
+        .Done()
+        .Ptr();
+}
 
-        TExprBase body = arg;
+TExprNode::TPtr TKeysDescription::BuildUnpickleLambda(TExprContext& ctx, TPositionHandle pos, const TStructExprType& rowType) {
+    TCoArgument arg = Build<TCoArgument>(ctx, pos)
+        .Name("item")
+        .Done();
 
-        for (const auto& key : PickleKeys) {
-            const auto index = rowType.FindItem(key);
-            Y_ENSURE(index);
+    TExprBase body = arg;
 
-            auto itemType = rowType.GetItems().at(*index)->GetItemType();
-            const auto member = Build<TCoMember>(ctx, pos)
-                    .Name().Build(key)
-                    .Struct(arg)
-                .Done()
-                .Ptr();
+    for (const auto& key : PickleKeys) {
+        const auto index = rowType.FindItem(key);
+        Y_ENSURE(index);
 
-            body = Build<TCoReplaceMember>(ctx, pos)
-                .Struct(body)
+        auto itemType = rowType.GetItems().at(*index)->GetItemType();
+        const auto member = Build<TCoMember>(ctx, pos)
                 .Name().Build(key)
-                .Item(ctx.NewCallable(pos, "Unpickle", { ExpandType(pos, *itemType, ctx), member }))
-                .Done();
-        }
-
-        return Build<TCoLambda>(ctx, pos)
-            .Args({arg})
-            .Body(body)
+                .Struct(arg)
             .Done()
             .Ptr();
+
+        body = Build<TCoReplaceMember>(ctx, pos)
+            .Struct(body)
+            .Name().Build(key)
+            .Item(ctx.NewCallable(pos, "Unpickle", { ExpandType(pos, *itemType, ctx), member }))
+            .Done();
     }
 
-    TVector<TCoAtom> GetKeysList(TExprContext& ctx, TPositionHandle pos) const {
-        TVector<TCoAtom> res;
-        res.reserve(PickleKeys.size() + MemberKeys.size());
+    return Build<TCoLambda>(ctx, pos)
+        .Args({arg})
+        .Body(body)
+        .Done()
+        .Ptr();
+}
 
-        for (const auto& pickleKey : PickleKeys) {
-            res.emplace_back(Build<TCoAtom>(ctx, pos).Value(pickleKey).Done());
-        }
-        for (const auto& memberKey : MemberKeys) {
-            res.emplace_back(Build<TCoAtom>(ctx, pos).Value(memberKey).Done());
-        }
-        return res;
-    }
+TVector<TCoAtom> TKeysDescription::GetKeysList(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoAtom> res;
+    res.reserve(PickleKeys.size() + MemberKeys.size());
 
-    TVector<TString> GetActualGroupKeys() {
-        TVector<TString> result;
-        result.reserve(PickleKeys.size() + MemberKeys.size());
-        result.insert(result.end(), PickleKeys.begin(), PickleKeys.end());
-        result.insert(result.end(), MemberKeys.begin(), MemberKeys.end());
-        return result;
+    for (const auto& pickleKey : PickleKeys) {
+        res.emplace_back(Build<TCoAtom>(ctx, pos).Value(pickleKey).Done());
     }
+    for (const auto& memberKey : MemberKeys) {
+        res.emplace_back(Build<TCoAtom>(ctx, pos).Value(memberKey).Done());
+    }
+    return res;
+}
 
-    bool NeedPickle() const {
-        return !PickleKeys.empty();
-    }
+TVector<TString> TKeysDescription::GetActualGroupKeys() const {
+    TVector<TString> result;
+    result.reserve(PickleKeys.size() + MemberKeys.size());
+    result.insert(result.end(), PickleKeys.begin(), PickleKeys.end());
+    result.insert(result.end(), MemberKeys.begin(), MemberKeys.end());
+    return result;
+}
 
-    TExprNode::TPtr GetKeySelector(TExprContext& ctx, TPositionHandle pos, const TStructExprType* rowType) {
-        auto builder = Build<TCoAtomList>(ctx, pos);
-        for (auto key : GetKeysList(ctx, pos)) {
-            builder.Add(std::move(key));
-        }
-        return BuildKeySelector(pos, *rowType, builder.Build().Value().Ptr(), ctx);
+bool TKeysDescription::NeedPickle() const {
+    return !PickleKeys.empty();
+}
+
+TExprNode::TPtr TKeysDescription::GetKeySelector(TExprContext& ctx, TPositionHandle pos, const TStructExprType* rowType) {
+    auto builder = Build<TCoAtomList>(ctx, pos);
+    for (auto key : GetKeysList(ctx, pos)) {
+        builder.Add(std::move(key));
     }
-};
+    return BuildKeySelector(pos, *rowType, builder.Build().Value().Ptr(), ctx);
+}
 
 TString BuildColumnName(const TExprBase& column) {
     if (const auto columnName = column.Maybe<TCoAtom>()) {
@@ -166,7 +157,7 @@ void EnsureNotDistinct(const TCoAggregate& aggregate) {
         "Distinct is not supported for aggregation with hop");
 }
 
-TMaybe<std::tuple<TString, TCoHoppingTraits>> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx) {
+TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx, bool analyticsMode) {
     const auto pos = aggregate.Pos();
 
     const auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
@@ -229,7 +220,20 @@ TMaybe<std::tuple<TString, TCoHoppingTraits>> ExtractHopTraits(const TCoAggregat
         return Nothing();
     }
 
-    return std::tuple{hoppingColumn, traits};
+    const auto newTraits = Build<TCoHoppingTraits>(ctx, aggregate.Pos())
+        .InitFrom(traits)
+        .DataWatermarks(analyticsMode
+            ? ctx.NewAtom(aggregate.Pos(), "false")
+            : traits.DataWatermarks().Ptr())
+        .Done();
+
+    return THoppingTraits {
+        hoppingColumn,
+        newTraits,
+        hop,
+        interval,
+        delay
+    };
 }
 
 TExprNode::TPtr BuildTimeExtractor(const TCoHoppingTraits& hoppingTraits, TExprContext& ctx) {
@@ -558,115 +562,6 @@ TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& 
         .Body<TCoAsStruct>()
             .Add(structItems)
             .Build()
-        .Done()
-        .Ptr();
-}
-
-TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, TExprContext& ctx) {
-    const auto pos = aggregate.Pos();
-
-    EnsureNotDistinct(aggregate);
-
-    const auto maybeHopTraits = ExtractHopTraits(aggregate, ctx);
-    if (!maybeHopTraits) {
-        return nullptr;
-    }
-    const auto [hoppingColumn, hoppingTraits] = *maybeHopTraits;
-
-    const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
-    TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hoppingColumn);
-
-    // if (keysDescription.NeedPickle()) {
-    //     return Build<TCoMap>(ctx, pos)
-    //         .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
-    //         .Input<TCoAggregate>()
-    //             .InitFrom(aggregate)
-    //             .Input<TCoMap>()
-    //                 .Lambda(keysDescription.BuildPickleLambda(ctx, pos))
-    //                 .Input(aggregate.Input())
-    //             .Build()
-    //             .Settings(RemoveSetting(aggregate.Settings().Ref(), "output_columns", ctx))
-    //         .Build()
-    //         .Done()
-    //         .Ptr();
-    // }
-
-    const auto keyLambda = keysDescription.GetKeySelector(ctx, pos, aggregateInputType);
-    const auto timeExtractorLambda = BuildTimeExtractor(hoppingTraits, ctx);
-    const auto initLambda = BuildInitHopLambda(aggregate, ctx);
-    const auto updateLambda = BuildUpdateHopLambda(aggregate, ctx);
-    const auto saveLambda = BuildSaveHopLambda(aggregate, ctx);
-    const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
-    const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
-    const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hoppingColumn, ctx);
-
-    const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
-    auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
-        .KeyExtractor(keyLambda)
-        .TimeExtractor(timeExtractorLambda)
-        .Hop(hoppingTraits.Hop())
-        .Interval(hoppingTraits.Interval())
-        .Delay(hoppingTraits.Delay())
-        .DataWatermarks(hoppingTraits.DataWatermarks())
-        .InitHandler(initLambda)
-        .UpdateHandler(updateLambda)
-        .MergeHandler(mergeLambda)
-        .FinishHandler(finishLambda)
-        .SaveHandler(saveLambda)
-        .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(false));
-
-    return Build<TCoPartitionsByKeys>(ctx, pos)
-        .Input(aggregate.Input())
-        .KeySelectorLambda(keyLambda)
-        .SortDirections<TCoBool>()
-                .Literal()
-                .Value("true")
-                .Build()
-            .Build()
-        .SortKeySelectorLambda(timeExtractorLambda)
-        .ListHandlerLambda()
-            .Args(streamArg)
-            .template Body<TCoForwardList>()
-                .Stream(multiHoppingCoreBuilder
-                    .template Input<TCoIterator>()
-                        .List(streamArg)
-                        .Build()
-                    .Done())
-                .Build()
-            .Build()
-        .Done()
-        .Ptr();
-}
-
-} // namespace
-
-namespace NYql::NHopping {
-
-TExprNode::TPtr RewriteAsHoppingWindow(TExprNode::TPtr node, TExprContext& ctx) {
-    const auto aggregate = TCoAggregate(node);
-
-    if (aggregate.Input().Ptr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
-        return nullptr;
-    }
-
-    if (!GetSetting(aggregate.Settings().Ref(), "hopping")) {
-        return nullptr;
-    }
-
-    auto result = RewriteAsHoppingWindowFullOutput(aggregate, ctx);
-    if (!result) {
-        return result;
-    }
-
-    auto outputColumnSetting = GetSetting(aggregate.Settings().Ref(), "output_columns");
-    if (!outputColumnSetting) {
-        return result;
-    }
-
-    return Build<TCoExtractMembers>(ctx, aggregate.Pos())
-        .Input(result)
-        .Members(outputColumnSetting->ChildPtr(1))
         .Done()
         .Ptr();
 }

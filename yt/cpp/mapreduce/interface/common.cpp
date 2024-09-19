@@ -348,6 +348,7 @@ TColumnSchema& TColumnSchema::Type(const NTi::TTypePtr& type) &
 {
     Y_ABORT_UNLESS(type.Get(), "Cannot create column schema with nullptr type");
     TypeV3_ = type;
+    RawTypeV3_ = {};
     return *this;
 }
 
@@ -355,6 +356,7 @@ TColumnSchema TColumnSchema::Type(const NTi::TTypePtr& type) &&
 {
     Y_ABORT_UNLESS(type.Get(), "Cannot create column schema with nullptr type");
     TypeV3_ = type;
+    RawTypeV3_ = {};
     return *this;
 }
 
@@ -386,6 +388,25 @@ TColumnSchema& TColumnSchema::Type(EValueType type, bool required) &
 TColumnSchema TColumnSchema::Type(EValueType type, bool required) &&
 {
     return Type(ToTypeV3(type, required));
+}
+
+const TMaybe<TNode>& TColumnSchema::RawTypeV3() const
+{
+    return RawTypeV3_;
+}
+
+TColumnSchema& TColumnSchema::RawTypeV3(TNode rawTypeV3) &
+{
+    RawTypeV3_ = std::move(rawTypeV3);
+    TypeV3_ = nullptr;
+    return *this;
+}
+
+TColumnSchema TColumnSchema::RawTypeV3(TNode rawTypeV3) &&
+{
+    RawTypeV3_ = std::move(rawTypeV3);
+    TypeV3_ = nullptr;
+    return *this;
 }
 
 bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)

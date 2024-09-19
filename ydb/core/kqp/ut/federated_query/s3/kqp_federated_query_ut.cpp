@@ -2265,6 +2265,48 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "File pattern '{' contains invalid wildcard:");
         }
     }
+
+    Y_UNIT_TEST(TestSecretsExistingValidation) {
+        const TString bucket = "test_bucket14";
+
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableExternalSourceSchemaInference(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            GRANT ALL ON `/Root` TO `test@builtin`;
+            CREATE OBJECT TestSecret (TYPE SECRET) WITH value = `test_value`;
+            CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID="TestSa",
+                SERVICE_ACCOUNT_SECRET_NAME="TestSecret"
+            );)",
+            "location"_a = GetBucketLocation(bucket)
+        );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient(NYdb::NQuery::TClientSettings().AuthToken("test@builtin"));
+
+        const TString sql = R"(
+            SELECT * FROM `/Root/external_data_source`.`/` WITH (
+                SCHEMA = (data String),
+                FORMAT = "csv_with_names"
+            ))";
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "secret with name 'TestSecret' not found");
+    }
 }
 
 } // namespace NKikimr::NKqp

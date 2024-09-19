@@ -188,97 +188,14 @@ class TestExecuteSqlWithParamsFromJson(BaseTestSqlWithDatabase):
         with open(filename, "w") as file:
             file.write(data)
 
-    def uint32(self, command):
-        param_data = '{\n' \
-            '   "par1": 1\n' \
-            '}'
-        script = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
-        self.write_data(param_data, str(self.tmp_path / "params.json"))
-        output = self.execute_ydb_cli_command_with_db(command + ["--input-file", str(self.tmp_path / "params.json"), "-s", script])
-        return self.canonical_result(output, self.tmp_path)
-
-    def uint64_and_string(self, command):
-        param_data = '{\n' \
-            '   "value": "seven",\n' \
-            '   "id": 2222' \
-            '}'
-        script = "DECLARE $id AS Uint64; "\
-                 "DECLARE $value AS String; "\
-                 "SELECT * FROM `{}` WHERE id = $id OR value = $value;".format(self.table_path)
-        self.write_data(param_data, str(self.tmp_path / "params.json"))
-        output = self.execute_ydb_cli_command_with_db(command + ["--input-file", str(self.tmp_path / "params.json"), "-s", script])
-        return self.canonical_result(output, self.tmp_path)
-
-    def list(self, command):
-        param_data = '{\n' \
-            '   "values": [1, 2, 3]\n' \
-            '}'
-        script = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
-        self.write_data(param_data, str(self.tmp_path / "params.json"))
-        output = self.execute_ydb_cli_command_with_db(command + ["--input-file", str(self.tmp_path / "params.json"), "-s", script])
-        return self.canonical_result(output, self.tmp_path)
-
-    def struct(self, command):
-        param_data = '{\n' \
-            '   "values": [\n' \
-            '       {\n'\
-            '           "key": 1,\n'\
-            '           "value": "one"\n'\
-            '       },\n'\
-            '       {\n'\
-            '           "key": 2,\n'\
-            '           "value": "two"\n'\
-            '       }\n'\
-            '   ]\n'\
-            '}'
-        script = "DECLARE $values AS List<Struct<key:Uint64, value:Utf8>>; "\
-                 "SELECT "\
-                 "Table.key AS key, "\
-                 "Table.value AS value "\
-                 "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
-        self.write_data(param_data, str(self.tmp_path / "params.json"))
-        output = self.execute_ydb_cli_command_with_db(command + ["--input-file", str(self.tmp_path / "params.json"), "-s", script])
-        return self.canonical_result(output, self.tmp_path)
-
-    def ignore_excess_parameters(self, command):
-        param_data = '{\n' \
-            '   "a": 12,\n' \
-            '   "b": 34' \
-            '}'
-        script = "DECLARE $a AS Uint64; " \
-                 "SELECT $a AS a; "
-        self.write_data(param_data, str(self.tmp_path / "params.json"))
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--input-file", str(self.tmp_path / "params.json")]
-        )
-        return self.canonical_result(output, self.tmp_path)
-
-    def script_from_file(self, command):
+    def test_script_from_file(self):
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
         self.write_data(script, str(self.tmp_path / "script.yql"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-f", str(self.tmp_path / "script.yql"), "--param", "$a=3"]
+            ["sql", "-f", str(self.tmp_path / "script.yql"), "--param", "$a=3"]
         )
         return self.canonical_result(output, self.tmp_path)
-
-    def test_uint32(self):
-        return self.uint32(["sql"])
-
-    def test_uint64_and_string(self):
-        return self.uint64_and_string(["sql"])
-
-    def test_list(self):
-        return self.list(["sql"])
-
-    def test_struct(self):
-        return self.struct(["sql"])
-
-    def test_ignore_excess_parameters(self):
-        return self.ignore_excess_parameters(["sql"])
-
-    def test_script_from_file(self):
-        return self.script_from_file(["sql"])
 
 
 @pytest.mark.parametrize("command", ["sql"])

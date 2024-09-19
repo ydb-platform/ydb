@@ -155,6 +155,8 @@ class TJsonNodes : public TViewerPipeClient {
         TString Database;
         ui32 MissingDisks = 0;
         float DiskSpaceUsage = 0; // the highest
+        float CpuUsage = 0; // total, normalized
+        float LoadAverage = 0; // normalized
         bool Problems = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -249,6 +251,22 @@ class TJsonNodes : public TViewerPipeClient {
                         }
                     }
                 }
+            }
+        }
+
+        void CalcCpuUsage() {
+            float usage = 0;
+            int threads = 0;
+            for (const auto& pool : SystemState.GetPoolStats()) {
+                usage += pool.GetUsage() * pool.GetThreads();
+                threads += pool.GetThreads();
+            }
+            CpuUsage = usage / threads;
+        }
+
+        void CalcLoadAverage() {
+            if (SystemState.GetNumberOfCpus() && SystemState.LoadAverageSize() > 0) {
+                LoadAverage = SystemState.GetLoadAverage(0) / SystemState.GetNumberOfCpus();
             }
         }
 
@@ -434,6 +452,14 @@ class TJsonNodes : public TViewerPipeClient {
                     return {};
             }
         }
+
+        void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState) {
+            SystemState.MergeFrom(systemState);
+            Cleanup();
+            CalcDatabase();
+            CalcCpuUsage();
+            CalcLoadAverage();
+        }
     };
 
     struct TNodeGroup {
@@ -494,6 +520,10 @@ class TJsonNodes : public TViewerPipeClient {
         { ENodeFields::Uptime, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Version, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::NodeName, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::CPU, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::Memory, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::LoadAverage, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::Database, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Missing, TFieldsType().set(+ENodeFields::PDisks) },
     };
 
@@ -996,43 +1026,69 @@ public:
             switch (SortBy) {
                 case ENodeFields::NodeId:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetNodeId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::HostName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetHostName(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::NodeName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetNodeName(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::DC:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetDataCenterId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Rack:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetRackId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Version:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetVersion(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Uptime:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetStartTime(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Memory:
+                    SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetMemoryUsed(); }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::CPU:
+                    SortCollection(NodeView, [](const TNode* node) { return node->CpuUsage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::LoadAverage:
+                    SortCollection(NodeView, [](const TNode* node) { return node->LoadAverage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::Missing:
+                    SortCollection(NodeView, [](const TNode* node) { return node->MissingDisks; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::DiskSpaceUsage:
+                    SortCollection(NodeView, [](const TNode* node) { return node->DiskSpaceUsage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::Database:
+                    SortCollection(NodeView, [](const TNode* node) { return node->Database; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
                 case ENodeFields::SubDomainKey:
-                case ENodeFields::Database:
                 case ENodeFields::DisconnectTime:
                 case ENodeFields::COUNT:
                     break;
             }
-            NeedSort = false;
-            InvalidateNodes();
+            if (!NeedSort) {
+                InvalidateNodes();
+            }
         }
     }
 
@@ -1637,9 +1693,7 @@ public:
                         TNodeId nodeId = systemInfo.GetNodeId();
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->SystemState.MergeFrom(systemInfo);
-                            node->Cleanup();
-                            node->CalcDatabase();
+                            node->MergeFrom(systemInfo);
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -1655,9 +1709,7 @@ public:
                     if (systemState.SystemStateInfoSize() > 0) {
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->SystemState.MergeFrom(systemState.GetSystemStateInfo(0));
-                            node->Cleanup();
-                            node->CalcDatabase();
+                            node->MergeFrom(systemState.GetSystemStateInfo(0));
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -2179,84 +2231,193 @@ public:
     }
 
     static YAML::Node GetSwagger() {
-        TSimpleYamlBuilder yaml({
-            .Method = "get",
-            .Tag = "viewer",
-            .Summary = "Nodes info",
-            .Description = "Information about nodes",
-        });
-        yaml.AddParameter({
-            .Name = "path",
-            .Description = "path to schema object",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "with",
-            .Description = "filter nodes by missing disks or space",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "storage",
-            .Description = "return storage info",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "tablets",
-            .Description = "return tablets info",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "sort",
-            .Description = "sort by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "group",
-            .Description = "group by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "offset",
-            .Description = "skip N nodes",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "limit",
-            .Description = "limit to N nodes",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "uptime",
-            .Description = "return only nodes with less uptime in sec.",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "problems_only",
-            .Description = "return only problem nodes",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "filter",
-            .Description = "filter nodes by id or host",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "filter_group_by",
-            .Description = "filter group by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "filter_group",
-            .Description = "content for filter group by",
-            .Type = "string",
-        });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>());
-        return yaml;
+        YAML::Node node = YAML::Load(R"___(
+            get:
+                tags:
+                  - viewer
+                summary: Nodes info
+                description: Information about nodes
+                parameters:
+                  - name: database
+                    in: query
+                    description: database name
+                    required: false
+                    type: string
+                  - name: path
+                    in: query
+                    description: path to schema object
+                    required: false
+                    type: string
+                  - name: node_id
+                    in: query
+                    description: node id
+                    required: false
+                    type: integer
+                  - name: group_id
+                    in: query
+                    description: group id
+                    required: false
+                    type: integer
+                  - name: pool
+                    in: query
+                    description: storage pool name
+                    required: false
+                    type: string
+                  - name: type
+                    in: query
+                    description: >
+                        return nodes of specific type:
+                          * `static`
+                          * `dynamic`
+                          * `any`
+                  - name: with
+                    in: query
+                    description: >
+                        filter groups by missing or space:
+                          * `missing`
+                          * `space`
+                  - name: storage
+                    in: query
+                    description: return storage info
+                    required: false
+                    type: boolean
+                  - name: tablets
+                    in: query
+                    description: return tablets info
+                    required: false
+                    type: boolean
+                  - name: problems_only
+                    in: query
+                    description: return only problem nodes
+                    required: false
+                    type: boolean
+                  - name: uptime
+                    in: query
+                    description: return only nodes with less uptime in sec.
+                    required: false
+                    type: integer
+                  - name: filter
+                    in: query
+                    description: filter nodes by id or host
+                    required: false
+                    type: string
+                  - name: sort
+                    in: query
+                    description: >
+                        sort by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `DC`
+                          * `Rack`
+                          * `Version`
+                          * `Uptime`
+                          * `Memory`
+                          * `CPU`
+                          * `LoadAverage`
+                          * `Missing`
+                          * `DiskSpaceUsage`
+                          * `Database`
+                    required: false
+                    type: string
+                  - name: group
+                    in: query
+                    description: >
+                        group by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `Database`
+                          * `DiskSpaceUsage`
+                          * `DC`
+                          * `Rack`
+                          * `Missing`
+                          * `Uptime`
+                          * `Version`
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        group by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `Database`
+                          * `DiskSpaceUsage`
+                          * `DC`
+                          * `Rack`
+                          * `Missing`
+                          * `Uptime`
+                          * `Version`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: content for filter group by
+                    required: false
+                    type: string
+                  - name: fields_required
+                    in: query
+                    description: >
+                        list of fields required in response, the more - the heavier could be request. `all` for all fields:
+                          * `NodeId` (always required)
+                          * `SystemState`
+                          * `PDisks`
+                          * `VDisks`
+                          * `Tablets`
+                          * `Host`
+                          * `NodeName`
+                          * `DC`
+                          * `Rack`
+                          * `Version`
+                          * `Uptime`
+                          * `Memory`
+                          * `CPU`
+                          * `LoadAverage`
+                          * `Missing`
+                          * `DiskSpaceUsage`
+                          * `SubDomainKey`
+                          * `DisconnectTime`
+                          * `Database`
+                    required: false
+                    type: string
+                  - name: offset
+                    in: query
+                    description: skip N nodes
+                    required: false
+                    type: integer
+                  - name: limit
+                    in: query
+                    description: limit to N nodes
+                    required: false
+                    type: integer
+                  - name: timeout
+                    in: query
+                    description: timeout in ms
+                    required: false
+                    type: integer
+                  - name: direct
+                    in: query
+                    description: fulfill request on the target node without redirects
+                    required: false
+                    type: boolean
+                responses:
+                    200:
+                        description: OK
+                        content:
+                            application/json:
+                                schema:
+                                    type: object
+                    400:
+                        description: Bad Request
+                    403:
+                        description: Forbidden
+                    504:
+                        description: Gateway Timeout
+                )___");
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
+        return node;
     }
 };
 

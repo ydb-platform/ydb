@@ -1550,6 +1550,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "wasm32",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
                     }

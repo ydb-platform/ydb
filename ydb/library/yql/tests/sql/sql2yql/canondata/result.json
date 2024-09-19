@@ -1126,6 +1126,13 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_agg_phases_agg_apply-avg_/sql.yql"
         }
     ],
+    "test_sql2yql.test[agg_phases_agg_apply-avg_decimal]": [
+        {
+            "checksum": "6995e83bda818a897fdd0eae9d07dcc0",
+            "size": 13095,
+            "uri": "https://{canondata_backend}/1942415/d77582873ccf3369a6a530c6d99bb20a670b52e8/resource.tar.gz#test_sql2yql.test_agg_phases_agg_apply-avg_decimal_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[agg_phases_agg_apply-count]": [
         {
             "checksum": "c3ef6597e1dad8332df19e9bd78f2dc5",
@@ -3777,6 +3784,13 @@
             "checksum": "d968a2aed57eb686c4e18e1c71e81398",
             "size": 2733,
             "uri": "https://{canondata_backend}/1942100/4770669c24007543908dd55606255f269883b26e/resource.tar.gz#test_sql2yql.test_blocks-date_top_sort_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-decimal_avg]": [
+        {
+            "checksum": "196ced0d7dead2abf0aa5fa8dc6b10cf",
+            "size": 2231,
+            "uri": "https://{canondata_backend}/1775319/1580c5e8e4c110f53c15179e596f8942460372c9/resource.tar.gz#test_sql2yql.test_blocks-decimal_avg_/sql.yql"
         }
     ],
     "test_sql2yql.test[blocks-decimal_comparison]": [
@@ -20782,6 +20796,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_agg_phases_agg_apply-avg_/formatted.sql"
         }
     ],
+    "test_sql_format.test[agg_phases_agg_apply-avg_decimal]": [
+        {
+            "checksum": "8d57ef61f93cb12395632a984257cda6",
+            "size": 1443,
+            "uri": "https://{canondata_backend}/1942415/d77582873ccf3369a6a530c6d99bb20a670b52e8/resource.tar.gz#test_sql_format.test_agg_phases_agg_apply-avg_decimal_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[agg_phases_agg_apply-count]": [
         {
             "checksum": "674b92a7d1504376a5f847da9c78a38e",
@@ -23433,6 +23454,13 @@
             "checksum": "e1ea4474a00a88966064496c3b2235a4",
             "size": 272,
             "uri": "https://{canondata_backend}/1942100/4770669c24007543908dd55606255f269883b26e/resource.tar.gz#test_sql_format.test_blocks-date_top_sort_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-decimal_avg]": [
+        {
+            "checksum": "d077a59363e93c9cf3548b776b93e316",
+            "size": 175,
+            "uri": "https://{canondata_backend}/1775319/1580c5e8e4c110f53c15179e596f8942460372c9/resource.tar.gz#test_sql_format.test_blocks-decimal_avg_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-decimal_comparison]": [

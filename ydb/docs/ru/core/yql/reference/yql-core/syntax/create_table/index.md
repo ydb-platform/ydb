@@ -126,19 +126,58 @@ WITH (
 
   {% endif %}
 
+  Пример создания строковой таблицы с использованием опций партиционирования:
+
+  ```yql
+  CREATE TABLE <table_name> (
+    a Uint64,
+    b Uint64,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+  );
+  ```
+
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+
 - Создание колоночной таблицы
 
   ```yql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
+    b Timestamp NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
+  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN
   );
   ```
+
+  При создании колоночных таблиц обязательно нужно использовать конструкцию `PARTITION BY HASH` с указанием первичных ключей, которые имеют высококардинальный тип данных (например, `Timestamp`), так как колоночные таблицы партиционируют данные не по первичным ключам, а по специально выделенным ключам — ключам партицирования. Подробно про ключи партиционирования колоночных таблиц изложено в статье [{#T}](../../../../dev/primary-key/column-oriented.md).
+
+  В настоящий момент колоночные таблицы не поддерживают автоматического репартицирования, поэтому важно указывать правильное число партиций при создании таблицы с помощью параметра `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`:
+
+  ```yql
+  CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Timestamp NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  PARTITION BY HASH(b)
+  WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+  );
+  ```
+  
+  Такой код создаст колоночную таблицу с 10-ю партициями. С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
+
 
 {% endlist %}
 

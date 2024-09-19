@@ -90,13 +90,32 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
 }
 
 template <CYsonStructDerived T>
+void WriteSchemaForNull(NYson::IYsonConsumer* consumer)
+{
+    if constexpr (std::is_same_v<T, TYsonStruct>) {
+       // It is not allowed to instantiate object of type `TYsonStruct`.
+       BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("type_name").Value("struct")
+                .Item("members").BeginList().EndList()
+            .EndMap();
+    } else {
+         New<T>()->WriteSchema(consumer);
+    }
+}
+
+template <CYsonStructDerived T>
 void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("optional")
             .Item("item").Do([&] (auto fluent) {
-                (value ? value : New<T>())->WriteSchema(fluent.GetConsumer());
+                if (value) {
+                    value->WriteSchema(fluent.GetConsumer());
+                } else {
+                    WriteSchemaForNull<T>(fluent.GetConsumer());
+                }
             })
         .EndMap();
 }

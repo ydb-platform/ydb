@@ -20,7 +20,6 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/fq/libs/config
     ydb/core/fq/libs/control_plane_storage/proto
-    ydb/core/fq/libs/exceptions
     ydb/core/fq/libs/quota_manager
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/rate_limiter/events
@@ -29,6 +28,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/security
     ydb/library/yql/public/issue
+    ydb/library/yql/utils
     ydb/public/lib/fq
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_value

@@ -3,6 +3,7 @@ import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from urllib.parse import urlencode
+from datetime import datetime
 
 
 def allure_test_description(
@@ -40,6 +41,7 @@ def allure_test_description(
                 f"schema=/{test_info['database']}/{YdbCluster.tables_path}&tenantPage=query"
                 f"&diagnosticsTab=nodes&name=/{test_info['database']}'>link</a>"
             ),
+            'timestamp': datetime.now().strftime('%c'),
         }
     )
     if ResultsProcessor.send_results:

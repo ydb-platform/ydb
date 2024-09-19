@@ -4,7 +4,6 @@ PEERDIR(
     library/cpp/charset
     library/cpp/enumbitset
     library/cpp/json
-    library/cpp/regex/pcre
     library/cpp/yson/node
     ydb/library/yql/minikql
     ydb/library/yql/public/udf

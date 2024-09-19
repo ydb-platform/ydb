@@ -1,6 +1,7 @@
 #include "retry_queue.h"
 
 #include <util/generic/utility.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NYql::NDq {
 
@@ -167,5 +168,11 @@ TDuration TRetryEventsQueue::TRetryState::RandomizeDelay(TDuration baseDelay) {
     const TDuration::TValue half = baseDelay.GetValue() / 2;
     return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
 }
+
+void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
+    stream << "RetryQueue: id " << EventQueueId << ", NextSeqNo " 
+        << NextSeqNo << ", MyConfirmedSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+}
+
 
 } // namespace NYql::NDq

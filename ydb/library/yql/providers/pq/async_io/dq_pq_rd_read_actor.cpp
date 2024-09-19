@@ -90,6 +90,18 @@ struct TRowDispatcherReadActorMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
 };
 
+struct TEvPrivate {
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvPrintState = EvBegin + 20,
+        EvEnd
+    };
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
+};
+
+ui64 PrintStatePeriodSec = 60;
+
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 public:
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
@@ -123,6 +135,7 @@ private:
     EState State = EState::INIT;
     ui64 CoordinatorRequestCookie = 0;
     TRowDispatcherReadActorMetrics Metrics;
+    bool SchedulePrintStatePeriod = false;
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -179,6 +192,7 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NActors::TEvents::TEvPong::TPtr& ev);
     void Handle(const NActors::TEvents::TEvPing::TPtr&);
+    void Handle(TEvPrivate::TEvPrintState::TPtr&);
 
     STRICT_STFUNC(StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
@@ -197,6 +211,7 @@ public:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NActors::TEvents::TEvPing, Handle);
+        hFunc(TEvPrivate::TEvPrintState, Handle);
     })
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
@@ -249,6 +264,10 @@ void TDqPqRdReadActor::ProcessState() {
         if (!CoordinatorActorId) {
             SRC_LOG_D("Send TEvCoordinatorChangesSubscribe to local row dispatcher, self id " << SelfId());
             Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
+            if (!SchedulePrintStatePeriod) {
+                SchedulePrintStatePeriod = true;
+                Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+            }
         }
         State = EState::WAIT_COORDINATOR_ID; 
         [[fallthrough]];
@@ -602,6 +621,17 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionC
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr& ev) {
     SRC_LOG_T("TEvPong from " << ev->Sender);
+}
+
+void TDqPqRdReadActor::Handle(TEvPrivate::TEvPrintState::TPtr&) {
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    TStringStream str;
+    str << "State:";
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        str << "   " << partitionId << " ";
+        sessionInfo.EventsQueue.PrintInternalState(str);
+    }
+    SRC_LOG_D(str.Str());
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

@@ -151,6 +151,7 @@ public:
     void Retry();
     void Ping();
     void Unsubscribe();
+    void PrintInternalState(TStringStream& stream) const;
 
 private:
     template <TProtobufEventWithTransportMeta T>

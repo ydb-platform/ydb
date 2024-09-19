@@ -48,12 +48,16 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCoordinatorPing = EvBegin + 20,
+        EvPrintState,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvCoordinatorPing : NActors::TEventLocal<TEvCoordinatorPing, EvCoordinatorPing> {};
+    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
 };
+
+ui64 PrintStatePeriodSec = 60;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
@@ -117,6 +121,12 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TRowDispatcherMetrics Metrics;
 
+    struct ConsumerCounters {
+        ui64 NewDataArrived = 0;
+        ui64 GetNextBatch = 0;
+        ui64 MessageBatch = 0;
+    };
+
     struct ConsumerInfo {
         ConsumerInfo(
             NActors::TActorId readActorId,
@@ -143,6 +153,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         NFq::NRowDispatcherProto::TEvStartSession Proto;
         TActorId TopicSessionId;
         const TString QueryId;
+        ConsumerCounters Counters;
     };
 
     struct SessionInfo {
@@ -192,9 +203,10 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvPrintState::TPtr&);
 
     void DeleteConsumer(const ConsumerSessionKey& key);
-    void PrintInternalState(const TString&);
+    void PrintInternalState();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -216,6 +228,7 @@ public:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
+        hFunc(NFq::TEvPrivate::TEvPrintState, Handle);
     })
 };
 
@@ -248,6 +261,7 @@ void TRowDispatcher::Bootstrap() {
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -306,11 +320,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
     Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
-void TRowDispatcher::PrintInternalState(const TString& prefix) {
+void TRowDispatcher::PrintInternalState() {
+    if (Consumers.empty()) {
+        return;
+    }
     TStringStream str;
     str << "Consumers:\n";
     for (auto& [key, consumerInfo] : Consumers) {
-        str << "    query id " << consumerInfo->QueryId << ", partId: " << key.PartitionId << ", read actor id: " << key.ReadActorId <<  "\n";
+        str << "    query id " << consumerInfo->QueryId << ", partId: " << key.PartitionId << ", read actor id: " << key.ReadActorId
+            << ", queueId " << consumerInfo->EventQueueId << ", get next " << consumerInfo->Counters.GetNextBatch
+            << ", data arrived " << consumerInfo->Counters.NewDataArrived << ", message batch " << consumerInfo->Counters.MessageBatch << "\n";
+        str << "        ";
+        consumerInfo->EventsQueue.PrintInternalState(str);
     }
 
     str << "\nSessions:\n";
@@ -323,14 +344,13 @@ void TRowDispatcher::PrintInternalState(const TString& prefix) {
             }
         }
     }
-    LOG_ROW_DISPATCHER_DEBUG(prefix << ":\n" << str.Str());
+    LOG_ROW_DISPATCHER_DEBUG(str.Str());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
-    PrintInternalState("Before AddConsumer:");
     TMaybe<ui64> readOffset;
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
@@ -385,11 +405,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
     Forward(ev, sessionActorId);
     Metrics.ClientsCount->Set(Consumers.size());
-    PrintInternalState("After AddConsumer:");
+    PrintInternalState();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender << ", partId " << ev->Get()->Record.GetPartitionId());
+    const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender << ", partId " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
 
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
@@ -403,6 +424,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
         LOG_ROW_DISPATCHER_ERROR("TEvGetNextBatch: wrong seq num from " << ev->Sender.ToString() << ", seqNo " << seqNo << ", ignore message");
         return;
     }
+    it->second->Counters.GetNextBatch++;
     Forward(ev, it->second->TopicSessionId);
 }
 
@@ -432,7 +454,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 }
 
 void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
-    PrintInternalState("Before DeleteConsumer:");
     LOG_ROW_DISPATCHER_DEBUG("DeleteConsumer, readActorId " << key.ReadActorId <<
         " partitionId " << key.PartitionId);
 
@@ -467,7 +488,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
     Metrics.ClientsCount->Set(Consumers.size());
-    PrintInternalState("After DeleteConsumer");
+    PrintInternalState();
 }
 
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
@@ -501,15 +522,16 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr
     it->second->EventsQueue.Ping();
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {    
     LOG_ROW_DISPATCHER_TRACE("TEvNewDataArrived from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore MessageBatch, no such session");
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvNewDataArrived, no such session");
         return;
     }
     LOG_ROW_DISPATCHER_TRACE("Forward TEvNewDataArrived to " << ev->Get()->ReadActorId);
+    it->second->Counters.NewDataArrived++;
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
@@ -523,6 +545,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     }
     Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch to " << ev->Get()->ReadActorId);
+    it->second->Counters.MessageBatch++;
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
@@ -550,6 +573,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
     }
     LOG_ROW_DISPATCHER_TRACE("Forward TEvStatus to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
+}
+
+void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
+    PrintInternalState();
 }
 
 } // namespace

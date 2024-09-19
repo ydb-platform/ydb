@@ -9,4 +9,9 @@ message TVersionedReadOptions
     required int32 read_mode = 1; // EVersionedIOMode
 }
 
+message TVersionedWriteOptions
+{
+    required int32 write_mode = 1; // EVersionedIOMode
+}
+
 ////////////////////////////////////////////////////////////////////////////////

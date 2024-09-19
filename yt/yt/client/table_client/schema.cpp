@@ -4,6 +4,7 @@
 #include "comparator.h"
 #include "logical_type.h"
 #include "unversioned_row.h"
+#include "versioned_io_options.h"
 
 #include <optional>
 
@@ -518,7 +519,11 @@ TColumnStableName TTableSchema::TNameMapping::NameToStableName(TStringBuf name) 
     auto* column = Schema_.FindColumn(name);
     if (!column) {
         if (Schema_.GetStrict()) {
-            THROW_ERROR_EXCEPTION("No column with name %Qv in strict schema", name);
+            if (auto originalColumnName = GetTimestampColumnOriginalNameOrNull(name);
+                !originalColumnName || !Schema_.FindColumn(*originalColumnName))
+            {
+                THROW_ERROR_EXCEPTION("No column with name %Qv in strict schema", name);
+            }
         }
         return TColumnStableName(TString(name));
     }

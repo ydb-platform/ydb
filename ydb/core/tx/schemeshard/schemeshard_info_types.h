@@ -3427,7 +3427,7 @@ public:
         return IsModificationInFly(TObject::GetTypeId(), objectId);
     }
 
-    const TModificationInfo* FindModificationInfo(const TString& typeId, const TString& objectId) const {
+    const TModificationInfo* FindModification(const TString& typeId, const TString& objectId) const {
         return ModificationsInFly.FindPtr(TGlobalObjectId(typeId, objectId));
     }
 

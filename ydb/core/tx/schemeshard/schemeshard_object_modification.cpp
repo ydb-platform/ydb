@@ -39,6 +39,8 @@ void TSchemeShard::Handle(const TEvPrivate::TEvInitializeObjectMetadata::TPtr& e
     Execute(CreateTxInitializeObjectMetadata(ev, ctx));
 }
 
+// TODO: Rewrite transactions such that in-mem side-effects are applied only on complete
+
 struct TTxStartObjectModification: public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvModifyObject::TPtr Request;
 
@@ -51,7 +53,7 @@ struct TTxStartObjectModification: public TSchemeShard::TRwTxBase {
         return TXTYPE_START_OBJECT_MODIFICATION;
     }
 
-    void ReplyWithError(TString errorMessage, const TActorContext& ctx) {
+    void ReplyError(TString errorMessage, const TActorContext& ctx) {
         ctx.Send(Request->Sender, MakeHolder<TEvSchemeShard::TEvModifyObjectResult>(std::move(errorMessage)), 0, Request->Cookie);
     }
 
@@ -64,29 +66,29 @@ struct TTxStartObjectModification: public TSchemeShard::TRwTxBase {
         const TString& objectId = Request->Get()->Record.GetSettings().GetObject();
 
         if (!Self->Objects.IsInitialized(typeId)) {
-            ReplyWithError(TStringBuilder() << typeId << " metadata hasn't been initialized on scheme shard yet.", ctx);
+            ReplyError(TStringBuilder() << typeId << " metadata hasn't been initialized on scheme shard yet.", ctx);
             return;
         }
 
         NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
         if (!cBehaviour) {
-            ReplyWithError(TStringBuilder() << "Incorrect object type: \"" << typeId << "\"", ctx);
+            ReplyError(TStringBuilder() << "Incorrect object type: \"" << typeId << "\"", ctx);
             return;
         }
         if (!cBehaviour->GetOperationsManager()) {
-            ReplyWithError(TStringBuilder() << "Object type \"" << typeId << "\" does not have manager for operations", ctx);
+            ReplyError(TStringBuilder() << "Object type \"" << typeId << "\" does not have manager for operations", ctx);
             return;
         }
         std::shared_ptr<NMetadata::NModifications::TSchemeOperationsManagerBase> manager =
             std::dynamic_pointer_cast<NMetadata::NModifications::TSchemeOperationsManagerBase>(cBehaviour->GetOperationsManager());
         if (!manager) {
-            ReplyWithError(TStringBuilder() << "Object type \"" << typeId << "\" does not have manager for scheme operations", ctx);
+            ReplyError(TStringBuilder() << "Object type \"" << typeId << "\" does not have manager for scheme operations", ctx);
             return;
         }
 
         auto buildResult = manager->BuildModificationCommand(Request, *Self, ctx);
         if (buildResult.IsFail()) {
-            ReplyWithError(buildResult.GetErrorMessage(), ctx);
+            ReplyError(buildResult.GetErrorMessage(), ctx);
             return;
         }
         std::shared_ptr<NMetadata::NModifications::IObjectModificationCommand> modifyObjectCommand = std::move(buildResult.GetResult());
@@ -120,10 +122,6 @@ struct TTxCommitObjectModification: public TSchemeShard::TRwTxBase {
 
     TTxType GetTxType() const override {
         return TXTYPE_COMMIT_OBJECT_MODIFICATION;
-    }
-
-    void ReplyWithError(TString errorMessage, const TActorContext& ctx) {
-        ctx.Send(Request->Sender, MakeHolder<TEvSchemeShard::TEvModifyObjectResult>(std::move(errorMessage)), 0, Request->Cookie);
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -160,7 +158,7 @@ struct TTxCompleteObjectModification: public TSchemeShard::TRwTxBase {
         const TString& objectId = Request->Get()->ObjectId;
         const auto& result = Request->Get()->Result;
 
-        const auto* modification = Self->Objects.FindModificationInfo(typeId, objectId);
+        const auto* modification = Self->Objects.FindModification(typeId, objectId);
         AFL_VERIFY(modification)("type_id", typeId)("object_id", objectId);
 
         if (result.IsSuccess()) {
@@ -202,10 +200,6 @@ struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
         return TXTYPE_INITIALIZE_OBJECT_METADATA;
     }
 
-    void ReplyWithError(TString errorMessage, const TActorContext& ctx) {
-        ctx.Send(Request->Sender, MakeHolder<TEvSchemeShard::TEvModifyObjectResult>(std::move(errorMessage)), 0, Request->Cookie);
-    }
-
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxInitializeObjectMetadata DoExecute"
@@ -213,14 +207,24 @@ struct TTxInitializeObjectMetadata: public TSchemeShard::TRwTxBase {
                 << ", snapshot: " << Request->Get()->Snapshot->DebugString());
 
         TString typeId = Request->Get()->TypeId;
+        auto currentObjects = *Request->Get()->Snapshot;
 
         NIceDb::TNiceDb db(txc.DB);
+
         for (const TString& objectId : Self->Objects.ListObjectsUnderModification(typeId)) {
+            const TObjectsInfo::TModificationInfo* modification = Self->Objects.FindModification(typeId, objectId);
+            AFL_VERIFY(modification);
+            if (modification->PreviousHistoryInstant == currentObjects.FindObjectAbstract(objectId)->GetLastHistoryInstant()) {
+                ctx.Send(modification->Sender, new TEvSchemeShard::TEvModifyObjectResult("Transaction was invalidated."));
+            } else {
+                ctx.Send(modification->Sender, new TEvSchemeShard::TEvModifyObjectResult());
+            }
+
             Self->Objects.OnModificationFinished(typeId, objectId);
             Self->PersistObjectModificationFinished(db, typeId, objectId);
         }
 
-        Self->Objects.Initialize(typeId, *Request->Get()->Snapshot);
+        Self->Objects.Initialize(typeId, std::move(currentObjects));
     }
 
     void DoComplete(const TActorContext& /*ctx*/) override {

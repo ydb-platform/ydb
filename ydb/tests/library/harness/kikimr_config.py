@@ -187,7 +187,7 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_cert = cert_pem
 
         if not binary_paths:
-            binary_paths = [kikimr_driver_path()] 
+            binary_paths = [kikimr_driver_path()]
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
         if nodes is None:

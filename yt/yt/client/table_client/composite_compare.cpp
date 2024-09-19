@@ -1,5 +1,7 @@
 #include "composite_compare.h"
 
+#include "private.h"
+
 #include <yt/yt/client/table_client/row_base.h>
 
 #include <yt/yt/core/yson/pull_parser.h>
@@ -20,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "YsonCompositeCompare");
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

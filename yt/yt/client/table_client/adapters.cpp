@@ -1,4 +1,5 @@
 #include "adapters.h"
+#include "private.h"
 
 #include "row_batch.h"
 
@@ -21,7 +22,7 @@ using NProfiling::TWallTimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientAdapters");
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

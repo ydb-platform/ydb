@@ -170,6 +170,9 @@ public:
     // "versioned_read_options"
     NTableClient::TVersionedReadOptions GetVersionedReadOptions() const;
 
+    // "versioned_write_options"
+    NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
+
 private:
     TYPath Path_;
     NYTree::IAttributeDictionaryPtr Attributes_;

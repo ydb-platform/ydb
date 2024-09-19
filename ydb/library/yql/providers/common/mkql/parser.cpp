@@ -253,23 +253,19 @@ TRuntimeNode BuildParseCall(
         );
     } else if (format == "json_list") {
         auto parseToListLambda = [&](TRuntimeNode blob) {
-            try {
-                const auto json = ctx.ProgramBuilder.StrictFromString(
-                    blob,
-                    ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
-                const auto dom = ctx.ProgramBuilder.Apply(
-                    ctx.ProgramBuilder.Udf("Yson2.ParseJson"),
-                    {json});
-                const auto userType = ctx.ProgramBuilder.NewTupleType({
-                    ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}),
-                    ctx.ProgramBuilder.NewStructType({}),
-                    ctx.ProgramBuilder.NewListType(parseItemType)});
-                return ctx.ProgramBuilder.Apply(
-                    ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType),
-                    {dom});
-            } catch (const yexception& ex) {
-                throw TErrorException(TIssuesIds::KIKIMR_BAD_REQUEST) << ex.what();
-            }
+            const auto json = ctx.ProgramBuilder.StrictFromString(
+                blob,
+                ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
+            const auto dom = ctx.ProgramBuilder.Apply(
+                ctx.ProgramBuilder.Udf("Yson2.ParseJson"),
+                {json});
+            const auto userType = ctx.ProgramBuilder.NewTupleType({
+                ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}),
+                ctx.ProgramBuilder.NewStructType({}),
+                ctx.ProgramBuilder.NewListType(parseItemType)});
+            return ctx.ProgramBuilder.Apply(
+                ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType),
+                {dom});
         };
 
         input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input),

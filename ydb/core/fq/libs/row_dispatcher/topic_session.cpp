@@ -91,6 +91,7 @@ struct TEvPrivate {
 };
 
 ui64 PrintStatePeriodSec = 60;
+ui64 MaxBatchSizeBytes = 10000000;
 
 TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& value) {
     return {value.begin(), value.end()};
@@ -552,24 +553,36 @@ void TTopicSession::SendData(ClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
 
-    auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
-    event->Record.SetPartitionId(PartitionId);
-    Y_ENSURE(info.NextMessageOffset);
-    event->Record.SetNextMessageOffset(*info.NextMessageOffset);
+    do {
+        auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
+        event->Record.SetPartitionId(PartitionId);
+        Y_ENSURE(info.NextMessageOffset);
+        event->ReadActorId = info.ReadActorId;
+
+        ui64 batchSize = 0;
+        while (!info.Buffer.empty()) {
+            const auto& [offset, json] = info.Buffer.front();
+            info.UsedSize -= json.size();
+            UsedSize -= json.size();
+            batchSize += json.size();
+            NFq::NRowDispatcherProto::TEvMessage message;
+            message.SetJson(json);
+            message.SetOffset(offset);
+            event->Record.AddMessages()->CopyFrom(message);
+            event->Record.SetNextMessageOffset(offset + 1);
+            info.Buffer.pop();
+
+            if (batchSize > MaxBatchSizeBytes) {
+                break;
+            }
+        }
+        if (info.Buffer.empty()) {
+            event->Record.SetNextMessageOffset(*info.NextMessageOffset);
+        }
+        LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
+        Send(RowDispatcherActorId, event.release());
+    } while(!info.Buffer.empty());
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
-    event->ReadActorId = info.ReadActorId;
-    while (!info.Buffer.empty()) {
-        const auto& [offset, json] = info.Buffer.front();
-        info.UsedSize -= json.size();
-        UsedSize -= json.size();
-        NFq::NRowDispatcherProto::TEvMessage message;
-        message.SetJson(json);
-        message.SetOffset(offset);
-        event->Record.AddMessages()->CopyFrom(message);
-        info.Buffer.pop();
-    }
-    LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
-    Send(RowDispatcherActorId, event.release());
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {

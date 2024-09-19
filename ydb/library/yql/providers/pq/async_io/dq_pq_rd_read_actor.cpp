@@ -225,6 +225,7 @@ public:
     void Stop(const TString& message);
     void StopSessions();
     void ReInit();
+    void PrintInternalState();
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -271,17 +272,20 @@ void TDqPqRdReadActor::ProcessState() {
         }
         State = EState::WAIT_COORDINATOR_ID; 
         [[fallthrough]];
-    case EState::WAIT_COORDINATOR_ID:
-        if (!CoordinatorActorId)
+    case EState::WAIT_COORDINATOR_ID: {
+        if (!CoordinatorActorId) {
             return;
+        }
         State = EState::WAIT_PARTITIONS_ADDRES;
-        SRC_LOG_D("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString());
+        auto partitionToRead = GetPartitionsToRead();
+        SRC_LOG_D("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString() << ", partIds: " << JoinSeq(", ", partitionToRead));
         Send(
             *CoordinatorActorId,
-            new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, GetPartitionsToRead()),
+            new NFq::TEvRowDispatcher::TEvCoordinatorRequest(SourceParams, partitionToRead),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             ++CoordinatorRequestCookie);
         return;
+    }
     case EState::WAIT_PARTITIONS_ADDRES:
         if (Sessions.empty()) {
             return;
@@ -341,6 +345,7 @@ void TDqPqRdReadActor::StopSessions() {
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     SRC_LOG_D("PassAway");
+    PrintInternalState();
     StopSessions();
     TActor<TDqPqRdReadActor>::PassAway();
     
@@ -391,21 +396,22 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
-    SRC_LOG_D("TEvStartSessionAck " << ev->Sender);
+    const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+    SRC_LOG_D("TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
     YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
-    SRC_LOG_D("TEvSessionError from " << ev->Sender);
+    const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+    SRC_LOG_D("TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
@@ -413,7 +419,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
@@ -429,8 +434,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
-    SRC_LOG_D("TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
-    SRC_LOG_D("Sessions size  " << Sessions.size());
+    const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+    SRC_LOG_T("TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
@@ -441,7 +446,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
@@ -572,7 +576,8 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
-    SRC_LOG_T("TEvMessageBatch from " << ev->Sender);
+    const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+    SRC_LOG_T("TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
     auto it = Sessions.find(partitionId);
@@ -584,7 +589,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     Metrics.InFlyGetNextBatch->Dec();
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
@@ -625,10 +629,14 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr& ev) {
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    PrintInternalState();
+}
+
+void TDqPqRdReadActor::PrintInternalState() {
     TStringStream str;
-    str << "State:";
+    str << "State:\n";
     for (auto& [partitionId, sessionInfo] : Sessions) {
-        str << "   " << partitionId << " ";
+        str << "   partId " << partitionId << " ";
         sessionInfo.EventsQueue.PrintInternalState(str);
     }
     SRC_LOG_D(str.Str());

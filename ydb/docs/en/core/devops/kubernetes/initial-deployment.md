@@ -145,7 +145,7 @@ Apply the manifest for creating storage nodes:
 - mirror-3-dc
 
   ```bash
-  kubectl apply -f https://github.com/ydb-platform/ydb-kubernetes-operator/blob/master/samples/storage-mirror-3dc.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-mirror-3dc.yaml
   ```
 
   This will create 9 {{ ydb-short-name }} storage nodes that store data with replication factor 3.

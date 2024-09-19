@@ -2123,8 +2123,8 @@ struct TQueryPlanReconstructor {
             op["Name"] = "LookupJoin";
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
 
-            newOps.AppendValue(op);
-            result["Operators"] = newOps;
+            newOps.AppendValue(std::move(op));
+            result["Operators"] = std::move(newOps);
 
             NJson::TJsonValue newPlans;
 
@@ -2150,14 +2150,14 @@ struct TQueryPlanReconstructor {
                 lookupOp["E-Size"] = plan.GetMapSafe().at("E-Size");
             }
 
-            lookupOps.AppendValue(lookupOp);
-            lookupPlan["Operators"] = lookupOps;
+            lookupOps.AppendValue(std::move(lookupOp));
+            lookupPlan["Operators"] = std::move(lookupOps);
 
             newPlans.AppendValue(Reconstruct(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
 
-            newPlans.AppendValue(lookupPlan);
+            newPlans.AppendValue(std::move(lookupPlan));
 
-            result["Plans"] = newPlans;
+            result["Plans"] = std::move(newPlans);
 
             return result;
         }
@@ -2175,7 +2175,7 @@ struct TQueryPlanReconstructor {
             }
 
             if (!plan.GetMapSafe().contains("Plans")) {
-                result["Plans"] = planInputs;
+                result["Plans"] = std::move(planInputs);
                 return result;
             }
 
@@ -2198,9 +2198,9 @@ struct TQueryPlanReconstructor {
                     op["E-Size"] = plan.GetMapSafe().at("E-Size");
                 }
 
-                newOps.AppendValue(op);
+                newOps.AppendValue(std::move(op));
 
-                result["Operators"] = newOps;
+                result["Operators"] = std::move(newOps);
                 return result;
             }
 
@@ -2289,17 +2289,17 @@ struct TQueryPlanReconstructor {
             }
         }
 
-        result["Node Type"] = opName;
+        result["Node Type"] = std::move(opName);
         NJson::TJsonValue newOps;
-        newOps.AppendValue(op);
-        result["Operators"] = newOps;
+        newOps.AppendValue(std::move(op));
+        result["Operators"] = std::move(newOps);
 
-        if (planInputs.size()){
+        if (!planInputs.empty()){
             NJson::TJsonValue plans;
-            for( auto i : planInputs) {
-                plans.AppendValue(i);
+            for(auto&& i : planInputs) {
+                plans.AppendValue(std::move(i));
             }
-            result["Plans"] = plans;
+            result["Plans"] = std::move(plans);
         }
 
         return result;

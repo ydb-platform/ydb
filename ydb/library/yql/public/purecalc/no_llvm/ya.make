@@ -20,6 +20,7 @@ PEERDIR(
     ydb/library/yql/minikql/computation/no_llvm
     ydb/library/yql/minikql/invoke_builtins/no_llvm
     ydb/library/yql/minikql/comp_nodes/no_llvm
+    ydb/library/yql/sql/pg
 )
 
 YQL_LAST_ABI_VERSION()

@@ -186,118 +186,151 @@ private:
 };
 
 template <bool WithoutRight, bool RightRequired, bool IsTuple>
-class TBlockWideMapJoinWrapper : public TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired, IsTuple>>
+class TBlockWideMapJoinWrapper : public TMutableComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired, IsTuple>>
 {
-using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired, IsTuple>>;
+using TBaseComputation = TMutableComputationNode<TBlockWideMapJoinWrapper<WithoutRight, RightRequired, IsTuple>>;
 using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMapJoinWrapper(TComputationMutables& mutables,
         const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftStreamItems,
         const TVector<ui32>&& leftKeyColumns, const TVector<ui32>&& leftIOMap,
-        IComputationWideFlowNode* flow, IComputationNode* dict)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        IComputationNode* stream, IComputationNode* dict)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , ResultJoinItems_(std::move(resultJoinItems))
         , LeftStreamItems_(std::move(leftStreamItems))
         , LeftKeyColumns_(std::move(leftKeyColumns))
-        , LeftIOMap_(leftIOMap)
-        , Flow_(flow)
+        , LeftIOMap_(std::move(leftIOMap))
+        , Stream_(stream)
         , Dict_(dict)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftStreamItems_.size()))
-        , KeyTuple_(mutables)
+        , KeyTupleCache_(mutables)
     {}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        auto& blockState = GetState(state, ctx);
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
-        const auto dict = Dict_->GetValue(ctx);
-
-        while (!blockState.HasBlocks()) {
-            while (blockState.IsNotFull() && blockState.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, blockState);
-                if constexpr (WithoutRight) {
-                    if (key && dict.Contains(key) == RightRequired) {
-                        blockState.CopyRow();
-                    }
-                } else if constexpr (RightRequired) {
-                    if (NUdf::TUnboxedValue lookup; key && (lookup = dict.Lookup(key))) {
-                        blockState.MakeRow(lookup);
-                    }
-                } else {
-                    blockState.MakeRow(dict.Lookup(key));
-                }
-            }
-            if (blockState.IsNotFull() && !blockState.IsFinished()) {
-                switch (Flow_->FetchValues(ctx, fields)) {
-                case EFetchResult::Yield:
-                    return EFetchResult::Yield;
-                case EFetchResult::One:
-                    blockState.Reset();
-                    continue;
-                case EFetchResult::Finish:
-                    blockState.Finish();
-                    break;
-                }
-                // Leave the loop, if no values left in the flow.
-                Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
-            }
-            if (blockState.IsEmpty()) {
-                return EFetchResult::Finish;
-            }
-            blockState.MakeBlocks(ctx.HolderFactory);
-        }
-
-        const auto sliceSize = blockState.Slice();
-
-        for (size_t i = 0; i < ResultJoinItems_.size(); i++) {
-            if (const auto out = output[i]) {
-                *out = blockState.Get(sliceSize, ctx.HolderFactory, i);
-            }
-        }
-
-        return EFetchResult::One;
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto keys = KeyTupleCache_.NewArray(ctx, LeftKeyColumns_.size(), items);
+        const auto state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_,
+                                                            LeftIOMap_, ResultJoinItems_);
+        const size_t inputWidth = LeftStreamItems_.size();
+        const size_t outputWidth = ResultJoinItems_.size();
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(state),
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      std::move(Dict_->GetValue(ctx)),
+                                                      LeftKeyColumns_,
+                                                      inputWidth, outputWidth,
+                                                      std::move(keys), items);
     }
 
 private:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
+                     NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
+                     NUdf::TUnboxedValue&& dict, const TVector<ui32>& leftKeyColumns,
+                     size_t inputWidth, size_t outputWidth,
+                     NUdf::TUnboxedValue&& keyValue, NUdf::TUnboxedValue* keyItems)
+            : TBase(memInfo)
+            , BlockState_(blockState)
+            , Stream_(stream)
+            , Dict_(dict)
+            , KeyValue_(keyValue)
+            , KeyItems_(keyItems)
+            , InputWidth_(inputWidth)
+            , OutputWidth_(outputWidth)
+            , LeftKeyColumns_(leftKeyColumns)
+            , HolderFactory_(holderFactory)
+        {}
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            MKQL_ENSURE(width == OutputWidth_,
+                        "The given width doesn't equal to the result type size");
+
+            auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+            auto* inputFields = blockState.GetRawInputFields();
+
+            while (!blockState.HasBlocks()) {
+                while (blockState.IsNotFull() && blockState.NextRow()) {
+                    const auto key = MakeKeysTuple(blockState);
+                    if constexpr (WithoutRight) {
+                        if (key && Dict_.Contains(key) == RightRequired) {
+                            blockState.CopyRow();
+                        }
+                    } else if constexpr (RightRequired) {
+                        if (NUdf::TUnboxedValue lookup; key && (lookup = Dict_.Lookup(key))) {
+                            blockState.MakeRow(lookup);
+                        }
+                    } else {
+                        blockState.MakeRow(Dict_.Lookup(key));
+                    }
+                }
+                if (blockState.IsNotFull() && !blockState.IsFinished()) {
+                    switch (Stream_.WideFetch(inputFields, InputWidth_)) {
+                    case NUdf::EFetchStatus::Yield:
+                        return NUdf::EFetchStatus::Yield;
+                    case NUdf::EFetchStatus::Ok:
+                        blockState.Reset();
+                        continue;
+                    case NUdf::EFetchStatus::Finish:
+                        blockState.Finish();
+                        break;
+                    }
+                    // Leave the loop, if no values left in the stream.
+                    Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
+                }
+                if (blockState.IsEmpty()) {
+                    return NUdf::EFetchStatus::Finish;
+                }
+                blockState.MakeBlocks(HolderFactory_);
+            }
+
+            const auto sliceSize = blockState.Slice();
+
+            for (size_t i = 0; i < OutputWidth_; i++) {
+                output[i] = blockState.Get(sliceSize, HolderFactory_, i);
+            }
+
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        NUdf::TUnboxedValue MakeKeysTuple(const TState& blockState) const {
+            // TODO: Handle converters.
+            if constexpr (!IsTuple) {
+                return blockState.GetValue(HolderFactory_, LeftKeyColumns_.front());
+            }
+
+            Y_ABORT_IF(KeyItems_ == nullptr);
+            for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
+                KeyItems_[i] = blockState.GetValue(HolderFactory_, LeftKeyColumns_[i]);
+            }
+            return KeyValue_;
+        }
+
+        NUdf::TUnboxedValue BlockState_;
+        NUdf::TUnboxedValue Stream_;
+        NUdf::TUnboxedValue Dict_;
+        NUdf::TUnboxedValue KeyValue_;
+        NUdf::TUnboxedValue* KeyItems_;
+
+        const size_t InputWidth_;
+        const size_t OutputWidth_;
+        const TVector<ui32>& LeftKeyColumns_;
+        const THolderFactory& HolderFactory_;
+    };
+
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow_)) {
-            this->DependsOn(flow, Dict_);
-        }
-    }
-
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_, LeftIOMap_,
-                                                 ResultJoinItems_, ctx.WideFields.data() + WideFieldsIndex_);
-    }
-
-    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid()) {
-            MakeState(ctx, state);
-        }
-        return *static_cast<TState*>(state.AsBoxed().Get());
-    }
-
-    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, const TState& state) const {
-        // TODO: Handle converters.
-        if constexpr (!IsTuple) {
-            return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
-        }
-
-        NUdf::TUnboxedValue* items = nullptr;
-        const auto keys = KeyTuple_.NewArray(ctx, LeftKeyColumns_.size(), items);
-        for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
-            items[i] = state.GetValue(ctx.HolderFactory, LeftKeyColumns_[i]);
-        }
-        return keys;
+        this->DependsOn(Stream_);
+        this->DependsOn(Dict_);
     }
 
     const TVector<TType*> ResultJoinItems_;
     const TVector<TType*> LeftStreamItems_;
     const TVector<ui32> LeftKeyColumns_;
     const TVector<ui32> LeftIOMap_;
-    IComputationWideFlowNode* const Flow_;
+    IComputationNode* const Stream_;
     IComputationNode* const Dict_;
-    ui32 WideFieldsIndex_;
-    const TContainerCacheOnContext KeyTuple_;
+    const TContainerCacheOnContext KeyTupleCache_;
 };
 
 template<bool RightRequired, bool IsTuple>

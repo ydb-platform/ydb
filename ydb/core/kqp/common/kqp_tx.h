@@ -269,6 +269,7 @@ public:
 
     bool ShouldExecuteDeferredEffects() const {
         if (HasUncommittedChangesRead || HasOlapTable) {
+            YQL_ENSURE(EnableImmediateEffects);
             return !DeferredEffects.Empty();
         }
 
@@ -298,6 +299,7 @@ public:
 
     bool CanDeferEffects() const {
         if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
+            YQL_ENSURE(EnableImmediateEffects);
             return false;
         }
 

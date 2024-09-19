@@ -2373,6 +2373,10 @@ private:
                     if (tx->HasLocks()) {
                         // Locks may be broken so shards with locks need to send readsets
                         sendingShardsSet.insert(shardId);
+
+                        if (ShardIdToTableInfo->Get(shardId).IsOlap) {
+                            sendingColumnShardsSet.insert(shardId);
+                        }
                     }
                     if (ShardsWithEffects.contains(shardId)) {
                         // Volatile transactions may abort effects, so they send readsets
@@ -2382,7 +2386,7 @@ private:
                         // Effects are only applied when all locks are valid
                         receivingShardsSet.insert(shardId);
 
-                        if (HtapTx && ShardIdToTableInfo->at(shardId).IsOlap) {
+                        if (ShardIdToTableInfo->Get(shardId).IsOlap) {
                             receivingColumnShardsSet.insert(shardId);
                         }
                     }
@@ -2440,10 +2444,13 @@ private:
                     }
                 }
 
-                if (!receivingColumnShardsSet.empty()) {
-                    AFL_ENSURE(HtapTx);
-                    const ui32 index = RandomNumber<ui32>(receivingColumnShardsSet.size());
-                    auto arbiterIterator = std::begin(receivingColumnShardsSet);
+                if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
+                    const auto& shards = receivingColumnShardsSet.empty()
+                        ? sendingColumnShardsSet
+                        : receivingColumnShardsSet;
+
+                    const ui32 index = RandomNumber<ui32>(shards.size());
+                    auto arbiterIterator = std::begin(shards);
                     std::advance(arbiterIterator, index);
                     columnShardArbiter = *arbiterIterator;
                 }

@@ -1556,20 +1556,9 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     class TFormat : public TBoxedValue {
     public:
-        class TFactory : public TBoxedValue {
-        public:
-            explicit TFactory(TSourcePosition pos)
-                : Pos_(pos)
-            {}
-
-        private:
-            TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
-                return TUnboxedValuePod(new TFormat(args[0], Pos_));
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-            const TSourcePosition Pos_;
-        };
+        explicit TFormat(TSourcePosition pos)
+            : Pos_(pos)
+        {}
 
         static const TStringRef& Name() {
             static auto name = TStringRef::Of("Format");
@@ -1588,249 +1577,260 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
             auto resourceType = builder.Resource(TMResourceName);
 
-            builder.Args()->Add(resourceType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-            builder.RunConfig<char*>().Returns<char*>();
+            builder.Args()->Done();
+            builder.Returns(builder.Callable(1)->Arg(builder.SimpleType<char*>()).Returns(resourceType));
 
             if (!typesOnly) {
-                builder.Implementation(new TFormat::TFactory(builder.GetSourcePosition()));
+                builder.Implementation(new TFormat(builder.GetSourcePosition()));
             }
 
             return true;
         }
 
     private:
-        const TSourcePosition Pos_;
-        const TUnboxedValue Format_;
-        std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_;
-
-        size_t ReservedSize_;
-
-        struct TDataPrinter {
-            const std::string_view Data;
-
-            size_t operator()(char* out, const TUnboxedValuePod&, const IDateBuilder&) const {
-                std::memcpy(out, Data.data(), Data.size());
-                return Data.size();
-            }
-        };
-
-    private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-        {
-            try {
-                EMPTY_RESULT_ON_EMPTY_ARG(0);
-                const auto value = args[0];
-
-                auto& builder = valueBuilder->GetDateBuilder();
-
-                auto result = valueBuilder->NewStringNotFilled(ReservedSize_);
-                auto pos = result.AsStringRef().Data();
-                ui32 size = 0U;
-
-                for (const auto& printer : Printers_) {
-                    if (const auto plus = printer(pos, value, builder)) {
-                        size += plus;
-                        pos += plus;
-                    }
-                }
-
-                if (size < ReservedSize_) {
-                    result = valueBuilder->SubString(result.Release(), 0U, size);
-                }
-
-                return result;
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
+        TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
+            return TUnboxedValuePod(new TImpl(args[0], Pos_));
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
 
-        TFormat(const TUnboxedValuePod& runConfig, TSourcePosition pos)
-            : Pos_(pos)
-            , Format_(runConfig)
-        {
-            const std::string_view formatView(Format_.AsStringRef());
-            auto dataStart = formatView.begin();
-            size_t dataSize = 0U;
-            ReservedSize_ = 0U;
+        class TImpl : public TBoxedValue {
+        public:
+            TUnboxedValue Run(
+                const IValueBuilder* valueBuilder,
+                const TUnboxedValuePod* args) const override
+            {
+                try {
+                    EMPTY_RESULT_ON_EMPTY_ARG(0);
+                    const auto value = args[0];
 
-            for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) {
-                if (*ptr != '%') {
-                    ++dataSize;
-                    continue;
+                    auto& builder = valueBuilder->GetDateBuilder();
+
+                    auto result = valueBuilder->NewStringNotFilled(ReservedSize_);
+                    auto pos = result.AsStringRef().Data();
+                    ui32 size = 0U;
+
+                    for (const auto& printer : Printers_) {
+                        if (const auto plus = printer(pos, value, builder)) {
+                            size += plus;
+                            pos += plus;
+                        }
+                    }
+
+                    if (size < ReservedSize_) {
+                        result = valueBuilder->SubString(result.Release(), 0U, size);
+                    }
+
+                    return result;
+                } catch (const std::exception& e) {
+                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                }
+            }
+
+            TImpl(const TUnboxedValue& format, TSourcePosition pos)
+                : Pos_(pos)
+                , Format_(format)
+            {
+                const std::string_view formatView(Format_.AsStringRef());
+                auto dataStart = formatView.begin();
+                size_t dataSize = 0U;
+                ReservedSize_ = 0U;
+
+                for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) {
+                    if (*ptr != '%') {
+                        ++dataSize;
+                        continue;
+                    }
+
+                    if (dataSize) {
+                        Printers_.emplace_back(TDataPrinter{std::string_view(&*dataStart, dataSize)});
+                        ReservedSize_ += dataSize;
+                        dataSize = 0U;
+                    }
+
+                    if (formatView.end() == ++ptr) {
+                        ythrow yexception() << "format string ends with single %%";
+                    }
+
+                    switch (*ptr) {
+                    case '%': {
+                        static constexpr size_t size = 1;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) {
+                            *out = '%';
+                            return size;
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'Y': {
+                        static constexpr size_t size = 4;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            return PrintNDigits<size>::Do(GetYear(value), out);
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'm': {
+                        static constexpr size_t size = 2;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            return PrintNDigits<size>::Do(GetMonth(value), out);
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'd': {
+                        static constexpr size_t size = 2;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            return PrintNDigits<size>::Do(GetDay(value), out);
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'H': {
+                        static constexpr size_t size = 2;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            return PrintNDigits<size>::Do(GetHour(value), out);
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'M': {
+                        static constexpr size_t size = 2;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            return PrintNDigits<size>::Do(GetMinute(value), out);
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'S':
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            constexpr size_t size = 2;
+                            if (const auto microsecond = GetMicrosecond(value)) {
+                                out += PrintNDigits<size>::Do(GetSecond(value), out);
+                                *out++ = '.';
+                                constexpr size_t msize = 6;
+                                return size + 1U + PrintNDigits<msize, false>::Do(microsecond, out);
+                            }
+                            return PrintNDigits<size>::Do(GetSecond(value), out);
+                        });
+                        ReservedSize_ += 9;
+                        break;
+
+                    case 'z': {
+                        static constexpr size_t size = 5;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
+                            auto timezoneId = GetTimezoneId(value);
+                            if (TTMStorage::IsUniversal(timezoneId)) {
+                                std::memcpy(out, "+0000", size);
+                                return size;
+                            }
+                            i32 shift;
+                            if (!builder.GetTimezoneShift(GetYear(value), GetMonth(value), GetDay(value),
+                                GetHour(value), GetMinute(value), GetSecond(value), timezoneId, shift))
+                            {
+                                std::memcpy(out, "+0000", size);
+                                return size;
+                            }
+
+                            *out++ = shift > 0 ? '+' : '-';
+                            shift = std::abs(shift);
+                            out += PrintNDigits<2U>::Do(shift / 60U, out);
+                            out += PrintNDigits<2U>::Do(shift % 60U, out);
+                            return size;
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'Z':
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            const auto timezoneId = GetTimezoneId(value);
+                            const auto tzName = NUdf::GetTimezones()[timezoneId];
+                            std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
+                            return tzName.size();
+                        });
+                        ReservedSize_ += MAX_TIMEZONE_NAME_LEN;
+                        break;
+                    case 'b': {
+                        static constexpr size_t size = 3;
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            static constexpr std::string_view mp[] {
+                                "Jan",
+                                "Feb",
+                                "Mar",
+                                "Apr",
+                                "May",
+                                "Jun",
+                                "Jul",
+                                "Aug",
+                                "Sep",
+                                "Oct",
+                                "Nov",
+                                "Dec"
+                            };
+                            auto month = GetMonth(value);
+                            Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
+                            std::memcpy(out, mp[month - 1].data(), size);
+                            return size;
+                        });
+                        ReservedSize_ += size;
+                        break;
+                    }
+                    case 'B': {
+                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                            static constexpr std::string_view mp[] {
+                                "January",
+                                "February",
+                                "March",
+                                "April",
+                                "May",
+                                "June",
+                                "July",
+                                "August",
+                                "September",
+                                "October",
+                                "November",
+                                "December"
+                            };
+                            auto month = GetMonth(value);
+                            Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
+                            const std::string_view monthFullName = mp[month - 1];
+                            std::memcpy(out, monthFullName.data(), monthFullName.size());
+                            return monthFullName.size();
+                        });
+                        ReservedSize_ += 9U; // MAX_MONTH_FULL_NAME_LEN
+                        break;
+                    }
+                    default:
+                        ythrow yexception() << "invalid format character: " << *ptr;
+                    }
+
+                    dataStart = ptr + 1U;
                 }
 
                 if (dataSize) {
-                    Printers_.emplace_back(TDataPrinter{std::string_view(&*dataStart, dataSize)});
+                    Printers_.emplace_back(TDataPrinter{std::string_view(dataStart, dataSize)});
                     ReservedSize_ += dataSize;
-                    dataSize = 0U;
                 }
-
-                if (formatView.end() == ++ptr) {
-                    ythrow yexception() << "format string ends with single %%";
-                }
-
-                switch (*ptr) {
-                case '%': {
-                    static constexpr size_t size = 1;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) {
-                        *out = '%';
-                        return size;
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'Y': {
-                    static constexpr size_t size = 4;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetYear(value), out);
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'm': {
-                    static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetMonth(value), out);
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'd': {
-                    static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetDay(value), out);
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'H': {
-                    static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetHour(value), out);
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'M': {
-                    static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetMinute(value), out);
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'S':
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        constexpr size_t size = 2;
-                        if (const auto microsecond = GetMicrosecond(value)) {
-                            out += PrintNDigits<size>::Do(GetSecond(value), out);
-                            *out++ = '.';
-                            constexpr size_t msize = 6;
-                            return size + 1U + PrintNDigits<msize, false>::Do(microsecond, out);
-                        }
-                        return PrintNDigits<size>::Do(GetSecond(value), out);
-                    });
-                    ReservedSize_ += 9;
-                    break;
-
-                case 'z': {
-                    static constexpr size_t size = 5;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
-                        auto timezoneId = GetTimezoneId(value);
-                        if (TTMStorage::IsUniversal(timezoneId)) {
-                            std::memcpy(out, "+0000", size);
-                            return size;
-                        }
-                        i32 shift;
-                        if (!builder.GetTimezoneShift(GetYear(value), GetMonth(value), GetDay(value),
-                            GetHour(value), GetMinute(value), GetSecond(value), timezoneId, shift))
-                        {
-                            std::memcpy(out, "+0000", size);
-                            return size;
-                        }
-
-                        *out++ = shift > 0 ? '+' : '-';
-                        shift = std::abs(shift);
-                        out += PrintNDigits<2U>::Do(shift / 60U, out);
-                        out += PrintNDigits<2U>::Do(shift % 60U, out);
-                        return size;
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'Z':
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        const auto timezoneId = GetTimezoneId(value);
-                        const auto tzName = NUdf::GetTimezones()[timezoneId];
-                        std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
-                        return tzName.size();
-                    });
-                    ReservedSize_ += MAX_TIMEZONE_NAME_LEN;
-                    break;
-                case 'b': {
-                    static constexpr size_t size = 3;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        static constexpr std::string_view mp[] {
-                            "Jan",
-                            "Feb",
-                            "Mar",
-                            "Apr",
-                            "May",
-                            "Jun",
-                            "Jul",
-                            "Aug",
-                            "Sep",
-                            "Oct",
-                            "Nov",
-                            "Dec"
-                        };
-                        auto month = GetMonth(value);
-                        Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
-                        std::memcpy(out, mp[month - 1].data(), size);
-                        return size;
-                    });
-                    ReservedSize_ += size;
-                    break;
-                }
-                case 'B': {
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        static constexpr std::string_view mp[] {
-                            "January",
-                            "February",
-                            "March",
-                            "April",
-                            "May",
-                            "June",
-                            "July",
-                            "August",
-                            "September",
-                            "October",
-                            "November",
-                            "December"
-                        };
-                        auto month = GetMonth(value);
-                        Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
-                        const std::string_view monthFullName = mp[month - 1];
-                        std::memcpy(out, monthFullName.data(), monthFullName.size());
-                        return monthFullName.size();
-                    });
-                    ReservedSize_ += 9U; // MAX_MONTH_FULL_NAME_LEN
-                    break;
-                }
-                default:
-                    ythrow yexception() << "invalid format character: " << *ptr;
-                }
-
-                dataStart = ptr + 1U;
             }
 
-            if (dataSize) {
-                Printers_.emplace_back(TDataPrinter{std::string_view(dataStart, dataSize)});
-                ReservedSize_ += dataSize;
-            }
-        }
+        private:
+            const TSourcePosition Pos_;
+            const TUnboxedValue Format_;
+            std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_;
+
+            size_t ReservedSize_;
+
+            struct TDataPrinter {
+                const std::string_view Data;
+
+                size_t operator()(char* out, const TUnboxedValuePod&, const IDateBuilder&) const {
+                    std::memcpy(out, Data.data(), Data.size());
+                    return Data.size();
+                }
+            };
+        };
+
+        const TSourcePosition Pos_;
     };
 
     template<size_t Digits>

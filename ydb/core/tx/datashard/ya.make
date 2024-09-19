@@ -208,6 +208,7 @@ SRCS(
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
     stream_scan_common.cpp
+    type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp

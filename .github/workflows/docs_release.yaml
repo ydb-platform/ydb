@@ -57,6 +57,6 @@ jobs:
         with:
           revision: "${{ github.sha }}"
           version: "${{ steps.extract_version.outputs.version }}"
-          storage-bucket: ${{ secrets.DOCS_AWS_BUCKET }}
+          storage-bucket: ${{ secrets.DOCS_PROJECT_NAME }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}

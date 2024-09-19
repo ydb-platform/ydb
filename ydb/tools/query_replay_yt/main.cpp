@@ -154,7 +154,7 @@ public:
         auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
             compileActorId,
             THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
-            TDuration::Seconds(300));
+            TDuration::Seconds(600));
 
         return future.ExtractValueSync();
     }

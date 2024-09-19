@@ -334,162 +334,164 @@ private:
 };
 
 template<bool RightRequired, bool IsTuple>
-class TBlockWideMultiMapJoinWrapper : public TPairStateWideFlowComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired, IsTuple>>
+class TBlockWideMultiMapJoinWrapper : public TMutableComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired, IsTuple>>
 {
-using TBaseComputation = TPairStateWideFlowComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired, IsTuple>>;
+using TBaseComputation = TMutableComputationNode<TBlockWideMultiMapJoinWrapper<RightRequired, IsTuple>>;
 using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMultiMapJoinWrapper(TComputationMutables& mutables,
         const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftStreamItems,
         const TVector<ui32>&& leftKeyColumns, const TVector<ui32>&& leftIOMap,
-        IComputationWideFlowNode* flow, IComputationNode* dict)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
+        IComputationNode* stream, IComputationNode* dict)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , ResultJoinItems_(std::move(resultJoinItems))
         , LeftStreamItems_(std::move(leftStreamItems))
         , LeftKeyColumns_(std::move(leftKeyColumns))
-        , LeftIOMap_(leftIOMap)
-        , Flow_(flow)
+        , LeftIOMap_(std::move(leftIOMap))
+        , Stream_(stream)
         , Dict_(dict)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftStreamItems_.size()))
-        , KeyTuple_(mutables)
+        , KeyTupleCache_(mutables)
     {}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& iterator, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        auto& blockState = GetState(state, ctx);
-        auto& iterState = GetIterator(iterator, ctx);
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
-        const auto dict = Dict_->GetValue(ctx);
-
-        while (!blockState.HasBlocks()) {
-            if (iterState) {
-                NUdf::TUnboxedValue lookupItem;
-                // Process the remaining items from the iterator.
-                while (blockState.IsNotFull() && iterState.Next(lookupItem)) {
-                    blockState.MakeRow(lookupItem);
-                }
-            }
-            if (blockState.IsNotFull() && blockState.NextRow()) {
-                const auto key = MakeKeysTuple(ctx, blockState);
-                // Lookup the item in the right dict. If the lookup succeeds,
-                // reset the iterator and proceed the execution from the
-                // beginning of the outer loop. Otherwise, the iterState is
-                // already invalidated (i.e. finished), so the execution will
-                // process the next tuple from the left flow.
-                if (NUdf::TUnboxedValue lookup; key && (lookup = dict.Lookup(key))) {
-                    iterState.Reset(std::move(lookup));
-                } else if constexpr (!RightRequired) {
-                    blockState.MakeRow(NUdf::TUnboxedValue());
-                }
-                continue;
-            }
-            if (blockState.IsNotFull() && !blockState.IsFinished()) {
-                switch (Flow_->FetchValues(ctx, fields)) {
-                case EFetchResult::Yield:
-                    return EFetchResult::Yield;
-                case EFetchResult::One:
-                    blockState.Reset();
-                    continue;
-                case EFetchResult::Finish:
-                    blockState.Finish();
-                    break;
-                }
-                // Leave the loop, if no values left in the flow.
-                Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
-            }
-            if (blockState.IsEmpty()) {
-                return EFetchResult::Finish;
-            }
-            blockState.MakeBlocks(ctx.HolderFactory);
-        }
-
-        const auto sliceSize = blockState.Slice();
-
-        for (size_t i = 0; i < ResultJoinItems_.size(); i++) {
-            if (const auto out = output[i]) {
-                *out = blockState.Get(sliceSize, ctx.HolderFactory, i);
-            }
-        }
-
-        return EFetchResult::One;
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        NUdf::TUnboxedValue* items = nullptr;
+        const auto keys = KeyTupleCache_.NewArray(ctx, LeftKeyColumns_.size(), items);
+        const auto state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_,
+                                                            LeftIOMap_, ResultJoinItems_);
+        const size_t inputWidth = LeftStreamItems_.size();
+        const size_t outputWidth = ResultJoinItems_.size();
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(state),
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      std::move(Dict_->GetValue(ctx)),
+                                                      LeftKeyColumns_,
+                                                      inputWidth, outputWidth,
+                                                      std::move(keys), items);
     }
 
 private:
-    void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow_))
-            this->DependsOn(flow, Dict_);
-    }
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
+                     NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
+                     NUdf::TUnboxedValue&& dict, const TVector<ui32>& leftKeyColumns,
+                     size_t inputWidth, size_t outputWidth,
+                     NUdf::TUnboxedValue&& keyValue, NUdf::TUnboxedValue* keyItems)
+            : TBase(memInfo)
+            , BlockState_(blockState)
+            , Stream_(stream)
+            , Dict_(dict)
+            , KeyValue_(keyValue)
+            , KeyItems_(keyItems)
+            , List_(NUdf::TUnboxedValue::Invalid())
+            , Iterator_(NUdf::TUnboxedValue::Invalid())
+            , Current_(NUdf::TUnboxedValue::Invalid())
+            , InputWidth_(inputWidth)
+            , OutputWidth_(outputWidth)
+            , LeftKeyColumns_(leftKeyColumns)
+            , HolderFactory_(holderFactory)
+        {}
 
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_, LeftIOMap_,
-                                                 ResultJoinItems_, ctx.WideFields.data() + WideFieldsIndex_);
-    }
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            MKQL_ENSURE(width == OutputWidth_,
+                        "The given width doesn't equal to the result type size");
 
-    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid()) {
-            MakeState(ctx, state);
+            auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
+            auto* inputFields = blockState.GetRawInputFields();
+
+            while (!blockState.HasBlocks()) {
+                if (!Iterator_.IsInvalid()) {
+                    // Process the remaining items from the iterator.
+                    while (blockState.IsNotFull() && Iterator_.Next(Current_)) {
+                        blockState.MakeRow(Current_);
+                    }
+                }
+                if (blockState.IsNotFull() && blockState.NextRow()) {
+                    const auto key = MakeKeysTuple(blockState);
+                    // Lookup the item in the right dict. If the lookup succeeds,
+                    // reset the iterator and proceed the execution from the
+                    // beginning of the outer loop. Otherwise, the iterator is
+                    // already invalidated (i.e. finished), so the execution will
+                    // process the next tuple from the left stream.
+                    if (key && (List_ = Dict_.Lookup(key))) {
+                        Iterator_ = List_.GetListIterator();
+                    } else if constexpr (!RightRequired) {
+                        blockState.MakeRow(NUdf::TUnboxedValue());
+                    }
+                    continue;
+                }
+                if (blockState.IsNotFull() && !blockState.IsFinished()) {
+                    switch (Stream_.WideFetch(inputFields, InputWidth_)) {
+                    case NUdf::EFetchStatus::Yield:
+                        return NUdf::EFetchStatus::Yield;
+                    case NUdf::EFetchStatus::Ok:
+                        blockState.Reset();
+                        continue;
+                    case NUdf::EFetchStatus::Finish:
+                        blockState.Finish();
+                        break;
+                    }
+                    // Leave the loop, if no values left in the stream.
+                    Y_DEBUG_ABORT_UNLESS(blockState.IsFinished());
+                }
+                if (blockState.IsEmpty()) {
+                    return NUdf::EFetchStatus::Finish;
+                }
+                blockState.MakeBlocks(HolderFactory_);
+            }
+
+            const auto sliceSize = blockState.Slice();
+
+            for (size_t i = 0; i < OutputWidth_; i++) {
+                output[i] = blockState.Get(sliceSize, HolderFactory_, i);
+            }
+
+            return NUdf::EFetchStatus::Ok;
         }
-        return *static_cast<TState*>(state.AsBoxed().Get());
-    }
 
-    class TIterator : public TComputationValue<TIterator> {
-    using TBase = TComputationValue<TIterator>;
+        NUdf::TUnboxedValue MakeKeysTuple(const TState& state) const {
+            // TODO: Handle converters.
+            if constexpr (!IsTuple) {
+                return state.GetValue(HolderFactory_, LeftKeyColumns_.front());
+            }
+
+            Y_ABORT_IF(KeyItems_ == nullptr);
+            for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
+                KeyItems_[i] = state.GetValue(HolderFactory_, LeftKeyColumns_[i]);
+            }
+            return KeyValue_;
+        }
+
+        NUdf::TUnboxedValue BlockState_;
+        NUdf::TUnboxedValue Stream_;
+        NUdf::TUnboxedValue Dict_;
+        NUdf::TUnboxedValue KeyValue_;
+        NUdf::TUnboxedValue* KeyItems_;
+
         NUdf::TUnboxedValue List_;
         NUdf::TUnboxedValue Iterator_;
         NUdf::TUnboxedValue Current_;
 
-    public:
-        TIterator(TMemoryUsageInfo* memInfo)
-            : TBase(memInfo)
-            , List_(NUdf::TUnboxedValue::Invalid())
-            , Iterator_(NUdf::TUnboxedValue::Invalid())
-            , Current_(NUdf::TUnboxedValue::Invalid())
-        {}
-
-        inline explicit operator bool() const { return !Iterator_.IsInvalid(); }
-        void Reset(const NUdf::TUnboxedValue&& list) {
-            List_ = std::move(list);
-            Iterator_ = List_.GetListIterator();
-        }
-        bool Next(NUdf::TUnboxedValue& item) {
-            const auto found = Iterator_.Next(Current_);
-            item = Current_;
-            return found;
-        }
+        const size_t InputWidth_;
+        const size_t OutputWidth_;
+        const TVector<ui32>& LeftKeyColumns_;
+        const THolderFactory& HolderFactory_;
     };
 
-    void MakeIterator(TComputationContext& ctx, NUdf::TUnboxedValue& iterator) const {
-        iterator = ctx.HolderFactory.Create<TIterator>();
-    }
-
-    TIterator& GetIterator(NUdf::TUnboxedValue& iterator, TComputationContext& ctx) const {
-        if (iterator.IsInvalid()) {
-            MakeIterator(ctx, iterator);
-        }
-        return *static_cast<TIterator*>(iterator.AsBoxed().Get());
-    }
-
-    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, const TState& state) const {
-        // TODO: Handle converters.
-        if constexpr (!IsTuple) {
-            return state.GetValue(ctx.HolderFactory, LeftKeyColumns_.front());
-        }
-
-        NUdf::TUnboxedValue* items = nullptr;
-        const auto keys = KeyTuple_.NewArray(ctx, LeftKeyColumns_.size(), items);
-        for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
-            items[i] = state.GetValue(ctx.HolderFactory, LeftKeyColumns_[i]);
-        }
-        return keys;
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream_);
+        this->DependsOn(Dict_);
     }
 
     const TVector<TType*> ResultJoinItems_;
     const TVector<TType*> LeftStreamItems_;
     const TVector<ui32> LeftKeyColumns_;
     const TVector<ui32> LeftIOMap_;
-    IComputationWideFlowNode* const Flow_;
+    IComputationNode* const Stream_;
     IComputationNode* const Dict_;
-    ui32 WideFieldsIndex_;
-    const TContainerCacheOnContext KeyTuple_;
+    const TContainerCacheOnContext KeyTupleCache_;
 };
 
 } // namespace

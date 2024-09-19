@@ -161,13 +161,13 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
 
                 if (!task.Query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
-                    throw TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                    throw NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
                 }
                 const TInstant deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(automaticQueriesTtl, resultSetsTtl) : resultSetsTtl);
                 task.Deadline = deadline;
                 if (!task.Internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                     commonCounters->ParseProtobufError->Inc();
-                    throw TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+                    throw NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
                 }
 
                 *task.Internal.mutable_result_ttl() = NProtoInterop::CastToProto(resultSetsTtl);

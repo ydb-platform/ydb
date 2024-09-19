@@ -138,7 +138,7 @@ try(CloseableYdbDSLContext dsl = YDB.using(url)) {
 
 ## YQL команды
 
-Из синтаксиса YQL доступны следующие команды в `YdbDSLContext`:
+В `YdbDSLContext` доступны следующие команды, специфичные для синтаксиса YQL:
 
 - [`UPSERT`](../../yql/reference/syntax/upsert_into.md):
 

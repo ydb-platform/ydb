@@ -155,16 +155,13 @@ def main():
         from (
             select * from (
                 select * from (
-                    select
-                        DISTINCT suite_folder || '/' || test_name as full_name,
+                    select  DISTINCT
+                        full_name,
                         suite_folder,
                         test_name
-                    from  `test_results/test_runs_column`
-                    where
-                        (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
-                        and branch = '{branch}'
-                        and run_timestamp >= Date('{last_date}') -{history_for_n_day}*Interval("P1D") 
-                ) as tests_with_fails
+                    from  `test_results/analytics/testowners` 
+                    where  run_timestamp_last >= Date('{last_date}') - 3*Interval("P1D") 
+                ) as all_tests
                 cross join (
                     select 
                         DISTINCT DateTime::MakeDate(run_timestamp) as date_base

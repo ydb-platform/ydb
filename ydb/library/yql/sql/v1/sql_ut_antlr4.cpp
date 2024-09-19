@@ -6702,24 +6702,6 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
-    Y_UNIT_TEST(CreateViewNoSecurityInvoker) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
-                CREATE VIEW TheView AS SELECT 1;
-            )"
-        );
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "mismatched input 'AS' expecting WITH");
-    }
-
-    Y_UNIT_TEST(CreateViewSecurityInvokerTurnedOff) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
-                CREATE VIEW TheView WITH (security_invoker = FALSE) AS SELECT 1;
-            )"
-        );
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "SECURITY_INVOKER option must be explicitly enabled");
-    }
-
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(

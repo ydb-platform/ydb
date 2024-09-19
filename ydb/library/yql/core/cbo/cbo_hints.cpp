@@ -130,7 +130,8 @@ private:
 private:
     // Expressions
     void ParseError(const TString& err, i32 pos) {
-        Y_ENSURE(false, Sprintf("Optimizer hints parser error position:%d, msg: %s", pos, err.c_str()));
+        auto [line, linePos] = GetLineAndLinePosFromTextPos(pos);
+        Y_ENSURE(false, Sprintf("Optimizer hints parser error at [line:%d, pos:%d], msg: %s", line, linePos, err.c_str()));
     }
 
     TString Label() {
@@ -280,6 +281,22 @@ private:
     void SkipWhiteSpaces() {
         for (; Pos < Size && isspace(Text[Pos + 1]); ++Pos) {
         }
+    }
+
+    std::pair<i32, i32> GetLineAndLinePosFromTextPos(i32 pos) {
+        i32 Line = 0;
+        i32 LinePos = 0;
+
+        for (i32 i = 0; i <= pos && i < static_cast<i32>(Text.Size()); ++i) {
+            if (Text[i] == '\n') {
+                LinePos = 0;
+                ++Line;
+            } else {
+                ++LinePos;
+            }
+        }
+
+        return {Line, LinePos};
     }
 
 private:

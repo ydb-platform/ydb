@@ -625,7 +625,7 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
                                     NScheme::DECIMAL_SCALE);
                 return false;
             }
-            outTypeInfo = NScheme::TTypeInfo(NYql::NProto::TypeIds::Decimal, {precision, scale});
+            outTypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));
             return true;
         }
         case Ydb::Type::kPgType: {
@@ -637,7 +637,7 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
                 error = TStringBuilder() << "Invalid PG type name: " << typeName;
                 return false;
             }
-            outTypeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, desc);
+            outTypeInfo = NScheme::TTypeInfo(desc);
             outTypeMod = pgType.type_modifier();
             return true;
         }

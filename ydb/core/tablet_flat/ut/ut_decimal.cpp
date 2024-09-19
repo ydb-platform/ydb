@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
         NTest::TDbExec db;
 
         auto makeDecimalTypeInfo = [] (ui32 precision, ui32 scale) {
-            return NScheme::TTypeInfo(NScheme::NTypeIds::Decimal, NScheme::TDecimalType(precision, scale));
+            return NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));
         };
 
         auto makeDecimalTypeInfoProto = [] (ui32 precision, ui32 scale) {

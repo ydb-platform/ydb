@@ -187,17 +187,17 @@ using TBaseComputation = TStatefulWideFlowComputationNode<TBlockWideMapJoinWrapp
 using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMapJoinWrapper(TComputationMutables& mutables,
-        const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftFlowItems,
+        const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftStreamItems,
         const TVector<ui32>&& leftKeyColumns, const TVector<ui32>&& leftIOMap,
         IComputationWideFlowNode* flow, IComputationNode* dict)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , ResultJoinItems_(std::move(resultJoinItems))
-        , LeftFlowItems_(std::move(leftFlowItems))
+        , LeftStreamItems_(std::move(leftStreamItems))
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , LeftIOMap_(leftIOMap)
         , Flow_(flow)
         , Dict_(dict)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftStreamItems_.size()))
         , KeyTuple_(mutables)
     {}
 
@@ -260,7 +260,7 @@ private:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, LeftFlowItems_, LeftIOMap_,
+        state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_, LeftIOMap_,
                                                  ResultJoinItems_, ctx.WideFields.data() + WideFieldsIndex_);
     }
 
@@ -286,7 +286,7 @@ private:
     }
 
     const TVector<TType*> ResultJoinItems_;
-    const TVector<TType*> LeftFlowItems_;
+    const TVector<TType*> LeftStreamItems_;
     const TVector<ui32> LeftKeyColumns_;
     const TVector<ui32> LeftIOMap_;
     IComputationWideFlowNode* const Flow_;
@@ -302,17 +302,17 @@ using TBaseComputation = TPairStateWideFlowComputationNode<TBlockWideMultiMapJoi
 using TState = TBlockJoinState<RightRequired>;
 public:
     TBlockWideMultiMapJoinWrapper(TComputationMutables& mutables,
-        const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftFlowItems,
+        const TVector<TType*>&& resultJoinItems, const TVector<TType*>&& leftStreamItems,
         const TVector<ui32>&& leftKeyColumns, const TVector<ui32>&& leftIOMap,
         IComputationWideFlowNode* flow, IComputationNode* dict)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
         , ResultJoinItems_(std::move(resultJoinItems))
-        , LeftFlowItems_(std::move(leftFlowItems))
+        , LeftStreamItems_(std::move(leftStreamItems))
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , LeftIOMap_(leftIOMap)
         , Flow_(flow)
         , Dict_(dict)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftFlowItems_.size()))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(LeftStreamItems_.size()))
         , KeyTuple_(mutables)
     {}
 
@@ -382,7 +382,7 @@ private:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, LeftFlowItems_, LeftIOMap_,
+        state = ctx.HolderFactory.Create<TState>(ctx, LeftStreamItems_, LeftIOMap_,
                                                  ResultJoinItems_, ctx.WideFields.data() + WideFieldsIndex_);
     }
 
@@ -445,7 +445,7 @@ private:
     }
 
     const TVector<TType*> ResultJoinItems_;
-    const TVector<TType*> LeftFlowItems_;
+    const TVector<TType*> LeftStreamItems_;
     const TVector<ui32> LeftKeyColumns_;
     const TVector<ui32> LeftIOMap_;
     IComputationWideFlowNode* const Flow_;
@@ -460,22 +460,22 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
-    MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting stream");
-    const auto joinFlowType = AS_TYPE(TFlowType, joinType);
-    MKQL_ENSURE(joinFlowType->GetItemType()->IsMulti(),
+    MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
+    const auto joinStreamType = AS_TYPE(TStreamType, joinType);
+    MKQL_ENSURE(joinStreamType->GetItemType()->IsMulti(),
                 "Expected Multi as a resulting item type");
-    const auto joinComponents = GetWideComponents(joinFlowType);
+    const auto joinComponents = GetWideComponents(joinStreamType);
     MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
     const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
-    MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left stream");
-    const auto leftFlowType = AS_TYPE(TFlowType, leftType);
-    MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(),
+    MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
+    const auto leftStreamType = AS_TYPE(TStreamType, leftType);
+    MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(),
                 "Expected Multi as a left stream item type");
-    const auto leftFlowComponents = GetWideComponents(leftFlowType);
-    MKQL_ENSURE(leftFlowComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
+    const auto leftStreamComponents = GetWideComponents(leftStreamType);
+    MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
 
     const auto rightDictNode = callable.GetInput(1);
     MKQL_ENSURE(rightDictNode.GetStaticType()->IsDict(),
@@ -522,7 +522,7 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
 
     TVector<ui32> leftIOMap;
     // XXX: Mind the last wide item, containing block length.
-    for (size_t i = 0; i < leftFlowItems.size() - 1; i++) {
+    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {
         if (leftKeyDrops.contains(i)) {
             continue;
         }
@@ -537,33 +537,33 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     case EJoinKind::Inner:                                                          \
         if (isMulti) {                                                              \
             return new TBlockWideMultiMapJoinWrapper<true, IS_TUPLE>(ctx.Mutables,  \
-                std::move(joinItems), std::move(leftFlowItems),                     \
+                std::move(joinItems), std::move(leftStreamItems),                   \
                 std::move(leftKeyColumns), std::move(leftIOMap),                    \
                 static_cast<IComputationWideFlowNode*>(flow), dict);                \
         }                                                                           \
         return new TBlockWideMapJoinWrapper<false, true, IS_TUPLE>(ctx.Mutables,    \
-            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(joinItems), std::move(leftStreamItems),                       \
             std::move(leftKeyColumns), std::move(leftIOMap),                        \
             static_cast<IComputationWideFlowNode*>(flow), dict);                    \
     case EJoinKind::Left:                                                           \
         if (isMulti) {                                                              \
             return new TBlockWideMultiMapJoinWrapper<false, IS_TUPLE>(ctx.Mutables, \
-                std::move(joinItems), std::move(leftFlowItems),                     \
+                std::move(joinItems), std::move(leftStreamItems),                   \
                 std::move(leftKeyColumns), std::move(leftIOMap),                    \
                 static_cast<IComputationWideFlowNode*>(flow), dict);                \
         }                                                                           \
         return new TBlockWideMapJoinWrapper<false, false, IS_TUPLE>(ctx.Mutables,   \
-            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(joinItems), std::move(leftStreamItems),                       \
             std::move(leftKeyColumns), std::move(leftIOMap),                        \
             static_cast<IComputationWideFlowNode*>(flow), dict);                    \
     case EJoinKind::LeftSemi:                                                       \
         return new TBlockWideMapJoinWrapper<true, true, IS_TUPLE>(ctx.Mutables,     \
-            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(joinItems), std::move(leftStreamItems),                       \
             std::move(leftKeyColumns), std::move(leftIOMap),                        \
             static_cast<IComputationWideFlowNode*>(flow), dict);                    \
     case EJoinKind::LeftOnly:                                                       \
         return new TBlockWideMapJoinWrapper<true, false, IS_TUPLE>(ctx.Mutables,    \
-            std::move(joinItems), std::move(leftFlowItems),                         \
+            std::move(joinItems), std::move(leftStreamItems),                       \
             std::move(leftKeyColumns), std::move(leftIOMap),                        \
             static_cast<IComputationWideFlowNode*>(flow), dict);                    \
     default:                                                                        \

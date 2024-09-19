@@ -163,6 +163,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
     Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
+    Self->SetupIndexation();
 }
 
 }   // namespace NKikimr::NColumnShard

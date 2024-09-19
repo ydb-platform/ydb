@@ -41,7 +41,7 @@ public:
         virtual ~IShardInfo() {}
 
         virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const = 0;
-        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite) const = 0;
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const = 0;
         virtual ui64 GetBytes() const = 0;
         virtual ui32 GetRowsCount() const = 0;
         virtual const TString& GetData() const = 0;
@@ -66,11 +66,19 @@ public:
 
     TYdbConclusionStatus SplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
         TableId = schemeEntry.TableId.PathId.LocalPathId;
+        AFL_VERIFY(schemeEntry.ColumnTableInfo);
+        AFL_VERIFY(schemeEntry.ColumnTableInfo->Description.HasSchema());
+        SchemaVersion = schemeEntry.ColumnTableInfo->Description.GetSchema().GetVersion();
+        AFL_VERIFY(SchemaVersion);
         return DoSplitData(schemeEntry, data);
     }
 
     ui64 GetTableId() const {
         return TableId;
+    }
+
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion;
     }
 
     const TFullSplitData& GetSplitData() const {
@@ -84,6 +92,7 @@ private:
     virtual TYdbConclusionStatus DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) = 0;
 
     ui64 TableId = 0;
+    ui64 SchemaVersion = 0;
 protected:
     std::optional<TFullSplitData> FullSplitData;
 };

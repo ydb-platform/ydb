@@ -10,6 +10,7 @@ from ydb.tests.library.common import yatest_common
 
 PID_FILENAME = "kqprun_daemon.pid"
 KQPRUN_PATH = os.getenv("KQPRUN_EXECUTABLE") or "ydb/tests/tools/kqprun/kqprun"
+INITIALIZATION_IMEOUT_RATIO = 2
 
 
 def is_kqprun_daemon_ready() -> bool:
@@ -40,7 +41,7 @@ def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]
         cmd.append("--script-query")
         cmd.append(yatest_common.source_path(query))
 
-    return (parsed.timeout_ms // 500, cmd)
+    return (parsed.timeout_ms, cmd)
 
 
 def start(argv: list[str]):
@@ -48,14 +49,14 @@ def start(argv: list[str]):
 
     portManager = PortManager()
     grpc_port = portManager.get_port()
-    timeout, cmd = build_start_comand(argv, grpc_port)
+    timeout_ms, cmd = build_start_comand(argv, grpc_port)
 
     recipes_common.start_daemon(
         command=cmd,
         environment=None,
         is_alive_check=is_kqprun_daemon_ready,
         pid_file_name=PID_FILENAME,
-        timeout=timeout,
+        timeout=INITIALIZATION_IMEOUT_RATIO * (timeout_ms // 1000),
         daemon_name="kqprun_daemon"
     )
 

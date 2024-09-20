@@ -42,6 +42,10 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
                 ++itRecord;
                 ++itBlobIdx;
             } else if (itIndex->GetAddress() < itRecord->GetAddress()) {
+                if (itIndex->HasBlobData()) {
+                    ++itIndex;
+                    continue;
+                }
                 AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
                 itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
                 ++itIndex;
@@ -54,9 +58,13 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
             AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
             itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
         }
-        for (; itIndex != Indexes.end(); ++itIndex, ++itBlobIdx) {
+        for (; itIndex != Indexes.end(); ++itIndex) {
+            if (itIndex->HasBlobData()) {
+                continue;
+            }
             AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
             itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+            ++itBlobIdx;
         }
     }
 

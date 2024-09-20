@@ -285,7 +285,7 @@ public:
         CheckChunksOrder(Records);
         CheckChunksOrder(Indexes);
         if (BlobIdxs.size()) {
-            AFL_VERIFY(BlobIdxs.size() == Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
+            AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
                                                                "indexes", Indexes.size());
         } else {
             std::set<ui32> blobIdxs;

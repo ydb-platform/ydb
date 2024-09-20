@@ -635,7 +635,7 @@ public:
     }
 
     TStorageGroups(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev)
+        : TBase(viewer, ev, "/storage/groups")
     {
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
@@ -1351,6 +1351,7 @@ public:
             }
         }
         if (AreBSControllerRequestsDone() && FieldsNeeded(FieldsWbDisks)) {
+            AddEvent("SendWhiteboardRequests");
             for (TGroup* group : GroupView) {
                 for (TNodeId nodeId : group->VDiskNodeIds) {
                     SendWhiteboardDisksRequest(nodeId);
@@ -1881,6 +1882,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
+        AddEvent("ReplyAndPassAway");
         ApplyEverything();
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));
@@ -1977,12 +1979,14 @@ public:
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());
             }
         }
+        AddEvent("RenderingResult");
         TStringStream out;
         Proto2Json(json, out, {
             .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
             .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
             .WriteNanAsString = true,
         });
+        AddEvent("ResultReady");
         TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
     }
 

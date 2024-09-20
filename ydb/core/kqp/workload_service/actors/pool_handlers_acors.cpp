@@ -219,7 +219,7 @@ private:
 
         TRequest* request = GetRequestSafe(sessionId);
         if (!request) {
-            if (ev->Get()->sendResponseOnNotFound) {
+            if (ev->Get()->SendResponseOnNotFound) {
                 this->Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
             }
             return;

@@ -161,10 +161,11 @@ struct TPoolState {
     }
 
     void DoCleanupRequest(TEvCleanupRequest::TPtr event) {
+        event->Get()->SendResponseOnNotFound = false;
         for (const auto& poolHandler : PreviousPoolHandlers) {
             ActorContext.Send(poolHandler, new TEvCleanupRequest(
                 event->Get()->Database, event->Get()->SessionId, event->Get()->PoolId,
-                event->Get()->Duration, event->Get()->CpuConsumed, false
+                event->Get()->Duration, event->Get()->CpuConsumed, event->Get()->SendResponseOnNotFound
             ));
         }
         ActorContext.Send(event->Forward(PoolHandler));

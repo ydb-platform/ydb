@@ -263,7 +263,6 @@ private:
             databaseState->RemovePendingSession(event->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
                 ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
             });
-            databaseState->PendingSessionIds.erase(event->Get()->SessionId);
             ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
             return;
         }

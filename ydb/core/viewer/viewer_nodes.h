@@ -2185,28 +2185,28 @@ public:
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks)) {
+                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
+                        return a.path() < b.path();
+                    });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
                         (*jsonNode.AddPDisks()) = std::move(pDisk);
                     }
-                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
-                        return a.pdiskid() < b.pdiskid();
-                    });
                 }
                 if (FieldsAvailable.test(+ENodeFields::VDisks)) {
-                    for (NKikimrWhiteboard::TVDiskStateInfo& vDisk : node->VDisks) {
-                        (*jsonNode.AddVDisks()) = std::move(vDisk);
-                    }
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
+                    for (NKikimrWhiteboard::TVDiskStateInfo& vDisk : node->VDisks) {
+                        (*jsonNode.AddVDisks()) = std::move(vDisk);
+                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::Tablets)) {
-                    for (NKikimrViewer::TTabletStateInfo& tablet : node->Tablets) {
-                        (*jsonNode.AddTablets()) = std::move(tablet);
-                    }
                     std::sort(node->Tablets.begin(), node->Tablets.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) {
                         return a.type() < b.type();
                     });
+                    for (NKikimrViewer::TTabletStateInfo& tablet : node->Tablets) {
+                        (*jsonNode.AddTablets()) = std::move(tablet);
+                    }
                 }
             }
         } else {

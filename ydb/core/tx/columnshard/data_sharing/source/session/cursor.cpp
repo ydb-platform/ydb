@@ -183,6 +183,7 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
     std::swap(PortionsForSend, local);
 
     if (PortionsForSend.empty()) {
+        AFL_VERIFY(!StartPortionId);
         NextPathId = std::nullopt;
         NextPortionId = std::nullopt;
         return true;

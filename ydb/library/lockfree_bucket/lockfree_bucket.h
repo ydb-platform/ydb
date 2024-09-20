@@ -26,10 +26,12 @@ public:
     void FillAndTake(ui64 tokens) {
         TTime prev = LastUpdate.load(std::memory_order_relaxed);
         TTime now = TTimer::Now();
+        i64 duration = TTimer::Duration(prev, now);
 
         while (true) {
             if (prev >= now) {
-                return;
+                duration = 0;
+                break;
             }
 
             if (LastUpdate.compare_exchange_weak(prev, now,
@@ -41,7 +43,7 @@ public:
 
         i64 currentTokens = Tokens.load(std::memory_order_relaxed);
 
-        ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * TTimer::Duration(prev, now);
+        ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * duration;
         i64 minTokens = MinTokens.load(std::memory_order_relaxed);
         i64 maxTokens = MaxTokens.load(std::memory_order_relaxed);
         Y_DEBUG_ABORT_UNLESS(minTokens <= maxTokens);

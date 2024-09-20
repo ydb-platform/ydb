@@ -600,13 +600,8 @@ class TJsonNodes : public TViewerPipeClient {
     }
 
 public:
-    TString GetLogPrefix() {
-        static TString prefix = "json/nodes ";
-        return prefix;
-    }
-
     TJsonNodes(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev)
+        : TBase(viewer, ev, "/viewer/nodes")
     {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -1600,7 +1595,7 @@ public:
     void SendWhiteboardSystemAndTabletsBatch(TNodeBatch& batch) {
         TNodeId nodeId = OffloadMerge ? batch.ChooseNodeId() : 0;
         if (batch.HasStaticNodes && (FieldsNeeded(FieldsVDisks) || FieldsNeeded(FieldsPDisks))) {
-            nodeId = 0; // we need to ask for all nodes anyway
+            nodeId = 0; // we need to ask for all nodes anyway (for the compatibility with older versions)
         }
         if (nodeId) {
             if (FieldsNeeded(FieldsSystemState) && SystemViewerResponse.count(nodeId) == 0) {
@@ -2221,12 +2216,15 @@ public:
                 jsonNodeGroup.SetNodeCount(nodeGroup.Nodes.size());
             }
         }
+        AddEvent("RenderingResult");
         TStringStream out;
         Proto2Json(json, out, {
             .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
+            .MapAsObject = true,
             .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
             .WriteNanAsString = true,
         });
+        AddEvent("ResultReady");
         TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
     }
 

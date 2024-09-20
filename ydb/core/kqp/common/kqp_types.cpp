@@ -6,19 +6,40 @@
 namespace NKikimr::NScheme {
 
 void ProtoMiniKQLTypeFromTypeInfo(NKikimrMiniKQL::TType* type, const TTypeInfo typeInfo) {
-    if (typeInfo.GetTypeId() == NTypeIds::Pg) {
+    switch (typeInfo.GetTypeId()) {
+    case NTypeIds::Pg: {
         type->SetKind(NKikimrMiniKQL::Pg);
         type->MutablePg()->Setoid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
-    } else {
+        break;
+    }
+    case NTypeIds::Decimal: {
+        const TDecimalType& decimal = typeInfo.GetDecimalType();
+        type->SetKind(NKikimrMiniKQL::Data);
+        type->MutableData()->SetScheme(NTypeIds::Decimal);
+        type->MutableData()->MutableDecimalParams()->SetPrecision(decimal.GetPrecision());
+        type->MutableData()->MutableDecimalParams()->SetScale(decimal.GetScale());
+        break;
+    }
+    default: {
         type->SetKind(NKikimrMiniKQL::Data);
         type->MutableData()->SetScheme(typeInfo.GetTypeId());
+        break;
+    }
     }
 }
 
 TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
     switch (type.GetKind()) {
-    case NKikimrMiniKQL::Data:
-        return TTypeInfo((NScheme::TTypeId)type.GetData().GetScheme());
+    case NKikimrMiniKQL::Data: {
+        NScheme::TTypeId typeId = type.GetData().GetScheme();
+        if (typeId == NTypeIds::Decimal) {
+            TDecimalType decimal(type.GetData().GetDecimalParams().GetPrecision(), type.GetData().GetDecimalParams().GetScale());
+            return TTypeInfo(decimal);
+        }
+        else {
+            return TTypeInfo(typeId);
+        }
+    }
     case NKikimrMiniKQL::Pg:
         return TTypeInfo(NPg::TypeDescFromPgTypeId(type.GetPg().Getoid()));
     default:
@@ -26,18 +47,13 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
     }
 }
 
-const NMiniKQL::TType* MiniKQLTypeFromTypeInfo(const TTypeInfo typeInfo, const NMiniKQL::TTypeEnvironment& env) {
-    if (typeInfo.GetTypeId() == NTypeIds::Pg) {
-        return NMiniKQL::TPgType::Create(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()), env);
-    } else {
-        return NMiniKQL::TDataType::Create((NUdf::TDataTypeId)typeInfo.GetTypeId(), env);
-    }
-}
-
 TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
-    case NMiniKQL::TType::EKind::Data:
-        return TTypeInfo((NScheme::TTypeId)AS_TYPE(NMiniKQL::TDataType, type)->GetSchemeType());
+    case NMiniKQL::TType::EKind::Data: {
+        NScheme::TTypeId typeId = AS_TYPE(NMiniKQL::TDataType, type)->GetSchemeType();
+        Y_ENSURE(typeId != NScheme::NTypeIds::Decimal, "Decimal is no supported");
+        return TTypeInfo(typeId);
+    }
     case NMiniKQL::TType::EKind::Pg:
         return TTypeInfo(NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
     default:

@@ -221,27 +221,27 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     TVector<const TItemExprType*> items;
     for (auto pair : Metadata->Columns) {
         auto& column = pair.second;
-
-        // Currently Kikimr doesn't have parametrized types and Decimal type
-        // is passed with no params. It's known to always be Decimal(22,9),
-        // so we transform Decimal type here.
         const TTypeAnnotationNode *type;
-        if (to_lower(column.Type) == "decimal") {
-            type = ctx.MakeType<TDataExprParamsType>(
-                NKikimr::NUdf::GetDataSlot(column.Type),
-                ToString(NKikimr::NScheme::DECIMAL_PRECISION),
-                ToString(NKikimr::NScheme::DECIMAL_SCALE));
-        } else {
-            if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
-                type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
-            } else {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
-            }
+        switch (column.TypeInfo.GetTypeId()) {
+        case NKikimr::NScheme::NTypeIds::Pg: {
+            type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
+            break;
+        }
+        case NKikimr::NScheme::NTypeIds::Decimal: {
+            const NKikimr::NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+            type = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(decimal.GetPrecision()), ToString(decimal.GetScale()));
+            if (!column.NotNull)
+                type = ctx.MakeType<TOptionalExprType>(type);
+            break;
+        }
+        default: {
+            type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
+            if (!column.NotNull)
+                type = ctx.MakeType<TOptionalExprType>(type);
+            break;
+        }
         }
 
-        if (!column.NotNull && column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
-            type = ctx.MakeType<TOptionalExprType>(type);
-        }
 
         items.push_back(ctx.MakeType<TItemExprType>(column.Name, type));
 

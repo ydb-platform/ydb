@@ -217,28 +217,24 @@ void ReplaceReadAttributes(TExprNode& node,
 
 static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool notNull) {
     Ydb::Type ydbType;
-    if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
+    switch (typeInfo.GetTypeId()) {
+    case NKikimr::NScheme::NTypeIds::Pg: {
         auto typeDesc = typeInfo.GetPgTypeDesc();
         auto* pg = ydbType.mutable_pg_type();
         pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
         pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-    } else {
-        auto& item = notNull
-            ? ydbType
-            : *ydbType.mutable_optional_type()->mutable_item();
-        //
-        // DECIMAL is PrimitiveType with (22,9) defaults in Scheme
-        // and separate (non-primitive) type everywhere else
-        //
-        // NKikimr::NScheme::NTypeIds::Decimal is omitted in public API intentionally
-        //
-        if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Decimal) {
-            auto* decimal = item.mutable_decimal_type();
-            decimal->set_precision(NKikimr::NScheme::DECIMAL_PRECISION);
-            decimal->set_scale(NKikimr::NScheme::DECIMAL_SCALE);
-        } else {
-            item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-        }
+        break;
+    }
+    case NKikimr::NScheme::NTypeIds::Decimal: {
+        auto& item = notNull ? ydbType : *ydbType.mutable_optional_type()->mutable_item();
+        ProtoFromDecimalType(typeInfo.GetDecimalType(), *item.mutable_decimal_type());
+        break;        
+    }
+    default: {
+        auto& item = notNull ? ydbType : *ydbType.mutable_optional_type()->mutable_item();
+        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        break;
+    }
     }
     return ydbType;
 }

@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -148,9 +149,7 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     KeyColumns.reserve(settings.GetKeyColumns().size());
     i32 keyOrder = 0;
     for (const auto& keyColumn : settings.GetKeyColumns()) {
-        NScheme::TTypeInfo typeInfo = keyColumn.GetTypeId() == NScheme::NTypeIds::Pg ?
-            NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())) :
-            NScheme::TTypeInfo(keyColumn.GetTypeId());
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
 
         KeyColumns.emplace(
             keyColumn.GetName(),
@@ -173,9 +172,7 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
 
     Columns.reserve(settings.GetColumns().size());
     for (const auto& column : settings.GetColumns()) {
-        NScheme::TTypeInfo typeInfo = column.GetTypeId() == NScheme::NTypeIds::Pg ?
-            NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
-            NScheme::TTypeInfo(column.GetTypeId());
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetTypeId(), column.GetTypeInfo());
 
         Columns.emplace_back(TSysTables::TTableColumnInfo{
             column.GetName(),

@@ -31,9 +31,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         if (columnData) {
             columnId = columnData->Id;
             columnType = columnData->TypeInfo.GetTypeId();
-            if (columnType == NScheme::NTypeIds::Pg) {
-                columnTypeInfo = columnData->TypeInfo;
-            }
+            columnTypeInfo = columnData->TypeInfo;
             notNull = columnData->NotNull;
         } else if (allowSystemColumns) {
             auto systemColumn = GetSystemColumns().find(name);
@@ -74,11 +72,14 @@ TSmallVec<bool> GetSkipNullKeys(const TKqpReadTableSettings& settings, const TKi
 
 NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, const TKqlCompileContext& ctx) {
     auto typeId = typeInfo.GetTypeId();
-    if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
-        return ctx.PgmBuilder().NewDecimalType(22, 9);
-    } else if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
+    switch (typeId) {
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        const NScheme::TDecimalType& decimal = typeInfo.GetDecimalType();
+        return ctx.PgmBuilder().NewDecimalType(decimal.GetPrecision(), decimal.GetScale());
+    }
+    case NKikimr::NScheme::NTypeIds::Pg:
         return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
-    } else {
+    default:
         return ctx.PgmBuilder().NewDataType(typeId);
     }
 }
@@ -86,14 +87,19 @@ NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, c
 void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TTypeId columnTypeId) {
     YQL_ENSURE(type);
     bool isOptional;
-    if (columnTypeId == NKikimr::NScheme::NTypeIds::Pg) {
+    switch (columnTypeId) {
+    case NKikimr::NScheme::NTypeIds::Pg: {
         const TPgExprType* pgType = nullptr;
         YQL_ENSURE(IsPg(type, pgType));
-    } else {
+        break;
+    }
+    default: {
         const TDataExprType* dataType = nullptr;
         YQL_ENSURE(IsDataOrOptionalOfData(type, isOptional, dataType));
         auto schemeType = NUdf::GetDataTypeInfo(dataType->GetSlot()).TypeId;
         YQL_ENSURE(schemeType == columnTypeId);
+        break;
+    }
     }
 }
 

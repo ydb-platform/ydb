@@ -339,6 +339,10 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             columnDesc.MutableDefaultFromLiteral()->CopyFrom(
                 cMeta.DefaultFromLiteral);
         }
+
+        if(NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
+            ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
+        }
     }
 
     for (TString& keyColumn : metadata->KeyColumnNames) {

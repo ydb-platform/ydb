@@ -3426,6 +3426,8 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
 
+bool GetTypeInfo(const NScheme::IType* type, const NKikimrProto::TTypeInfo& typeInfoProto, const TStringBuf& typeName, const TStringBuf& columnName, NScheme::TTypeInfo &typeInfo, ::TString& errorStr);
+
 }
 
 }

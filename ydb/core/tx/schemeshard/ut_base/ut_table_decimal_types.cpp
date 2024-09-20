@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
             NLs::PathExist,
             NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal")
+            NLs::CheckColumnType(0, "Decimal(22,9)")
         });
     }
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
             NLs::PathExist,
             NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal")
+            NLs::CheckColumnType(0, "Decimal(22,9)")
         });        
     }
 
@@ -102,8 +102,64 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
             NLs::PathExist,
             NLs::Finished,
             NLs::CheckColumnType(0, "Decimal(35,6)")
+        });
+
+        AsyncAlterTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            Columns { Name: "added" Type: "Decimal(35,6)" }
+        )_");
+        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusAccepted)});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+            NLs::PathExist,
+            NLs::Finished,
+            NLs::CheckColumnType(0, "Decimal(35,6)")
         });        
     }
 
+    Y_UNIT_TEST(CreateWithWrongParameters) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
 
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Decimal(99,6)" }
+            Columns { Name: "value" Type: "Decimal(99,6)" }
+            KeyColumnNames: ["key"]
+        )_");
+        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusSchemeError, 
+            "Type 'Decimal(99,6)' specified for column 'key' is not supported by storage")});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterWithWrongParameters) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )_");
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+            NLs::PathExist,
+            NLs::Finished
+        });
+
+        AsyncAlterTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            Columns { Name: "added" Type: "Decimal(99,6)" }
+        )_");
+        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusInvalidParameter, 
+            "Type 'Decimal(99,6)' specified for column 'added' is not supported by storage")});
+        env.TestWaitNotification(runtime, txId);
+
+    }    
 }

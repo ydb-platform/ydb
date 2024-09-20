@@ -402,7 +402,7 @@ private:
                 // Decimal type is transformed into parametrized Decimal(22, 9).
                 if (columnTypeId == NYql::NProto::TypeIds::Decimal) {
                     columnDataType = ctx.MakeType<TDataExprParamsType>(
-                        NUdf::GetDataSlot(columnTypeId),
+                        EDataSlot::Decimal,
                         ToString(NScheme::DECIMAL_PRECISION),
                         ToString(NScheme::DECIMAL_SCALE));
                 } else {

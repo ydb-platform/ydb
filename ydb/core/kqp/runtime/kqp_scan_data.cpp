@@ -238,8 +238,7 @@ public:
     using TArrayType = arrow::Decimal128Array;
     static void Validate(const arrow::Decimal128Array& array) {
         const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array.type());
-        YQL_ENSURE(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
-        YQL_ENSURE(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
+        YQL_ENSURE(static_cast<ui32>(type.precision()) <= NScheme::DECIMAL_MAX_PRECISION, "Unsupported Decimal precision.");
     }
 
     static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::Decimal128Array& array, const ui32 rowIndex) {

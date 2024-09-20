@@ -176,7 +176,7 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     }
 }
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
+bool SetColumnType(Ydb::Type& protoType, const TString& typeName, const TString& paramOne, const TString& paramTwo, bool notNull, TString& error) {
     auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
     if (typeDesc) {
         Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
@@ -186,22 +186,27 @@ void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) 
         pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
         pg->set_typlen(0);
         pg->set_typmod(0);
-        return;
+        return true;
     }
 
     NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
     if (dataSlot == NUdf::EDataSlot::Decimal) {
+        ui32 precision = FromString(paramOne);
+        ui32 scale = FromString(paramTwo);
+        if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
+            error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
+            return false;
+        }
         auto decimal = notNull ? protoType.mutable_decimal_type() :
             protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        // We have no params right now
-        // TODO: Fix decimal params support for kikimr
-        decimal->set_precision(22);
-        decimal->set_scale(9);
+        decimal->set_precision(precision);
+        decimal->set_scale(scale);
     } else {
         auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
         auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
         primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
     }
+    return true;
 }
 
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,

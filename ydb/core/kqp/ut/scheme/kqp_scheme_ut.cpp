@@ -2282,43 +2282,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithDecimalColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(35,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,20),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
 
-        {
+        auto createAndCheck = [&](ui32 precision, ui32 scale) {
+            TString tableName = TStringBuilder() << "/Root/TableWithDecimalColumn" << precision << scale;
+            auto createQuery = TStringBuilder() << Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint64,
+                Value Decimal(%u,%u),
+                PRIMARY KEY (Key)
+            );)", tableName.c_str(), precision, scale);
+            auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+
+            if (precision == 36) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 999) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), " Invalid decimal precision");
+                return;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
             auto tableDesc = describe.GetTableDescription();
             TVector<TTableColumn> columns = tableDesc.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
@@ -2330,9 +2319,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
+        };
+
+        createAndCheck(2, 1);
+        createAndCheck(22, 9);
+        createAndCheck(35, 9);
+        createAndCheck(22, 20);
+        createAndCheck(36, 35);
+        createAndCheck(999, 99);
     }
 
     void AlterTableAddIndex(EIndexTypeSql type) {
@@ -2957,45 +2953,50 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"(
             CREATE TABLE `)" << tableName << R"(` (
                 Key Uint64,
-                Value1 String,
+                Value String,
                 PRIMARY KEY (Key)
             );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(35,9);
-            )";
+
+        auto addColumn = [&] (ui32 precision, ui32 scale) {
+            TString columnName = TStringBuilder() << "Column" << precision << scale;
+            auto query = TStringBuilder() << Sprintf(R"(
+            ALTER TABLE `%s`
+                 ADD COLUMN %s Decimal(%u,%u)
+            )", tableName.c_str(), columnName.c_str(), precision, scale);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,20);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,9);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+
+            if (precision == 36) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 999) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), " Invalid decimal precision");
+                return;
+            }
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
-            TType valueType = columns[2].Type;
+        };
+
+        addColumn(2, 1);
+        addColumn(22, 9);
+        addColumn(35, 9);
+        addColumn(22, 20);
+        addColumn(36, 35);
+        addColumn(999, 99);
+
+        TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        auto tableDesc = describe.GetTableDescription();
+        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 6);
+
+        auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
+            TType valueType = columns[columnIdx].Type;
             TTypeParser parser(valueType);
             auto optionalKind = parser.GetKind();
             UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
@@ -3003,9 +3004,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
+        };
+
+        checkColumn(2, 2, 1);
+        checkColumn(3, 22, 9);
+        checkColumn(4, 35,9);
+        checkColumn(5, 22, 20);
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {

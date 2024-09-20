@@ -161,7 +161,7 @@ namespace NKqp {
             break;
         case NScheme::NTypeIds::Decimal: {
             TTypeBuilder builder;
-            builder.Decimal(TDecimalType(22, 9));
+            builder.Decimal(TDecimalType(TypeInfo.GetDecimalType().GetPrecision(), TypeInfo.GetDecimalType().GetScale()));
             str << builder.Build();
             break;
         }

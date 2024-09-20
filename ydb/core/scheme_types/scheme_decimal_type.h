@@ -15,9 +15,8 @@ public:
         : Precision(precision)
         , Scale(scale)
     {
-        // TODO Uncomment after parametrized decimal in KQP
-        //Y_ABORT_UNLESS(Precision);
-        //Y_ABORT_UNLESS(Scale);
+        Y_ABORT_UNLESS(Precision);
+        Y_ABORT_UNLESS(Scale);
     }
 
     TString CellValueToString(const std::pair<ui64, i64>& cellValue) const;

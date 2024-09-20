@@ -279,16 +279,19 @@ namespace {
         switch (type->GetSlot()) {
         case EDataSlot::Decimal:
             if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
-                if (dataExprParamsType->GetParamOne() != "22") {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal precision \""
-                        << dataExprParamsType->GetParamOne() << "\". Only Decimal(22,9) is supported for table columns");
+                ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
+                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Decimal precision " << precision << " should be less or equal " << NKikimr::NScheme::DECIMAL_MAX_PRECISION);
                     return false;
                 }
-                if (dataExprParamsType->GetParamTwo() != "9") {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal scale \""
-                        << dataExprParamsType->GetParamTwo() << "\". Only Decimal(22,9) is supported for table columns");
+                if (scale > precision) {
+                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() <<"Decimal precision " << precision << " should be greater than scale " << scale);
                     return false;
                 }
+            } else {
+                Y_ABORT("Error dynamic_cast decimal type");
+                return false;
             }
             break;
 
@@ -907,6 +910,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
                 auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
                 columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
+            } else if (actualType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
+                if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(actualType)) {
+                    ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                    ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                    columnMeta.TypeInfo = NKikimr::NScheme::TDecimalType(precision, scale);
+                }
             }
 
             if (columnTuple.Size() > 2) {
@@ -1352,6 +1361,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 ctx.Step.Repeat(TExprStep::ExprEval);
                                 return TStatus(TStatus::Repeat, true);
                             }
+                        }
+                    }
+
+                    if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
+                        auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
+                        columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
+                    } else if (actualType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
+                        if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(actualType)) {
+                            ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                            ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                            columnMeta.TypeInfo = NKikimr::NScheme::TDecimalType(precision, scale);
                         }
                     }
 

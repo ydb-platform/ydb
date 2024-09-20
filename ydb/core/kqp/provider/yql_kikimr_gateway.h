@@ -1075,7 +1075,7 @@ public:
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull);
+bool SetColumnType(Ydb::Type& protoType, const TString& typeName, const TString& paramOne, const TString& paramTwo, bool notNull, TString& error);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);

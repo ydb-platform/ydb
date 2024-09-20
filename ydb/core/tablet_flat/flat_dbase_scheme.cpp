@@ -1,6 +1,7 @@
 #include "flat_dbase_scheme.h"
 
 #include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -32,15 +33,13 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             switch (col.PType.GetTypeId()) {
             case NScheme::NTypeIds::Pg: {
                 NKikimrProto::TTypeInfo typeInfo;
-                typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(col.PType.GetPgTypeDesc()));
-                typeInfo.SetPgTypeMod(col.PTypeMod);
+                NScheme::ProtoFromTypeInfo(col.PType, col.PTypeMod, typeInfo);
                 delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.Null);
                 break;
             }
             case NScheme::NTypeIds::Decimal: {
                 NKikimrProto::TTypeInfo typeInfo;
-                typeInfo.SetDecimalPrecision(col.PType.GetDecimalType().GetPrecision());
-                typeInfo.SetDecimalScale(col.PType.GetDecimalType().GetScale());
+                NScheme::ProtoFromTypeInfo(col.PType, {}, typeInfo);
                 delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.Null);
                 break;
             }

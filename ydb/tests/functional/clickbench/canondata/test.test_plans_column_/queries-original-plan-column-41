@@ -89,22 +89,12 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
+                                                                                "Node Type": "Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                                        "GroupBy": "",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
-                                                                                            }
-                                                                                        ],
-                                                                                        "Name": "Aggregate"
-                                                                                    },
-                                                                                    {
-                                                                                        "Inputs": [
-                                                                                            {
-                                                                                                "InternalOperatorId": 2
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
@@ -270,6 +260,28 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
+                                                                                                    "GroupBy": {
+                                                                                                        "Aggregates": [
+                                                                                                            {
+                                                                                                                "Column": {
+                                                                                                                    "Id": 114
+                                                                                                                },
+                                                                                                                "Function": {
+                                                                                                                    "Id": 2
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "KeyColumns": [
+                                                                                                            {
+                                                                                                                "Id": 44
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 43
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                },
+                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -277,6 +289,9 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 43
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 114
                                                                                                             }
                                                                                                         ]
                                                                                                     }

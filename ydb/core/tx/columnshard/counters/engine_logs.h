@@ -85,17 +85,44 @@ public:
     }
 };
 
+class TIntervalMemoryCounters {
+public:
+    const std::shared_ptr<TValueAggregationClient> MinReadBytes;
+    TIntervalMemoryCounters(const std::shared_ptr<TValueAggregationClient>& minReadBytes)
+        : MinReadBytes(minReadBytes)
+    {
+
+    }
+};
+
+class TPortionsIndexCounters {
+public:
+    const TIntervalMemoryCounters RawBytes;
+    const TIntervalMemoryCounters BlobBytes;
+    TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes)
+        : RawBytes(std::move(rawBytes))
+        , BlobBytes(std::move(blobBytes)) {
+    }
+};
+
 class TGranuleDataCounters {
 private:
     const TDataClassCounters InsertedData;
     const TDataClassCounters CompactedData;
     const TDataClassCounters FullData;
+    const TPortionsIndexCounters PortionsIndexCounters;
+
 public:
-    TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData)
+    const TPortionsIndexCounters& GetPortionsIndexCounters() const {
+        return PortionsIndexCounters;
+    }
+
+    TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData,
+        TPortionsIndexCounters&& portionsIndexCounters)
         : InsertedData(insertedData)
         , CompactedData(compactedData)
         , FullData(fullData)
-    {
+        , PortionsIndexCounters(std::move(portionsIndexCounters)) {
     }
 
     void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
@@ -105,20 +132,60 @@ public:
     }
 };
 
+class TIntervalMemoryAgentCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    const std::shared_ptr<TValueAggregationAgent> ReadBytes;
+public:
+    TIntervalMemoryAgentCounters(const TCommonCountersOwner& base, const TString& memoryType)
+        : TBase(base, "memory", memoryType)
+        , ReadBytes(TBase::GetValueAutoAggregations("Bytes")) {
+    }
+
+    TIntervalMemoryCounters GetClient() const {
+        return TIntervalMemoryCounters(ReadBytes->GetClient());
+    }
+};
+
+class TPortionsIndexAgentsCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    TIntervalMemoryAgentCounters ReadRawBytes;
+    TIntervalMemoryAgentCounters ReadBlobBytes;
+
+public:
+
+    TPortionsIndexAgentsCounters(const TString& baseName)
+        : TBase(baseName)
+        , ReadRawBytes(TBase::CreateSubGroup("control", "read_memory"), "raw")
+        , ReadBlobBytes(TBase::CreateSubGroup("control", "read_memory"), "blob")
+    {
+    }
+
+    TPortionsIndexCounters BuildCounters() const {
+        return TPortionsIndexCounters(ReadRawBytes.GetClient(), ReadBlobBytes.GetClient());
+    }
+};
+
 class TAgentGranuleDataCounters {
 private:
     TAgentDataClassCounters InsertedData;
     TAgentDataClassCounters CompactedData;
     TAgentDataClassCounters FullData;
+    TPortionsIndexAgentsCounters PortionsIndex;
+
 public:
     TAgentGranuleDataCounters(const TString& ownerId)
         : InsertedData(ownerId, "ByGranule/Inserted")
         , CompactedData(ownerId, "ByGranule/Compacted")
-        , FullData(ownerId, "ByGranule/Full") {
+        , FullData(ownerId, "ByGranule/Full")
+        , PortionsIndex("ByGranule/PortionsIndex")
+    {
     }
 
     TGranuleDataCounters RegisterClient() const {
-        return TGranuleDataCounters(InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient());
+        return TGranuleDataCounters(
+            InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient(), PortionsIndex.BuildCounters());
     }
 };
 

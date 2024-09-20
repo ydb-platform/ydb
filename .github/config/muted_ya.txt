@@ -11,8 +11,6 @@ ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDat
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultCountAll_FilterL
-ydb/core/kqp/ut/olap KqpOlapWrite.WriteDeleteCleanGC
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink
@@ -33,10 +31,6 @@ ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.CreateTableAsSelectFromExte
 ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.CreateTableAsSelectFromExternalTable
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/scheme KqpOlap.OlapRead_GenericQuerys
-ydb/core/kqp/ut/scheme KqpOlap.OlapRead_StreamGenericQuery
-ydb/core/kqp/ut/scheme KqpOlap.OlapRead_UsesGenericQueryOnJoinWithDataShardTable
-ydb/core/kqp/ut/scheme KqpOlapScheme.DropTable
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
 ydb/core/kqp/ut/scheme [14/50]*
@@ -122,4 +116,6 @@ ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
+ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
+ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/tests/functional/rename [test_rename.py */10] chunk chunk

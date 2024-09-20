@@ -37,16 +37,16 @@ public:
         auto client = Kikimr->GetQueryClient();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         {
             auto type = IsOlap ? "COLUMN" : "ROW";
             auto result = client.ExecuteQuery(Sprintf(R"(
                 CREATE TABLE `/Root/Test` (
-                    Group Uint32,
-                    Name String,
+                    Group Uint32 not null,
+                    Name String not null,
                     Amount Uint64,
                     Comment String,
                     PRIMARY KEY (Group, Name)
@@ -56,7 +56,7 @@ public:
                 );
 
                 CREATE TABLE `/Root/KV` (
-                    Key Uint32,
+                    Key Uint32 not null,
                     Value String,
                     PRIMARY KEY (Key)
                 ) WITH (
@@ -68,7 +68,7 @@ public:
                 );
 
                 CREATE TABLE `/Root/KV2` (
-                    Key Uint32,
+                    Key Uint32 not null,
                     Value String,
                     PRIMARY KEY (Key)
                 ) WITH (

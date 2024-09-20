@@ -22,8 +22,6 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
-    ydb/core/tx/columnshard/common/tests
-    ydb/core/tx/columnshard/test_helper
     ydb/services/metadata
     ydb/core/tx
     ydb/public/lib/yson_value

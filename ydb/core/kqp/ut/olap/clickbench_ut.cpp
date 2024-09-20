@@ -155,7 +155,6 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            // .SetExpectedReadNodeType("TableFullScan");
         q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
@@ -166,10 +165,9 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY RegionID
                 ORDER BY c DESC
                 LIMIT 10
-            )")
+            )");
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("TableFullScan");
-            // .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            //.SetExpectedReadNodeType("Filter-TableFullScan");
         q9.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q12;
@@ -184,7 +182,6 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             )");
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
-            // .SetExpectedReadNodeType("TableFullScan");
             // .SetExpectedReadNodeType("TableFullScan");
         q12.FillExpectedAggregationGroupByPlanOptions();
 
@@ -201,7 +198,6 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            // .SetExpectedReadNodeType("TableFullScan");
         q14.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q22;
@@ -213,7 +209,8 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY SearchPhrase
                 ORDER BY c DESC
                 LIMIT 10;
-            )");
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter");
         q22.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q39;

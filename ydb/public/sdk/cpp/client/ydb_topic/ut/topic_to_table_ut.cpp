@@ -205,7 +205,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 
 bool TFixture::GetEnablePQConfigTransactionsAtSchemeShard() const
 {
-    return false;
+    return true;
 }
 
 NTable::TSession TFixture::CreateTableSession()

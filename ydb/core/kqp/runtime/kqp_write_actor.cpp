@@ -102,15 +102,13 @@ namespace NKqp {
 struct IKqpTableWriterCallbacks {
     virtual ~IKqpTableWriterCallbacks() = default;
 
+    // Ready to accept writes
     virtual void OnReady(const TTableId& tableId) = 0;
 
+    // EvWrite statuses
     virtual void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) = 0;
-
     virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
-
     virtual void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) = 0;
-
-    //virtual void OnCompleted(ui64 shardId, ui64 dataSize, bool isShardEmpty) = 0;
 
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
@@ -141,8 +139,7 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     };
 
     enum class EMode {
-        UNSPECIFIED,
-        FLUSH,
+        WRITE,
         PREPARE,
         COMMIT,
         IMMEDIATE_COMMIT,
@@ -631,41 +628,36 @@ public:
             }
         }
 
-        if (Mode == EMode::COMMIT) {
-            const auto result = ShardedWriteController->OnMessageAcknowledged(
+        const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-            if (result) {
-                Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
-            }
-        } else {
-            const auto result = ShardedWriteController->OnMessageAcknowledged(
-                ev->Get()->Record.GetOrigin(), ev->Cookie);
-            if (result) {
-                Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), result->DataSize, result->IsShardEmpty);
-            }
+        if (result && (Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT)) {
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
+        } else if (result) {
+            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), result->DataSize, result->IsShardEmpty);
         }
     }
 
     void SetPrepare(ui64 txId) {
+        YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::PREPARE;
         TxId = txId;
-
         // TODO: ShardedWriteController for empty
+        // TODO: other shards from prepareInfo
     }
 
     void SetCommit() {
+        YQL_ENSURE(Mode == EMode::PREPARE);
         Mode = EMode::COMMIT;
-        // TODO: ShardedWriteController for empty
     }
 
     void SetImmediateCommit(ui64 txId) {
+        YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::IMMEDIATE_COMMIT;
         TxId = txId;
         // TODO: ShardedWriteController for empty
     }
 
     void Flush() {
-        Mode = EMode::FLUSH;
         for (const size_t shardId : ShardedWriteController->GetPendingShards()) {
             SendDataToShard(shardId);
         }
@@ -837,7 +829,7 @@ public:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
-    TWriteActorSettings MessageSettings;
+    TWriteActorSettings MessageSettings; // TODO: fill it
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -857,7 +849,7 @@ public:
 
     TLocksManager LocksManager;
     bool Closed = false;
-    EMode Mode = EMode::UNSPECIFIED;
+    EMode Mode = EMode::WRITE;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -958,6 +950,7 @@ private:
         EgressStats.Resume();
         Y_UNUSED(size);
 
+        YQL_ENSURE(WriteTableActor);
         WriteTableActor->Write(*WriteToken, data);
         if (Closed) {
             WriteTableActor->Close(*WriteToken);

@@ -3032,14 +3032,22 @@ bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const 
         return false;
     }
 
-    const auto precision = FromString<ui8>(GetParamOne());
+    ui8 precision;
+    if (!TryFromString<ui8>(GetParamOne(), precision)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
+        return false;
+    }
 
     if (!precision || precision > 35) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
         return false;
     }
 
-    const auto scale = FromString<ui8>(GetParamTwo());
+    ui8 scale;
+    if (!TryFromString<ui8>(GetParamTwo(), scale)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));
+        return false;
+    }
 
     if (scale > precision) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));

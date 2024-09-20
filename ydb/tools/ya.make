@@ -6,6 +6,7 @@ RECURSE(
     simple_queue
     olap_workload
     statistics_workload
+    stress_tool
     tsserver
     tstool
     ydbd_slice

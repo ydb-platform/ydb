@@ -61,8 +61,8 @@ namespace {
 
     class TLocksManager {
     public:
-        void AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) {
-            Locks[shardId].AddAndCheckLock(lock);
+        bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) {
+            return Locks[shardId].AddAndCheckLock(lock);
         }
 
         const std::optional<NKikimrDataEvents::TLock>& GetLock(ui64 shardId) {
@@ -109,6 +109,8 @@ struct IKqpTableWriterCallbacks {
     virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
 
     virtual void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) = 0;
+
+    //virtual void OnCompleted(ui64 shardId, ui64 dataSize, bool isShardEmpty) = 0;
 
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
@@ -168,11 +170,11 @@ public:
         try {
             ShardedWriteController = CreateShardedWriteController(
                 TShardedWriteControllerSettings {
-                    .MemoryLimitTotal = kInFlightMemoryLimitPerActor,
-                    .MemoryLimitPerMessage = kMemoryLimitPerMessage,
+                    .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                    .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
                     .MaxBatchesPerMessage = (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
                         ? 1
-                        : kMaxBatchesPerMessage),
+                        : MessageSettings.MaxBatchesPerMessage),
                 },
                 TypeEnv,
                 Alloc);
@@ -206,18 +208,14 @@ public:
     }
 
     TVector<ui64> GetShardsIds() const {
-        return (!ShardedWriteController)
-            ? TVector<ui64>()
-            : ShardedWriteController->GetShardsIds();
+        return ShardedWriteController->GetShardsIds();
     }
 
     std::optional<size_t> GetShardsCount() const {
-        return (InconsistentTx || !ShardedWriteController)
+        return InconsistentTx
             ? std::nullopt
             : std::optional<size_t>(ShardedWriteController->GetShardsCount());
     }
-
-    // void Commit(bool immediate) {}
 
     using TWriteToken = IShardedWriteController::TWriteToken;
 
@@ -624,13 +622,13 @@ public:
             }());
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            if (!LocksInfo[ev->Get()->Record.GetOrigin()].AddAndCheckLock(lock)) {
+            if (!LocksManager.AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                 RuntimeError(
                     TStringBuilder() << "Transaction locks invalidated. Table `"
                         << SchemeEntry->TableId.PathId.ToString() << "`.",
                     NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssues{});
-            LocksManager.AddLock(ev->Get()->Record.GetOrigin(), lock);
+            }
         }
 
         if (Mode == EMode::COMMIT) {
@@ -839,6 +837,7 @@ public:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
+    TWriteActorSettings MessageSettings;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -930,7 +929,7 @@ private:
 
     i64 GetFreeSpace() const final {
         return (WriteTableActor && WriteTableActor->IsReady())
-            ? MemoryLimit - GetMemory()
+            ? MessageSettings.InFlightMemoryLimitPerActorBytes - GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
@@ -970,7 +969,7 @@ private:
     void Process() {
         if (GetFreeSpace() <= 0) {
             WaitingForTableActor = true;
-        } else if (WaitingForTableActor && GetFreeSpace() > MemoryLimit / 2) {
+        } else if (WaitingForTableActor && GetFreeSpace() > MessageSettings.InFlightMemoryLimitPerActorBytes / 2) {
             ResumeExecution();
         }
 
@@ -999,51 +998,6 @@ private:
     void PassAway() override {
         WriteTableActor->Terminate();
         TActorBootstrapped<TKqpDirectWriteActor>::PassAway();
-    }
-
-    void Prepare() {
-        YQL_ENSURE(SchemeEntry);
-        ResolveAttempts = 0;
-
-        if (!ShardedWriteController) {
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
-            columnsMetadata.reserve(Settings.GetColumns().size());
-            for (const auto & column : Settings.GetColumns()) {
-                columnsMetadata.push_back(column);
-            }
-
-            try {
-                ShardedWriteController = CreateShardedWriteController(
-                    TShardedWriteControllerSettings {
-                        .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                        .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
-                        .MaxBatchesPerMessage = (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
-                            ? 1
-                            : MessageSettings.MaxBatchesPerMessage),
-                    },
-                    std::move(columnsMetadata),
-                    TypeEnv,
-                    Alloc);
-            } catch (...) {
-                RuntimeError(
-                    CurrentExceptionMessage(),
-                    NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-            }
-        }
-
-        try {
-            if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-                ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
-            } else {
-                ShardedWriteController->OnPartitioningChanged(*SchemeEntry, std::move(*SchemeRequest));
-            }
-            ResumeExecution();
-        } catch (...) {
-            RuntimeError(
-                CurrentExceptionMessage(),
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-        }
-        ProcessBatches();
     }
 
     void ResumeExecution() {
@@ -1097,7 +1051,6 @@ private:
     bool Closed = false;
 
     bool WaitingForTableActor = false;
-    const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
 };
 
 
@@ -1378,12 +1331,12 @@ public:
     i64 GetFreeSpace(TWriteToken token) const {
         auto& info = WriteInfos.at(token.TableId);
         return info.WriteTableActor->IsReady()
-            ? MemoryLimit - info.WriteTableActor->GetMemory()
+            ? MessageSettings.InFlightMemoryLimitPerActorBytes - info.WriteTableActor->GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
     i64 GetTotalFreeSpace() const {
-        return MemoryLimit - GetTotalMemory();
+        return MessageSettings.InFlightMemoryLimitPerActorBytes - GetTotalMemory();
     }
 
     i64 GetTotalMemory() const {
@@ -1433,7 +1386,7 @@ public:
     void Process() {
         if (GetTotalFreeSpace() <= 0) {
             State = EState::WAITING;
-        } else if (State == EState::WAITING && GetTotalFreeSpace() > MemoryLimit / 2) {
+        } else if (State == EState::WAITING && GetTotalFreeSpace() > MessageSettings.InFlightMemoryLimitPerActorBytes / 2) {
             ResumeExecution();
         }
 
@@ -1519,6 +1472,7 @@ public:
 
 private:
     TString LogPrefix;
+    TWriteActorSettings MessageSettings;
 
     const TActorId SessionActorId;
 
@@ -1541,8 +1495,6 @@ private:
 
     EState State;
     THashMap<TTableId, std::deque<TBufferWriteMessage>> DataQueues;
-
-    const i64 MemoryLimit;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -1655,8 +1607,8 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return kMaxForwardedSize - DataSize > 0
-            ? kMaxForwardedSize - DataSize
+        return MessageSettings.MaxForwardedSize - DataSize > 0
+            ? MessageSettings.MaxForwardedSize - DataSize
             : std::numeric_limits<i64>::min();
     }
 
@@ -1704,6 +1656,7 @@ private:
 
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
+    TWriteActorSettings MessageSettings;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;

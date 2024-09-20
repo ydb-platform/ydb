@@ -52,6 +52,13 @@ UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com'
 `Serial8` | $2^63–1$ | `Int64`
 `BigSerial` | $2^63–1$ | `Int64`
 
+При переполнении `Sequence` на вставке будет возвращаться ошибка:
+
+```text
+Error: Failed to get next val for sequence: /dev/test/users/_serial_column_user_id, status: SCHEME_ERROR
+    <main>: Error: sequence [OwnerId: 72075186224037889, LocalPathId: 161] doesn't have any more values available, code: 200503
+```
+
 Отметим, что следующее значение выдаётся генератором до непосредственной вставки в таблицу и уже будет считаться использованным, даже если строка, содержащая это значение, не была успешно вставлена, например, при откате транзакции. Поэтому множество значений такой колонки может содержать пропуски и состоять из нескольких промежутков.
 
 Для таблиц с автоинкрементными колонками поддержаны операции [copy](../../../../reference/ydb-cli/tools-copy.md), [dump](../../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../../reference/ydb-cli/export-import/import-file.md) и [import](../../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../../reference/ydb-cli/export-import/export-s3.md).

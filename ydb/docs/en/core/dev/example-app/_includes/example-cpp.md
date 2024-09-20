@@ -115,7 +115,7 @@ The code snippet below shows how to process query results using the `parser` obj
 
 The given code snippet prints the following text to the console at startup:
 
-```bash
+```text
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
@@ -174,7 +174,7 @@ void SelectWithParams(TQueryClient client) {
 
 The given code snippet prints the following text to the console at startup:
 
-```bash
+```text
 > SelectWithParams:
 Season, title: Season 3, series title: Silicon Valley
 ```
@@ -257,7 +257,7 @@ void StreamQuerySelect(TQueryClient client) {
 
 The given code snippet prints the following text to the console at startup:
 
-```bash
+```text
 > StreamQuery:
 Season, SeriesId: 1, SeasonId: 1, Title: Season 1, Air date: 2006-02-03
 Season, SeriesId: 1, SeasonId: 2, Title: Season 2, Air date: 2007-08-24
@@ -385,7 +385,7 @@ The next step is to create the next query that uses the results of code executio
 
 The given code snippets output the following text to the console at startup:
 
-```bash
+```text
 > MultiStep:
 Episode 1, Season: 5, title: Grow Fast or Die Slow, Air date: Sun Mar 25, 2018
 Episode 2, Season: 5, title: Reorientation, Air date: Sun Apr 01, 2018

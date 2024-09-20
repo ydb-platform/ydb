@@ -10,6 +10,13 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+THashMap<NTopic::EAutoPartitioningStrategy, TString> AutoPartitioningStrategiesStrs = {
+    std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Disabled, "disabled"),
+    std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUp, "up"),
+    std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUpAndDown, "up-and-down"),
+    std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Paused, "paused"),
+};
+
 TCommandScheme::TCommandScheme()
     : TClientCommandTree("scheme", {}, "Scheme service operations")
 {
@@ -365,6 +372,18 @@ int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescrip
     if (!description.GetSupportedCodecs().empty()) {
         Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
     }
+    auto autoPartitioningStrategyIt = NYdb::NConsoleClient::AutoPartitioningStrategiesStrs.find(description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy());
+    if (!autoPartitioningStrategyIt.IsEnd()) {
+        Cout << Endl << "AutoPartitioningStrategy: " << autoPartitioningStrategyIt->second;
+        if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled) {
+            Cout << Endl << "AutoPartitioningMinActivePartitions: " << description.GetPartitioningSettings().GetMinActivePartitions();
+            Cout << Endl << "AutoPartitioningMaxActivePartitions: " << description.GetPartitioningSettings().GetMaxActivePartitions();
+            Cout << Endl << "AutoPartitioningDownUtilizationPercent: " << description.GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent();
+            Cout << Endl << "AutoPartitioningUpUtilizationPercent: " << description.GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent();
+            Cout << Endl << "AutoPartitioningStabilizationWindowSeconds: " << description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds() << Endl;
+        }
+    }
+
     PrintTopicConsumers(description.GetConsumers());
 
     PrintPermissionsIfNeeded(description);

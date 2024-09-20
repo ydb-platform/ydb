@@ -113,7 +113,7 @@ struct IKqpTableWriterCallbacks {
     virtual ~IKqpTableWriterCallbacks() = default;
 
     // Ready to accept writes
-    virtual void OnReady(const TTableId& tableId) = 0;
+    virtual void OnReady() = 0;
 
     // EvWrite statuses
     virtual void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) = 0;
@@ -829,7 +829,7 @@ public:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        Callbacks->OnReady(TableId);
+        Callbacks->OnReady();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -1018,7 +1018,7 @@ private:
         Callbacks->ResumeExecution();
     }
 
-    void OnReady(const TTableId&) override {
+    void OnReady() override {
         Process();
     }
 
@@ -1138,17 +1138,16 @@ public:
         , TypeEnv(*Alloc)
     {
         Alloc->Release();
-        State = EState::WRITING;
     }
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TKqpBufferWriteActor::StateFuncBuf);
+        Become(&TKqpBufferWriteActor::StateFunc);
     }
 
     static constexpr char ActorName[] = "KQP_BUFFER_WRITE_ACTOR";
 
-    STFUNC(StateFuncBuf) {
+    STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
@@ -1165,13 +1164,39 @@ public:
         TWriteToken token;
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
-            token = Open(std::move(*ev->Get()->Settings));
+            auto& settings = *ev->Get()->Settings;
+            if (!WriteInfos.empty()) {
+                AFL_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
+                AFL_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
+                AFL_ENSURE(InconsistentTx == settings.TransactionSettings.InconsistentTx);
+            } else {
+                LockTxId = settings.TransactionSettings.LockTxId;
+                LockNodeId = settings.TransactionSettings.LockNodeId;
+                InconsistentTx = settings.TransactionSettings.InconsistentTx;
+            }
+
+            auto& writeInfo = WriteInfos[settings.TableId];
+            if (!writeInfo.WriteTableActor) {
+                writeInfo.WriteTableActor = new TKqpTableWriteActor(
+                    this,
+                    settings.TableId,
+                    settings.TablePath,
+                    LockTxId,
+                    LockNodeId,
+                    InconsistentTx,
+                    TypeEnv,
+                    Alloc);
+                writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
+            }
+
+            auto cookie = writeInfo.WriteTableActor->Open(settings.OperationType, std::move(settings.Columns));
+            token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;
         }
         
         auto& queue = DataQueues[token.TableId];
-        queue.emplace_back();
+        queue.emplace();
         auto& message = queue.back();
 
         message.Token = token;
@@ -1179,91 +1204,105 @@ public:
         message.Close = ev->Get()->Close;
         message.Data = ev->Get()->Data;
         message.Alloc = ev->Get()->Alloc;
-
-        if (HasWrites) {
-            AFL_ENSURE(LockTxId == ev->Get()->Settings->TransactionSettings.LockTxId);
-            AFL_ENSURE(LockNodeId == ev->Get()->Settings->TransactionSettings.LockNodeId);
-            AFL_ENSURE(InconsistentTx == ev->Get()->Settings->TransactionSettings.InconsistentTx);
-        } else {
-            LockTxId = ev->Get()->Settings->TransactionSettings.LockTxId;
-            LockNodeId = ev->Get()->Settings->TransactionSettings.LockNodeId;
-            InconsistentTx = ev->Get()->Settings->TransactionSettings.InconsistentTx;
-            HasWrites = true;
-        }
         
-        ProcessQueue(token.TableId);
-    }
-
-    void ProcessQueue(const TTableId& tableId) {
-        auto& queue = DataQueues.at(tableId);
-        auto& writeInfo = WriteInfos.at(tableId);
-
-        if (!writeInfo.WriteTableActor->IsReady()) {
-            return;
-        }
-
-        while (!queue.empty()) {
-            auto& message = queue.front();
-
-            if (!message.Data->empty()) {
-                for (const auto& data : *message.Data) {
-                    Write(message.Token, data);
-                }
-            }
-            if (message.Close) {
-                Close(message.Token);
-            }
-
-            auto result = std::make_unique<TEvBufferWriteResult>();
-            result->Token = message.Token;
-
-            // TODO: send ok only when there are free space
-            Send(message.From, result.release());
-
-            {
-                TGuard guard(*message.Alloc);
-                message.Data = nullptr;
-            }
-            queue.pop_front();
-        }
-
         Process();
     }
 
-    TWriteToken Open(TWriteSettings&& settings) {
-        YQL_ENSURE(State == EState::WRITING || State == EState::WAITING);
+    void Process() {
+        ProcessRequestQueue();
+        ProcessWrite();
+        ProcessAckQueue();
+    }
 
-        auto& info = WriteInfos[settings.TableId];
-        if (!info.WriteTableActor) {
-            info.WriteTableActor = new TKqpTableWriteActor(
-                this,
-                settings.TableId,
-                settings.TablePath,
-                LockTxId,
-                LockNodeId,
-                InconsistentTx,
-                TypeEnv,
-                Alloc);
-            info.WriteTableActorId = RegisterWithSameMailbox(info.WriteTableActor);
+    void ProcessRequestQueue() {
+        for (auto& [tableId, queue] : DataQueues) {
+            auto& writeInfo = WriteInfos.at(tableId);
+
+            if (!writeInfo.WriteTableActor->IsReady()) {
+                return;
+            }
+
+            while (!queue.empty()) {
+                auto& message = queue.front();
+
+                if (!message.Data->empty()) {
+                    for (const auto& data : *message.Data) {
+                        writeInfo.WriteTableActor->Write(message.Token.Cookie, data);
+                    }
+                }
+                if (message.Close) {
+                    writeInfo.WriteTableActor->Close(message.Token.Cookie);
+                }
+
+                AckQueue.push(TAckMessage{
+                    .ForwardActorId = message.From,
+                    .Token = message.Token,
+                    .DataSize = 0,
+                });
+
+                {
+                    TGuard guard(*message.Alloc);
+                    message.Data = nullptr;
+                }
+                queue.pop();
+            }
+        }
+    }
+
+    void ProcessAckQueue() {
+        while (!AckQueue.empty()) {
+            const auto& item = AckQueue.front();
+            if (GetTotalFreeSpace() >= item.DataSize) {
+                AckQueue.pop();
+            } else {
+                return;
+            }
+        }
+    }
+
+    void ProcessWrite() {
+        if (GetTotalFreeSpace() <= 0) {
             State = EState::WAITING;
+        } else if (State == EState::WAITING && GetTotalFreeSpace() > MessageSettings.InFlightMemoryLimitPerActorBytes / 2) {
+            ResumeExecution();
         }
 
-        auto writeToken = info.WriteTableActor->Open(settings.OperationType, std::move(settings.Columns));
-        return {settings.TableId, std::move(writeToken)};
-    }
+        const bool needToFlush = (State == EState::WAITING
+            || State == EState::FLUSHING
+            || State == EState::PREPARING
+            || State == EState::COMMITTING
+            || State == EState::ROLLINGBACK);
 
-    void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) {
-        YQL_ENSURE(State == EState::WRITING || State == EState::WAITING);
+        if (needToFlush) {
+            for (auto& [_, info] : WriteInfos) {
+                if (info.WriteTableActor->IsReady()) {
+                    info.WriteTableActor->Flush();
+                }
+            }
+        }
 
-        auto& info = WriteInfos.at(token.TableId);
-        info.WriteTableActor->Write(token.Cookie, data);
-    }
+        bool isFinished = true;
+        for (auto& [_, info] : WriteInfos) {
+            isFinished &= info.WriteTableActor->IsFinished();
+        }
+        if (isFinished) {
+            CA_LOG_D("Write actor finished");
+            switch (State) {
+                case EState::PREPARING:
+                    break;
+                case EState::COMMITTING:
+                    break;
+                case EState::ROLLINGBACK:
+                    break;
+                case EState::FLUSHING:
+                    //OnFlushedCallback();
+                    break;
+                default:
+                    YQL_ENSURE(false);
+            }
 
-    void Close(TWriteToken token) {
-        YQL_ENSURE(State == EState::WRITING || State == EState::WAITING);
-
-        auto& info = WriteInfos.at(token.TableId);
-        info.WriteTableActor->Close(token.Cookie);
+            State = EState::FINISHED;
+        }
     }
 
     THashMap<ui64, NKikimrDataEvents::TLock> GetLocks(TWriteToken token) const {
@@ -1383,7 +1422,7 @@ public:
                     TGuard guard(*message.Alloc);
                     message.Data = nullptr;
                 }
-                queue.pop_front();
+                queue.pop();
             }
         }
         
@@ -1399,58 +1438,13 @@ public:
         PassAway();
     }
 
-    void Process() {
-        if (GetTotalFreeSpace() <= 0) {
-            State = EState::WAITING;
-        } else if (State == EState::WAITING && GetTotalFreeSpace() > MessageSettings.InFlightMemoryLimitPerActorBytes / 2) {
-            ResumeExecution();
-        }
-
-        const bool needToFlush = (State == EState::WAITING
-            || State == EState::FLUSHING
-            || State == EState::PREPARING
-            || State == EState::COMMITTING
-            || State == EState::ROLLINGBACK);
-
-        if (needToFlush) {
-            for (auto& [_, info] : WriteInfos) {
-                if (info.WriteTableActor->IsReady()) {
-                    info.WriteTableActor->Flush();
-                }
-            }
-        }
-
-        bool isFinished = true;
-        for (auto& [_, info] : WriteInfos) {
-            isFinished &= info.WriteTableActor->IsFinished();
-        }
-        if (isFinished) {
-            CA_LOG_D("Write actor finished");
-            switch (State) {
-                case EState::PREPARING:
-                    break;
-                case EState::COMMITTING:
-                    break;
-                case EState::ROLLINGBACK:
-                    break;
-                case EState::FLUSHING:
-                    //OnFlushedCallback();
-                    break;
-                default:
-                    YQL_ENSURE(false);
-            }
-
-            State = EState::FINISHED;
-        }
-    }
-
     void ResumeExecution() {
         CA_LOG_D("Resuming execution.");
         State = EState::WRITING;
     }
 
-    void OnReady(const TTableId& tableId) override {
-        ProcessQueue(tableId);
+    void OnReady() override {
+        Process();
     }
 
     void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) override {
@@ -1477,7 +1471,7 @@ public:
     }
 
     void ReplyErrorAndDie(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) {
-        CA_LOG_E("Error: " << message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString());
+        CA_LOG_E(message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString());
         Send(SessionActorId, new TEvKqpBuffer::TEvError{
             message,
             statusCode,
@@ -1492,7 +1486,6 @@ private:
 
     const TActorId SessionActorId;
 
-    bool HasWrites = false;
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
@@ -1503,14 +1496,19 @@ private:
     struct TWriteInfo {
         TKqpTableWriteActor* WriteTableActor = nullptr;
         TActorId WriteTableActorId;
-
-        THashMap<ui64, std::function<void()>> ResumeExecutionCallbacks;
     };
 
     THashMap<TTableId, TWriteInfo> WriteInfos;
 
     EState State;
-    THashMap<TTableId, std::deque<TBufferWriteMessage>> DataQueues;
+    THashMap<TTableId, std::queue<TBufferWriteMessage>> DataQueues;
+
+    struct TAckMessage {
+        TActorId ForwardActorId;
+        TWriteToken Token;
+        i64 DataSize;
+    };
+    std::queue<TAckMessage> AckQueue;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -1561,6 +1559,11 @@ private:
     }
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
+        EgressStats.Bytes += DataSize;
+        EgressStats.Chunks++;
+        EgressStats.Splits++;
+        EgressStats.Resume();
+
         WriteToken = result->Get()->Token;
         DataSize = 0;
         {
@@ -1605,10 +1608,6 @@ private:
         }
 
         AFL_ENSURE(Send(BufferActorId, ev.release()));
-        EgressStats.Bytes += DataSize;
-        EgressStats.Chunks++;
-        EgressStats.Splits++;
-        EgressStats.Resume();
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};

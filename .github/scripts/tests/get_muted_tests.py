@@ -1,6 +1,7 @@
-import os
 import argparse
 import configparser
+import datetime
+import os
 import posixpath
 import re
 import requests
@@ -54,19 +55,10 @@ class YaMuteCheck:
 
 def get_all_tests(**kwargs):
     print(f'Getting all tests')
-    
+    path_to_save = kwargs.get('path', None)
+    job_id = kwargs.get('job_id', None)
+    branch = kwargs.get('branch', None)
 
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-        )
-        return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
@@ -82,16 +74,46 @@ def get_all_tests(**kwargs):
         table_client = ydb.TableClient(driver, tc_settings)
             
         # geting last date from history
-        tests = f"""
-        select 
-            suite_folder,
-            test_name,
-            full_name,
-            owners,
-            run_timestamp_last
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        if job_id and branch: # extend all tests from main by new tests from pr
+            
+            tests = f"""
+            select * from (
+                select 
+                    suite_folder,
+                    test_name,
+                    full_name
+                    from  `test_results/analytics/testowners`
+                where  
+                    run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
+                    and run_timestamp_last <= Date('{today}') + Interval("P1D")
+                union
+                select distinct
+                    suite_folder,
+                    test_name,
+                    suite_folder || '/' || test_name as full_name
+                from  `test_results/test_runs_column`
+                where
+                    job_id = {job_id} 
+                    and branch = '{branch}'
+            )
+            order by full_name
+            """
+        else: #only all tests from main
+            tests = f"""
+            select 
+                suite_folder,
+                test_name,
+                full_name,
+                owners,
+                run_timestamp_last,
+                Date('{today}') as date
             from  `test_results/analytics/testowners`
-            order by suite_folder,test_name
-        """
+            where  
+                run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
+                and run_timestamp_last <= Date('{today}') + Interval("P1D")
+            order by full_name
+            """
         query = ydb.ScanQuery(tests, {})
         it = table_client.scan_query(query)
         results = []
@@ -102,7 +124,6 @@ def get_all_tests(**kwargs):
             except StopIteration:
                 break
         lines=[]
-        path_to_save = kwargs.get('path', None)
         if path_to_save :
             for row in results: 
                 lines.append(row['suite_folder'] + ' '+ row['test_name'] + '\n')
@@ -117,16 +138,17 @@ def create_tables(pool,  table_path):
     def callee(session):
         session.execute_scheme(f"""
             CREATE table IF NOT EXISTS `{table_path}` (
+                `date` Date NOT NULL,
                 `test_name` Utf8 NOT NULL,
                 `suite_folder` Utf8 NOT NULL,
                 `full_name` Utf8 NOT NULL,
                 `run_timestamp_last` Timestamp NOT NULL,
                 `owners` Utf8,
-                `branch` Utf8,
+                `branch` Utf8 NOT NULL,
                 `is_muted` Uint32 ,
-                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`)
+                PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
             )
-                PARTITION BY HASH(suite_folder,`test_name`)
+                PARTITION BY HASH(date,branch)
                 WITH (STORE = COLUMN)
             """)
 
@@ -137,6 +159,7 @@ def bulk_upsert(table_client, table_path, rows):
     print(f"> bulk upsert: {table_path}")
     column_types = (
         ydb.BulkUpsertColumns()
+        .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
         .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -194,17 +217,6 @@ def write_to_file(text, file):
         f.writelines(text)
 
 def upload_muted_tests(tests):
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-        )
-        return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
@@ -219,7 +231,7 @@ def upload_muted_tests(tests):
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
         
-        table_path = f'test_results/analytics/all_tests_with_owner_and_mute'
+        table_path = f'test_results/all_tests_with_owner_and_mute'
         
         with ydb.SessionPool(driver) as pool:
             create_tables(pool, table_path)
@@ -239,7 +251,21 @@ def get_mute_details(args):
         download_file(use_all_tests_s3_file, all_tests_file)
         all_tests = read_file(os.path.join(repo_path,all_tests_file))
     else:
-        all_tests= get_all_tests(path=all_tests_file)
+        if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+            print(
+                "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
+            )
+            return 1
+        else:
+            # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
+            # So, set up it locally
+            os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
+                "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+            ]
+        if args.job_id and args.branch_id:
+            all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch_id)
+        else:
+            all_tests= get_all_tests(path=all_tests_file)
 
     if all_tests == 1:
         return 1
@@ -298,7 +324,8 @@ def get_mute_details(args):
             testcase = test[1]
             if mute_check(testsuite, testcase):
                 removed_muted_tests.append(testsuite + ' '+ testcase + '\n')
-            
+        
+        # geting only uniq items in both lists because not uniq items= this tests was muted before    
         added_set = set(added_muted_tests)
         removed_set = set(removed_muted_tests)
         added_unique = added_set - removed_set
@@ -314,21 +341,20 @@ def get_mute_details(args):
         print(f"Added lines have been written to {added_lines_file}.")
         print(f"Removed lines have been written to {removed_lines_file}.")
         
-    else:
-        print(f'Unknown mode {args.mode}')
-        
-    
-    
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
-    parser.add_argument('--mode', default='get_mute_details',choices=['upload_muted_tests','get_mute_details'], 
+    parser.add_argument('--mode', default='upload_muted_tests',choices=['upload_muted_tests','get_mute_details'], 
                         type=str, help='choose mode upload_muted or get_mute_details')
     parser.add_argument('--output_folder', type=str, default=repo_path + '.github/config/mute_info/'  , 
                         help=f'The folder to output results. Default is the value of repo_path = {repo_path}.github/config/mute_info/.')
     parser.add_argument('--use_all_tests_s3_file', action='store_true', 
                         help='pass s3 file url to use it as all test base')
+    parser.add_argument('--branch', action='store_true', 
+                        help='pass branch to extend list of tests by new tests from this pr (by job-id of PR-check branch)')
+    parser.add_argument('--job-id', action='store_true', 
+                    help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')    
     args = parser.parse_args()
 
     get_mute_details(args)

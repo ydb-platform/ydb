@@ -544,7 +544,7 @@ class KikimrConfigGenerator(object):
             writer.write(yaml.safe_dump(self.yaml_config))
 
     def clone_grpc_as_ext_endpoint(self, port):
-        cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config']);
+        cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])
         if 'ext_endpoints' in cur_grpc_config:
             del cur_grpc_config['ext_endpoints']
 

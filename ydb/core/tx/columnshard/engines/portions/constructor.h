@@ -31,10 +31,14 @@ private:
 
     class TAddressBlobId {
     private:
-        YDB_READONLY_DEF(TChunkAddress, Address);
+        TChunkAddress Address;
         YDB_READONLY(TBlobRangeLink16::TLinkId, BlobIdx, 0);
 
     public:
+        const TChunkAddress& GetAddress() const {
+            return Address;
+        }
+
         TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
             : Address(address)
             , BlobIdx(blobIdx)
@@ -269,7 +273,7 @@ public:
             CheckChunksOrder(Indexes);
         }
         {
-            auto pred = [](const TIndexChunk& l, const TIndexChunk& r) {
+            auto pred = [](const TAddressBlobId& l, const TAddressBlobId& r) {
                 return l.GetAddress() < r.GetAddress();
             };
             std::sort(BlobIdxs.begin(), BlobIdxs.end(), pred);

@@ -87,7 +87,7 @@ See the command description to run the load:
 ### ClickBench-specific options { #run_clickbench_options }
 
 Name | Description | Default value
----|---
+---|---|---
 `--ext-queries <queries>` or `-q <queries>` | External queries to execute during the load, separated by semicolons. |
 `--ext-queries-file <name>` | Name of the file containing external queries to execute during the load, separated by semicolons. |
 `--ext-query-dir <name>` | Directory containing external queries for the load. Queries should be in files named `q[0-42].sql`. |

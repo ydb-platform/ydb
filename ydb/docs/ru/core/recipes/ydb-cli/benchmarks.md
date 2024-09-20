@@ -45,18 +45,18 @@
 Также можно указать, что перед созданием таблицы должны быть удалены, если они уже созданы. Параметра `--clear`
 
 Подробнее см. описание команд для каждого бенчмарка:
-[clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
-[tpch init](../../reference/ydb-cli/workload-tpch.md#init)
-[tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
+* [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
+* [tpch init](../../reference/ydb-cli/workload-tpch.md#init)
+* [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
 
 ### Наполнение данными
 
 Наполнение данными выполняется при помощи команды `import`. Данная команда специфична для каждого бенчмарка и её поведение зависит от подкоманд. При этом есть и общие для всех параметры.
 
 Подробное описание см. в соответствующих разделах:
-[clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)
-[tpch import](../../reference/ydb-cli/workload-tpch.md#load)
-[tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
+* [clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)
+* [tpch import](../../reference/ydb-cli/workload-tpch.md#load)
+* [tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
 
 Примеры:
 
@@ -81,9 +81,9 @@
 Команда позволяет выбрать запросы для исполнения, сгенерировать несколько видов отчетов, собрать статистику исполнения и тд.
 
 Подробное описание см. в соответствующих разделах:
-[clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
-[tpch run](../../reference/ydb-cli/workload-tpch.md#run)
-[tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
+* [clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
+* [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
+* [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
 
 ## Очистка {#cleanup}
 
@@ -97,6 +97,6 @@
 ```
 
 Подробное описание см. в соответствующих разделах:
-[clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
-[tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
-[tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
+* [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
+* [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
+* [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)

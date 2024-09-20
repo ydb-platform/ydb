@@ -15,7 +15,7 @@ All commands support the common `--path` option, which specifies the path to the
 ### Available options {#common_options}
 
 Name | Description | Default value
----|---
+---|---|---
 `--path` or `-p` | Path to the directory with tables. | `/`
 
 ## Initializing a load test { #init }
@@ -82,9 +82,9 @@ See the command description:
 
 ### TPC-H-specific options { #run_tpch_options }
 
-Name | Description
----|---
-`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-23].sql`. No default value.
+Name | Description | Default value
+---|---|---
+`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-23].sql`. |
 
 ## Test data cleaning { #cleanup }
 

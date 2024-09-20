@@ -218,13 +218,7 @@ private:
         const TActorId& workerActorId = ev->Sender;
 
         TRequest* request = GetRequestSafe(sessionId);
-        if (!request) {
-            if (ev->Get()->SendResponseOnNotFound) {
-                this->Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
-            }
-            return;
-        }
-        if (request->State == TRequest::EState::Canceling) {
+        if (!request || request->State == TRequest::EState::Canceling) {
             this->Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
             return;
         }

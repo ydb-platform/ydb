@@ -86,7 +86,7 @@ namespace NKikimr::NEvWrite {
 
         auto gPassAway = PassAwayGuard();
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            ExternalController->OnFail(Ydb::StatusIds::INTERNAL_ERROR,
+            ExternalController->OnFail(Ydb::StatusIds::GENERIC_ERROR,
                 TStringBuilder() << "Cannot write data into shard " << ShardId << " in longTx " <<
                 ExternalController->GetLongTxId().ToString());
             return;

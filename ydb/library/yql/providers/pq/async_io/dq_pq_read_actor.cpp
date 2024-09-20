@@ -335,8 +335,6 @@ private:
             ui32 batchItemsEstimatedCount = 0;
             for (auto& event : events) {
                 if (const auto* val = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                    std::cerr << "DataReceivedEvent: " << val->DebugString(true) << "\n"
-                        << "Session: " << val->GetPartitionSession()->DebugString() << "\n";
                     batchItemsEstimatedCount += val->GetMessages().size();
                 }
             }
@@ -539,8 +537,6 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) { }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-            std::cerr << "TStartPartitionSessionEvent: " << event.DebugString(true) << "\n";
-
             const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
             const auto partitionKeyStr = ToString(partitionKey);
 

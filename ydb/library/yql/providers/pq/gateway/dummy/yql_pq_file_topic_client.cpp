@@ -27,7 +27,6 @@ public:
 
     TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block) {
         with_lock(Mutex_) {
-            Cerr << "Pop blocking" << Endl;
             if (block) {
                 CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
 
@@ -35,15 +34,12 @@ public:
                 Events_.pop_front();
                 return front;
             } else {
-                Cerr << "Pop nonblocking" << Endl;
                 if (!CanPopPredicate()) {
-                    Cerr << "can't pop, returning" << Endl;
                     return {};
                 }
 
                 auto front = Events_.front();
                 Events_.pop_front();
-                Cerr << "Popped event" << Endl;
                 return front;
             }
         }
@@ -173,10 +169,8 @@ private:
 
             while (size_t read = fi.ReadLine(rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
-                Cerr << "Read message: " << read << Endl;
                 MsgOffset_++;
             }
-            Cerr << "Got " << msgs.size() << "msgs" << Endl;
             if (!msgs.empty()) {
                 EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_));
             }

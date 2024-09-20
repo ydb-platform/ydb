@@ -7,8 +7,6 @@ SRCS(
 PEERDIR(
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/public/purecalc/common
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

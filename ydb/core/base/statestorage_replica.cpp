@@ -104,6 +104,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
                 }
             }
         } else {
+            // FIXME: change to NODATA in a future version
             msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::ERROR));
         }
         msg->Record.SetCookie(cookie);

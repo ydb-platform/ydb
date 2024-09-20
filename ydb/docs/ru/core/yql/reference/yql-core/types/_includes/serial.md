@@ -56,7 +56,7 @@ UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com'
 
 ```text
 Error: Failed to get next val for sequence: /dev/test/users/_serial_column_user_id, status: SCHEME_ERROR
-    <main>: Error: sequence [OwnerId: 72075186224037889, LocalPathId: 161] doesn't have any more values available, code: 200503
+    <main>: Error: sequence [OwnerId: <some>, LocalPathId: <some>] doesn't have any more values available, code: 200503
 ```
 
 Отметим, что следующее значение выдаётся генератором до непосредственной вставки в таблицу и уже будет считаться использованным, даже если строка, содержащая это значение, не была успешно вставлена, например, при откате транзакции. Поэтому множество значений такой колонки может содержать пропуски и состоять из нескольких промежутков.

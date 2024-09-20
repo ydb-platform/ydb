@@ -164,6 +164,9 @@ namespace NKikimr {
                 case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
                     break;
+                case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+                    break;
                 default:
                     *code = Ydb::StatusIds::BAD_REQUEST;
                     *error = TStringBuilder()

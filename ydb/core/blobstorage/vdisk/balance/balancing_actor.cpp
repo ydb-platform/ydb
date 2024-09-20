@@ -130,7 +130,7 @@ namespace NBalancing {
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
                 if (cnt % 100 == 99 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     // actor should not block the thread for a long time, so we should yield
-                    // STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
                 }
@@ -197,6 +197,7 @@ namespace NBalancing {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
                 PassAway();
+                return;
             }
 
             if (BatchManager.IsBatchCompleted()) {
@@ -242,8 +243,8 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
             if (ev.Get()->Type == TEvReplToken::EventType) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
-                ScheduleJobQuant();
+                STLOG(PRI_ERROR, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
+                ContinueBalancing();
             }
         }
 

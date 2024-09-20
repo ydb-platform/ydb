@@ -51,13 +51,13 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqp
 };
 
 struct TEvCleanupRequest : public NActors::TEventLocal<TEvCleanupRequest, TKqpWorkloadServiceEvents::EvCleanupRequest> {
-    TEvCleanupRequest(const TString& database, const TString& sessionId, const TString& poolId, TDuration duration, TDuration cpuConsumed, bool sendResponseOnNotfound = true)
+    TEvCleanupRequest(const TString& database, const TString& sessionId, const TString& poolId, TDuration duration, TDuration cpuConsumed, bool sendResponseOnNotFound = true)
         : Database(database)
         , SessionId(sessionId)
         , PoolId(poolId)
         , Duration(duration)
         , CpuConsumed(cpuConsumed)
-        , SendResponseOnNotfound(sendResponseOnNotfound)
+        , sendResponseOnNotFound(sendResponseOnNotFound)
     {}
 
     const TString Database;
@@ -65,7 +65,7 @@ struct TEvCleanupRequest : public NActors::TEventLocal<TEvCleanupRequest, TKqpWo
     const TString PoolId;
     const TDuration Duration;
     const TDuration CpuConsumed;
-    const bool SendResponseOnNotfound;
+    const bool sendResponseOnNotFound;
 };
 
 struct TEvCleanupResponse : public NActors::TEventLocal<TEvCleanupResponse, TKqpWorkloadServiceEvents::EvCleanupResponse> {

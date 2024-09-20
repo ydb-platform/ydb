@@ -20,6 +20,7 @@ struct TDatabaseState {
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
     std::unordered_set<TString> PendingSessionIds = {};
+    std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests = {};
     std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
@@ -85,6 +86,14 @@ struct TDatabaseState {
         StartPendingRequests();
     }
 
+    void RemovePendingSession(const TString& sessionId, std::function<void(TEvCleanupRequest::TPtr)> callback) {
+        for (auto& event : PendingCancelRequests[sessionId]) {
+            callback(std::move(event));
+        }
+        PendingCancelRequests.erase(sessionId);
+        PendingSessionIds.erase(sessionId);
+    }
+
 private:
     void StartPendingRequests() {
         if (!EnabledResourcePoolsOnServerless && Serverless) {
@@ -100,7 +109,9 @@ private:
 
     void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         for (const auto& ev : PendingRequersts) {
-            PendingSessionIds.erase(ev->Get()->SessionId);
+            RemovePendingSession(ev->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
+                ActorContext.Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, {NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
+            });
             ActorContext.Send(ev->Sender, new TEvContinueRequest(status, {}, {}, issues));
         }
         PendingRequersts.clear();

@@ -172,7 +172,7 @@ public:
         const TString& sessionId = ev->Get()->SessionId;
         if (GetOrCreateDatabaseState(database)->PendingSessionIds.contains(sessionId)) {
             LOG_D("Finished request with worker actor " << ev->Sender << ", wait for place request, Database: " << database << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
-            PendingCancelRequests[sessionId].emplace_back(std::move(ev));
+            GetOrCreateDatabaseState(database)->PendingCancelRequests[sessionId].emplace_back(std::move(ev));
             return;
         }
 
@@ -260,6 +260,9 @@ private:
 
         const TString& poolId = event->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            GetOrCreateDatabaseState(database)->RemovePendingSession(event->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
+                ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
+            });
             databaseState->PendingSessionIds.erase(event->Get()->SessionId);
             ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
             return;
@@ -278,17 +281,14 @@ private:
         const TString& sessionId = ev->Get()->SessionId;
         LOG_T("Request placed into pool, Database: " << database << ", PoolId: " << poolId << ", SessionId: " << sessionId);
 
-        GetOrCreateDatabaseState(database)->PendingSessionIds.erase(sessionId);
-
         auto poolState = GetPoolState(database, poolId);
-        for (auto& event : PendingCancelRequests[sessionId]) {
+        GetOrCreateDatabaseState(database)->RemovePendingSession(sessionId, [this, poolState](TEvCleanupRequest::TPtr event) {
             if (poolState) {
                 poolState->DoCleanupRequest(std::move(event));
             } else {
-                ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
+                ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
             }
-        }
-        PendingCancelRequests.erase(sessionId);
+        });
 
         if (poolState) {
             poolState->PlaceRequestRunning = false;
@@ -601,7 +601,6 @@ private:
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
     std::unordered_set<TString> PendingHandlers;
-    std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests;
 
     std::unordered_map<TString, TDatabaseState> DatabaseToState;
     std::unordered_map<TString, TPoolState> PoolIdToState;

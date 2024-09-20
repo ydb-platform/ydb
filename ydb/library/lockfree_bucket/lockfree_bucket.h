@@ -47,8 +47,11 @@ public:
         Y_DEBUG_ABORT_UNLESS(minTokens <= maxTokens);
 
         while (true) {
-            i64 newTokens = currentTokens - tokens + rawInflow / TTimer::Resolution;
-            newTokens = std::max(std::min(newTokens, maxTokens), minTokens);
+            i64 newTokens = currentTokens + rawInflow / TTimer::Resolution;
+            newTokens = std::min(newTokens, maxTokens);
+            newTokens = newTokens - tokens;
+            newTokens = std::max(newTokens, minTokens);
+
             if (newTokens == currentTokens) {
                 break;
             }

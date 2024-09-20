@@ -1585,7 +1585,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             auto optionalBoolType = builder.Optional()->Item(boolType).Build();
 
             auto args = builder.Args();
-            args->Add(optionalStringType);
+            args->Add(stringType);
             args->Add(optionalBoolType).Name("AlwaysWriteFractionalSeconds");
             args->Done();
             builder.OptionalArgs(1);

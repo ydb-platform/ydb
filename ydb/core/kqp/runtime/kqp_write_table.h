@@ -30,7 +30,10 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns) = 0;
     virtual void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) = 0;
     virtual void Close(TWriteToken token) = 0;
+
     virtual void Close() = 0;
+
+    virtual void AddCoveringMessages() = 0;
 
     virtual TVector<ui64> GetPendingShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;
@@ -39,7 +42,7 @@ public:
     struct TMessageMetadata {
         ui64 Cookie = 0;
         ui64 OperationsCount = 0;
-        bool IsLast = false;
+        //bool IsLast = false;
         bool IsFinal = false;
         ui64 SendAttempts = 0;
     };

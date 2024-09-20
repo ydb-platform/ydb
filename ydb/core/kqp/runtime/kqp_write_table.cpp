@@ -865,8 +865,16 @@ struct TMetadata {
 };
 
 struct TBatchWithMetadata {
-    IShardedWriteController::TWriteToken Token;
-    IPayloadSerializer::IBatchPtr Data;
+    IShardedWriteController::TWriteToken Token = std::numeric_limits<IShardedWriteController::TWriteToken>::max();
+    IPayloadSerializer::IBatchPtr Data = nullptr;
+
+    bool IsCoveringBatch() const {
+        return Data != nullptr;
+    }
+
+    i64 GetMemory() const {
+        return IsCoveringBatch() ? 0 : Data->GetMemory();
+    }
 };
 
 class TShardsInfo {
@@ -902,11 +910,11 @@ public:
             i64 dataSize = 0;
             while (BatchesInFlight < maxCount
                     && BatchesInFlight < Batches.size()
-                    && dataSize + GetBatch(BatchesInFlight).Data->GetMemory() <= maxDataSize) {
-                dataSize += GetBatch(BatchesInFlight).Data->GetMemory();
+                    && dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize) {
+                dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
-            YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).Data->GetMemory() <= maxDataSize); 
+            YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).GetMemory() <= maxDataSize); 
         }
 
         const TBatchWithMetadata& GetBatch(size_t index) const {
@@ -917,7 +925,7 @@ public:
             if (BatchesInFlight != 0 && Cookie == cookie) {
                 ui64 dataSize = 0;
                 for (size_t index = 0; index < BatchesInFlight; ++index) {
-                    dataSize += Batches.front().Data->GetMemory();
+                    dataSize += Batches.front().GetMemory();
                     Batches.pop_front();
                 }
 
@@ -934,7 +942,7 @@ public:
         void PushBatch(TBatchWithMetadata&& batch) {
             YQL_ENSURE(!IsClosed());
             Batches.emplace_back(std::move(batch));
-            Memory += Batches.back().Data->GetMemory();
+            Memory += Batches.back().GetMemory();
         }
 
         ui64 GetCookie() const {
@@ -1155,6 +1163,12 @@ public:
         ShardsInfo.Close();
     }
 
+    void AddCoveringMessages() override {
+        for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
+            shardInfo.PushBatch(TBatchWithMetadata{});
+        }
+    }
+
     TVector<ui64> GetPendingShards() const override {
         return ShardsInfo.GetPendingShards();
     }
@@ -1178,8 +1192,7 @@ public:
         TMessageMetadata meta;
         meta.Cookie = shardInfo.GetCookie();
         meta.OperationsCount = shardInfo.GetBatchesInFlight();
-        meta.IsLast = shardInfo.Size() == shardInfo.GetBatchesInFlight();
-        meta.IsFinal = shardInfo.IsClosed() && meta.IsLast;
+        meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
         meta.SendAttempts = shardInfo.GetSendAttempts();
 
         return meta;
@@ -1195,16 +1208,20 @@ public:
 
         for (size_t index = 0; index < shardInfo.GetBatchesInFlight(); ++index) {
             const auto& inFlightBatch = shardInfo.GetBatch(index);
-            YQL_ENSURE(!inFlightBatch.Data->IsEmpty());
-            result.TotalDataSize += inFlightBatch.Data->GetMemory();
-            const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(evWrite)
-                    .AddDataToPayload(inFlightBatch.Data->SerializeToString());
-            evWrite.AddOperation(
-                WriteInfos.at(inFlightBatch.Token).Metadata.OperationType,
-                WriteInfos.at(inFlightBatch.Token).Metadata.TableId,
-                WriteInfos.at(inFlightBatch.Token).Serializer->GetWriteColumnIds(),
-                payloadIndex,
-                WriteInfos.at(inFlightBatch.Token).Serializer->GetDataFormat());
+            if (inFlightBatch.Data) {
+                YQL_ENSURE(!inFlightBatch.Data->IsEmpty());
+                result.TotalDataSize += inFlightBatch.Data->GetMemory();
+                const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(evWrite)
+                        .AddDataToPayload(inFlightBatch.Data->SerializeToString());
+                evWrite.AddOperation(
+                    WriteInfos.at(inFlightBatch.Token).Metadata.OperationType,
+                    WriteInfos.at(inFlightBatch.Token).Metadata.TableId,
+                    WriteInfos.at(inFlightBatch.Token).Serializer->GetWriteColumnIds(),
+                    payloadIndex,
+                    WriteInfos.at(inFlightBatch.Token).Serializer->GetDataFormat());
+            } else {
+                YQL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());   
+            }
         }
 
         return result;
@@ -1346,6 +1363,9 @@ private:
             for (size_t index = 0; index < shardInfo.Size(); ++index) {
                 const auto& batch = shardInfo.GetBatch(index);
                 const auto& writeInfo = WriteInfos.at(batch.Token);
+                // Resharding supported only for inconsistent write,
+                // so convering empty batches don't exist in this case.
+                YQL_ENSURE(batch.Data);
                 writeInfo.Serializer->AddBatch(batch.Data);
             }
         }

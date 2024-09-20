@@ -641,7 +641,7 @@ public:
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::PREPARE;
         TxId = txId;
-        // TODO: ShardedWriteController for empty
+        ShardedWriteController->AddCoveringMessages();
         // TODO: other shards from prepareInfo
     }
 
@@ -654,7 +654,7 @@ public:
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::IMMEDIATE_COMMIT;
         TxId = txId;
-        // TODO: ShardedWriteController for empty
+        ShardedWriteController->AddCoveringMessages();
     }
 
     void Flush() {
@@ -664,6 +664,8 @@ public:
     }
 
     void SendDataToShard(const ui64 shardId) {
+        YQL_ENSURE(Mode != EMode::COMMIT);
+
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {

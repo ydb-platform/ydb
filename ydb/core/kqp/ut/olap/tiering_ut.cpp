@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         testHelper.ResetTiering("/Root/olapStore/olapTable");
-        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
 
         {
             auto selectQuery = TString(R"(
@@ -139,12 +139,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         {
-            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET description `{"rules": []}`)";
-            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-        }
-
-        {
             const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET defaultColumn ``)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
@@ -155,6 +149,41 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
+    }
+
+    Y_UNIT_TEST(DropTableClearsObjectStorage) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+        const TString tieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
+
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
+        }
+
+        testHelper.SetTiering("/Root/olapStore/olapTable", tieringRule);
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 0);
+
+        {
+            const TString query = R"(
+                DROP TABLE `/Root/olapStore/olapTable`;
+                DROP TABLESTORE `/Root/olapStore`;)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 0);
     }
 }
 

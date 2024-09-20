@@ -177,6 +177,9 @@ void TPartitionHistogramWrapper::Setup(bool isSupportivePartition, std::unique_p
     }
 }
 void TPartitionHistogramWrapper::IncFor(ui64 key, ui64 value) {
+    if (!Inited)
+        return;
+
     if (!IsSupportivePartition) {
         return Histogram->IncFor(key, value);
     }

@@ -170,9 +170,9 @@ namespace NLs {
 
     TCheckFunc HasOwner(const TString& owner);
     TCheckFunc HasRight(const TString& right);
-    TCheckFunc HasNotRight(const TString& right);
+    TCheckFunc HasNoRight(const TString& right);
     TCheckFunc HasEffectiveRight(const TString& right);
-    TCheckFunc HasNotEffectiveRight(const TString& right);
+    TCheckFunc HasNoEffectiveRight(const TString& right);
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);

@@ -168,6 +168,12 @@ public:
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
         const TString& database = ev->Get()->Database;
+        const TString& sessionId = ev->Get()->SessionId;
+        if (GetOrCreateDatabaseState(database)->PendingSessionIds.contains(sessionId)) {
+            PendingCancelRequests[sessionId].emplace_back(std::move(ev));
+            return;
+        }
+
         const TString& poolId = ev->Get()->PoolId;
         auto poolState = GetPoolState(database, poolId);
         if (!poolState) {
@@ -176,7 +182,7 @@ public:
         }
 
         LOG_D("Finished request with worker actor " << ev->Sender << ", Database: " << database << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
-        Send(ev->Forward(poolState->PoolHandler));
+        poolState->DoCleanupRequest(std::move(ev));
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -220,6 +226,7 @@ public:
         hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
         hFunc(TEvPrivate::TEvCpuLoadResponse, Handle);
         hFunc(TEvPrivate::TEvResignPoolHandler, Handle);
+        hFunc(TEvPrivate::TEvStopPoolHandlerResponse, Handle);
     )
 
 private:
@@ -265,9 +272,22 @@ private:
     void Handle(TEvPrivate::TEvPlaceRequestIntoPoolResponse::TPtr& ev) {
         const TString& database = ev->Get()->Database;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Request placed into pool, Database: " << database << ", PoolId: " << poolId);
+        const TString& sessionId = ev->Get()->SessionId;
+        LOG_T("Request placed into pool, Database: " << database << ", PoolId: " << poolId << ", SessionId: " << sessionId);
 
-        if (auto poolState = GetPoolState(database, poolId)) {
+        GetOrCreateDatabaseState(database)->PendingSessionIds.erase(sessionId);
+
+        auto poolState = GetPoolState(database, poolId);
+        for (auto& event : PendingCancelRequests[sessionId]) {
+            if (poolState) {
+                poolState->DoCleanupRequest(std::move(event));
+            } else {
+                ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
+            }
+        }
+        PendingCancelRequests.erase(sessionId);
+
+        if (poolState) {
             poolState->PlaceRequestRunning = false;
             poolState->UpdateHandler();
             poolState->StartPlaceRequest();
@@ -388,6 +408,17 @@ private:
         }
     }
 
+    void Handle(TEvPrivate::TEvStopPoolHandlerResponse::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        LOG_T("Got stop pool handler response, Database: " << database << ", PoolId: " << poolId);
+
+        Counters.ActivePools->Dec();
+        if (auto poolState = GetPoolState(database, poolId)) {
+            poolState->PreviousPoolHandlers.erase(ev->Sender);
+        }
+    }
+
 private:
     void InitializeWorkloadService() {
         if (ServiceInitialized) {
@@ -449,7 +480,6 @@ private:
         }
         for (const auto& poolKey : poolsToDelete) {
             PoolIdToState.erase(poolKey);
-            Counters.ActivePools->Dec();
         }
 
         if (!PoolIdToState.empty()) {
@@ -567,6 +597,7 @@ private:
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
     std::unordered_set<TString> PendingHandlers;
+    std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests;
 
     std::unordered_map<TString, TDatabaseState> DatabaseToState;
     std::unordered_map<TString, TPoolState> PoolIdToState;

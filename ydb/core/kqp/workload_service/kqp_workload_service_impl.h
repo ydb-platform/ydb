@@ -19,6 +19,7 @@ struct TDatabaseState {
     bool& EnabledResourcePoolsOnServerless;
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
+    std::unordered_set<TString> PendingSessionIds = {};
     std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
@@ -38,6 +39,7 @@ struct TDatabaseState {
 
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
         TString database = ev->Get()->Database;
+        PendingSessionIds.emplace(ev->Get()->SessionId);
         PendingRequersts.emplace_back(std::move(ev));
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
@@ -112,6 +114,7 @@ struct TPoolState {
     bool WaitingInitialization = false;
     bool PlaceRequestRunning = false;
     std::optional<TActorId> NewPoolHandler = std::nullopt;
+    std::unordered_set<TActorId> PreviousPoolHandlers = {};
 
     ui64 InFlightRequests = 0;
     TInstant LastUpdateTime = TInstant::Now();
@@ -122,6 +125,7 @@ struct TPoolState {
         }
 
         ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
+        PreviousPoolHandlers.insert(PoolHandler);
         PoolHandler = *NewPoolHandler;
         NewPoolHandler = std::nullopt;
         InFlightRequests = 0;
@@ -142,6 +146,16 @@ struct TPoolState {
         Y_ENSURE(InFlightRequests);
         InFlightRequests--;
         LastUpdateTime = TInstant::Now();
+    }
+
+    void DoCleanupRequest(TEvCleanupRequest::TPtr event) {
+        for (const auto& poolHandler : PreviousPoolHandlers) {
+            ActorContext.Send(poolHandler, new TEvCleanupRequest(
+                event->Get()->Database, event->Get()->SessionId, event->Get()->PoolId,
+                event->Get()->Duration, event->Get()->CpuConsumed, false
+            ));
+        }
+        ActorContext.Send(event->Forward(PoolHandler));
     }
 };
 

@@ -161,6 +161,7 @@ public:
         }
 
         SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvStopPoolHandlerResponse(Database, PoolId));
 
         Counters.OnCleanup(ResetCountersOnStrop);
 
@@ -184,16 +185,16 @@ private:
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
-        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId));
-
         auto event = std::move(ev->Get()->Event);
+        const TString& sessionId = event->Get()->SessionId;
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(Database, PoolId, sessionId));
+
         const TActorId& workerActorId = event->Sender;
         if (!InFlightLimit) {
             this->Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::PRECONDITION_FAILED, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Resource pool " << PoolId << " was disabled due to zero concurrent query limit")}));
             return;
         }
 
-        const TString& sessionId = event->Get()->SessionId;
         if (LocalSessions.contains(sessionId)) {
             this->Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
             return;
@@ -217,7 +218,13 @@ private:
         const TActorId& workerActorId = ev->Sender;
 
         TRequest* request = GetRequestSafe(sessionId);
-        if (!request || request->State == TRequest::EState::Canceling) {
+        if (!request) {
+            if (ev->Get()->SendResponseOnNotfound) {
+                this->Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
+            }
+            return;
+        }
+        if (request->State == TRequest::EState::Canceling) {
             this->Send(workerActorId, new TEvCleanupResponse(Ydb::StatusIds::SUCCESS));
             return;
         }

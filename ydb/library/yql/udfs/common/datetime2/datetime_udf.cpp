@@ -1577,12 +1577,18 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
             auto resourceType = builder.Resource(TMResourceName);
             auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
+
             auto stringType = builder.SimpleType<char*>();
             auto optionalStringType = builder.Optional()->Item(stringType).Build();
 
+            auto boolType = builder.SimpleType<bool>();
+            auto optionalBoolType = builder.Optional()->Item(boolType).Build();
+
             auto args = builder.Args();
             args->Add(optionalStringType);
+            args->Add(optionalBoolType).Name("AlwaysWriteFractionalSeconds");
             args->Done();
+            builder.OptionalArgs(1);
             builder.Returns(builder.Callable(1)->Arg(optionalResourceType).Returns(optionalStringType).Build());
 
             if (!typesOnly) {
@@ -1596,7 +1602,11 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
-            return TUnboxedValuePod(new TImpl(args[0], Pos_));
+            bool alwaysWriteFractionalSeconds = false;
+            if (auto val = args[1]) {
+                alwaysWriteFractionalSeconds = val.Get<bool>();
+            }
+            return TUnboxedValuePod(new TImpl(args[0], Pos_, alwaysWriteFractionalSeconds));
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
@@ -1634,9 +1644,10 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 }
             }
 
-            TImpl(const TUnboxedValue& format, TSourcePosition pos)
+            TImpl(const TUnboxedValue& format, TSourcePosition pos, bool alwaysWriteFractionalSeconds = false)
                 : Pos_(pos)
                 , Format_(format)
+                , AlwaysWriteFractionalSeconds_(alwaysWriteFractionalSeconds)
             {
                 const std::string_view formatView(Format_.AsStringRef());
                 auto dataStart = formatView.begin();
@@ -1710,13 +1721,16 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                         break;
                     }
                     case 'S':
-                        Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                        Printers_.emplace_back([alwaysWriteFractional = AlwaysWriteFractionalSeconds_](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                             constexpr size_t size = 2;
-                            if (const auto microsecond = GetMicrosecond(value)) {
+                            if (const auto microsecond = GetMicrosecond(value); microsecond || alwaysWriteFractional) {
                                 out += PrintNDigits<size>::Do(GetSecond(value), out);
                                 *out++ = '.';
                                 constexpr size_t msize = 6;
-                                return size + 1U + PrintNDigits<msize, false>::Do(microsecond, out);
+                                auto addSz = alwaysWriteFractional ?
+                                    PrintNDigits<msize, true>::Do(microsecond, out) :
+                                    PrintNDigits<msize, false>::Do(microsecond, out);
+                                return size + 1U + addSz;
                             }
                             return PrintNDigits<size>::Do(GetSecond(value), out);
                         });
@@ -1823,6 +1837,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         private:
             const TSourcePosition Pos_;
             const TUnboxedValue Format_;
+            bool AlwaysWriteFractionalSeconds_;
             std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_;
 
             size_t ReservedSize_;

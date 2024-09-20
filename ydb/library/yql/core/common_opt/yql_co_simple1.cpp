@@ -3382,7 +3382,7 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
 TExprNode::TPtr RewriteAsHoppingWindow(TExprNode::TPtr node, TExprContext& ctx) {
     const auto aggregate = TCoAggregate(node);
 
-    if (aggregate.Input().Ptr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+    if (!IsPureIsolatedLambda(*aggregate.Ptr())) {
         return nullptr;
     }
 
@@ -5187,6 +5187,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto hopping = RewriteAsHoppingWindow(node, ctx); hopping) {
+            YQL_CLOG(DEBUG, Core) << "RewriteAggregate";
             return hopping;
         }
 

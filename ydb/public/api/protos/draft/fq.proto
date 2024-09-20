@@ -205,6 +205,10 @@ message ResultSetMeta {
     bool truncated = 3;
 }
 
+message QueryTimeline {
+    string svg = 1; // No validation because generated on server side
+}
+
 message Query {
     QueryMeta meta = 1;
     QueryContent content = 2;
@@ -214,6 +218,7 @@ message Query {
     QueryStatistics statistics = 6;
     repeated ResultSetMeta result_set_meta = 7;
     QueryAst ast = 8;
+    QueryTimeline timeline = 9;
 }
 
 message QueryStatistics {

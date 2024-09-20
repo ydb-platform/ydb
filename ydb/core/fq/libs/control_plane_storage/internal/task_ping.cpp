@@ -285,6 +285,10 @@ TPingTaskParams ConstructHardPingTask(
             internal.set_current_load(request.current_load());
         }
 
+        if (request.timeline()) {
+            internal.set_timeline(request.timeline());
+        }
+
         if (request.flat_stats_size() != 0) {
             internal.clear_statistics();
             auto stats = DeserializeFlatStats(request.flat_stats());

@@ -99,6 +99,16 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
+struct TCommitInfo {
+    struct TShardInfo {
+        TVector<ui64> SendingShards;
+        TVector<ui64> ReceivingShards;
+    };
+
+    ui64 TxId;
+    THashMap<ui64, TShardInfo> ShardIdToInfo;
+};
+
 struct IKqpTableWriterCallbacks {
     virtual ~IKqpTableWriterCallbacks() = default;
 
@@ -637,12 +647,12 @@ public:
         }
     }
 
-    void SetPrepare(ui64 txId) {
+    void SetPrepare(TCommitInfo&& commitInfo) {
         YQL_ENSURE(Mode == EMode::WRITE);
+        YQL_ENSURE(!CommitInfo);
         Mode = EMode::PREPARE;
-        TxId = txId;
+        CommitInfo = std::move(commitInfo);
         ShardedWriteController->AddCoveringMessages();
-        // TODO: other shards from prepareInfo
     }
 
     void SetCommit() {
@@ -650,10 +660,11 @@ public:
         Mode = EMode::COMMIT;
     }
 
-    void SetImmediateCommit(ui64 txId) {
+    void SetImmediateCommit(TCommitInfo&& commitInfo) {
         YQL_ENSURE(Mode == EMode::WRITE);
+        YQL_ENSURE(!CommitInfo);
         Mode = EMode::IMMEDIATE_COMMIT;
-        TxId = txId;
+        CommitInfo = std::move(commitInfo);
         ShardedWriteController->AddCoveringMessages();
     }
 
@@ -692,9 +703,10 @@ public:
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
         if (isImmediateCommit) {
+            YQL_ENSURE(CommitInfo);
             const auto lock = LocksManager.GetLock(shardId);
             if (lock) {
-                evWrite->Record.SetTxId(TxId);
+                evWrite->Record.SetTxId(CommitInfo->TxId);
                 auto* locks = evWrite->Record.MutableLocks();
                 locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 locks->AddSendingShards(shardId);
@@ -704,12 +716,17 @@ public:
                 }
             }
         } else if (isPrepare) {
-            evWrite->Record.SetTxId(TxId);
+            YQL_ENSURE(CommitInfo);
+            evWrite->Record.SetTxId(CommitInfo->TxId);
             auto* locks = evWrite->Record.MutableLocks();
             locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-            // TODO: other shards from prepareInfo
-            locks->AddSendingShards(shardId);
-            locks->AddReceivingShards(shardId);
+            
+            for (const ui64 sendingShardId : CommitInfo->ShardIdToInfo.at(shardId).SendingShards) {
+                locks->AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : CommitInfo->ShardIdToInfo.at(shardId).ReceivingShards) {
+                locks->AddReceivingShards(receivingShardId);
+            }
 
             // TODO: multi locks (for tablestore support)
             const auto lock = LocksManager.GetLock(shardId);
@@ -835,7 +852,6 @@ public:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
-    ui64 TxId = 0;
     const TTableId TableId;
     const TString TablePath;
 
@@ -852,6 +868,7 @@ public:
     TLocksManager LocksManager;
     bool Closed = false;
     EMode Mode = EMode::WRITE;
+    std::optional<TCommitInfo> CommitInfo;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -1285,7 +1302,9 @@ public:
         State = EState::PREPARING;
         // OnPreparedCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetPrepare(prepareSettings.TxId);
+            TCommitInfo commitInfo;
+            commitInfo.TxId = prepareSettings.TxId;
+            info.WriteTableActor->SetPrepare(std::move(commitInfo));
         }
         Close();
         Process();
@@ -1305,7 +1324,9 @@ public:
         State = EState::COMMITTING;
         //OnCommitCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetImmediateCommit(txId);
+            TCommitInfo commitInfo;
+            commitInfo.TxId = txId;
+            info.WriteTableActor->SetImmediateCommit(std::move(commitInfo));
         }
         Close();
         Process();

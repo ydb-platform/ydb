@@ -42,7 +42,6 @@ public:
     struct TMessageMetadata {
         ui64 Cookie = 0;
         ui64 OperationsCount = 0;
-        //bool IsLast = false;
         bool IsFinal = false;
         ui64 SendAttempts = 0;
     };

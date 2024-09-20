@@ -8535,6 +8535,34 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(TwoSimilarColumnFamilies) {
+        TKikimrRunner runner(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithFamily";
+
+        auto query = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String FAMILY family1,
+                Value2 Uint32 FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "snappy"
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ), 
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "zstd"
+                ))
+                WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

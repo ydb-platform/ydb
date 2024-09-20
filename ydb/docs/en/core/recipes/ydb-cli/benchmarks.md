@@ -8,6 +8,7 @@
 | [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
 | [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
 They all function similarly. For a detailed description of each, refer to the relevant reference via the links above. All commands for working with benchmarks are organized into corresponding groups, and the database path is specified in the same way for all commands:
+
 ```bash
 {{ ydb-cli }} workload clickbench --path path/in/database ...
 {{ ydb-cli }} workload tpch --path path/in/database ...

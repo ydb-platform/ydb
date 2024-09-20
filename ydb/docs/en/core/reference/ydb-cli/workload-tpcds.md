@@ -81,7 +81,7 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-Name | Description | Default value 
+Name | Description | Default value
 ---|---|---
 `--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |
 

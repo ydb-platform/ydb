@@ -3667,9 +3667,9 @@ void TPDisk::Update() {
         InputQueue.ProducedWait(TDuration::MilliSeconds(10));
     }
 
-    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId);
+    auto entireUpdateMs = Mon.UpdateDurationTracker.UpdateEnded();
+    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs );
     UpdateCycleOrbit.Reset();
-    Mon.UpdateDurationTracker.UpdateEnded();
     *Mon.PDiskThreadCPU = ThreadCPUTime();
 }
 

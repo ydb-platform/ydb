@@ -852,13 +852,10 @@
 
   ```c++
     auto tableSession = tableClient.GetSession().GetValueSync().GetSession();
-
     auto transaction = tableSession.BeginTransaction().GetValueSync().GetTransaction();
-
     NYdb::NTopic::TWriteMessage writeMessage("message");
 
     topicSession->Write(std::move(writeMessage), transaction);
-
     transaction.Commit().GetValueSync();
   ```
 

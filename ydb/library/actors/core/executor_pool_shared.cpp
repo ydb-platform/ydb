@@ -143,16 +143,16 @@ void TSharedExecutorPool::GiveHalfThread(i16 from, i16 to) {
 }
 
 void TSharedExecutorPool::GetSharedStats(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {
-    statsCopy.resize(SharedThreadCount);
+    statsCopy.resize(SharedThreadCount + 1);
     for (i16 i = 0; i < SharedThreadCount; ++i) {
-        Threads[i].Thread->GetSharedStats(poolId, statsCopy[i]);
+        Threads[i].Thread->GetSharedStats(poolId, statsCopy[i + 1]);
     }
 }
 
 void TSharedExecutorPool::GetSharedStatsForHarmonizer(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {
-    statsCopy.resize(SharedThreadCount);
+    statsCopy.resize(SharedThreadCount + 1);
     for (i16 i = 0; i < SharedThreadCount; ++i) {
-        Threads[i].Thread->GetSharedStatsForHarmonizer(poolId, statsCopy[i]);
+        Threads[i].Thread->GetSharedStatsForHarmonizer(poolId, statsCopy[i + 1]);
     }
 }
 

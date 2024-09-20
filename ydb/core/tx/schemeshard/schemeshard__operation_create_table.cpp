@@ -447,9 +447,14 @@ public:
 
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
-                    checks.IsInsideTableIndexPath()
-                          .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                          .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                    checks.IsInsideTableIndexPath();
+                    // Not tmp index impl tables can be created only as part of create index
+                    // tmp index impl tables created multiple times during index construction
+                    if (!NTableIndex::IsTmpImplTable(name)) {
+                        checks
+                            .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                            .IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
                 } else if (!Transaction.GetAllowAccessToPrivatePaths()) {
                     checks.IsCommonSensePath()
                           .IsLikeDirectory();

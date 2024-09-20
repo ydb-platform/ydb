@@ -138,6 +138,11 @@ namespace NBalancing {
                 const auto& top = GInfo->GetTopology();
                 const auto& key = It.GetCurKey().LogoBlobID();
 
+                if (BALANCE_ONLY_HUGE_BLOBS && !Ctx->HugeBlobCtx->IsHugeBlob(GInfo->Type, key, Ctx->MinREALHugeBlobInBytes)) {
+                    // skip non huge blobs
+                    continue;
+                }
+
                 TPartsCollectorMerger merger(top.GType);
                 It.PutToMerger(&merger);
 

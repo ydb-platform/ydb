@@ -76,6 +76,8 @@ namespace NBalancing {
     static constexpr ui32 MAX_TO_DELETE_PER_EPOCH = 1000;
     static constexpr TDuration EPOCH_TIMEOUT = TDuration::Minutes(1);
 
+    static constexpr bool BALANCE_ONLY_HUGE_BLOBS = true;
+
 
     struct TEvBalancingSendPartsOnMain : TEventLocal<TEvBalancingSendPartsOnMain, TEvBlobStorage::EvBalancingSendPartsOnMain> {
         TEvBalancingSendPartsOnMain(const TVector<TLogoBlobID>& ids)

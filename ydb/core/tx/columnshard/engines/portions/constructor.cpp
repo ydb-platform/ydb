@@ -35,7 +35,7 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();
         auto itBlobIdx = BlobIdxs.begin();
-        while (itRecord != Records.end() && itIndex != Indexes.end()) {
+        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
             if (itRecord->GetAddress() < itIndex->GetAddress()) {
                 AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
                 itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
@@ -54,11 +54,11 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
                 AFL_VERIFY(false);
             }
         }
-        for (; itRecord != Records.end(); ++itRecord, ++itBlobIdx) {
+        for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
             AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
             itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
         }
-        for (; itIndex != Indexes.end(); ++itIndex) {
+        for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
             if (itIndex->HasBlobData()) {
                 continue;
             }
@@ -66,6 +66,8 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
             itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
             ++itBlobIdx;
         }
+        AFL_VERIFY(itRecord == Records.end());
+        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
     }
 
     result.Indexes = Indexes;

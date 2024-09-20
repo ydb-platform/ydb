@@ -47,6 +47,7 @@ private:
         }
     };
     std::vector<TAddressBlobId> BlobIdxs;
+    bool NeedBlobIdxsSort = false;
 
 public:
     void SetPortionId(const ui64 value) {
@@ -245,6 +246,9 @@ public:
     }
 
     void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
+        if (BlobIdxs.size() && address < BlobIdxs.back().GetAddress()) {
+            NeedBlobIdxsSort = true;
+        }
         BlobIdxs.emplace_back(address, blobIdx);
     }
 
@@ -272,7 +276,7 @@ public:
             std::sort(Indexes.begin(), Indexes.end(), pred);
             CheckChunksOrder(Indexes);
         }
-        {
+        if (NeedBlobIdxsSort) {
             auto pred = [](const TAddressBlobId& l, const TAddressBlobId& r) {
                 return l.GetAddress() < r.GetAddress();
             };

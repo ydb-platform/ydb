@@ -2023,13 +2023,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
     WriteMessagesInTx(0, 1);
 }
 
-Y_UNIT_TEST_F(X, TFixture)
-{
-    CreateTopic("topic");
-    AddConsumer("topic", {"consumer-1"});
-    AddConsumer("topic", {"consumer-2", "consumer-3"});
-}
-
 }
 
 }

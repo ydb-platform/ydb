@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, true);
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
         
         NDump::TClient backupClient(driver);
 

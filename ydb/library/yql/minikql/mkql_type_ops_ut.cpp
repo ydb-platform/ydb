@@ -95,9 +95,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
     }
 
     Y_UNIT_TEST(SplitMakeTzDate16vs32) {
-        TestSplitMakeTzDate16vs32(0);
-        TestSplitMakeTzDate16vs32(1);
-        // TODO add more timezones
+        TVector<ui16> timezones = {
+            0,   // GMT
+            1,   // Europe/Moscow
+            451, // Europe/London
+            588, // UTC
+        };
+        for (const auto& tz : timezones) {
+            TestSplitMakeTzDate16vs32(tz);
+        }
     }
 
     void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime) {

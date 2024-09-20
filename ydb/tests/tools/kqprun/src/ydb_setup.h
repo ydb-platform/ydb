@@ -70,6 +70,8 @@ public:
 
     void WaitAsyncQueries() const;
 
+    void CloseSessions() const;
+
     void StartTraceOpt() const;
 
     static void StopTraceOpt();

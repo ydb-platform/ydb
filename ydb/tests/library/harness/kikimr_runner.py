@@ -87,7 +87,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
-        self.__binary_path = None
 
     @property
     def cwd(self):

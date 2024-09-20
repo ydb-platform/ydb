@@ -1254,7 +1254,7 @@ TCheckFunc HasRight(const TString& right) {
     };
 }
 
-TCheckFunc HasNotRight(const TString& right) {
+TCheckFunc HasNoRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         CheckRight(record, right, false, true);
     };
@@ -1270,7 +1270,7 @@ TCheckFunc HasEffectiveRight(const TString& right) {
     };
 }
 
-TCheckFunc HasNotEffectiveRight(const TString& right) {
+TCheckFunc HasNoEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         CheckEffectiveRight(record, right, false);
     };

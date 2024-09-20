@@ -3991,9 +3991,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
             NLs::PathExist,
             NLs::HasOwner(userSID),
-            NLs::HasNotRight("+R:alice"),
-            NLs::HasNotRight("+W:alice"),
-            NLs::HasNotRight("+R:bob")
+            NLs::HasNoRight("+R:alice"),
+            NLs::HasNoRight("+W:alice"),
+            NLs::HasNoRight("+R:bob")
         });
     }
 }

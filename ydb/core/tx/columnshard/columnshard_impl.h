@@ -544,6 +544,10 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    const TTablesManager& GetTablesManager() const {
+        return TablesManager;
+    }
+
     bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
         return LongTxWrites.contains(insertWriteId);
     }

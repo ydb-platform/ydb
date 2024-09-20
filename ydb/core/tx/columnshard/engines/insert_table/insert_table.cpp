@@ -57,6 +57,22 @@ TInsertionSummary::TCounters TInsertTable::Commit(
     return counters;
 }
 
+TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data) {
+    TInsertionSummary::TCounters counters;
+    counters.Rows += data.GetMeta().GetNumRows();
+    counters.RawBytes += data.GetMeta().GetRawBytes();
+    counters.Bytes += data.BlobSize();
+
+    AddBlobLink(data.GetBlobRange().BlobId);
+    const ui64 pathId = data.GetPathId();
+    auto& pathInfo = Summary.GetPathInfo(pathId);
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
+    dbTable.Commit(data);
+    pathInfo.AddCommitted(std::move(data));
+
+    return counters;
+}
+
 void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds) {
     Y_ABORT_UNLESS(!writeIds.empty());
 

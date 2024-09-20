@@ -7872,7 +7872,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             csController->WaitCompactions(TDuration::Seconds(5));
         }
 
-        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest`", "[[#];[#];[[42u]];[[43u]]]");
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` ORDER BY value", "[[#];[#];[[42u]];[[43u]]]");
     }
 
     Y_UNIT_TEST(DropThenAddColumn) {

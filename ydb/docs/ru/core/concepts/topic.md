@@ -153,7 +153,7 @@
 
 ## Транзакции с участием топиков {#topic-transactions}
 
-{{ ydb-short-name }} поддерживает работу с топиками в рамках [транзакций](./transactions.md). 
+{{ ydb-short-name }} поддерживает работу с топиками в рамках [транзакций](./transactions.md).
 
 ### Транзакционное чтение из топика {#topic-transactions-read}
 

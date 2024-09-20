@@ -715,6 +715,8 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
 {
     Config = newConfig;
 
+    PQ_LOG_D("Apply new config " << Config.ShortDebugString());
+
     ui32 cacheSize = CACHE_SIZE;
     if (Config.HasCacheSize()) {
         cacheSize = Config.GetCacheSize();

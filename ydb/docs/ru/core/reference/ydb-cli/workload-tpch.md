@@ -90,7 +90,7 @@
 Запустите очистку:
 
 ```bash
-{{ ydb-cli }} workload clickbench  --path clickbench/hits clean
+{{ ydb-cli }} workload tpch --path tpch/s1 clean
 ```
 
 Команда не имеет параметров.

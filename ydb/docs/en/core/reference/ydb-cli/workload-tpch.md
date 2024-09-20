@@ -91,7 +91,7 @@ Name | Description | Default value
 Run cleaning:
 
 ```bash
-{{ ydb-cli }} workload clickbench --path clickbench/hits clean
+{{ ydb-cli }} workload tpch --path tpch/s1 clean
 ```
 
 The command has no parameters.

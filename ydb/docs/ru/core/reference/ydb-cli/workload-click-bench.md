@@ -99,7 +99,7 @@ wget https://datasets.clickhouse.com/hits_compatible/hits.csv.gz
 Запустите очистку:
 
 ```bash
-{{ ydb-cli }} workload clickbench  --path clickbench/hits clean
+{{ ydb-cli }} workload clickbench --path clickbench/hits clean
 ```
 
 Команда не имеет параметров.

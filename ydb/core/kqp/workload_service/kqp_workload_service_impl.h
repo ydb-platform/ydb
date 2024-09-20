@@ -100,6 +100,7 @@ private:
 
     void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         for (const auto& ev : PendingRequersts) {
+            PendingSessionIds.erase(ev->Get()->SessionId);
             ActorContext.Send(ev->Sender, new TEvContinueRequest(status, {}, {}, issues));
         }
         PendingRequersts.clear();

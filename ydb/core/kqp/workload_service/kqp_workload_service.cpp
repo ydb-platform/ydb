@@ -168,13 +168,14 @@ public:
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
         const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
         const TString& sessionId = ev->Get()->SessionId;
         if (GetOrCreateDatabaseState(database)->PendingSessionIds.contains(sessionId)) {
+            LOG_D("Finished request with worker actor " << ev->Sender << ", wait for place request, Database: " << database << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
             PendingCancelRequests[sessionId].emplace_back(std::move(ev));
             return;
         }
 
-        const TString& poolId = ev->Get()->PoolId;
         auto poolState = GetPoolState(database, poolId);
         if (!poolState) {
             ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
@@ -252,12 +253,14 @@ private:
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
         const auto& event = ev->Get()->Event;
         const TString& database = event->Get()->Database;
+        auto databaseState = GetOrCreateDatabaseState(database);
         if (ev->Get()->DefaultPoolCreated) {
-            GetOrCreateDatabaseState(database)->HasDefaultPool = true;
+            databaseState->HasDefaultPool = true;
         }
 
         const TString& poolId = event->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            databaseState->PendingSessionIds.erase(event->Get()->SessionId);
             ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
             return;
         }
@@ -472,7 +475,7 @@ private:
         std::vector<TString> poolsToDelete;
         poolsToDelete.reserve(PoolIdToState.size());
         for (const auto& [poolKey, poolState] : PoolIdToState) {
-            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION) {
+            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION && poolState.PendingRequests.empty()) {
                 CpuQuotaManager->CleanupHandler(poolState.PoolHandler);
                 Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler(true));
                 poolsToDelete.emplace_back(poolKey);
@@ -542,7 +545,8 @@ private:
         Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
     }
 
-    TDatabaseState* GetOrCreateDatabaseState(const TString& database) {
+    TDatabaseState* GetOrCreateDatabaseState(TString database) {
+        database = CanonizePath(database);
         auto databaseIt = DatabaseToState.find(database);
         if (databaseIt != DatabaseToState.end()) {
             return &databaseIt->second;

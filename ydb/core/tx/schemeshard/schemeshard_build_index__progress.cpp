@@ -60,7 +60,7 @@ static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
 }
 
 // return count, parts, step
-static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(TSchemeShard* ss, const TPathId& tableId, const TIndexBuildInfo& buildInfo) {
+static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ASSERT(kmeans.K != 0);
     Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
@@ -78,7 +78,7 @@ static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(TSchemeShard* ss, co
     const auto count = pow(kmeans.K, kmeans.Level + 1);
     ui32 step = 1;
     auto parts = count;
-    auto shards = ss->Tables.at(tableId)->GetShard2PartitionIdx().size();
+    auto shards = tableInfo.GetShard2PartitionIdx().size();
     if (buildInfo.KMeans.Level + 1 == buildInfo.KMeans.Levels || shards <= 1) {
         shards = 1;
         parts = 1;
@@ -324,53 +324,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTmpPropose(
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
-
-    auto path = TPath::Init(buildInfo.TablePathId, ss);
-    auto tableId = path->PathId;
-    path.Dive(buildInfo.IndexName);
-
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
-    modifyScheme.SetWorkingDir(path.PathString());
 
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
-    TString name0 = PostingTable;
-    TString name1 = PostingTable;
-    const char* suffix0 = buildInfo.KMeans.Level % 2 == 0 ? TmpPostingTableSuffix0 : TmpPostingTableSuffix1;
-    const char* suffix1 = buildInfo.KMeans.Level % 2 == 0 ? TmpPostingTableSuffix1 : TmpPostingTableSuffix0;
-    name0.append(suffix0);
-    name1.append(suffix1);
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+    const auto& tableInfo = ss->Tables.at(path->PathId);
+    NTableIndex::TTableColumns implTableColumns;
+    {
+        buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
+        const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
+        NKikimrScheme::EStatus status;
+        TString errStr;
+        Y_ABORT_UNLESS(NTableIndex::CommonCheck(tableInfo, indexDesc, path.DomainInfo()->GetSchemeLimits(), false, implTableColumns, status, errStr));
+        modifyScheme.ClearInitiateIndexBuild();
+    }
 
     // TODO(mbkkt) for levels greater than zero we need to disable split/merge completely
     // For now it's not guranteed, but very likely
     // But lock is really unconvinient approach (needs to store TxId/etc)
     // So maybe best way to do this is specify something in defintion, that will prevent these operations like IsBackup
-
+    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
+    const char* suffix = buildInfo.KMeans.Level % 2 == 0 ? TmpPostingTableSuffix0 : TmpPostingTableSuffix1;
+    op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
-    op = ss->Tables.at(path.Dive(name1)->PathId)->TableDescription;
-    op.ClearPath();
-    op.SetName(name0);
-
-    THashMap<ui32, TString> keyColumns;
-    for (auto& column : *op.MutableColumns()) {
-        column.ClearFamily();
-        column.ClearFamilyName();
-        auto [typeInfo, typeMod] = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(), &column.GetTypeInfo());
-        column.SetType(NScheme::TypeName(typeInfo, typeMod));
-        keyColumns.emplace(column.GetId(), column.GetName());
-    }
-    op.ClearKeyColumnNames();
-    for (auto id : op.GetKeyColumnIds()) {
-        op.AddKeyColumnNames(keyColumns[id]);
-    }
-
-    op.SetSystemColumnNamesAllowed(true);
-    const auto [count, parts, step] = ComputeKMeansBoundaries(ss, tableId, buildInfo);
+    const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
     auto& config = *op.MutablePartitionConfig();
-    config.Clear();
     config.SetShadowData(true);
 
     auto& policy = *config.MutablePartitioningPolicy();

@@ -37,8 +37,8 @@ public:
 
 protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
-    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage = "Found");
+    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx);
+    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx);
 
 private:
     void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);

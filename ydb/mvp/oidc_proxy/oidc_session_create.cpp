@@ -35,7 +35,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
         if (restoreContextResult.IsSuccess()) {
             if (code.Empty()) {
                 LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
-                RetryRequestToProtectedResourceAndDie(ctx, "Empty code");
+                RetryRequestToProtectedResourceAndDie(ctx);
             } else {
                 RequestSessionToken(code, ctx);
             }
@@ -43,7 +43,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
             const auto& restoreSessionStatus = restoreContextResult.Status;
             LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
             if (restoreSessionStatus.IsErrorRetryable) {
-                RetryRequestToProtectedResourceAndDie(ctx, "Cannot restore oidc context");
+                RetryRequestToProtectedResourceAndDie(ctx);
             } else {
                 SendUnknownErrorResponseAndDie(ctx);
             }
@@ -51,7 +51,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
     } else {
         LOG_DEBUG_S(ctx, NMVP::EService::MVP, checkStateResult.ErrorMessage);
         if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
-            RetryRequestToProtectedResourceAndDie(ctx, "Cannot restore oidc context");
+            RetryRequestToProtectedResourceAndDie(ctx);
         } else {
             SendUnknownErrorResponseAndDie(ctx);
         }
@@ -110,15 +110,15 @@ TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString&
     return cookieBuilder;
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx, const TString& responseMessage) {
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx) {
     NHttp::THeadersBuilder responseHeaders;
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx, responseMessage);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx, const TString& responseMessage) {
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
     SetCORS(Request, responseHeaders);
     responseHeaders->Set("Location", Context.GetRequestedAddress());
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", responseMessage, *responseHeaders)));
+    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", "Found", *responseHeaders)));
     Die(ctx);
 }
 

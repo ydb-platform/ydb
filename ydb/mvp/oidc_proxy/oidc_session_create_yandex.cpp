@@ -61,13 +61,13 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
     for (const auto& cookie : response.Getset_cookie_header()) {
         responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx, "Cookie set");
+    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
 }
 
 void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
     if (event->Get()->Status == "400") {
-        RetryRequestToProtectedResourceAndDie(ctx, "Can not create session cookie");
+        RetryRequestToProtectedResourceAndDie(ctx);
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");

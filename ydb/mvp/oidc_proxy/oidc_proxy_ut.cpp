@@ -652,7 +652,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Message, "Cookie set");
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(protectedPageHeaders.Has("Location"));
         redirectStrategy.CheckLocationHeader(protectedPageHeaders.Get("Location"), hostProxy, protectedPage);

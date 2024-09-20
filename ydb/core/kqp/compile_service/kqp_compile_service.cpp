@@ -601,7 +601,7 @@ private:
         const auto& query = ev->Get()->Query;
         LWTRACK(KqpCompileServiceHandleRequest,
             ev->Get()->Orbit,
-            query ? query->UserSid : 0);
+            query ? query->UserSid : "");
 
         try {
             PerformRequest(ev, ctx);
@@ -703,7 +703,7 @@ private:
 
         LWTRACK(KqpCompileServiceEnqueued,
             ev->Get()->Orbit,
-            ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
+            ev->Get()->Query ? ev->Get()->Query->UserSid : "");
 
         TKqpCompileSettings compileSettings(
             request.KeepInCache,
@@ -1130,7 +1130,7 @@ private:
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
             orbit,
-            query ? query->UserSid : 0,
+            query ? query->UserSid : "",
             compileResult->Issues.ToString());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"

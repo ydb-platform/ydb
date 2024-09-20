@@ -1576,13 +1576,20 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             }
 
             auto resourceType = builder.Resource(TMResourceName);
+            auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
+            auto stringType = builder.SimpleType<char*>();
+            auto optionalStringType = builder.Optional()->Item(stringType).Build();
 
-            builder.Args()->Done();
-            builder.Returns(builder.Callable(1)->Arg(builder.SimpleType<char*>()).Returns(resourceType));
+            auto args = builder.Args();
+            args->Add(optionalStringType);
+            args->Done();
+            builder.Returns(builder.Callable(1)->Arg(optionalResourceType).Returns(optionalStringType).Build());
 
             if (!typesOnly) {
                 builder.Implementation(new TFormat(builder.GetSourcePosition()));
             }
+
+            builder.IsStrict();
 
             return true;
         }

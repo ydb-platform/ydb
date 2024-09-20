@@ -1298,6 +1298,16 @@ public:
         return true;
     }
 
+    bool IsEmpty() const override {
+        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
+            const auto& writeInfo = WriteInfos.at(token);
+            if (writeInfo.Serializer && writeInfo.Serializer->IsEmpty()) {
+                return false;
+            }
+        }
+        return ShardsInfo.IsEmpty();
+    }
+
     ui64 GetShardsCount() const override {
         return ShardsInfo.GetShards().size();
     }

@@ -13,6 +13,7 @@ struct TPrepareSettings {
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;
     std::optional<ui64> ArbiterShard;
+    std::optional<ui64> ArbiterColumnShard;
 };
 
 struct TPreparedInfo {

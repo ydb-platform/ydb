@@ -70,6 +70,7 @@ public:
     virtual bool IsAllWritesFinished() const = 0;
 
     virtual bool IsReady() const = 0;
+    virtual bool IsEmpty() const = 0;
 };
 
 using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;

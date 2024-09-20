@@ -99,16 +99,6 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
-struct TCommitInfo {
-    struct TShardInfo {
-        TVector<ui64> SendingShards;
-        TVector<ui64> ReceivingShards;
-    };
-
-    ui64 TxId;
-    THashMap<ui64, TShardInfo> ShardIdToInfo;
-};
-
 struct IKqpTableWriterCallbacks {
     virtual ~IKqpTableWriterCallbacks() = default;
 
@@ -208,6 +198,10 @@ public:
 
     bool IsReady() const {
         return ShardedWriteController->IsReady();
+    }
+
+    bool IsEmpty() const {
+        return ShardedWriteController->IsEmpty();
     }
 
     const THashMap<ui64, TLockInfo>& GetLocks() const {
@@ -647,24 +641,23 @@ public:
         }
     }
 
-    void SetPrepare(TCommitInfo&& commitInfo) {
+    void SetPrepare(const std::shared_ptr<TPrepareSettings>& prepareSettings) {
         YQL_ENSURE(Mode == EMode::WRITE);
-        YQL_ENSURE(!CommitInfo);
         Mode = EMode::PREPARE;
-        CommitInfo = std::move(commitInfo);
+        PrepareSettings = prepareSettings;
         ShardedWriteController->AddCoveringMessages();
     }
 
-    void SetCommit() {
-        YQL_ENSURE(Mode == EMode::PREPARE);
-        Mode = EMode::COMMIT;
-    }
+    //void SetCommit() {
+    //    //TODO: do we need it?
+    //    YQL_ENSURE(Mode == EMode::PREPARE);
+    //    Mode = EMode::COMMIT;
+    //}
 
-    void SetImmediateCommit(TCommitInfo&& commitInfo) {
+    void SetImmediateCommit(ui64 txId) {
         YQL_ENSURE(Mode == EMode::WRITE);
-        YQL_ENSURE(!CommitInfo);
         Mode = EMode::IMMEDIATE_COMMIT;
-        CommitInfo = std::move(commitInfo);
+        PrepareSettings->TxId = txId;
         ShardedWriteController->AddCoveringMessages();
     }
 
@@ -703,10 +696,9 @@ public:
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
         if (isImmediateCommit) {
-            YQL_ENSURE(CommitInfo);
             const auto lock = LocksManager.GetLock(shardId);
             if (lock) {
-                evWrite->Record.SetTxId(CommitInfo->TxId);
+                evWrite->Record.SetTxId(PrepareSettings->TxId);
                 auto* locks = evWrite->Record.MutableLocks();
                 locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 locks->AddSendingShards(shardId);
@@ -716,16 +708,38 @@ public:
                 }
             }
         } else if (isPrepare) {
-            YQL_ENSURE(CommitInfo);
-            evWrite->Record.SetTxId(CommitInfo->TxId);
+            evWrite->Record.SetTxId(PrepareSettings->TxId);
             auto* locks = evWrite->Record.MutableLocks();
             locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
             
-            for (const ui64 sendingShardId : CommitInfo->ShardIdToInfo.at(shardId).SendingShards) {
-                locks->AddSendingShards(sendingShardId);
-            }
-            for (const ui64 receivingShardId : CommitInfo->ShardIdToInfo.at(shardId).ReceivingShards) {
-                locks->AddReceivingShards(receivingShardId);
+            if (!PrepareSettings->ArbiterColumnShard) {
+                for (const ui64 sendingShardId : PrepareSettings->SendingShards) {
+                    locks->AddSendingShards(sendingShardId);
+                }
+                for (const ui64 receivingShardId : PrepareSettings->ReceivingShards) {
+                    locks->AddReceivingShards(receivingShardId);
+                }
+                if (PrepareSettings->ArbiterShard) {
+                    locks->SetArbiterShard(*PrepareSettings->ArbiterShard);
+                }
+            } else if (PrepareSettings->ArbiterColumnShard == shardId) {
+                locks->SetArbiterColumnShard(*PrepareSettings->ArbiterColumnShard);
+                for (const ui64 sendingShardId : PrepareSettings->SendingShards) {
+                    locks->AddSendingShards(sendingShardId);
+                }
+                for (const ui64 receivingShardId : PrepareSettings->ReceivingShards) {
+                    locks->AddReceivingShards(receivingShardId);
+                }
+            } else {
+                locks->SetArbiterColumnShard(*PrepareSettings->ArbiterColumnShard);
+                locks->AddSendingShards(*PrepareSettings->ArbiterColumnShard);
+                locks->AddReceivingShards(*PrepareSettings->ArbiterColumnShard);
+                if (PrepareSettings->SendingShards.contains(shardId)) {
+                    locks->AddSendingShards(shardId);
+                }
+                if (PrepareSettings->ReceivingShards.contains(shardId)) {
+                    locks->AddReceivingShards(shardId);
+                }
             }
 
             // TODO: multi locks (for tablestore support)
@@ -868,7 +882,8 @@ public:
     TLocksManager LocksManager;
     bool Closed = false;
     EMode Mode = EMode::WRITE;
-    std::optional<TCommitInfo> CommitInfo;
+    
+    std::shared_ptr<TPrepareSettings> PrepareSettings;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -1121,13 +1136,11 @@ class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, pub
 
 public:
     enum class EState {
-        WAITING, // Out of memory, wait for free memory. Can't accept any writes in this state.
-        WRITING, // Allow to write data to buffer (there is free memory).
+        WRITING, // Allow to write data to buffer.
         FLUSHING, // Force flush (for uncommitted changes visibility). Can't accept any writes in this state.
         PREPARING, // Do preparation for commit. All writers are closed. New writes wouldn't be accepted.
         COMMITTING, // Do immediate commit (single shard). All writers are closed. New writes wouldn't be accepted.
         ROLLINGBACK, // Do rollback. New writes wouldn't be accepted.
-        FINISHED,
     };
 
 public:
@@ -1261,17 +1274,11 @@ public:
     }
 
     void ProcessWrite() {
-        if (GetTotalFreeSpace() <= 0) {
-            State = EState::WAITING;
-        } else if (State == EState::WAITING && GetTotalFreeSpace() > MessageSettings.InFlightMemoryLimitPerActorBytes / 2) {
-            ResumeExecution();
-        }
-
-        const bool needToFlush = (State == EState::WAITING
+        const bool needToFlush = GetTotalFreeSpace() <= 0
             || State == EState::FLUSHING
             || State == EState::PREPARING
             || State == EState::COMMITTING
-            || State == EState::ROLLINGBACK);
+            || State == EState::ROLLINGBACK;
 
         if (needToFlush) {
             for (auto& [_, info] : WriteInfos) {
@@ -1281,27 +1288,23 @@ public:
             }
         }
 
-        bool isFinished = true;
-        for (auto& [_, info] : WriteInfos) {
-            isFinished &= info.WriteTableActor->IsFinished();
-        }
-        if (isFinished) {
-            CA_LOG_D("Write actor finished");
-            switch (State) {
-                case EState::PREPARING:
-                    break;
-                case EState::COMMITTING:
-                    break;
-                case EState::ROLLINGBACK:
-                    break;
-                case EState::FLUSHING:
-                    //OnFlushedCallback();
-                    break;
-                default:
-                    YQL_ENSURE(false);
+        if (State == EState::PREPARING) {
+            bool isFinished = true;
+            for (auto& [_, info] : WriteInfos) {
+                isFinished &= info.WriteTableActor->IsFinished();
             }
-
-            State = EState::FINISHED;
+            if (isFinished) {
+                OnFinished();
+            }
+        }
+        if (State == EState::FLUSHING) {
+            bool isEmpty = true;
+            for (auto& [_, info] : WriteInfos) {
+                isEmpty &= info.WriteTableActor->IsEmpty();
+            }
+            if (isEmpty) {
+                OnFlushed();
+            }
         }
     }
 
@@ -1329,43 +1332,31 @@ public:
     }
 
     void Flush() {
-        State = EState::FLUSHING;
-        //OnFlushedCallback = callback;
-        Close();
-        Process();
-    }
-
-    void Prepare(TPrepareSettings&& prepareSettings) {
         YQL_ENSURE(State == EState::WRITING);
-        Y_UNUSED(prepareSettings);
+        State = EState::FLUSHING;
+        Process();
+    }
+
+    void Prepare(const std::shared_ptr<TPrepareSettings>& prepareSettings) {
+        YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
-        // OnPreparedCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
-            TCommitInfo commitInfo;
-            commitInfo.TxId = prepareSettings.TxId;
-            info.WriteTableActor->SetPrepare(std::move(commitInfo));
+            info.WriteTableActor->SetPrepare(prepareSettings);
         }
         Close();
         Process();
     }
 
-    void OnCommit() {
-        YQL_ENSURE(State == EState::PREPARING);
-        State = EState::COMMITTING;
-        //OnCommitCallback = std::move(callback);
-        for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetCommit();
-        }
-    }
+    //void OnCommit() {
+    //    YQL_ENSURE(State == EState::PREPARING);
+    //    // TODO: need it?
+    //}
 
     void ImmediateCommit(ui64 txId) {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
-        //OnCommitCallback = std::move(callback);
         for (auto& [_, info] : WriteInfos) {
-            TCommitInfo commitInfo;
-            commitInfo.TxId = txId;
-            info.WriteTableActor->SetImmediateCommit(std::move(commitInfo));
+            info.WriteTableActor->SetImmediateCommit(txId);
         }
         Close();
         Process();
@@ -1377,10 +1368,6 @@ public:
                 info.WriteTableActor->Close();
             }
         }
-    }
-
-    bool IsFinished() const {
-        return State == EState::FINISHED;
     }
 
     i64 GetFreeSpace(TWriteToken token) const {
@@ -1438,11 +1425,6 @@ public:
         PassAway();
     }
 
-    void ResumeExecution() {
-        CA_LOG_D("Resuming execution.");
-        State = EState::WRITING;
-    }
-
     void OnReady() override {
         Process();
     }
@@ -1450,20 +1432,28 @@ public:
     void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) override {
         AFL_ENSURE(State == EState::PREPARING);
         Y_UNUSED(preparedInfo, dataSize);
-        //OnPreparedCallback(std::move(preparedInfo));
+        // TODO: collect info for commit
         Process();
     }
 
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
         AFL_ENSURE(State == EState::COMMITTING);
         Y_UNUSED(shardId, dataSize);
-        //OnCommitCallback(shardId);
-        Process();
+        // TODO: send result
     }
 
     void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
         Y_UNUSED(shardId, dataSize, isShardEmpty);
         Process();
+    }
+
+    void OnFinished() {
+        // TODO: send collected data
+    }
+
+    void OnFlushed() {
+        State = EState::WRITING;
+        // TODO: send ok
     }
 
     void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) override {

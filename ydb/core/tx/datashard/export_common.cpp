@@ -4,6 +4,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NDataShard {
 

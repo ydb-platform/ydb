@@ -87,7 +87,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
     } else {
-        Schedule(GetDeadline(), new TEvents::TEvWakeup);
+        ScheduleWakeup(GetDeadline());
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
@@ -179,7 +179,7 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
     if (TMonotonic::Now() >= GetDeadline()) {
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
-        Schedule(GetDeadline(), new TEvents::TEvWakeup);
+        ScheduleWakeup(GetDeadline());
     }
 }
 
@@ -417,6 +417,12 @@ void TColumnShardScan::ReportStats() {
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvScanStats(Rows, Bytes));
     Rows = 0;
     Bytes = 0;
+}
+
+void TColumnShardScan::ScheduleWakeup(TMonotonic deadline) {
+    if (deadline != TMonotonic::Max()) {
+        Schedule(GetDeadline(), new TEvents::TEvWakeup);
+    }
 }
 
 TMonotonic TColumnShardScan::GetDeadline() const {

@@ -451,8 +451,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         engine.Load(db);
 
         std::vector<TCommittedData> dataToIndex = {
-            TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), (TInsertWriteId)2),
-            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), (TInsertWriteId)1)
+            TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
+            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1)
         };
 
         // write
@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, (TInsertWriteId)txId));
+                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -651,7 +651,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
-            dataToIndex.push_back(TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, (TInsertWriteId)txId));
+            dataToIndex.push_back(
+                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             blobsAll.Merge(std::move(blobs));
@@ -682,7 +683,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
-            dataToIndex.push_back(TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, TInsertWriteId(txId)));
+            dataToIndex.push_back(
+                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -730,7 +732,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 TSnapshot ss(planStep, txId);
                 std::vector<TCommittedData> dataToIndex;
                 dataToIndex.push_back(
-                    TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, TInsertWriteId(txId)));
+                    TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
 
                 bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);

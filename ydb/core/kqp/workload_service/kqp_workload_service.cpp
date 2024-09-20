@@ -260,7 +260,7 @@ private:
 
         const TString& poolId = event->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            GetOrCreateDatabaseState(database)->RemovePendingSession(event->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
+            databaseState->RemovePendingSession(event->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
                 ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
             });
             databaseState->PendingSessionIds.erase(event->Get()->SessionId);

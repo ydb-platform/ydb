@@ -20,7 +20,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
+static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
     switch (state) {
     case TIndexBuildInfo::EState::Invalid:
         return "Invalid";
@@ -57,6 +57,39 @@ constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
     case TIndexBuildInfo::EState::Rejected:
         return "Rejected";
     }
+}
+
+// return count, parts, step
+static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(TSchemeShard* ss, const TPathId& tableId, const TIndexBuildInfo& buildInfo) {
+    const auto& kmeans = buildInfo.KMeans;
+    Y_ASSERT(kmeans.K != 0);
+    Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
+    auto pow = [](ui32 k, ui32 l) {
+        ui32 r = 1;
+        while (l != 0) {
+            if (l % 2 != 0) {
+                r *= k;
+            }
+            k *= k;
+            l /= 2;
+        }
+        return r;
+    };
+    const auto count = pow(kmeans.K, kmeans.Level + 1);
+    ui32 step = 1;
+    auto parts = count;
+    auto shards = ss->Tables.at(tableId)->GetShard2PartitionIdx().size();
+    if (buildInfo.KMeans.Level + 1 == buildInfo.KMeans.Levels || shards <= 1) {
+        shards = 1;
+        parts = 1;
+    }
+    for (; shards < parts; parts /= 2) {
+        step *= 2;
+    }
+    for (; parts < shards / 2; parts *= 2) {
+        Y_ASSERT(step == 1);
+    }
+    return {count, parts, step};
 }
 
 class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
@@ -334,35 +367,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTmpPropose(
     }
 
     op.SetSystemColumnNamesAllowed(true);
-
-    const auto& kmeans = buildInfo.KMeans;
-    Y_ASSERT(kmeans.K != 0);
-    Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
-    auto pow = [](ui32 k, ui32 l) {
-        ui32 r = 1;
-        while (l != 0) {
-            if (l % 2 != 0) {
-                r *= k;
-            }
-            k *= k;
-            l /= 2;
-        }
-        return r;
-    };
-    const auto count = pow(kmeans.K, kmeans.Level + 1);
-    auto step = 1;
-    auto parts = count;
-    auto shards = ss->Tables.at(tableId)->GetShard2PartitionIdx().size();
-    if (buildInfo.KMeans.Level + 1 == buildInfo.KMeans.Levels || shards <= 1) {
-        shards = 1;
-        parts = 1;
-    }
-    for (; shards < parts; parts /= 2) {
-        step *= 2;
-    }
-    for (; parts < shards / 2; parts *= 2) {
-        Y_ASSERT(step == 1);
-    }
+    const auto [count, parts, step] = ComputeKMeansBoundaries(ss, tableId, buildInfo);
 
     auto& config = *op.MutablePartitionConfig();
     config.Clear();
@@ -379,16 +384,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTmpPropose(
     if (parts <= 1) {
         return propose;
     }
-    auto i = kmeans.Parent;
+    auto i = buildInfo.KMeans.Parent;
     for (const auto end = i + count;;) {
         i += step;
         if (i >= end) {
             Y_ASSERT(op.SplitBoundarySize() == std::min(count, parts) - 1);
-            return propose;
+            break;
         }
         auto cell = TCell::Make(i);
         op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
     }
+    return propose;
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(

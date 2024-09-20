@@ -448,7 +448,8 @@ public:
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
-                   // Not tmp index impl tables can be created only as part of create index
+                    // Not tmp index impl tables can be created only as part of create index
+                    // tmp index impl tables created multiple times during index construction
                     if (!NTableIndex::IsTmpImplTable(name)) {
                         checks
                             .IsUnderCreating(NKikimrScheme::StatusNameConflict)

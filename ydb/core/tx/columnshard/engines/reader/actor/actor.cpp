@@ -419,9 +419,9 @@ void TColumnShardScan::ReportStats() {
     Bytes = 0;
 }
 
-void TColumnShardScan::ScheduleWakeup(TMonotonic deadline) {
+void TColumnShardScan::ScheduleWakeup(const TMonotonic deadline) {
     if (deadline != TMonotonic::Max()) {
-        Schedule(GetDeadline(), new TEvents::TEvWakeup);
+        Schedule(deadline, new TEvents::TEvWakeup);
     }
 }
 

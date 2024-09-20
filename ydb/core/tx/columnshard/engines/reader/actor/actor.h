@@ -102,7 +102,7 @@ private:
 
     void ReportStats();
 
-    void ScheduleWakeup(TMonotonic deadline);
+    void ScheduleWakeup(const TMonotonic deadline);
 
     TMonotonic GetDeadline() const;
 

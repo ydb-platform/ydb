@@ -29,7 +29,7 @@ email | name | user_id
 `bob@example.com` | Bob | 2
 `john@example.com` | John | 3
 
-Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной целочисленной колонкой:
+Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной целочисленной колонкой и `Sequence` затрагиваться при таком запросе никак не будет:
 
 ``` yql
 UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com');
@@ -54,4 +54,4 @@ UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com'
 
 Отметим, что следующее значение выдаётся генератором до непосредственной вставки в таблицу и уже будет считаться использованным, даже если строка, содержащая это значение, не была успешно вставлена, например, при откате транзакции. Поэтому множество значений такой колонки может содержать пропуски и состоять из нескольких промежутков.
 
-Для таблиц с автоинкрементными колонками поддержаны операции [копирования](../../../../reference/ydb-cli/tools-copy.md), [dump](../../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../../reference/ydb-cli/export-import/import-file.md).
+Для таблиц с автоинкрементными колонками поддержаны операции [копирования](../../../../reference/ydb-cli/tools-copy.md), [dump](../../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../../reference/ydb-cli/export-import/import-file.md) и [import](../../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../../reference/ydb-cli/export-import/export-s3.md).

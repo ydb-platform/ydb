@@ -113,6 +113,12 @@ TString DyNumberToString(TStringBuf data) {
     return result;
 }
 
+TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
+    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
+    Y_ABORT_UNLESS(pgResult.Error.Empty());
+    return pgResult.Str;
+}
+
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err) {
     Y_UNUSED(err);
     using namespace NYql::NDecimal;
@@ -132,8 +138,8 @@ bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
     return true;
 }
 
-bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err) {
-    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeDesc);
+bool PgToStream(TStringBuf data, const NScheme::TTypeInfo& typeInfo, IOutputStream& out, TString& err) {
+    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
     if (pgResult.Error) {
         err = *pgResult.Error;
         return false;

@@ -130,6 +130,9 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 ExpectedSlotCount = 0;
 
+    // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    ui32 ChunkBaseLimit = 130;
+
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     TControlWrapper MaxCommonLogChunks = 200;
@@ -301,6 +304,8 @@ struct TPDiskConfig : public TThrRefBase {
         str << " OrangeLogChunksMultiplier# " << OrangeLogChunksMultiplier << x;
         str << " WarningLogChunksMultiplier# " << WarningLogChunksMultiplier << x;
         str << " YellowLogChunksMultiplier# " << YellowLogChunksMultiplier << x;
+        str << " MaxMetadataMegabytes# " << MaxMetadataMegabytes << x;
+        str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << "}";
         return str.Str();
     }
@@ -377,6 +382,13 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasChunkBaseLimit()) {
+            ui32 limit = cfg->GetChunkBaseLimit();
+            limit = Min<ui32>(130, limit);
+            limit = Max<ui32>(13, limit);
+            ChunkBaseLimit = limit;
         }
     }
 };

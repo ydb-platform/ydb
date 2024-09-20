@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
+#include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/set.h>
@@ -24,6 +25,7 @@ namespace NSharedCache {
         EvRequest,
         EvResult,
         EvUpdated,
+        EvReplacementPolicySwitch,
 
         EvEnd
 
@@ -126,6 +128,16 @@ namespace NSharedCache {
         };
 
         THashMap<TLogoBlobID, TActions> Actions;
+    };
+
+    struct TEvReplacementPolicySwitch : public TEventLocal<TEvReplacementPolicySwitch, EvReplacementPolicySwitch> {
+        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
+
+        TReplacementPolicy ReplacementPolicy;
+
+        TEvReplacementPolicySwitch(TReplacementPolicy replacementPolicy)
+            : ReplacementPolicy(replacementPolicy)
+        {}
     };
 }
 }

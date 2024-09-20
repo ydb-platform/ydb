@@ -11,7 +11,6 @@ namespace NKikimr {
 class TBlobStorageGroupMirror3of4DiscoverRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 MinGeneration;
-    const TInstant StartTime;
     const TInstant Deadline;
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
@@ -31,7 +30,6 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , MinGeneration(params.Common.Event->MinGeneration)
-        , StartTime(params.Common.Now)
         , Deadline(params.Common.Event->Deadline)
         , ReadBody(params.Common.Event->ReadBody)
         , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)

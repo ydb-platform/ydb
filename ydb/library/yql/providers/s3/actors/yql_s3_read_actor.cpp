@@ -63,6 +63,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -150,6 +151,12 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
+void ThrowParquetNotOk(arrow::Status status) {
+    if (!status.ok()) {
+        throw parquet::ParquetException(status.ToString());
+    }
+}
+
 using namespace NKikimr::NMiniKQL;
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
@@ -167,7 +174,11 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    TString Format, Compression;
+    // It's very important to keep here std::string instead of TString 
+    // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
+    // This behaviour can be found in the getInputFormat call
+    std::string Format;  
+    TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
     std::vector<ui32> ColumnReorder;
@@ -637,8 +648,8 @@ public:
 
         // init the 1st reader, get meta/rg count
         readers.resize(1);
-        THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
-        THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
+        ThrowParquetNotOk(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
+        ThrowParquetNotOk(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
 
         bool hasPredicate = ReadSpec->Predicate.payload_case() != NYql::NConnector::NApi::TPredicate::PayloadCase::PAYLOAD_NOT_SET;
@@ -647,7 +658,7 @@ public:
 
         if (numGroups) {
             std::shared_ptr<arrow::Schema> schema;
-            THROW_ARROW_NOT_OK(readers[0]->GetSchema(&schema));
+            ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
 
@@ -684,17 +695,17 @@ public:
                 // init other readers if any
                 readers.resize(readerCount);
                 for (ui64 i = 1; i < readerCount; i++) {
-                    THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit),
+                    ThrowParquetNotOk(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit),
                                     parquet::default_reader_properties(),
                                     fileMetadata));
-                    THROW_ARROW_NOT_OK(builder.Build(&readers[i]));
+                    ThrowParquetNotOk(builder.Build(&readers[i]));
                 }
             }
 
             for (ui64 i = 0; i < readerCount; i++) {
                 if (!columnIndices.empty()) {
                     CurrentRowGroupIndex = i;
-                    THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
+                    ThrowParquetNotOk(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
                     SourceContext->IncChunkCount();
                 }
                 RowGroupReaderIndex[i] = i;
@@ -736,7 +747,7 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                THROW_ARROW_NOT_OK(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -772,7 +783,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
+                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;
@@ -806,11 +817,11 @@ public:
         properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
-        THROW_ARROW_NOT_OK(builder.Open(arrowFile));
-        THROW_ARROW_NOT_OK(builder.Build(&fileReader));
+        ThrowParquetNotOk(builder.Open(arrowFile));
+        ThrowParquetNotOk(builder.Build(&fileReader));
 
         std::shared_ptr<arrow::Schema> schema;
-        THROW_ARROW_NOT_OK(fileReader->GetSchema(&schema));
+        ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
 
@@ -829,7 +840,7 @@ public:
 
             std::shared_ptr<arrow::Table> table;
             ui64 ingressBytes = IngressBytes;
-            THROW_ARROW_NOT_OK(fileReader->ReadRowGroup(group, columnIndices, &table));
+            ThrowParquetNotOk(fileReader->ReadRowGroup(group, columnIndices, &table));
             ui64 downloadedBytes = IngressBytes - ingressBytes;
             auto reader = std::make_unique<arrow::TableBatchReader>(*table);
 
@@ -965,6 +976,7 @@ public:
                 message = ErrorText;
             }
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
+            FatalCode = StatusFromS3ErrorCode(errorCode);
         }
 
         if (ev->Get()->Issues) {
@@ -1115,7 +1127,7 @@ private:
             DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
         }
 
-        NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
         StartCycleCount = GetCycleCountFast();
 
@@ -1123,7 +1135,7 @@ private:
             if (ReadSpec->Arrow) {
                 if (ReadSpec->Compression) {
                     Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression"));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                 } else {
                     try {
                         if (Url.StartsWith("file://")) {
@@ -1133,7 +1145,7 @@ private:
                         }
                     } catch (const parquet::ParquetException& ex) {
                         Issues.AddIssue(TIssue(ex.what()));
-                        fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                        FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                         RetryStuff->Cancel();
                     }
                 }
@@ -1149,7 +1161,12 @@ private:
                     LOG_CORO_D("S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
                     Issues.AddIssue(TIssue(ex.message()));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    RetryStuff->Cancel();
+                } catch (const TCodeLineException& ex) {
+                    LOG_CORO_D(ex.what());
+                    Issues.AddIssue(ex.GetRawMessage());
+                    FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
                     RetryStuff->Cancel();
                 }
             }
@@ -1162,7 +1179,7 @@ private:
             return;
         } catch (const std::exception& err) {
             Issues.AddIssue(TIssue(err.what()));
-            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+            FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
 
@@ -1170,7 +1187,7 @@ private:
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), FatalCode));
         else
             Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
     }
@@ -1230,6 +1247,7 @@ private:
     bool ServerReturnedError = false;
     TString ErrorText;
     TIssues Issues;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode;
 
     NActors::TActorId DecompressorActorId;
     std::size_t LastOffset = 0;
@@ -1373,12 +1391,7 @@ public:
             DecodedChunkSizeHist,
             HttpInflightSize,
             HttpDataRps,
-            DeferredQueueSize,
-            ReadSpec->Format,
-            ReadSpec->Compression,
-            ReadSpec->ArrowSchema,
-            ReadSpec->RowSpec,
-            ReadSpec->Settings
+            DeferredQueueSize
         );
 
         if (!UseRuntimeListing) {
@@ -1719,7 +1732,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), result->Get()->Record.GetFatalCode()));
     }
 
     void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {

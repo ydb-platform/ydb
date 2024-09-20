@@ -1549,11 +1549,27 @@ private:
 
         NewLine();
         PushCurrentIndent();
-        Visit(msg.GetRule_alter_backup_collection_actions3().GetRule_alter_backup_collection_action1());
-        for (const auto& action : msg.GetRule_alter_backup_collection_actions3().GetBlock2()) {
-            Visit(action.GetToken1()); // comma
-            NewLine();
-            Visit(action.GetRule_alter_backup_collection_action2());
+        switch (msg.GetBlock3().Alt_case()) {
+        case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
+            Visit(msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetRule_alter_backup_collection_action1());
+            for (const auto& action : msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetBlock2()) {
+                Visit(action.GetToken1()); // comma
+                NewLine();
+                Visit(action.GetRule_alter_backup_collection_action2());
+            }
+            break;
+        }
+        case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
+            Visit(msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetRule_alter_backup_collection_entry1());
+            for (const auto& entry : msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetBlock2()) {
+                Visit(entry.GetToken1()); // comma
+                NewLine();
+                Visit(entry.GetRule_alter_backup_collection_entry2());
+            }
+            break;
+        }
+        default:
+            ythrow yexception() << "Alt is not supported";
         }
 
         PopCurrentIndent();
@@ -2872,7 +2888,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -2881,7 +2897,7 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+        auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
         TParsedTokenList allTokens;
         auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
             if (token.Name != "EOF") {
@@ -2935,7 +2951,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -2998,7 +3014,7 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+    auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -3042,6 +3058,7 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
 
 THashSet<TString> GetKeywords() {
     TString grammar;
+    // ANTLR4-MIGRATION: just change SQLv1 to SQLv1Antlr4
     Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;

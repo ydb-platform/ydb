@@ -17,8 +17,6 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <openssl/sha.h>
-
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -44,53 +42,6 @@ static THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryOrderBy"),
     TStringBuf("SubqueryAssumeOrderBy")
 };
-
-class TCacheKeyBuilder {
-public:
-    TString Process(const TExprNode& root) {
-        SHA256_Init(&Sha);
-        unsigned char hash[SHA256_DIGEST_LENGTH];
-        Visit(root);
-        SHA256_Final(hash, &Sha);
-        return TString((const char*)hash, sizeof(hash));
-    }
-
-private:
-    void Visit(const TExprNode& node) {
-        auto [it, inserted] = Visited.emplace(&node, Visited.size());
-        SHA256_Update(&Sha, &it->second, sizeof(it->second));
-        if (!inserted) {
-            return;
-        }
-
-        ui32 type = node.Type();
-        SHA256_Update(&Sha, &type, sizeof(type));
-        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
-            ui32 textLen = node.Content().size();
-            SHA256_Update(&Sha, &textLen, sizeof(textLen));
-            SHA256_Update(&Sha, node.Content().Data(), textLen);
-        }
-
-        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {
-            return;
-        }
-
-        ui32 len = node.ChildrenSize();
-        SHA256_Update(&Sha, &len, sizeof(len));
-        for (const auto& child : node.Children()) {
-            Visit(*child);
-        }
-    }
-
-private:
-    SHA256_CTX Sha;
-    TNodeMap<ui64> Visited;
-};
-
-TString MakeCacheKey(const TExprNode& root) {
-    TCacheKeyBuilder builder;
-    return builder.Process(root);
-}
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
     bool underTypeOf, bool& hasUnresolvedTypes) {
@@ -1022,7 +973,20 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", { clonedArg });
         }
 
+        TString key;
         NYT::TNode ysonNode;
+        if (types.QContext) {
+            key = MakeCacheKey(*clonedArg);
+            if (types.QContext.CanRead()) {
+                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                ysonNode = NYT::NodeFromYsonString(item->Value);
+            }
+        }
+
         do {
             calcProvider.Clear();
             calcWorldRoot.Drop();
@@ -1044,6 +1008,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
+            }
+
+            if (types.QContext.CanRead()) {
+                break;
             }
 
             IDataProvider::TFillSettings fillSettings;
@@ -1080,29 +1048,13 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             delegatedNode->SetTypeAnn(atomType);
             delegatedNode->SetState(TExprNode::EState::ConstrComplete);
-            TString yson;
-            TString key;
-            if (types.QContext) {
-                key = MakeCacheKey(*clonedArg);
+            auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
+            status = SyncTransform(transformer, delegatedNode, ctx);
+            if (status.Level == IGraphTransformer::TStatus::Error) {
+                return nullptr;
             }
 
-            if (types.QContext.CanRead()) {
-                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
-                if (!item) {
-                    throw yexception() << "Missing replay data";
-                }
-
-                yson = item->Value;
-            } else {
-                auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
-                status = SyncTransform(transformer, delegatedNode, ctx);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
-
-                yson = delegatedNode->GetResult().Content();
-            }
-
+            TString yson{delegatedNode->GetResult().Content()};
             ysonNode = NYT::NodeFromYsonString(yson);
             if (ysonNode.HasKey("FallbackProvider")) {
                 nextProvider = ysonNode["FallbackProvider"].AsString();

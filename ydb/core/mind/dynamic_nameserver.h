@@ -11,6 +11,10 @@ namespace NKikimrConfig {
     class TStaticNameserviceConfig;
 } // NKikimrConfig
 
+namespace NKikimrBlobStorage {
+    class TStorageConfig;
+} // NKikimrBlobStorage
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -25,6 +29,7 @@ IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setu
                                 ui32 poolId = 0);
 
 TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrConfig::TStaticNameserviceConfig& nsConfig);
+TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrBlobStorage::TStorageConfig& config);
 
 } // NNodeBroker
 } // NKikimr

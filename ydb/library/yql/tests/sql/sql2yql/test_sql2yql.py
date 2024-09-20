@@ -13,7 +13,8 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
     cmd = [
         SQLRUN_PATH,
         case_file,
-        '--syntax-version=1'
+        '--syntax-version=1',
+        '--test-antlr4',
     ]
 
     if ansi_lexer:

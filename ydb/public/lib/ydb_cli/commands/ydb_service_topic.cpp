@@ -2,9 +2,13 @@
 
 #include "ydb_service_topic.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -300,8 +304,7 @@ namespace {
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
-            .StoreResult(&MaxActivePartitions_)
-            .DefaultValue(1);
+            .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
     }
 
@@ -325,15 +328,18 @@ namespace {
         GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0,
         GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0);
 
-        settings.PartitioningSettings(MinActivePartitions_, MaxActivePartitions_, autoscaleSettings);
+        ui32 finalMaxActivePartitions = MaxActivePartitions_.Defined() ? *MaxActivePartitions_
+                                      : autoscaleSettings.GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled ? MinActivePartitions_ + 50
+                                      : MinActivePartitions_;
+
+        settings.PartitioningSettings(MinActivePartitions_, finalMaxActivePartitions, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
         auto codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        if (!codecs.empty()) {
+            settings.SetSupportedCodecs(codecs);
         }
-        settings.SetSupportedCodecs(codecs);
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());
@@ -488,6 +494,7 @@ namespace {
         : TClientCommandTree("consumer", {}, "Consumer operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerAdd>());
         AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
+        AddCommand(std::make_unique<TCommandTopicConsumerDescribe>());
         AddCommand(std::make_unique<TCommandTopicConsumerOffset>());
     }
 
@@ -538,11 +545,10 @@ namespace {
             consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
         }
 
-        TVector<NTopic::ECodec> codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        auto codecs = GetCodecs();
+        if (!codecs.empty()) {
+            consumerSettings.SetSupportedCodecs(codecs);
         }
-        consumerSettings.SetSupportedCodecs(codecs);
         consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
@@ -592,6 +598,41 @@ namespace {
         return EXIT_SUCCESS;
     }
 
+    TCommandTopicConsumerDescribe::TCommandTopicConsumerDescribe()
+        : TYdbCommand("describe", {}, "Consumer describe operation") {
+    }
+
+    void TCommandTopicConsumerDescribe::Config(TConfig& config) {
+        TYdbCommand::Config(config);
+        config.Opts->AddLongOption("consumer", "Consumer to describe")
+            .Required()
+            .StoreResult(&ConsumerName_);
+        config.Opts->AddLongOption("partition-stats", "Show partition statistics")
+            .StoreTrue(&ShowPartitionStats_);
+        config.Opts->SetFreeArgsNum(1);
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
+    }
+
+    void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
+        TYdbCommand::Parse(config);
+        ParseFormats();
+        ParseTopicName(config, 0);
+    }
+
+    int TCommandTopicConsumerDescribe::Run(TConfig& config) {
+        TDriver driver = CreateDriver(config);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
+        ThrowOnError(consumerDescription);
+
+        return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
+    }
+
+    int TCommandTopicConsumerDescribe::PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const {
+        return PrintPrettyDescribeConsumerResult(description, ShowPartitionStats_);
+    }
 
     TCommandTopicConsumerCommitOffset::TCommandTopicConsumerCommitOffset()
         : TYdbCommand("commit", {}, "Commit offset for consumer") {
@@ -854,7 +895,6 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
-            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }
@@ -867,7 +907,7 @@ namespace {
         Codec_ = ::NYdb::NConsoleClient::ParseCodec(CodecStr_, AllowedCodecs_);
     }
 
-    NTopic::ECodec TCommandWithCodec::GetCodec() const {
+    TMaybe<NTopic::ECodec> TCommandWithCodec::GetCodec() const {
         return Codec_;
     }
 
@@ -883,8 +923,8 @@ namespace {
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
                                     EMessagingFormat::SingleMessage,
-                                    //      EOutputFormat::JsonRawStreamConcat,
-                                    //      EOutputFormat::JsonRawArray,
+                                    //      EDataFormat::JsonRawStreamConcat,
+                                    //      EDataFormat::JsonRawArray,
                                 });
         AddAllowedCodecs(config, AllowedCodecs);
 
@@ -917,7 +957,9 @@ namespace {
 
     NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
         NTopic::TWriteSessionSettings settings;
-        settings.Codec(GetCodec());
+        if (auto codec = GetCodec(); codec.Defined()) {
+            settings.Codec(*codec);
+        }
         settings.Path(TopicName);
 
         if (!MessageGroupId_.Defined()) {

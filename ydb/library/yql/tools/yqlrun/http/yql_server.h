@@ -37,6 +37,7 @@ public:
             ui64 nextUniqueId,
             TUserDataTable filesMapping,
             THolder<TGatewaysConfig>&& gatewaysConfig,
+            const THashSet<TString>& sqlFlags,
             IModuleResolver::TPtr modules,
             IUdfResolver::TPtr udfResolver,
             TFileStoragePtr fileStorage)
@@ -46,6 +47,7 @@ public:
         , NextUniqueId(nextUniqueId)
         , FilesMapping(std::move(filesMapping))
         , GatewaysConfig(std::move(gatewaysConfig))
+        , SqlFlags(sqlFlags)
         , Modules(modules)
         , UdfResolver(udfResolver)
         , FileStorage(fileStorage)
@@ -72,6 +74,7 @@ public:
     ui64 NextUniqueId;
     TUserDataTable FilesMapping;
     const THolder<TGatewaysConfig> GatewaysConfig;
+    const THashSet<TString> SqlFlags;
     IModuleResolver::TPtr Modules;
     IUdfResolver::TPtr UdfResolver;
     TFileStoragePtr FileStorage;
@@ -84,6 +87,7 @@ TAutoPtr<TYqlServer> CreateYqlServer(
         ui64 nextUniqueId,
         TUserDataTable filesMapping,
         THolder<TGatewaysConfig>&& gatewaysConfig,
+        const THashSet<TString>& sqlFlags,
         IModuleResolver::TPtr modules = nullptr,
         IUdfResolver::TPtr udfResolver = nullptr,
         TFileStoragePtr fileStorage = nullptr);

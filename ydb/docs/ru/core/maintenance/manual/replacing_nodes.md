@@ -18,7 +18,7 @@
 
 config.yaml:
 
-```
+```yaml
 - host: host1.my.sub.net
   node_id: 1
   location: {unit: 12345, data_center: MYDC, rack: r1}
@@ -32,7 +32,7 @@ config.yaml:
 
 DefineBox выглядит так:
 
-```
+```proto
 DefineBox {
     BoxId: 1
     Host { Key { Fqdn: "host1.my.sub.net" IcPort: 19001 } HostConfigId: 1 }
@@ -43,7 +43,7 @@ DefineBox {
 
 Предположим, что мы хотим переименовать host1.my.sub.net в host4.my.sub.net. Для этого сначала делаем DefineBox следующего вида:
 
-```
+```proto
 DefineBox {
     BoxId: 1
     Host { Key { Fqdn: "host1.my.sub.net" IcPort: 19001 } HostConfigId: 1 EnforcedNodeId: 1 }
@@ -54,7 +54,7 @@ DefineBox {
 
 Затем изменяем config.yaml:
 
-```
+```yaml
 - host: host4.my.sub.net
   node_id: 1
   location: {unit: 12345, data_center: MYDC, rack: r1}
@@ -70,7 +70,7 @@ DefineBox {
 
 И затем делаем второй раз скорректированный DefineBox:
 
-```
+```proto
 DefineBox {
     BoxId: 1
     Host { Key { Fqdn: "host4.my.sub.net" IcPort: 19001 } HostConfigId: 1 }

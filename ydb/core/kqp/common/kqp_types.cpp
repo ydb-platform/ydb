@@ -8,7 +8,7 @@ namespace NKikimr::NScheme {
 void ProtoMiniKQLTypeFromTypeInfo(NKikimrMiniKQL::TType* type, const TTypeInfo typeInfo) {
     if (typeInfo.GetTypeId() == NTypeIds::Pg) {
         type->SetKind(NKikimrMiniKQL::Pg);
-        type->MutablePg()->Setoid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
+        type->MutablePg()->Setoid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
     } else {
         type->SetKind(NKikimrMiniKQL::Data);
         type->MutableData()->SetScheme(typeInfo.GetTypeId());
@@ -20,7 +20,7 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
     case NKikimrMiniKQL::Data:
         return TTypeInfo((NScheme::TTypeId)type.GetData().GetScheme());
     case NKikimrMiniKQL::Pg:
-        return TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(type.GetPg().Getoid()));
+        return TTypeInfo(NPg::TypeDescFromPgTypeId(type.GetPg().Getoid()));
     default:
         Y_ENSURE(false, "not a data or pg type");
     }
@@ -28,7 +28,7 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
 
 const NMiniKQL::TType* MiniKQLTypeFromTypeInfo(const TTypeInfo typeInfo, const NMiniKQL::TTypeEnvironment& env) {
     if (typeInfo.GetTypeId() == NTypeIds::Pg) {
-        return NMiniKQL::TPgType::Create(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()), env);
+        return NMiniKQL::TPgType::Create(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()), env);
     } else {
         return NMiniKQL::TDataType::Create((NUdf::TDataTypeId)typeInfo.GetTypeId(), env);
     }
@@ -39,7 +39,7 @@ TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
     case NMiniKQL::TType::EKind::Data:
         return TTypeInfo((NScheme::TTypeId)AS_TYPE(NMiniKQL::TDataType, type)->GetSchemeType());
     case NMiniKQL::TType::EKind::Pg:
-        return TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
+        return TTypeInfo(NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
     default:
         Y_ENSURE(false, "not a data or pg type");
     }

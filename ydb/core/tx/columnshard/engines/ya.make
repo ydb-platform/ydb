@@ -13,6 +13,7 @@ SRCS(
     filter.cpp
     portion_info.cpp
     tier_info.cpp
+    defs.cpp
 )
 
 PEERDIR(

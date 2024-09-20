@@ -2,7 +2,7 @@
 
 #include <google/protobuf/message.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include <ydb/library/yql/parser/proto_ast/common.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -36,6 +36,7 @@ namespace NSQLTranslationV1 {
         Aggregated,
         AggregationKey,
         OverWindow,
+        OverWindowDistinct,
         Failed,
         End,
     };
@@ -150,6 +151,7 @@ namespace NSQLTranslationV1 {
         bool IsAggregated() const;
         bool IsAggregationKey() const;
         bool IsOverWindow() const;
+        bool IsOverWindowDistinct() const;
         bool HasState(ENodeState state) const {
             PrecacheState();
             return State.Test(state);
@@ -882,6 +884,7 @@ namespace NSQLTranslationV1 {
         Normal,
         Distinct,
         OverWindow,
+        OverWindowDistinct,
     };
 
     class TTupleNode: public TAstListNode {
@@ -1121,6 +1124,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> AutoPartitioningByLoad;
         TNodePtr MinPartitions;
         TNodePtr MaxPartitions;
+        TNodePtr PartitionCount;
         TNodePtr UniformPartitions;
         TVector<TVector<TNodePtr>> PartitionAtKeys;
         TMaybe<TIdentifier> KeyBloomFilter;
@@ -1331,6 +1335,7 @@ namespace NSQLTranslationV1 {
         }
     };
 
+
     struct TCreateTopicParameters {
         TVector<TTopicConsumerDescription> Consumers;
         TTopicSettings TopicSettings;
@@ -1346,6 +1351,36 @@ namespace NSQLTranslationV1 {
     };
 
     struct TDropTopicParameters {
+        bool MissingOk;
+    };
+
+    struct TCreateBackupCollectionParameters {
+        std::map<TString, TDeferredAtom> Settings;
+
+        bool Database;
+        TVector<TDeferredAtom> Tables;
+
+        bool ExistingOk;
+    };
+
+    struct TAlterBackupCollectionParameters {
+        enum class EDatabase {
+            Unchanged,
+            Add,
+            Drop,
+        };
+
+        std::map<TString, TDeferredAtom> Settings;
+        std::set<TString> SettingsToReset;
+
+        EDatabase Database = EDatabase::Unchanged;
+        TVector<TDeferredAtom> TablesToAdd;
+        TVector<TDeferredAtom> TablesToDrop;
+
+        bool MissingOk;
+    };
+
+    struct TDropBackupCollectionParameters {
         bool MissingOk;
     };
 
@@ -1483,6 +1518,16 @@ namespace NSQLTranslationV1 {
                               TScopedStatePtr scoped);
     TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                             TScopedStatePtr scoped);
+
+    TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+        const TCreateBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildAlterBackupCollection(TPosition pos, const TString& id,
+        const TAlterBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
+        const TDropBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

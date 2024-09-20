@@ -750,7 +750,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .Apply(BIND([=] (IAsyncZeroCopyInputStreamPtr inputStream) {
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return NRpcProxy::CreateTableReader(std::move(inputStream));
         }));
 }
@@ -782,7 +782,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
             FromProto(schema.Get(), meta.schema());
         }))
-        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
 }
@@ -1068,6 +1068,9 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
+    if (options.UseLookupCache) {
+        req->set_use_lookup_cache(*options.UseLookupCache);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

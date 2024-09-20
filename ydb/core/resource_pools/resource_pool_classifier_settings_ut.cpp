@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 
 namespace NKikimr {
 
@@ -46,6 +48,12 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["rank"]), "123");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "test_pool");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["membername"]), "test@user");
+    }
+
+    Y_UNIT_TEST(SettingsValidation) {
+        TClassifierSettings settings;
+        settings.Membername = BUILTIN_ACL_METADATA;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(settings.Validate(), yexception, TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << settings.Membername);
     }
 }
 

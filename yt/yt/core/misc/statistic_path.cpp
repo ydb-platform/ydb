@@ -98,6 +98,13 @@ TErrorOr<TStatisticPath> ParseStatisticPath(const TStatisticPathType& path)
     return TStatisticPath(path);
 }
 
+TErrorOr<TStatisticPath> SlashedStatisticPath(const TStatisticPathType& path)
+{
+    TString copy;
+    std::replace_copy(path.begin(), path.end(), std::back_inserter(copy), TChar('/'), Delimiter);
+    return ParseStatisticPath(copy);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 const TStatisticPathType& TStatisticPath::Path() const noexcept
@@ -209,14 +216,15 @@ std::strong_ordering operator<=>(const TStatisticPath& lhs, const TStatisticPath
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NStatisticPathLiterals {
-
 TStatisticPathLiteral operator""_L(const char* str, size_t len)
 {
     return TStatisticPathLiteral(TStatisticPathType(str, len));
 }
 
-} // namespace NStatisticPathLiterals
+TStatisticPath operator""_SP(const char* str, size_t len)
+{
+    return SlashedStatisticPath(TStatisticPathType(str, len)).ValueOrThrow();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

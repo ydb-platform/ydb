@@ -34,8 +34,6 @@ class TBlobStorageGroupMultiCollectRequest : public TBlobStorageGroupRequestActo
     ui64 FlagRequestsInFlight;
     ui64 CollectRequestsInFlight;
 
-    TInstant StartTime;
-
     TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos;
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
@@ -108,7 +106,6 @@ public:
         , Decommission(params.Common.Event->Decommission)
         , FlagRequestsInFlight(0)
         , CollectRequestsInFlight(0)
-        , StartTime(params.Common.Now)
     {
         Y_ABORT_UNLESS(Iterations > 1);
     }

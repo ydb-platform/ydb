@@ -71,8 +71,7 @@ namespace NYdb::NConsoleClient {
         ui64 RetentionPeriodHours_;
         ui64 RetentionStorageMb_;
         ui32 MinActivePartitions_;
-        ui32 MaxActivePartitions_;
-
+        TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
     };
 
@@ -135,6 +134,21 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
+    };
+
+    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithFormat, public TCommandWithTopicName {
+    public:
+        TCommandTopicConsumerDescribe();
+        void Config(TConfig& config) override;
+        void Parse(TConfig& config) override;
+        int Run(TConfig& config) override;
+
+    private:
+        int PrintPrettyResult(const NYdb::NTopic::TConsumerDescription& description) const;
+
+    private:
+        TString ConsumerName_;
+        bool ShowPartitionStats_ = false;
     };
 
     class TCommandTopicConsumerCommitOffset: public TYdbCommand, public TCommandWithTopicName {
@@ -211,12 +225,12 @@ namespace NYdb::NConsoleClient {
     protected:
         void AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NTopic::ECodec>& allowedCodecs);
         void ParseCodec();
-        NTopic::ECodec GetCodec() const;
+        TMaybe<NTopic::ECodec> GetCodec() const;
 
     private:
         TVector<NTopic::ECodec> AllowedCodecs_;
         TString CodecStr_;
-        NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
+        TMaybe<NTopic::ECodec> Codec_;
     };
 
     class TCommandTopicWrite: public TYdbCommand,

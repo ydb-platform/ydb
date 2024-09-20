@@ -1,11 +1,13 @@
 # Example applications working with {{ ydb-short-name }}
 
-This section describes the code of same-type test apps implemented using {{ ydb-short-name }} SDKs in different programming languages:
+This section outlines the implementation of example applications, all designed to perform similar functions, using the {{ ydb-short-name }} SDKs across various programming languages. Each app is developed to demonstrate how a respective SDK can be utilized in a specific language.
 
 {% if oss %}
 
 - [C++](../example-cpp.md)
+
 {% endif %}
+
 - [C# (.NET)](../example-dotnet.md)
 - [Go](../go/index.md)
 - [Java](../java/index.md)
@@ -14,7 +16,7 @@ This section describes the code of same-type test apps implemented using {{ ydb-
 
 {% node info %}
 
-Additional information on how these example applications work is available in [{{ ydb-short-name }} SDK reference documentation](../../../reference/ydb-sdk/index.md).
+Refer to [{{ ydb-short-name }} SDK reference documentation](../../../reference/ydb-sdk/index.md) for more details.
 
 {% endnote %}
 

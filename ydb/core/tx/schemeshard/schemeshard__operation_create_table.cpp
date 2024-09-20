@@ -559,14 +559,18 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+            .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+            .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+            .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+        };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,
             schema,
             *typeRegistry,
             limits,
             *domainInfo,
-            context.SS->EnableTablePgTypes,
-            context.SS->EnableTableDatetime64,
+            featureFlags,
             errStr,
             LocalSequences);
 
@@ -651,7 +655,7 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
         if (tableInfo->IsAsyncReplica()) {
-            newTable->SetAsyncReplica();
+            newTable->SetAsyncReplica(true);
         }
 
         if (tableInfo->IsRestoreTable()) {

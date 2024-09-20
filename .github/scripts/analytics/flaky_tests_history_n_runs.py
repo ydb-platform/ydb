@@ -34,6 +34,9 @@ def create_tables(pool,  table_path):
                 `build_type` Utf8 NOT NULL,
                 `branch` Utf8 NOT NULL,
                 `runs_window` Uint64 NOT NULL,
+                `first_run` Timestamp,
+                `last_run` Timestamp ,
+                `owners` Utf8 NOT NULL,
                 `history` String,
                 `history_class` String,
                 `pass_count` Uint64,
@@ -59,6 +62,9 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("runs_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
         .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
@@ -128,15 +134,15 @@ def main():
             except StopIteration:
                 break
     
-        if results[0] and results[0].get( 'max_date_window', default_start_date) is not None:
-            last_date = results[0].get(
-                'max_date_window', default_start_date).strftime('%Y-%m-%d')
+        if results[0] and results[0].get( 'max_date_window', default_start_date) is not None and results[0].get( 'max_date_window', default_start_date) > default_start_date:
             last_datetime = results[0].get(
                 'max_date_window', default_start_date)
-        else:
-            last_date = default_start_date.strftime('%Y-%m-%d')
-            last_datetime = default_start_date
 
+        else:
+            last_datetime = default_start_date
+            
+        last_date = last_datetime.strftime('%Y-%m-%d')
+        
         print(f'last hisotry date: {last_date}')
         today = datetime.date.today()
         date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
@@ -148,9 +154,12 @@ def main():
                     build_type,
                     branch,
                     history_list,
-                    dist_hist,
+                    if(dist_hist = '','no_runs',dist_hist) as dist_hist,
                     suite_folder,
-                    test_name
+                    test_name,
+                    owners,
+                    first_run,
+                    last_run
                 from (
                     select
                         full_name,
@@ -158,38 +167,69 @@ def main():
                         build_type,
                         branch,
                         AGG_LIST(status) as history_list ,
-                        String::JoinFromList( AGG_LIST_DISTINCT(status) ,',') as dist_hist,
+                        String::JoinFromList( ListSort(AGG_LIST_DISTINCT(status)) ,',') as dist_hist,
                         suite_folder,
-                        test_name
+                        test_name,
+                        owners,
+                        min(run_timestamp) as first_run,
+                        max(run_timestamp) as last_run
                     from (
                         select * from (
-                                select t1.test_name, t1.suite_folder, t1.full_name,
-                                Date('{date}') as date_base,
-                               '{build_type}' as  build_type,
-                               '{branch}' as  branch
+                                select distinct
+                                    t1.suite_folder,
+                                    t1.test_name,
+                                    t1.full_name,
+                                    t1.owners, 
+                                    Date('{date}') as date_base,
+                                    '{build_type}' as  build_type,
+                                    '{branch}' as  branch
                                 from  `test_results/analytics/testowners` as t1
+                                where  run_timestamp_last >= Date('{date}') - 3*Interval("P1D") 
+                                and run_timestamp_last <= Date('{date}') + Interval("P1D")
                             ) as test_and_date
                         left JOIN (
                             select * from (
-                                select
-                                    suite_folder || '/' || test_name as full_name,
-                                    run_timestamp,
-                                    status ,
-                                    ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS run_number
-                                from  `test_results/test_runs_column`
-                                where
-                                    run_timestamp <= Date('{date}') 
-                                    and run_timestamp >= Date('{date}') -14*Interval("P1D") 
-                                    and job_name in ('Postcommit_relwithdebinfo','Postcommit_asan')
-                                    and build_type = '{build_type}'
-                                    and status != 'skipped'
-                                    and branch = '{branch}'
-                            )
-                            where run_number <= {history_for_n_runs}
+                                select * from (
+                                    select * from (
+                                        select
+                                            suite_folder || '/' || test_name as full_name,
+                                            run_timestamp,
+                                            status ,
+                                            ROW_NUMBER() OVER (PARTITION BY suite_folder,test_name ORDER BY run_timestamp DESC) AS run_number
+                                        from  `test_results/test_runs_column`
+                                        where
+                                            run_timestamp <= Date('{date}') + Interval("P1D")
+                                            and run_timestamp >= Date('{date}') -13*Interval("P1D") 
+                                            and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
+                                            and build_type = '{build_type}'
+                                            and status != 'skipped'
+                                            and branch = '{branch}'
+                                        )
+                                    where run_number <= {history_for_n_runs}
+                                    )
+                                Union all
+                                    select * from (
+                                        select
+                                            suite_folder || '/' || test_name as full_name,
+                                            run_timestamp,
+                                            status ,
+                                            ROW_NUMBER() OVER (PARTITION BY suite_folder,test_name ORDER BY run_timestamp DESC) AS run_number
+                                        from  `test_results/test_runs_column`
+                                        where
+                                            run_timestamp <= Date('{date}') + Interval("P1D")
+                                            and run_timestamp >= Date('{date}') -13*Interval("P1D") 
+                                            and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
+                                            and build_type = '{build_type}'
+                                            and status = 'skipped'
+                                            and branch = '{branch}'
+                                        )
+                                    where run_number <= {history_for_n_runs}
+                                )
+                                order by full_name,run_timestamp 
                         ) as hist
                         ON test_and_date.full_name=hist.full_name
                     )
-                    GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch
+                    GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
             
                 )
             """
@@ -217,6 +257,9 @@ def main():
                 prepared_for_update_rows.append({
                     'suite_folder': row['suite_folder'],
                     'test_name': row['test_name'],
+                    'first_run': row['first_run'],
+                    'last_run': row['last_run'],
+                    'owners': row['owners'],
                     'full_name': row['full_name'],
                     'date_window': row['date_base'],
                     'build_type': row['build_type'],

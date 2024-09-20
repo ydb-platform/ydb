@@ -16,7 +16,7 @@ channels:
             plugin: transform_metric_labels
             config:
               labels:
-                - gh_runner_name: "{$env('GH_RUNNER_NAME')}"
+                - gh_preset: "{$env('GH_PRESET_NAME')}"
       output:
         plugin: yc_metrics
         config:

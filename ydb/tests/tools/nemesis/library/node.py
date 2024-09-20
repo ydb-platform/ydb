@@ -56,15 +56,6 @@ class KillNodeNemesis(AbstractKillDaemonNemesis):
         return list(self.cluster.nodes.values())
 
 
-class KillBlockStoreNodeNemesis(AbstractKillDaemonNemesis):
-    def __init__(self, cluster, schedule=(120, 180)):
-        super(KillBlockStoreNodeNemesis, self).__init__(cluster, schedule=schedule)
-
-    @property
-    def daemons(self):
-        return list(self.cluster.nbs.values())
-
-
 @six.add_metaclass(abc.ABCMeta)
 class AbstractSerialDaemonKillNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def __init__(self, cluster, schedule, schedule_between_kills):
@@ -147,7 +138,6 @@ def nodes_nemesis_list(cluster):
     for _ in range(scale_per_cluster):
         nemesis_list.extend([
             KillSlotNemesis(cluster),
-            KillBlockStoreNodeNemesis(cluster),
         ])
     return nemesis_list
 

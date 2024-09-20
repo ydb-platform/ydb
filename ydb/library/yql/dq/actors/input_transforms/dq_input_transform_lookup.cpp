@@ -111,7 +111,7 @@ private: //events
                         outputRowItems[i] = wideInputRow[index];
                         break;
                     case EOutputRowItemSource::LookupKey:
-                        outputRowItems[i] = lookupKey.GetElement(index);
+                        outputRowItems[i] = lookupPayload && *lookupPayload ? lookupKey.GetElement(index) : NUdf::TUnboxedValue {};
                         break;
                     case EOutputRowItemSource::LookupOther:
                         if (lookupPayload && *lookupPayload) {
@@ -184,7 +184,7 @@ private: //IDqComputeActorAsyncInput
             }
         }
         finished = IsFinished();
-        return 0;
+        return AwaitingQueue.RowCount();
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -352,15 +352,17 @@ TOutputRowColumnOrder CategorizeOutputRowItems(
     size_t idxRightPayload = 0;
     for (ui32 i = 0; i != type->GetMembersCount(); ++i) {
         const auto prefixedName = type->GetMemberName(i);
-        if (prefixedName.starts_with(leftLabel)) {
-            Y_ABORT_IF(prefixedName.length() == leftLabel.length());
+        if (prefixedName.starts_with(leftLabel) &&
+            prefixedName.length() > leftLabel.length() &&
+            prefixedName[leftLabel.length()] == '.') {
             const auto name = prefixedName.SubStr(leftLabel.length() + 1); //skip prefix and dot
             result[i] = {
                 leftJoinColumns.contains(name) ? EOutputRowItemSource::InputKey : EOutputRowItemSource::InputOther,
                 idxLeft++
             };
-        } else if (prefixedName.starts_with(rightLabel)) {
-            Y_ABORT_IF(prefixedName.length() == rightLabel.length());
+        } else if (prefixedName.starts_with(rightLabel) &&
+                   prefixedName.length() > rightLabel.length() &&
+                   prefixedName[rightLabel.length()] == '.') {
             const auto name = prefixedName.SubStr(rightLabel.length() + 1); //skip prefix and dot
             //presume that indexes in LookupKey, LookupOther has the same relative position as in OutputRow
             if (rightJoinColumns.contains(name)) {

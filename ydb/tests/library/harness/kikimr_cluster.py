@@ -13,7 +13,6 @@ import ydb
 from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
-from . import blockstore
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,6 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__yaml_config = load_yaml(config_path)
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
-        self._nbs = None
         self.__binary_path = binary_path if binary_path is not None else param_constants.kikimr_driver_path()
         self.__output_path = output_path
         self.__slot_count = 0
@@ -77,11 +75,11 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         return self
 
     def _start(self):
-        for inst_set in [self.nodes, self.slots, self.nbs]:
+        for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.start())
 
     def _stop(self):
-        for inst_set in [self.nodes, self.slots, self.nbs]:
+        for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.stop())
 
     @staticmethod
@@ -127,7 +125,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         self._deploy_secrets()
 
-        for inst_set in [self.nodes, self.nbs]:
+        for inst_set in [self.nodes]:
             self._run_on(
                 inst_set,
                 lambda x: x.prepare_artifacts(
@@ -167,7 +165,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         )
 
         if param_constants.deploy_cluster:
-            for inst_set in [self.nodes, self.slots, self.nbs]:
+            for inst_set in [self.nodes, self.slots]:
                 self._run_on(
                     inst_set,
                     lambda x: x.cleanup_logs()
@@ -198,15 +196,6 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 configurator=None,
             ) for node_id, host in zip(itertools.count(start=1), self.__hosts)
         }
-
-    @property
-    def nbs(self):
-        return {}
-        if self._nbs is None:
-            self._nbs = {}
-            for node_id, host in zip(itertools.count(start=1), self.__hosts):
-                self._nbs[node_id] = blockstore.ExternalNetworkBlockStoreNode(host)
-        return self._nbs
 
     @property
     def slots(self):

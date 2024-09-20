@@ -146,10 +146,6 @@ To update cluster (stop + start):
             help='Enable pqv1 service in kikimr'
         )
         sub_parser.add_argument(
-            '--enable-datastreams', default=False, action='store_true',
-            help='Enable datastreams service'
-        )
-        sub_parser.add_argument(
             '--public-http-config-path', default=None,
             help='The path to public HTTP config'
         )

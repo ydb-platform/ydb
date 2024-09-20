@@ -53,6 +53,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/path_generator
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers
+    ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils
     ydb/library/yql/utils/threading
 )

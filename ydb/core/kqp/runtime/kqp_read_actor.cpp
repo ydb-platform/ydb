@@ -377,14 +377,11 @@ public:
 
         KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
         for (size_t i = 0; i < Settings->KeyColumnTypesSize(); ++i) {
-            auto typeId = Settings->GetKeyColumnTypes(i);
-            KeyColumnTypes.push_back(
-                NScheme::TTypeInfo(
-                    (NScheme::TTypeId)typeId,
-                    (typeId == NScheme::NTypeIds::Pg) ?
-                        NPg::TypeDescFromPgTypeId(
-                            Settings->GetKeyColumnTypeInfos(i).GetPgTypeId()
-                        ) : nullptr));
+            NScheme::TTypeId typeId = Settings->GetKeyColumnTypes(i);
+            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Pg ?
+                NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(Settings->GetKeyColumnTypeInfos(i).GetPgTypeId())) :
+                NScheme::TTypeInfo(typeId);
+            KeyColumnTypes.push_back(typeInfo);
         }
         Counters->ReadActorsCount->Inc();
 
@@ -856,8 +853,9 @@ public:
             << ", limit: " << limit
             << ", readId = " << id
             << ", reverse = " << record.GetReverse()
-            << " snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
-            << " lockTxId = " << Settings->GetLockTxId());
+            << ", snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
+            << ", lockTxId = " << Settings->GetLockTxId()
+            << ", lockNodeId = " << Settings->GetLockNodeId());
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
@@ -912,6 +910,26 @@ public:
             // dropped read
             return;
         }
+
+        CA_LOG_D("Recv TEvReadResult from ShardID=" << Reads[id].Shard->TabletId
+            << ", ReadId=" << id
+            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
+            << ", Finished=" << record.GetFinished()
+            << ", RowCount=" << record.GetRowCount()
+            << ", TxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", BrokenTxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetBrokenTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();
@@ -1442,13 +1460,12 @@ public:
 
 private:
     NScheme::TTypeInfo MakeTypeInfo(const NKikimrTxDataShard::TKqpTransaction_TColumnMeta& info) {
-        auto typeId = info.GetType();
-        return NScheme::TTypeInfo(
-            (NScheme::TTypeId)typeId,
-            (typeId == NScheme::NTypeIds::Pg) ?
-                NPg::TypeDescFromPgTypeId(
-                    info.GetTypeInfo().GetPgTypeId()
-                ) : nullptr);
+        NScheme::TTypeId typeId = info.GetType();
+        if (typeId == NScheme::NTypeIds::Pg) {
+            return {NPg::TypeDescFromPgTypeId(info.GetTypeInfo().GetPgTypeId())};
+        } else {
+            return {typeId};
+        }
     }
 
     void InitResultColumns() {

@@ -173,6 +173,7 @@ class YQLRun(object):
             cmd += " ".join(self.extra_args) + " "
 
         cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
+        cmd += '--validate-result-format '
 
         if files:
             for f in files:

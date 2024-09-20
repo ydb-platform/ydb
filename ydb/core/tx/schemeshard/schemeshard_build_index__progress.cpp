@@ -3,7 +3,11 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/datashard/upload_stats.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -49,6 +53,164 @@ constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
         return "Rejected";
     }
 }
+
+class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
+    using TThis = TUploadSampleK;
+    using TBase = TActorBootstrapped<TThis>;
+
+protected:
+    TString LogPrefix;
+    TString TargetTable;
+
+    NDataShard::TUploadRetryLimits Limits;
+
+    TActorId ResponseActorId;  
+    ui64 BuildIndexId = 0;
+    TIndexBuildInfo::TSampleK::TRows Init;
+
+    std::shared_ptr<NTxProxy::TUploadTypes> Types;
+    std::shared_ptr<NTxProxy::TUploadRows> Rows;
+
+    TActorId Uploader;
+    ui32 RetryCount = 0;
+    ui32 RowsBytes = 0;
+
+    NDataShard::TUploadStatus UploadStatus;
+
+public:
+    TUploadSampleK(TString targetTable,
+                   const TIndexBuildInfo::TLimits& limits,
+                   const TActorId& responseActorId,
+                   ui64 buildIndexId,
+                   TIndexBuildInfo::TSampleK::TRows&& init)
+        : TargetTable(std::move(targetTable))
+        , ResponseActorId(responseActorId)
+        , BuildIndexId(buildIndexId)
+        , Init(std::move(init))
+    {
+        LogPrefix = TStringBuilder() 
+            << "TUploadSampleK: BuildIndexId: " << BuildIndexId 
+            << " ResponseActorId: " << ResponseActorId;
+        Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
+        Y_ASSERT(!Init.empty());
+    }
+
+    static constexpr auto ActorActivityType() {
+        return NKikimrServices::TActivity::SAMPLE_K_UPLOAD_ACTOR;
+    }
+
+    void UploadStatusToMessage(NKikimrIndexBuilder::TEvUploadSampleKResponse& msg) {
+        msg.SetUploadStatus(UploadStatus.StatusCode);
+        NYql::IssuesToMessage(UploadStatus.Issues, msg.MutableIssues());
+    }
+
+    void Describe(IOutputStream& out) const noexcept override {
+        out << LogPrefix << Debug();
+    }
+
+    TString Debug() const {
+        return UploadStatus.ToString();
+    }
+
+    void Bootstrap(const NActors::TActorContext& ctx) {
+        Rows = std::make_shared<NTxProxy::TUploadRows>();
+        Rows->reserve(Init.size());
+        std::array<TCell, 2> PrimaryKeys;
+        PrimaryKeys[0] = TCell::Make(ui32{0});
+        for (ui32 i = 1; auto& [_, row] : Init) {
+            RowsBytes += row.size();
+            PrimaryKeys[1] = TCell::Make(ui32{i++});
+            // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
+            Rows->emplace_back(TSerializedCellVec{PrimaryKeys}, std::move(row));
+        }
+        Init = {}; // release memory
+        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(PrimaryKeys);
+
+        Types = std::make_shared<NTxProxy::TUploadTypes>(3);
+        Ydb::Type type;
+        type.set_type_id(Ydb::Type::UINT32);
+        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn, type};
+        (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_IdColumn, type};
+        type.set_type_id(Ydb::Type::STRING);
+        (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn, type};
+
+        Become(&TThis::StateWork);
+
+        Upload(ctx, false);
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+        }
+    }
+
+    void HandleWakeup(const NActors::TActorContext& ctx) {
+        LOG_D("Retry upload " << Debug());
+
+        if (Rows) {
+            Upload(ctx, true);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
+        LOG_T("Handle TEvUploadRowsResponse "
+              << Debug()
+              << " Uploader: " << Uploader.ToString()
+              << " ev->Sender: " << ev->Sender.ToString());
+
+        if (Uploader) {
+            Y_VERIFY_S(Uploader == ev->Sender,
+                       LogPrefix << "Mismatch"
+                                 << " Uploader: " << Uploader.ToString()
+                                 << " ev->Sender: " << ev->Sender.ToString()
+                                 << Debug());
+        } else {
+            return;
+        }
+
+        UploadStatus.StatusCode = ev->Get()->Status;
+        UploadStatus.Issues = std::move(ev->Get()->Issues);
+
+        if (UploadStatus.IsRetriable() && RetryCount < Limits.MaxUploadRowsRetryCount) {
+            LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
+
+            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            return;
+        }
+        TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
+
+        response->Record.SetId(BuildIndexId);
+        response->Record.SetRowsDelta(Rows->size());
+        response->Record.SetBytesDelta(RowsBytes);
+
+        UploadStatusToMessage(response->Record);
+
+        ctx.Send(ResponseActorId, response.Release());
+    }
+
+    void Upload(const NActors::TActorContext& ctx, bool isRetry) {
+        if (isRetry) {
+            ++RetryCount;
+        } else {
+            RetryCount = 0;
+        }
+
+        auto actor = NTxProxy::CreateUploadRowsInternal(
+            SelfId(),
+            TargetTable,
+            Types,
+            Rows,
+            NTxProxy::EUploadRowsMode::WriteToTableShadow, // TODO(mbkkt) is it fastest?
+            true /*writeToPrivateTable*/);
+
+        Uploader = ctx.Register(actor);
+    }
+};
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
@@ -243,6 +405,25 @@ private:
         return shardId;
     }
 
+    void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+        auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());        
+
+        ev->Record.SetK(buildInfo.KMeansSettings.K);
+        ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
+
+        ev->Record.AddColumns(buildInfo.IndexColumns[0]);
+
+        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+        ev->Record.SetSeed(ui64(shardId));
+        LOG_D("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+    }
+
     void SendBuildIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
         ev->Record.SetBuildIndexId(ui64(BuildId));
@@ -250,7 +431,7 @@ private:
         ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
         ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
 
-        if (buildInfo.IsBuildIndex()) {
+        if (buildInfo.IsBuildSecondaryIndex()) {
             if (buildInfo.TargetName.empty()) {
                 TPath implTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
                 buildInfo.TargetName = implTable.PathString();
@@ -294,6 +475,18 @@ private:
         ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
     }
     
+    bool SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
+        if (buildInfo.Sample.Rows.empty()) {
+            return false;
+        }
+
+        auto implLevelTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        auto actor = new TUploadSampleK(implLevelTable.PathString(), buildInfo.Limits, Self->SelfId(), ui64(BuildId), std::move(buildInfo.Sample.Rows));
+
+        TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
+        return true;
+    }
+
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId id)
         : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
@@ -351,24 +544,22 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
-                // TODO add vector index filling
-                if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
-                } else {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
-                }
+                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
 
                 Progress(BuildId);
             }
 
             break;
-        case TIndexBuildInfo::EState::Filling:
-            if (buildInfo.IsCancellationRequested()) {
-                buildInfo.DoneShardsSize = 0;
+        case TIndexBuildInfo::EState::Filling: {
+            auto makeDone = [&] (size_t doneShards) {
+                buildInfo.DoneShardsSize = doneShards;
                 buildInfo.InProgressShards = {};
                 buildInfo.ToUploadShards = {};
 
                 Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+            };
+            if (buildInfo.IsCancellationRequested()) {
+                makeDone(0);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Applying);
                 Progress(BuildId);
@@ -417,6 +608,13 @@ public:
                 Y_ABORT_UNLESS(buildInfo.SnapshotStep);
             }
 
+            if (buildInfo.IsBuildVectorIndex()) {
+                buildInfo.Sample.MakeStrictTop(buildInfo.KMeansSettings.K);
+                if (buildInfo.Sample.MaxProbability == 0) {
+                    makeDone(buildInfo.Shards.size());
+                }
+            }
+
             while (!buildInfo.ToUploadShards.empty()
                    && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards)
             {
@@ -424,13 +622,23 @@ public:
                 buildInfo.ToUploadShards.pop_front();
                 buildInfo.InProgressShards.insert(shardIdx);
 
-                SendBuildIndexRequest(shardIdx, buildInfo);
+                if (buildInfo.IsBuildVectorIndex()) {
+                    SendSampleKRequest(shardIdx, buildInfo);
+                } else {
+                    SendBuildIndexRequest(shardIdx, buildInfo);
+                }
             }
+
 
             if (buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty()
                 && buildInfo.DoneShardsSize == buildInfo.Shards.size()) {
                 // all done
                 Y_ABORT_UNLESS(0 == Self->IndexBuildPipes.CloseAll(BuildId, ctx));
+
+                if (buildInfo.IsBuildVectorIndex() && SendUploadSampleKRequest(buildInfo)) {
+                    AskToScheduleBilling(buildInfo);
+                    break;
+                }
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
@@ -442,6 +650,7 @@ public:
             }
 
             break;
+        }
         case TIndexBuildInfo::EState::Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
@@ -681,6 +890,232 @@ public:
                   << ", buildIndexId# " << buildId
                   << ", tabletId# " << tabletId
                   << ", shardIdx# " << shardIdx);
+            break;
+        }
+
+        return true;
+    }
+};
+
+struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TSchemeShard::TIndexBuilder::TTxReply  {
+private:
+    TEvDataShard::TEvSampleKResponse::TPtr SampleK;
+
+public:
+    explicit TTxReplySampleK(TSelf* self, TEvDataShard::TEvSampleKResponse::TPtr& sampleK)
+        : TTxReply(self)
+        , SampleK(sampleK)
+    {
+    }
+
+    bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        auto& record = SampleK->Get()->Record;
+
+        LOG_I("TTxReply : TEvSampleKResponse, Id# " << record.GetId());
+
+        const auto buildId = TIndexBuildId(record.GetId());
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
+        if (!buildInfoPtr) {
+            return true;
+        }
+        auto& buildInfo = *buildInfoPtr->Get();
+        LOG_D("TTxReply : TEvSampleKResponse"
+              << ", TIndexBuildInfo: " << buildInfo
+              << ", record: " << record.ShortDebugString());
+
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        if (!Self->TabletIdToShardIdx.contains(shardId)) {
+            return true;
+        }
+
+        TShardIdx shardIdx = Self->TabletIdToShardIdx.at(shardId);
+        if (!buildInfo.Shards.contains(shardIdx)) {
+            return true;
+        }
+
+        switch (const auto state = buildInfo.State; state) {
+        case TIndexBuildInfo::EState::Filling:
+        {
+            TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
+            auto actualSeqNo = std::pair<ui64, ui64>(Self->Generation(), shardStatus.SeqNoRound);
+            auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
+
+            if (actualSeqNo != recordSeqNo) {
+                LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                      << " ignore progress message by seqNo"
+                      << ", TIndexBuildInfo: " << buildInfo
+                      << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
+                      << ", record: " << record.ShortDebugString());
+                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                return true;
+            }
+
+            if (record.ProbabilitiesSize()) {
+                Y_ASSERT(record.RowsSize());
+                auto& probabilities = record.GetProbabilities();
+                auto& rows = *record.MutableRows();
+                Y_ASSERT(probabilities.size() == rows.size());
+                for (int i = 0; i != probabilities.size(); ++i) {
+                    if (probabilities[i] >= buildInfo.Sample.MaxProbability) {
+                        break;
+                    }
+                    buildInfo.Sample.Rows.emplace_back(probabilities[i], std::move(rows[i]));
+                }
+                buildInfo.Sample.MakeWeakTop(buildInfo.KMeansSettings.K);
+            }
+
+            if (record.HasRowsDelta() || record.HasBytesDelta()) {
+                TBillingStats delta(record.GetRowsDelta(), record.GetBytesDelta());
+                shardStatus.Processed += delta;
+                buildInfo.Processed += delta;
+            }
+
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            shardStatus.DebugMessage = issues.ToString();
+
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
+            shardStatus.Status = record.GetStatus();
+
+            switch (shardStatus.Status) {
+            case  NKikimrIndexBuilder::EBuildStatus::DONE:
+                if (buildInfo.InProgressShards.erase(shardIdx)) {
+                    ++buildInfo.DoneShardsSize;
+
+                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+
+                    Progress(buildId);
+                }
+                break;
+
+            case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
+                // datashard gracefully rebooted, reschedule shard
+                if (buildInfo.InProgressShards.erase(shardIdx)) {
+                    buildInfo.ToUploadShards.push_front(shardIdx);
+
+                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+
+                    Progress(buildId);
+                }
+                break;
+
+            case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
+                buildInfo.Issue += TStringBuilder()
+                    << "One of the shards report BAD_REQUEST at Filling stage, process has to be canceled"
+                    << ", shardId: " << shardId
+                    << ", shardIdx: " << shardIdx;
+                Self->PersistBuildIndexIssue(db, buildInfo);
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+                Progress(buildId);
+                break;
+
+            case  NKikimrIndexBuilder::EBuildStatus::INVALID:
+            case  NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+            case  NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
+            case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
+                Y_ABORT("Unreachable");
+            }
+            break;
+        }
+        case TIndexBuildInfo::EState::AlterMainTable:
+        case TIndexBuildInfo::EState::Invalid:
+        case TIndexBuildInfo::EState::Locking:
+        case TIndexBuildInfo::EState::GatheringStatistics:
+        case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::Applying:
+        case TIndexBuildInfo::EState::Unlocking:
+        case TIndexBuildInfo::EState::Done:
+            Y_FAIL_S("Unreachable " << Name(state));
+        case TIndexBuildInfo::EState::Cancellation_Applying:
+        case TIndexBuildInfo::EState::Cancellation_Unlocking:
+        case TIndexBuildInfo::EState::Cancelled:
+        case TIndexBuildInfo::EState::Rejection_Applying:
+        case TIndexBuildInfo::EState::Rejection_Unlocking:
+        case TIndexBuildInfo::EState::Rejected:
+            LOG_D("TTxReply : TEvSampleKResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
+        }
+
+        return true;
+    }
+};
+
+struct TSchemeShard::TIndexBuilder::TTxReplyUpload: public TSchemeShard::TIndexBuilder::TTxReply  {
+private:
+    TEvIndexBuilder::TEvUploadSampleKResponse::TPtr Upload;
+
+public:
+    explicit TTxReplyUpload(TSelf* self, TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload)
+        : TTxReply(self)
+        , Upload(upload)
+    {
+    }
+
+    bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
+        auto& record = Upload->Get()->Record;
+
+        LOG_I("TTxReply : TEvUploadSampleKResponse, Id# " << record.GetId());
+
+        const auto buildId = TIndexBuildId(record.GetId());
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
+        if (!buildInfoPtr) {
+            return true;
+        }
+        auto& buildInfo = *buildInfoPtr->Get();
+        LOG_D("TTxReply : TEvUploadSampleKResponse"
+              << ", TIndexBuildInfo: " << buildInfo
+              << ", record: " << record.ShortDebugString());
+        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+
+        switch (const auto state = buildInfo.State; state) {
+        case TIndexBuildInfo::EState::Filling:
+        {
+            if (record.HasRowsDelta() || record.HasBytesDelta()) {
+                TBillingStats delta(record.GetRowsDelta(), record.GetBytesDelta());
+                buildInfo.Processed += delta;
+            }
+
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+
+            NIceDb::TNiceDb db(txc.DB);
+            auto status = record.GetUploadStatus();
+            if (status == Ydb::StatusIds::SUCCESS) {
+                // TODO(mbkkt) next rounds of build vector index
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Applying);
+                Progress(buildId);
+                // make final bill
+                Bill(buildInfo);
+            } else {
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(record.GetIssues(), issues);
+                buildInfo.Issue += issues.ToString();
+                Self->PersistBuildIndexIssue(db, buildInfo);
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+                Progress(buildId);
+            }
+            break;
+        }
+        case TIndexBuildInfo::EState::AlterMainTable:
+        case TIndexBuildInfo::EState::Invalid:
+        case TIndexBuildInfo::EState::Locking:
+        case TIndexBuildInfo::EState::GatheringStatistics:
+        case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::Applying:
+        case TIndexBuildInfo::EState::Unlocking:
+        case TIndexBuildInfo::EState::Done:
+            Y_FAIL_S("Unreachable " << Name(state));
+        case TIndexBuildInfo::EState::Cancellation_Applying:
+        case TIndexBuildInfo::EState::Cancellation_Unlocking:
+        case TIndexBuildInfo::EState::Cancelled:
+        case TIndexBuildInfo::EState::Rejection_Applying:
+        case TIndexBuildInfo::EState::Rejection_Unlocking:
+        case TIndexBuildInfo::EState::Rejected:
+            LOG_D("TTxReply : TEvUploadSampleKResponse superfluous message " << record.ShortDebugString());
             break;
         }
 
@@ -1230,7 +1665,6 @@ public:
     }
 };
 
-
 ITransaction* TSchemeShard::CreateTxReply(TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult) {
     return new TIndexBuilder::TTxReplyAllocate(this, allocateResult);
 }
@@ -1245,6 +1679,14 @@ ITransaction* TSchemeShard::CreateTxReply(TTxId completedTxId) {
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress) {
     return new TIndexBuilder::TTxReplyProgress(this, progress);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK) {
+    return new TIndexBuilder::TTxReplySampleK(this, sampleK);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload) {
+    return new TIndexBuilder::TTxReplyUpload(this, upload);
 }
 
 ITransaction* TSchemeShard::CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId) {

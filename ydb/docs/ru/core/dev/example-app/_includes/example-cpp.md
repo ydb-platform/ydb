@@ -1,5 +1,7 @@
 # Приложение на C++
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example), доступного в составе [C++ SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp) {{ ydb-short-name }}.
 
 {% include [init.md](steps/01_init.md) %}
@@ -112,7 +114,7 @@ void SelectSimple(TQueryClient client) {
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
@@ -171,7 +173,7 @@ void SelectWithParams(TQueryClient client) {
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > SelectWithParams:
 Season, title: Season 3, series title: Silicon Valley
 ```
@@ -254,7 +256,7 @@ void StreamQuerySelect(TQueryClient client) {
 
 Приведенный фрагмент кода при запуске выводит на консоль текст:
 
-```bash
+```text
 > StreamQuery:
 Season, SeriesId: 1, SeasonId: 1, Title: Season 1, Air date: 2006-02-03
 Season, SeriesId: 1, SeasonId: 2, Title: Season 2, Air date: 2007-08-24
@@ -381,7 +383,7 @@ void MultiStep(TQueryClient client) {
 
 Приведенные фрагменты кода при запуске выводят на консоль текст:
 
-```bash
+```text
 > MultiStep:
 Episode 1, Season: 5, title: Grow Fast or Die Slow, Air date: Sun Mar 25, 2018
 Episode 2, Season: 5, title: Reorientation, Air date: Sun Apr 01, 2018
@@ -434,4 +436,3 @@ void ExplicitTcl(TQueryClient client) {
     }));
 }
 ```
-

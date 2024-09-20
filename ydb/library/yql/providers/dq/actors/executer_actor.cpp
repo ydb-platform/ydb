@@ -191,6 +191,7 @@ private:
 
 
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
+        const TString scheduler = Settings->Scheduler.Get().GetOrElse({});
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
             GwmActorId, SelfId(), ControlId, workerCount,
@@ -204,6 +205,7 @@ private:
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
+        allocateRequest->Record.SetScheduler(scheduler);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }

@@ -260,8 +260,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const NScheme::TTypeRegistry& typeRegistry,
     const TSchemeLimits& limits,
     const TSubDomainInfo& subDomain,
-    bool pgTypesEnabled,
-    bool datetime64TypesEnabled,
+    const TCreateAlterDataFeatureFlags& featureFlags,
     TString& errStr,
     const THashSet<TString>& localSequences)
 {
@@ -310,7 +309,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
-        const NScheme::IType* type = typeRegistry.GetType(typeName);
 
         NKikimrSchemeOp::TFamilyDescription* columnFamily = nullptr;
         if (col.HasFamily() && col.HasFamilyName()) {
@@ -383,7 +381,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NScheme::NTypeIds::Utf8:
                         break;
                     case NScheme::NTypeIds::Pg: {
-                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc())) {
+                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetPgTypeDesc())) {
                             case INT2OID:
                             case INT4OID:
                             case INT8OID:
@@ -391,7 +389,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                             case FLOAT8OID:
                                 break;
                             default: {
-                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetTypeDesc());
+                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetPgTypeDesc());
                                 TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID));
                                 errStr = Sprintf(
                                     "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
@@ -447,39 +445,34 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             NScheme::TTypeInfo typeInfo;
-            TString typeMod;
-            if (type) {
-                // Only allow YQL types
-                if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                    errStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", col.GetType().data(), colName.data());
-                    return nullptr;
-                }
-                typeInfo = NScheme::TTypeInfo(type->GetTypeId());
+            if (!typeRegistry.GetTypeInfo(typeName, colName, typeInfo, errStr)) {
+                return nullptr;
+            }
 
-                if (!datetime64TypesEnabled) {
-                    switch (type->GetTypeId()) {
-                        case NScheme::NTypeIds::Date32:
-                        case NScheme::NTypeIds::Datetime64:
-                        case NScheme::NTypeIds::Timestamp64:
-                        case NScheme::NTypeIds::Interval64:
-                            errStr = Sprintf("Type '%s' specified for column '%s', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", col.GetType().data(), colName.data());
-                            return nullptr;
-                        default:
-                            break;
-                    }
-                }
-            } else {
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Date32:
+            case NScheme::NTypeIds::Datetime64:
+            case NScheme::NTypeIds::Timestamp64:
+            case NScheme::NTypeIds::Interval64:
+                if (!featureFlags.EnableTableDatetime64) {
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                if (!pgTypesEnabled) {
+                break;
+            case NScheme::NTypeIds::Decimal:
+                if (!featureFlags.EnableParameterizedDecimal && stricmp(typeName.data(), "decimal") != 0){
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", col.GetType().data(), colName.data());
+                    return nullptr;
+                }   
+                break;
+            case NScheme::NTypeIds::Pg:
+                if (!featureFlags.EnableTablePgTypes) {
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-                typeMod = NPg::TypeModFromPgTypeName(typeName);
+                break;                             
+            default:
+                break;
             }
 
             ui32 colId = col.HasId() ? col.GetId() : alterData->NextColumnId;
@@ -497,7 +490,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             colName2Id[colName] = colId;
             TTableInfo::TColumn& column = alterData->Columns[colId];
-            column = TTableInfo::TColumn(colName, colId, typeInfo, typeMod, col.GetNotNull());
+            column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
             column.IsBuildInProgress = col.GetIsBuildInProgress();
             if (source)
@@ -565,7 +558,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         for (const auto& indexDescription : op.GetTableIndexes()) {
             if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                 errStr = "Table with vector indexes doesn't support TTL";
-                return nullptr;                
+                return nullptr;
             }
         }
 
@@ -2038,6 +2031,7 @@ TString TExportInfo::ToString() const {
         << " DomainPathId: " << DomainPathId
         << " ExportPathId: " << ExportPathId
         << " UserSID: '" << UserSID << "'"
+        << " PeerName: '" << PeerName << "'"
         << " State: " << State
         << " WaitTxId: " << WaitTxId
         << " Issue: '" << Issue << "'"
@@ -2466,7 +2460,7 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 }
 
 // validate type of the sequence
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
         const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr) {
 
     i64 dataTypeMaxValue, dataTypeMinValue;
@@ -2498,9 +2492,9 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
                 errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
                 return std::nullopt;
             }
-        }                    
+        }
     } else {
-        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+        auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {
             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
             return std::nullopt;

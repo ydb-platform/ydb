@@ -1,4 +1,6 @@
-# App in C++
+# Example app in C++
+
+<!-- markdownlint-disable blanks-around-fences -->
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example) that is available as part of the {{ ydb-short-name }} [C++SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp).
 

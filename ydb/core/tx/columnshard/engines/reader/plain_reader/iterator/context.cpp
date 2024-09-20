@@ -32,22 +32,16 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
     const bool needSnapshots = !source->GetExclusiveIntervalOnly() || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() ||
                                !source->IsSourceInMemory();
-    bool partialUsageByPK = false;
-    {
-        const TPKRangeFilter::EUsageClass usage =
-            ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey());
-        switch (usage) {
+    const bool partialUsageByPK = [&]() {
+        switch (source->GetUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
-                partialUsageByPK = true;
-                break;
+                return true;
             case TPKRangeFilter::EUsageClass::DontUsage:
-                partialUsageByPK = true;
-                break;
+                return true;
             case TPKRangeFilter::EUsageClass::FullUsage:
-                partialUsageByPK = false;
-                break;
+                return false;
         }
-    }
+    }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
     const bool hasDeletions = source->GetHasDeletions();
@@ -153,7 +147,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             columnsFetch = columnsFetch + *SpecColumns;
         }
         if (!exclusiveSource) {
-            columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
+            columnsFetch = columnsFetch + *MergeColumns;
         } else {
             if (columnsFetch.GetColumnsCount() == 1 && SpecColumns->Contains(columnsFetch) && !hasFilterSharding) {
                 return nullptr;
@@ -161,8 +155,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
         if (columnsFetch.GetColumnsCount() || hasFilterSharding || needFilterDeletion) {
             acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Fetching);
+            if (needSnapshots) {
+                acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
+                result->AddStep(std::make_shared<TSnapshotFilter>());
+            }
             if (!exclusiveSource) {
-                acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
+                acc.AddAssembleStep(*result, *MergeColumns, "LAST_PK", false);
             }
             if (needFilterDeletion) {
                 acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
@@ -192,13 +190,13 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
             result->AddStep(std::make_shared<TDeletionFilter>());
         }
-        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
-            acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
-            result->AddStep(std::make_shared<TSnapshotFilter>());
-        }
         if (partialUsageByPredicate) {
             acc.AddAssembleStep(*result, *PredicateColumns, "PREDICATE", false);
             result->AddStep(std::make_shared<TPredicateFilter>());
+        }
+        if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
+            acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
+            result->AddStep(std::make_shared<TSnapshotFilter>());
         }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
             if (i->GetFilterOriginalColumnIds().empty()) {
@@ -227,12 +225,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
         acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
         acc.AddAssembleStep(*result, *PKColumns, "PK", false);
+        if (needSnapshots) {
+            result->AddStep(std::make_shared<TSnapshotFilter>());
+        }
         if (needFilterDeletion) {
             acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
             result->AddStep(std::make_shared<TDeletionFilter>());
-        }
-        if (needSnapshots) {
-            result->AddStep(std::make_shared<TSnapshotFilter>());
         }
         if (partialUsageByPredicate) {
             result->AddStep(std::make_shared<TPredicateFilter>());

@@ -1,9 +1,9 @@
 #pragma once
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/batch.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
@@ -112,7 +112,7 @@ public:
     void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const;
 
     void CreateTestOlapTable(ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
-        CreateOlapTableWithStore(TableName, StoreName, storeShardsCount, tableShardsCount);
+        CreateOlapTablesWithStore({TableName}, StoreName, storeShardsCount, tableShardsCount);
     }
 
     TString GetMultiColumnTestTableSchema(ui32 reps) const;

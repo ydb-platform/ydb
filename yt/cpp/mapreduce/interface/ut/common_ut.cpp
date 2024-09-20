@@ -359,7 +359,5 @@ TEST(TCommonTest, ModificationLoadedSchema)
     )"""));
     schema.MutableColumns()[0].Type(VT_INT64, true);
 
-    Cerr << NodeToYsonString(schema.ToNode()) << Endl;
-
     ASSERT_EQ(schema.ToNode()[0]["type"].AsString(), "int64");
 }

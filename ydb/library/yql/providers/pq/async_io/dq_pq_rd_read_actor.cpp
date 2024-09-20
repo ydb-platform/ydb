@@ -426,9 +426,21 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
-    SRC_LOG_D("TEvStatus from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset());
+    const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+    SRC_LOG_D("TEvStatus from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
+
+    ui64 partitionId = ev->Get()->Record.GetPartitionId();
+    auto sessionIt = Sessions.find(partitionId);
+    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    auto& sessionInfo = sessionIt->second;
+
+    if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
+        SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
+        return;
+    }
+
     if (ReadyBuffer.empty()) {
-        TPartitionKey partitionKey{TString{}, ev->Get()->Record.GetPartitionId()};
+        TPartitionKey partitionKey{TString{}, partitionId};
         PartitionToOffset[partitionKey] = ev->Get()->Record.GetNextMessageOffset();
     }
 }

@@ -4,9 +4,9 @@
 
 | Benchmark                            | Reference                                                |
 |--------------------------------------|----------------------------------------------------------|
-| [TPC-H](https://tpc.org/tpch/)       | [tpch](../../reference/ydb-cli/workload-tpch.md)|
-| [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
-| [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
+| [TPC-H](https://tpc.org/tpch/)       | [tpch](../../reference/ydb-cli/workload-tpch.md) |
+| [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md) |
+| [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md) |
 
 They all function similarly. For a detailed description of each, refer to the relevant reference via the links above. All commands for working with benchmarks are organized into corresponding groups, and the database path is specified in the same way for all commands:
 
@@ -45,6 +45,7 @@ You can also specify that tables should be deleted before creation if they alrea
 
 
 For more details, see the description of the commands for each benchmark:
+
 * [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
 * [tpch init](../../reference/ydb-cli/workload-tpch.md#init)
 * [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
@@ -82,6 +83,7 @@ Examples:
 The command allows you to select queries for execution, generate various types of reports, collect execution statistics, and more.
 
 For a detailed description, see the relevant reference sections:
+
 * [clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
 * [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
 * [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
@@ -97,6 +99,7 @@ After all necessary testing has been completed, the benchmark's data can be remo
 ```
 
 For a detailed description, see the corresponding sections:
+
 * [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)

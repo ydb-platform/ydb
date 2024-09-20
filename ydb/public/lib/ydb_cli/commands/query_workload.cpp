@@ -78,11 +78,11 @@ TCommandQueryWorkload::TCommandQueryWorkload()
 }
 
 TCommandQueryWorkloadRun::TCommandQueryWorkloadRun()
-    : TYdbOperationCommand("run", {}, "Run YDB query workload")
+    : TYdbCommand("run", {}, "Run YDB query workload")
 {}
 
 void TCommandQueryWorkloadRun::Config(TConfig& config) {
-    TYdbOperationCommand::Config(config);
+    TYdbCommand::Config(config);
     config.Opts->AddLongOption('q', "query", "Query to execute") .RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads; 1 if not specified").DefaultValue(1).StoreResult(&Threads);
     config.Opts->AddLongOption('d', "delay", "Interval delay in seconds; 1 if not specified").DefaultValue(1).StoreResult(&IntervalSeconds);
@@ -112,7 +112,7 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                     auto asyncResult = client.StreamExecuteQuery(
                         Query,
                         NQuery::TTxControl::NoTx(),
-                        FillSettings(settings)
+                        settings
                     );
 
                     auto result = asyncResult.GetValueSync();

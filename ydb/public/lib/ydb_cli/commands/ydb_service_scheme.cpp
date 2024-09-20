@@ -322,7 +322,35 @@ namespace {
         Cout << "Written size per minute: " << PrettySize(topicStats.GetBytesWrittenPerMinute()) << Endl;
         Cout << "Written size per hour: " << PrettySize(topicStats.GetBytesWrittenPerHour()) << Endl;
         Cout << "Written size per day: " << PrettySize(topicStats.GetBytesWrittenPerDay()) << Endl;
+    }
 
+    void PrintMain(const NTopic::TTopicDescription& topicDescription) {
+        Cout << Endl << "Main:";
+        Cout << Endl << "RetentionPeriod: " << topicDescription.GetRetentionPeriod().Hours() << " hours";
+        if (topicDescription.GetRetentionStorageMb().Defined()) {
+            Cout << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
+        }
+        Cout << Endl << "PartitionsCount: " << topicDescription.GetTotalPartitionsCount();
+        Cout << Endl << "PartitionWriteSpeed: " << topicDescription.GetPartitionWriteSpeedBytesPerSecond() / 1_KB << " KB";
+        Cout << Endl << "MeteringMode: " << (TStringBuilder() << topicDescription.GetMeteringMode());
+        if (!topicDescription.GetSupportedCodecs().empty()) {
+            Cout << Endl << "SupportedCodecs: " << FormatCodecs(topicDescription.GetSupportedCodecs()) << Endl;
+        }
+    }
+
+    void PrintAutopartitioning(const NTopic::TTopicDescription& topicDescription) {
+        auto autoPartitioningStrategyIt = NYdb::NConsoleClient::AutoPartitioningStrategiesStrs.find(topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy());
+        if (!autoPartitioningStrategyIt.IsEnd()) {
+            Cout << Endl << "AutoPartitioning:";
+            Cout << Endl << "Strategy: " << autoPartitioningStrategyIt->second;
+            if (topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled) {
+                Cout << Endl << "MinActivePartitions: " << topicDescription.GetPartitioningSettings().GetMinActivePartitions();
+                Cout << Endl << "MaxActivePartitions: " << topicDescription.GetPartitioningSettings().GetMaxActivePartitions();
+                Cout << Endl << "DownUtilizationPercent: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent();
+                Cout << Endl << "UpUtilizationPercent: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent();
+                Cout << Endl << "StabilizationWindowSeconds: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds() << Endl;
+            }
+        }
     }
 
     void PrintPartitionStatistics(const NTopic::TTopicDescription& topicDescription) {
@@ -362,32 +390,10 @@ namespace {
 }
 
 int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& description) const {
-    Cout << Endl << "RetentionPeriod: " << description.GetRetentionPeriod().Hours() << " hours";
-    if (description.GetRetentionStorageMb().Defined()) {
-        Cout << Endl << "StorageRetention: " << *description.GetRetentionStorageMb() << " MB";
-    }
-    Cout << Endl << "PartitionsCount: " << description.GetTotalPartitionsCount();
-    Cout << Endl << "PartitionWriteSpeed: " << description.GetPartitionWriteSpeedBytesPerSecond() / 1_KB << " KB";
-    Cout << Endl << "MeteringMode: " << (TStringBuilder() << description.GetMeteringMode());
-    if (!description.GetSupportedCodecs().empty()) {
-        Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
-    }
-    auto autoPartitioningStrategyIt = NYdb::NConsoleClient::AutoPartitioningStrategiesStrs.find(description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy());
-    if (!autoPartitioningStrategyIt.IsEnd()) {
-        Cout << Endl << "AutoPartitioningStrategy: " << autoPartitioningStrategyIt->second;
-        if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled) {
-            Cout << Endl << "AutoPartitioningMinActivePartitions: " << description.GetPartitioningSettings().GetMinActivePartitions();
-            Cout << Endl << "AutoPartitioningMaxActivePartitions: " << description.GetPartitioningSettings().GetMaxActivePartitions();
-            Cout << Endl << "AutoPartitioningDownUtilizationPercent: " << description.GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent();
-            Cout << Endl << "AutoPartitioningUpUtilizationPercent: " << description.GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent();
-            Cout << Endl << "AutoPartitioningStabilizationWindowSeconds: " << description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds() << Endl;
-        }
-    }
-
+    PrintMain(description);
+    PrintAutopartitioning(description);
     PrintTopicConsumers(description.GetConsumers());
-
     PrintPermissionsIfNeeded(description);
-
     if (ShowStats) {
         PrintStatistics(description);
     }
@@ -806,8 +812,6 @@ namespace {
         Cout << "Last modified: " << FormatTime(tableDescription.GetModificationTime()) << Endl;
         Cout << "Created: " << FormatTime(tableDescription.GetCreationTime()) << Endl;
     }
-
-
 
     void PrintPartitionInfo(const NTable::TTableDescription& tableDescription, bool showBoundaries, bool showStats) {
         const TVector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();

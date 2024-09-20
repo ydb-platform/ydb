@@ -44,12 +44,13 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
 
 
     /* For CROSS Join and degenerate predicates (if subtree tables and joinCondition tables do not intersect) */
-    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg])) {
+    /* 'ANY' flag means leaving only one row from the join side. */
+    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg]) || joinNode->LeftAny) {
         TES |= subtreeNodes[joinNode->LeftArg];
         TES = ConvertConflictRulesIntoTES(TES, conflictRules);
     }
 
-    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg])) {
+    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg]) || joinNode->RightAny) {
         TES |= subtreeNodes[joinNode->RightArg];
         TES = ConvertConflictRulesIntoTES(TES, conflictRules);
     }

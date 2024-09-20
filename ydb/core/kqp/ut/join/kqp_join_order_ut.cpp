@@ -148,17 +148,6 @@ private:
 
         joinRequest.append("SELECT * FROM `/Root/table_0` as t0 ");
 
-        srand(228);
-        NJson::TJsonValue stats;
-        for (size_t i = 0; i < ChainSize; ++i) {
-            TString table = Sprintf("/Root/table_%ld", i);
-            int nRows = rand();
-            NJson::TJsonValue tableStat;
-            tableStat[table]["n_rows"] = nRows;
-            tableStat[table]["byte_size"] = nRows * 10;
-            stats.AppendValue(std::move(tableStat));
-        }
-
         for (size_t i = 1; i < ChainSize; ++i) {
             TString table = Sprintf("/Root/table_%ld", i);
 

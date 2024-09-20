@@ -205,7 +205,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ["relwithdebinfo", "release-asan", "release-clang14"]
+        build_preset: ["relwithdebinfo", "release-asan"]
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:

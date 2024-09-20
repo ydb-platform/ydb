@@ -35,6 +35,7 @@ enum class ENodeFields : ui8 {
     SubDomainKey,
     DisconnectTime,
     Database,
+    HasDisks,
     COUNT
 };
 
@@ -124,6 +125,7 @@ class TJsonNodes : public TViewerPipeClient {
         Any,
         Static,
         Dynamic,
+        Storage,
     };
     EType Type = EType::Any;
 
@@ -660,6 +662,9 @@ public:
         } else if (params.Get("type") == "dynamic") {
             Type = EType::Dynamic;
             FieldsRequired.set(+ENodeFields::NodeInfo);
+        } else if (params.Get("type") == "storage") {
+            Type = EType::Storage;
+            FieldsRequired.set(+ENodeFields::NodeInfo);
         } else if (params.Get("type") == "any") {
             Type = EType::Any;
         }
@@ -856,6 +861,42 @@ public:
         if (FilterStorageStage != EFilterStorageStage::None) {
             return;
         }
+        if (((Type == EType::Static || Type == EType::Dynamic) && FieldsAvailable.test(+ENodeFields::NodeInfo)) || (Type == EType::Storage && FieldsAvailable.test(+ENodeFields::HasDisks))) {
+            TNodeView nodeView;
+            switch (Type) {
+                case EType::Static:
+                    for (TNode* node : NodeView) {
+                        if (node->IsStatic()) {
+                            nodeView.push_back(node);
+                        }
+                    }
+                    break;
+                case EType::Dynamic:
+                    for (TNode* node : NodeView) {
+                        if (!node->IsStatic()) {
+                            nodeView.push_back(node);
+                        }
+                    }
+                    break;
+                case EType::Storage:
+                    for (TNode* node : NodeView) {
+                        if (node->HasDisks) {
+                            nodeView.push_back(node);
+                        }
+                    }
+                    break;
+                case EType::Any:
+                    break;
+            }
+            NodeView.swap(nodeView);
+            FoundNodes = TotalNodes = NodeView.size();
+            Type = EType::Any;
+            InvalidateNodes();
+        }
+        // storage/nodes pre-filter, affects TotalNodes count
+        if (Type != EType::Any) {
+            return;
+        }
         if (!FilterNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
             TNodeView nodeView;
             for (TNode* node : NodeView) {
@@ -889,17 +930,6 @@ public:
                 }
                 NodeView.swap(nodeView);
                 With = EWith::Everything;
-                InvalidateNodes();
-            }
-            if (Type != EType::Any && FieldsAvailable.test(+ENodeFields::NodeInfo)) {
-                TNodeView nodeView;
-                for (TNode* node : NodeView) {
-                    if ((Type == EType::Static && node->IsStatic()) || (Type == EType::Dynamic && !node->IsStatic())) {
-                        nodeView.push_back(node);
-                    }
-                }
-                NodeView.swap(nodeView);
-                Type = EType::Any;
                 InvalidateNodes();
             }
             if (ProblemNodesOnly && FieldsAvailable.test(+ENodeFields::SystemState)) {
@@ -1011,6 +1041,7 @@ public:
                 case ENodeFields::CPU:
                 case ENodeFields::LoadAverage:
                 case ENodeFields::DisconnectTime:
+                case ENodeFields::HasDisks:
                     break;
             }
         }
@@ -1078,6 +1109,7 @@ public:
                 case ENodeFields::Tablets:
                 case ENodeFields::SubDomainKey:
                 case ENodeFields::DisconnectTime:
+                case ENodeFields::HasDisks:
                 case ENodeFields::COUNT:
                     break;
             }
@@ -1543,6 +1575,7 @@ public:
                     ++slots;
                     MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), slots);
                 }
+                FieldsAvailable.set(+ENodeFields::HasDisks);
                 FilterStorageStage = EFilterStorageStage::None;
                 ApplyEverything();
             } else {
@@ -1566,6 +1599,7 @@ public:
                 for (TNode* node : NodeView) {
                     node->CalcDisks();
                 }
+                FieldsAvailable.set(+ENodeFields::HasDisks);
                 FieldsAvailable.set(+ENodeFields::Missing);
                 FieldsAvailable.set(+ENodeFields::DiskSpaceUsage);
             } else {
@@ -2267,6 +2301,7 @@ public:
                         return nodes of specific type:
                           * `static`
                           * `dynamic`
+                          * `storage`
                           * `any`
                   - name: with
                     in: query

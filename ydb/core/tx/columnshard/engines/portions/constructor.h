@@ -29,6 +29,21 @@ private:
     YDB_ACCESSOR_DEF(std::vector<TColumnRecord>, Records);
     std::vector<TUnifiedBlobId> BlobIds;
 
+    class TAddressBlobId {
+    private:
+        YDB_READONLY_DEF(TChunkAddress, Address);
+        YDB_READONLY(TBlobRangeLink16::TLinkId, BlobIdx, 0);
+
+    public:
+        TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
+            : Address(address)
+            , BlobIdx(blobIdx)
+        {
+
+        }
+    };
+    std::vector<TAddressBlobId> BlobIdxs;
+
 public:
     void SetPortionId(const ui64 value) {
         AFL_VERIFY(value);
@@ -226,19 +241,7 @@ public:
     }
 
     void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
-        for (auto&& i : Records) {
-            if (i.GetColumnId() == address.GetEntityId() && i.GetChunkIdx() == address.GetChunkIdx()) {
-                i.RegisterBlobIdx(blobIdx);
-                return;
-            }
-        }
-        for (auto&& i : Indexes) {
-            if (i.GetIndexId() == address.GetEntityId() && i.GetChunkIdx() == address.GetChunkIdx()) {
-                i.RegisterBlobIdx(blobIdx);
-                return;
-            }
-        }
-        AFL_VERIFY(false)("problem", "portion haven't address for blob registration")("address", address.DebugString());
+        BlobIdxs.emplace_back(address, blobIdx);
     }
 
     TString DebugString() const {
@@ -265,26 +268,37 @@ public:
             std::sort(Indexes.begin(), Indexes.end(), pred);
             CheckChunksOrder(Indexes);
         }
+        {
+            auto pred = [](const TIndexChunk& l, const TIndexChunk& r) {
+                return l.GetAddress() < r.GetAddress();
+            };
+            std::sort(BlobIdxs.begin(), BlobIdxs.end(), pred);
+        }
     }
 
     void FullValidation() const {
         AFL_VERIFY(Records.size());
         CheckChunksOrder(Records);
         CheckChunksOrder(Indexes);
-        std::set<ui32> blobIdxs;
-        for (auto&& i : Records) {
-            blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
-        }
-        for (auto&& i : Indexes) {
-            if (i.HasBlobRange()) {
-                blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            }
-        }
-        if (BlobIds.size()) {
-            AFL_VERIFY(BlobIds.size() == blobIdxs.size());
-            AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+        if (BlobIdxs.size()) {
+            AFL_VERIFY(BlobIdxs.size() == Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
+                                                               "indexes", Indexes.size());
         } else {
-            AFL_VERIFY(blobIdxs.empty());
+            std::set<ui32> blobIdxs;
+            for (auto&& i : Records) {
+                blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+            }
+            for (auto&& i : Indexes) {
+                if (i.HasBlobRange()) {
+                    blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
+                }
+            }
+            if (BlobIds.size()) {
+                AFL_VERIFY(BlobIds.size() == blobIdxs.size());
+                AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+            } else {
+                AFL_VERIFY(blobIdxs.empty());
+            }
         }
     }
 

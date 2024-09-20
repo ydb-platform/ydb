@@ -44,6 +44,8 @@ protected:
 
     void SetUp(NUnitTest::TTestContext&) override;
 
+    virtual bool GetEnablePQConfigTransactionsAtSchemeShard() const;
+
     NTable::TSession CreateTableSession();
     NTable::TTransaction BeginTx(NTable::TSession& session);
     void CommitTx(NTable::TTransaction& tx, EStatus status = EStatus::SUCCESS);
@@ -66,6 +68,8 @@ protected:
                      size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
     void DescribeTopic(const TString& path);
+
+    void AddConsumer(const TString& topic, const TVector<TString>& consumers);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -198,9 +202,16 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
+    settings.SetEnablePQConfigTransactionsAtSchemeShard(GetEnablePQConfigTransactionsAtSchemeShard());
+
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
     Driver = std::make_unique<TDriver>(Setup->MakeDriver());
+}
+
+bool TFixture::GetEnablePQConfigTransactionsAtSchemeShard() const
+{
+    return true;
 }
 
 NTable::TSession TFixture::CreateTableSession()
@@ -327,6 +338,20 @@ void TFixture::CreateTopic(const TString& path,
 
 {
     Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
+}
+
+void TFixture::AddConsumer(const TString& path,
+                           const TVector<TString>& consumers)
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    for (const auto& consumer : consumers) {
+        settings.BeginAddConsumer(consumer);
+    }
+
+    auto result = client.AlterTopic(path, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 void TFixture::DescribeTopic(const TString& path)

@@ -36,7 +36,7 @@ jobs:
         uses: diplodoc-platform/docs-upload-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          storage-bucket: ${{ secrets.DOCS_AWS_BUCKET }}
+          storage-bucket: "common/${{ secrets.DOCS_PROJECT_NAME }}"
           storage-endpoint: ${{ vars.DOCS_AWS_ENDPOINT }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}

@@ -365,7 +365,7 @@ public:
                         result.ListedObjectSize = listingResult.ListedObjectSize;
                         for (auto& directoryPrefix : listingResult.Directories) {
                             if (directoryPrefix.MatchedGlobs.empty()) {
-                                // We need to list until extra columns are extracteds
+                                // We need to list until extra columns are extracted
                                 queue->push_back(directoryPrefix.Path);
                             } else {
                                 result.Directories.push_back(directoryPrefix);

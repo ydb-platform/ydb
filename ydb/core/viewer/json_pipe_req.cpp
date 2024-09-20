@@ -760,11 +760,13 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
-    Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-    Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-    if (Database && !Direct) {
-        RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        return true;
+    if (Event) {
+        Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+        if (Database && !Direct) {
+            RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+            return true;
+        }
     }
     return false;
 }

@@ -1,6 +1,6 @@
-# Serial типы данных
+# Серийные типы данных
 
-Serial типы данных представляют собой целые числа, но с дополнительным механизмом генерации значений. Эти типы данных используются для создания автоинкрементных колонок, а именно для каждой новой строки, добавляемой в таблицу, будет автоматически генерироваться уникальное значение для такой колонки (подобно типу [SERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) в PostgreSQL или свойству [AUTO_INCREMENT](https://dev.mysql.com/doc/refman/9.0/en/example-auto-increment.html) в MySQL).
+Серийные типы данных представляют собой целые числа, но с дополнительным механизмом генерации значений. Эти типы данных используются для создания автоинкрементных колонок, а именно для каждой новой строки, добавляемой в таблицу, будет автоматически генерироваться уникальное значение для такой колонки (подобно типу [SERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) в PostgreSQL или свойству [AUTO_INCREMENT](https://dev.mysql.com/doc/refman/9.0/en/example-auto-increment.html) в MySQL).
 
 ## Пример использования
 
@@ -12,14 +12,17 @@ CREATE TABLE users (
     PRIMARY KEY (user_id)
 );
 ```
+
 ``` yql
 UPSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
 INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com');
 REPLACE INTO users (name, email) VALUES ('John', 'john@example.com');
 ```
+
 ``` yql
 SELECT * FROM users;
 ```
+
 email | name | user_id
 ----- | ----- | -----
 `alice@example.com` | Alice | 1
@@ -27,10 +30,13 @@ email | name | user_id
 `john@example.com` | John | 3
 
 Можно самостоятельно указать значение `Serial` колонки при вставке, в этом случае вставка будет выполняться, как с обычной целочисленной колонкой:
+
 ``` yql
 UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com');
 ```
+
 ## Описание
+
 Только колонки, участвующие в первичном ключе таблиц, могут иметь тип `Serial`.
 
 При определении такого типа для колонки создаётся отдельный схемный объект `Sequence`, привязанный к этой колонке и являющийся генератором последовательности, из которого извлекаются значения. Этот объект является приватным и скрыт от пользователя. `Sequence` будет уничтожен вместе с таблицей.
@@ -46,8 +52,6 @@ UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com'
 `Serial8` | $2^63–1$ | `Int64`
 `BigSerial` | $2^63–1$ | `Int64`
 
-При переполнении `Sequence` на вставке будет возвращаться ошибка.
-
 Отметим, что следующее значение выдаётся генератором до непосредственной вставки в таблицу и уже будет считаться использованным, даже если строка, содержащая это значение, не была успешно вставлена, например, при откате транзакции. Поэтому множество значений такой колонки может содержать пропуски и состоять из нескольких промежутков.
 
-Для таблиц с автоинкрементными колонками поддержаны операции копирования и `backup`/`restore`.
+Для таблиц с автоинкрементными колонками поддержаны операции [копирования](../../../../reference/ydb-cli/tools-copy.md), [dump](../../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../../reference/ydb-cli/export-import/import-file.md).

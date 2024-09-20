@@ -3,7 +3,7 @@
 В данном разделе размещены статьи по типам данных YQL:
 
 - [Простые/примитивные типы](primitive.md)
-- [Serial типы](serial.md)
+{% if feature_serial %}- [Серийные типы](serial.md){% endif %}
 - [Опциональные типы](optional.md)
 - [Контейнеры](containers.md)
 - [Специальные типы](special.md)

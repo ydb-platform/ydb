@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context("good_state", "/requested/page", redirectStrategy.IsAjaxRequest());
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
         TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        TContext context("test_state", "/requested/page", false);
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -828,7 +828,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context("test_state", "/requested/page", redirectStrategy.IsAjaxRequest());
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -895,7 +895,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        TContext context("test_state", "/requested/page", false);
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
         request << "GET /callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -1056,7 +1056,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context("good_state", "/requested/page", false);
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
@@ -1094,7 +1094,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context("good_state", "/requested/page", false);
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';

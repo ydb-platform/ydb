@@ -14,13 +14,21 @@ namespace NMVP {
 namespace NOIDC {
 
 class TContext {
+public:
+    struct TInitializer {
+        TString State;
+        TString RequestedAddress;
+        bool AjaxRequest = false;
+    };
+
 private:
     TString State;
     bool AjaxRequest = false;
     TString RequestedAddress;
 
 public:
-    TContext(const TString& state = "", const TString& requestedAddress = "", bool isAjaxRequest = false);
+    TContext() = default;
+    TContext(const TInitializer& initializer);
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
     TString GetState(const TString& key) const;

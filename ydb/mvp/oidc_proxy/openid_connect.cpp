@@ -163,7 +163,6 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
                                          .ErrorMessage = errorMessage << "Calculated digest is not equal expected digest"});
     }
     TString requestedAddress;
-    bool isAjaxRequest = false;
     if (NJson::ReadJsonTree(requestedAddressContext, &jsonConfig, &jsonValue)) {
         const NJson::TJsonValue* jsonRequestedAddress = nullptr;
         if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress)) {
@@ -173,18 +172,10 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
                                              .IsErrorRetryable = false,
                                              .ErrorMessage = errorMessage << "Requested address was not found in the cookie"});
         }
-        const NJson::TJsonValue* jsonAjaxRequest = nullptr;
-        if (jsonValue.GetValuePointer("ajax_request", &jsonAjaxRequest)) {
-            isAjaxRequest = jsonAjaxRequest->GetBooleanRobust();
-        } else {
-            return TRestoreOidcContextResult({.IsSuccess = false,
-                                             .IsErrorRetryable = true,
-                                             .ErrorMessage = errorMessage << "Can not detect ajax request"}, TContext("", requestedAddress));
-        }
     }
     return TRestoreOidcContextResult({.IsSuccess = true,
                                      .IsErrorRetryable = true,
-                                     .ErrorMessage = ""}, TContext("", requestedAddress, isAjaxRequest));
+                                     .ErrorMessage = ""}, TContext({.RequestedAddress = requestedAddress}));
 }
 
 TCheckStateResult CheckState(const TString& state, const TString& key) {

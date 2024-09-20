@@ -10,10 +10,10 @@
 namespace NMVP {
 namespace NOIDC {
 
-TContext::TContext(const TString& state, const TString& requestedAddress, bool isAjaxRequest)
-    : State(state)
-    , AjaxRequest(isAjaxRequest)
-    , RequestedAddress(requestedAddress)
+TContext::TContext(const TInitializer& initializer)
+    : State(initializer.State)
+    , AjaxRequest(initializer.AjaxRequest)
+    , RequestedAddress(initializer.RequestedAddress)
 {}
 
 TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
@@ -54,8 +54,7 @@ TString TContext::CreateYdbOidcCookie(const TString& secret) const {
 
 TString TContext::GenerateCookie(const TString& key) const {
     TStringBuilder requestedAddressContext;
-    requestedAddressContext << "{\"requested_address\":\"" << RequestedAddress
-                            << "\",\"ajax_request\":" << (AjaxRequest ? "true" : "false") << "}";
+    requestedAddressContext << "{\"requested_address\":\"" << RequestedAddress << "\"}";
     TString digest = HmacSHA256(key, requestedAddressContext);
     TStringBuilder signedRequestedAddress;
     signedRequestedAddress << "{\"requested_address_context\":\"" << Base64Encode(requestedAddressContext)

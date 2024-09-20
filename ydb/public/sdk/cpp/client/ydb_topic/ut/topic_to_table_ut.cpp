@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/blob.h>
@@ -42,9 +43,13 @@ protected:
         void WaitForEvent();
     };
 
+    struct TFeatureFlags {
+        bool EnablePQConfigTransactionsAtSchemeShard = true;
+    };
+
     void SetUp(NUnitTest::TTestContext&) override;
 
-    virtual bool GetEnablePQConfigTransactionsAtSchemeShard() const;
+    void NotifySchemeShard(const TFeatureFlags& flags);
 
     NTable::TSession CreateTableSession();
     NTable::TTransaction BeginTx(NTable::TSession& session);
@@ -105,6 +110,8 @@ protected:
                              NYdb::EStatus status);
     void CloseTopicWriteSession(const TString& topicPath,
                                 const TString& messageGroupId);
+    void CloseTopicReadSession(const TString& topicPath,
+                               const TString& consumerName);
 
     enum EEndOfTransaction {
         Commit,
@@ -185,6 +192,8 @@ private:
                                               ui64 tabletId,
                                               const NPQ::TWriteId& writeId);
 
+    ui64 GetSchemeShardTabletId(const TActorId& actorId);
+
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
 
@@ -202,16 +211,25 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
-    settings.SetEnablePQConfigTransactionsAtSchemeShard(GetEnablePQConfigTransactionsAtSchemeShard());
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
     Driver = std::make_unique<TDriver>(Setup->MakeDriver());
 }
 
-bool TFixture::GetEnablePQConfigTransactionsAtSchemeShard() const
+void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
 {
-    return true;
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *request->Record.MutableConfig() = *Setup->GetServer().ServerSettings.AppConfig;
+    request->Record.MutableConfig()->MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(flags.EnablePQConfigTransactionsAtSchemeShard);
+
+    auto& runtime = Setup->GetRuntime();
+    auto actorId = runtime.AllocateEdgeActor();
+
+    ui64 ssId = GetSchemeShardTabletId(actorId);
+
+    runtime.SendToPipe(ssId, actorId, request.release());
+    runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>();
 }
 
 NTable::TSession TFixture::CreateTableSession()
@@ -688,6 +706,13 @@ void TFixture::CloseTopicWriteSession(const TString& topicPath,
     TopicWriteSessions.erase(key);
 }
 
+void TFixture::CloseTopicReadSession(const TString& topicPath,
+                                     const TString& consumerName)
+{
+    Y_UNUSED(consumerName);
+    TopicReadSessions.erase(topicPath);
+}
+
 void TFixture::WriteToTopic(const TString& topicPath,
                             const TString& messageGroupId,
                             const TString& message,
@@ -802,6 +827,37 @@ void TFixture::WaitForSessionClose(const TString& topicPath,
     }
 
     UNIT_ASSERT(context.AckCount() <= context.WriteCount);
+}
+
+ui64 TFixture::GetSchemeShardTabletId(const TActorId& actorId)
+{
+    auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+    navigate->DatabaseName = "/Root";
+
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = SplitPath("/Root");
+    entry.SyncVersion = true;
+    entry.ShowPrivatePath = true;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+
+    navigate->ResultSet.push_back(std::move(entry));
+    //navigate->UserToken = "root@builtin";
+    navigate->Cookie = 12345;
+
+    auto& runtime = Setup->GetRuntime();
+
+    runtime.Send(MakeSchemeCacheID(), actorId,
+                 new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()),
+                 0,
+                 true);
+    auto response = runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Request->Cookie, 12345);
+    UNIT_ASSERT_VALUES_EQUAL(response->Request->ErrorCount, 0);
+
+    auto& front = response->Request->ResultSet.front();
+
+    return front.Self->Info.GetSchemeshardId();
 }
 
 ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPath, ui32 partition)
@@ -2039,6 +2095,41 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
     WriteMessagesInTx(0, 1);
     WriteMessagesInTx(4, 0);
     WriteMessagesInTx(0, 1);
+}
+
+Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
+{
+    // There was a server
+    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
+
+    // Users have created their own topic on it
+    CreateTopic(TEST_TOPIC);
+
+    // And they wrote their messages into it
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-1");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-2");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-3");
+
+    // And he had a consumer
+    AddConsumer(TEST_TOPIC, {"consumer-1"});
+
+    // We read messages from the topic and committed offsets
+    auto messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+    CloseTopicReadSession(TEST_TOPIC, "consumer-1");
+
+    // And then the Logbroker team turned on the feature flag
+    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = true});
+
+    // Users continued to write to the topic
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-4");
+
+    // Users have added new consumers
+    AddConsumer(TEST_TOPIC, {"consumer-2"});
+
+    // And they wanted to continue reading their messages
+    messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
 }
 
 }

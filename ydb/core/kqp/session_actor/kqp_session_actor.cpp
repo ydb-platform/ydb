@@ -255,6 +255,7 @@ public:
             QueryState->UserToken
         ), IEventHandle::FlagTrackDelivery);
 
+        QueryState->PoolHandlerActor = MakeKqpWorkloadServiceId(SelfId().NodeId());
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -2387,6 +2388,7 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
+                hFunc(TEvKqpExecuter::TEvStreamData, HandleNoop);
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
 
                 // always come from WorkerActor

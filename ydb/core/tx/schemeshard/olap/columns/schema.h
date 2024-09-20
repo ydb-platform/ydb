@@ -51,7 +51,8 @@ public:
 
     const TOlapColumnSchema* GetByIdVerified(const ui32 id) const noexcept;
 
-    bool ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId);
+    bool ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors,
+        ui32& nextEntityId);
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;

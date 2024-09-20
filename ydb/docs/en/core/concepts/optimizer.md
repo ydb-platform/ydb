@@ -10,9 +10,9 @@ A significant part of the optimizations in {{ ydb-short-name }} applies to almos
 
 ## Cost-Based Query Optimizer
 
-Cost-Based Optimizer is used for more complex optimizations, such as choosing an optimal join order and join algorithms. Cost-based Optimizer considers a large number of alternative execution plans for each query and chooses the best one based on the cost estimate for each option. Currently, this optimizer only works with plans that contain [JOIN](../yql/reference/syntax/join.md) operations. It chooses the best order for these operations to be executed, and also chooses the most efficient implementation for each Join algoritm in the plan.
+The cost-based optimizer is used for more complex optimizations, such as choosing an optimal join order and join algorithms. The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option. Currently, this optimizer only works with plans that contain [JOIN](../yql/reference/syntax/join.md) operations. It chooses the best order for these operations and the most efficient algotithm implementation for each join operation in the plan.
 
-The cost optimizer consists of three main components:
+The cost-optimizer consists of three main components:
 
 * Plan enumerator
 * Cost estimation function
@@ -20,7 +20,7 @@ The cost optimizer consists of three main components:
 
 ### Plan enumerator
 
-The current Cost-Based Optimizer in {{ ydb-short-name }} enumerates all useful join trees, for which the join conditions are defined. We first build a join hypergraph, where the nodes are tables and edges are join conditions. Depending on how the original query was written, the join hypergraph may have quite different topologies, varying from simple chain-like graphs to complex cliques. The resulting topology of the join graph determines how many possible alternite plans need to be considered by the optimizer.
+The current Cost-based optimizer in {{ ydb-short-name }} enumerates all useful join trees, for which the join conditions are defined. It first builds a join hypergraph, where the nodes are tables and edges are join conditions. Depending on how the original query is written, the join hypergraph may have quite different topologies, ranging from simple chain-like graphs to complex cliques. The resulting topology of the join graph determines how many possible altenative plans need to be considered by the optimizer.
 
 For example, a star is a common topology in analytical queries, where a main fact table is joined to multiple dimension tables:
 
@@ -46,11 +46,11 @@ In this query graph, all `Dim...` tables are joined to the `Fact_Sales` fact tab
 
 ![Join graph](_assets/Star-Schema.png)
 
-Common topologies also include chain and clique. A "chain" is a topology where tables are connected to each other sequentially and each table participates in no more than one join. A "clique" is a fully connected graph where each table is connected to another.
+Common topologies also include chains and cliques. A "chain" is a topology where tables are connected to each other sequentially and each table participates in no more than one join. A "clique" is a fully connected graph where each table is connected to every other table.
 
-In practice, OLAP queries often have a topology that is a combination of a "star" and a "chain", while complex topologies like a "clique" are very rare.
+In practice, OLAP queries often have a topology that is a combination of "star" and "chain" topologies, while complex topologies like "cliques" are very rare.
 
-The topology greatly influences the number of alternative plans that the optimizer needs to consider. Therefore, the cost-based optimizer limits the number of joins that are compared by exhaustive search, depending on the topology of the original plan. The capabilities of exact optimization in {{ ydb-short-name }} are listed in the following table:
+The topology significantly impacts the number of alternative plans that the optimizer needs to consider. Therefore, the cost-based optimizer limits the number of joins that are compared by exhaustive search, depending on the topology of the original plan. The capabilities of exact optimization in {{ ydb-short-name }} are listed in the following table:
 
 | Topology | Number of supported joins |
 | -------- | ------------------------- |

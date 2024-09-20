@@ -28,6 +28,10 @@ public:
         return VersionsById;
     }
 
+    TMap<ui64, TVersionData>& MutableVersionsById() {
+        return VersionsById;
+    }
+
     NOlap::TSnapshot GetMinVersionForId(const ui64 sVersion) const {
         auto it = MinVersionById.find(sVersion);
         Y_ABORT_UNLESS(it != MinVersionById.end());
@@ -42,10 +46,11 @@ public:
         VersionsById.emplace(ssVersion, versionInfo);
         Y_ABORT_UNLESS(Versions.emplace(snapshot, ssVersion).second);
 
-        if (MinVersionById.contains(ssVersion)) {
-            MinVersionById.emplace(ssVersion, std::min(snapshot, MinVersionById.at(ssVersion)));
-        } else {
+        auto it = MinVersionById.find(ssVersion);
+        if (it == MinVersionById.end()) {
             MinVersionById.emplace(ssVersion, snapshot);
+        } else {
+            it->second = std::min(snapshot, it->second);
         }
     }
 };

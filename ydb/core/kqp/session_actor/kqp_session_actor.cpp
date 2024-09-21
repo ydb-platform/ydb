@@ -1298,12 +1298,20 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
+        if (Settings.TableService.GetEnableOltpSink() && !BufferActorId && QueryState->TxCtx->TxHasEffects()) {
+            TKqpBufferWriterSettings settings {
+                .SessionActorId = SelfId(),
+            };
+            auto* actor = CreateKqpBufferWriterActor(std::move(settings));
+            BufferActorId = RegisterWithSameMailbox(actor);
+        }
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo);
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings,
+            txCtx->ShardIdToTableInfo, BufferActorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

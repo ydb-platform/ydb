@@ -129,7 +129,8 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo)
+        const TGUCSettings::TPtr& GUCSettings,
+        const TShardIdToTableInfoPtr& shardIdToTableInfo, const TActorId bufferActorId)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -138,6 +139,7 @@ public:
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
+        , BufferActorId(bufferActorId)
     {
         Target = creator;
 
@@ -2848,6 +2850,7 @@ private:
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
+    TActorId BufferActorId;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2893,11 +2896,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const TActorId bufferActorId)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext,
-        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
+        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, bufferActorId);
 }
 
 } // namespace NKqp

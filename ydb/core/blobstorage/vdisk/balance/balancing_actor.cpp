@@ -87,6 +87,9 @@ namespace NBalancing {
         ///////////////////////////////////////////////////////////////////////////////////////////
 
         void ContinueBalancing() {
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
+
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
@@ -101,8 +104,6 @@ namespace NBalancing {
 
         void ScheduleJobQuant() {
             Ctx->MonGroup.ReplTokenAquired()++;
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
 
             // once repl token received, start balancing - waking up sender and deleter
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
@@ -128,7 +129,7 @@ namespace NBalancing {
             THPTimer timer;
 
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
-                if (cnt % 100 == 99 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
+                if (cnt % 128 == 127 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     // actor should not block the thread for a long time, so we should yield
                     STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());

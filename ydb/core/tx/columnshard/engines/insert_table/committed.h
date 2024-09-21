@@ -33,7 +33,7 @@ public:
         : TBase(userData)
         , Snapshot(ss)
         , InsertWriteId(ephemeralWriteId)
-        , DedupId(ToString(generation) + ":" + ToString((ui64)insertWriteId)) {
+        , DedupId(ToString(generation) + ":" + ToString((ui64)ephemeralWriteId)) {
     }
 
     void SetRemove() {

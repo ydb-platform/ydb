@@ -3045,7 +3045,7 @@ bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const 
 
     ui8 scale;
     if (!TryFromString<ui8>(GetParamTwo(), scale)){
-        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal scale: " << GetParamTwo()));
         return false;
     }
 

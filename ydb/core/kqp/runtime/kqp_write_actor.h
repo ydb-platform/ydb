@@ -10,12 +10,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TKqpBufferWriterSettings {
-    TActorId SessionActorId;
-};
-
-NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings);
-
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>);
 
 }

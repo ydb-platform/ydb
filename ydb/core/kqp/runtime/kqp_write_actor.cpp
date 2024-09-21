@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>

@@ -164,7 +164,7 @@ struct TMkqlPAllocHeader {
     ui64 Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
 };
 
-static_assert(sizeof(TMkqlPAllocHeader) == 
+static_assert(sizeof(TMkqlPAllocHeader) ==
     sizeof(size_t) +
     sizeof(TAllocState::TListEntry) +
     sizeof(void*), "Padding is not allowed");
@@ -423,8 +423,10 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
 }
 
 void* MKQLArrowAllocate(ui64 size);
+void* MKQLArrowAllocateUntracked(ui64 size);
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
-void MKQLArrowFree(const void* mem, ui64 size);
+bool MKQLArrowFree(const void* mem, ui64 size, bool forceUntrack = true);
+void MKQLArrowTrack(const void* mem);
 void MKQLArrowUntrack(const void* mem);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>

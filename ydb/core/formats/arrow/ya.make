@@ -47,12 +47,13 @@ SRCS(
     converter.cpp
     converter.h
     custom_registry.cpp
+    memory_pool.cpp
     permutations.cpp
+    process_columns.cpp
     program.cpp
     size_calcer.cpp
-    ssa_program_optimizer.cpp
     special_keys.cpp
-    process_columns.cpp
+    ssa_program_optimizer.cpp
 )
 
 END()

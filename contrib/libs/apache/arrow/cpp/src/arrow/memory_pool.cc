@@ -535,7 +535,7 @@ Status mimalloc_memory_pool(MemoryPool** out) {
 #endif
 }
 
-MemoryPool* default_memory_pool() {
+MemoryPool* __attribute__((weak)) default_memory_pool() {
   auto backend = DefaultBackend();
   switch (backend) {
     case MemoryPoolBackend::System:

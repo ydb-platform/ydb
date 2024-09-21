@@ -8,6 +8,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/formats/arrow/memory_pool.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 
@@ -91,20 +92,21 @@ public:
     {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
+        NArrow::GetMemoryPool()->Track(Batch);
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch)
         : Batch(batch) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
-
+        NArrow::GetMemoryPool()->Track(Batch);
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
         : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch}))) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
-
+        NArrow::GetMemoryPool()->Track(Batch);
     }
 };
 

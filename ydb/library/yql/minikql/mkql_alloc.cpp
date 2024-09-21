@@ -7,7 +7,7 @@ namespace NKikimr {
 
 namespace NMiniKQL {
 
-Y_POD_THREAD(TAllocState*) TlsAllocState;
+Y_POD_THREAD(TAllocState*) TlsAllocState = nullptr;
 
 TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, nullptr, nullptr };
 TAllocState::TCurrentPages TAllocState::EmptyCurrentPages = { &TAllocState::EmptyPageHeader, &TAllocState::EmptyPageHeader };
@@ -251,7 +251,7 @@ void* MKQLArrowAllocate(ui64 size) {
     if (state->EnableArrowTracking) {
         state->OffloadAlloc(fullSize);
     }
-    
+
     auto ptr = GetAlignedPage(fullSize);
     auto header = (TMkqlArrowHeader*)ptr;
     if (state->EnableArrowTracking) {
@@ -265,6 +265,13 @@ void* MKQLArrowAllocate(ui64 size) {
     return header + 1;
 }
 
+void* MKQLArrowAllocateUntracked(ui64 size) {
+    auto header = (TMkqlArrowHeader*)GetAlignedPage(size + sizeof(TMkqlArrowHeader));
+    header->Entry.Clear();
+    header->Size = size;
+    return header + 1;
+}
+
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
     auto res = MKQLArrowAllocate(size);
     memcpy(res, mem, Min(prevSize, size));
@@ -272,12 +279,16 @@ void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
     return res;
 }
 
-void MKQLArrowFree(const void* mem, ui64 size) {
+bool MKQLArrowFree(const void* mem, ui64 size, bool forceUntrack) {
     auto fullSize = size + sizeof(TMkqlArrowHeader);
     auto header = ((TMkqlArrowHeader*)mem) - 1;
     if (!header->Entry.IsUnlinked()) {
         TAllocState* state = TlsAllocState;
-        Y_ENSURE(state);
+        if (forceUntrack) {
+            Y_ENSURE(state);
+        } else if (!state) {
+            return false;
+        }
         state->OffloadFree(fullSize);
         header->Entry.Unlink();
         auto it = state->ArrowBuffers.find(mem);
@@ -287,6 +298,23 @@ void MKQLArrowFree(const void* mem, ui64 size) {
 
     Y_ENSURE(size == header->Size);
     ReleaseAlignedPage(header, fullSize);
+    return true;
+}
+
+void MKQLArrowTrack(const void* mem) {
+    TAllocState* state = TlsAllocState;
+    Y_ENSURE(state);
+    if (!state->EnableArrowTracking) {
+        return;
+    }
+
+    auto header = ((TMkqlArrowHeader*)mem) - 1;
+    if (header->Entry.IsUnlinked()) {
+        header->Entry.Link(&state->ArrowBlocksRoot);
+        Y_ENSURE(state->ArrowBuffers.insert(header + 1).second);
+        auto fullSize = header->Size + sizeof(TMkqlArrowHeader);
+        state->OffloadAlloc(fullSize);
+    }
 }
 
 void MKQLArrowUntrack(const void* mem) {

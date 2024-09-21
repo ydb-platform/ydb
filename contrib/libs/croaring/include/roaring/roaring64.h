@@ -1,6 +1,7 @@
 #ifndef ROARING64_H
 #define ROARING64_H
 
+#include <roaring.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -91,6 +92,14 @@ roaring64_bitmap_t *roaring64_bitmap_of_ptr(size_t n_args,
         (sizeof((const uint64_t[]){0, __VA_ARGS__}) / sizeof(uint64_t)) - 1, \
         &((const uint64_t[]){0, __VA_ARGS__})[1])
 #endif
+
+/**
+ * Create a new bitmap by moving containers from a 32 bit roaring bitmap.
+ *
+ * After calling this function, the original bitmap will be empty, and the
+ * returned bitmap will contain all the values from the original bitmap.
+ */
+roaring64_bitmap_t *roaring64_bitmap_move_from_roaring32(roaring_bitmap_t *r);
 
 /**
  * Create a new bitmap containing all the values in [min, max) that are at a

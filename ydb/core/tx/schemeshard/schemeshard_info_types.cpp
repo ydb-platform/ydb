@@ -459,12 +459,14 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     return nullptr;
                 }
                 break;
-            case NScheme::NTypeIds::Decimal:
-                if (!featureFlags.EnableParameterizedDecimal && stricmp(typeName.data(), "decimal") != 0){
+            case NScheme::NTypeIds::Decimal: {
+                const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName);
+                if (!featureFlags.EnableParameterizedDecimal && !(decimalType->GetPrecision() == NScheme::DECIMAL_PRECISION && decimalType->GetScale() == NScheme::DECIMAL_SCALE)){
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }   
                 break;
+            }
             case NScheme::NTypeIds::Pg:
                 if (!featureFlags.EnableTablePgTypes) {
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());

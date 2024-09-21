@@ -8,6 +8,7 @@
 namespace NKikimr {
 namespace NScheme {
 
+constexpr ui32 DECIMAL_MAX_PRECISION = 35;
 constexpr ui32 DECIMAL_PRECISION = 22;
 constexpr ui32 DECIMAL_SCALE = 9;
 

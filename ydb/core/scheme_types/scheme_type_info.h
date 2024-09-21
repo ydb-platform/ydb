@@ -70,7 +70,7 @@ public:
         return TypeId != NTypeIds::Pg ? TString{} : NPg::TypeModFromPgTypeName(name);
     }
 
-    constexpr const TDecimalType GetDecimalType() const {
+    constexpr const TDecimalType& GetDecimalType() const {
         Y_ABORT_UNLESS (TypeId == NTypeIds::Decimal);
         return DecimalTypeDesc;
     }

@@ -62,10 +62,10 @@ Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
         break;
     }
     case NScheme::NTypeIds::Decimal : {
-        auto decimalType = typeInfo.GetDecimalType();
+        const NScheme::TDecimalType& decimal = typeInfo.GetDecimalType();
         auto* decimalProto = ydbType.mutable_decimal_type();
-        decimalProto->set_precision(decimalType.GetPrecision());
-        decimalProto->set_scale(decimalType.GetScale());        
+        decimalProto->set_precision(decimal.GetPrecision());
+        decimalProto->set_scale(decimal.GetScale());        
         break;
     }
     default : {
@@ -123,17 +123,9 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
-        if (typeName == "Decimal(22,9)"sv) {
-            //
-            // typename is reformatted as above
-            // should discard (SCALE,PRECISION)
-            // they are validated to be (22,9)
-            //
-            typeName = "Decimal"sv;
-        }
 
         NScheme::TTypeInfo typeInfo;
-        if (!typeRegistry->GetTypeInfo(typeName, colName, typeInfo, errStr)) {
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), col.GetTypeInfo(), typeName, colName, typeInfo, errStr)) {
             return std::make_pair(nullptr, errStr);
         }
 

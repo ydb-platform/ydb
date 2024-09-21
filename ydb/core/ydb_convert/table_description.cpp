@@ -7,9 +7,11 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -400,6 +402,16 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         if (column.GetNotNull()) {
             newColumn->set_not_null(column.GetNotNull());
         }
+    } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+        Y_ENSURE(columnType);
+        auto typeParams = columnType->mutable_decimal_type();
+        typeParams->set_precision(column.GetTypeInfo().GetDecimalPrecision());
+        typeParams->set_scale(column.GetTypeInfo().GetDecimalScale());
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -412,14 +424,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
         Y_ENSURE(columnType);
-        if (protoType == NYql::NProto::TypeIds::Decimal) {
-            auto typeParams = columnType->mutable_decimal_type();
-            // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
-        } else {
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
-        }
+        NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
     }
     return columnType;
 }
@@ -441,6 +446,16 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         if (column.GetNotNull()) {
             newColumn->set_not_null(column.GetNotNull());
         }
+    } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision()) {
+        if (column.GetNotNull()) {
+            columnType = newColumn->mutable_type();
+        } else {
+            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        }
+        Y_ENSURE(columnType);
+        auto typeParams = columnType->mutable_decimal_type();
+        typeParams->set_precision(column.GetTypeInfo().GetDecimalPrecision());
+        typeParams->set_scale(column.GetTypeInfo().GetDecimalScale());
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -453,14 +468,7 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
         Y_ENSURE(columnType);
-        if (protoType == NYql::NProto::TypeIds::Decimal) {
-            auto typeParams = columnType->mutable_decimal_type();
-            // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
-        } else {
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
-        }
+        NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
     }
     switch (column.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
@@ -609,20 +617,17 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
         case Ydb::Type::kDecimalType: {
             ui32 precision = itemType.decimal_type().precision();
             ui32 scale = itemType.decimal_type().scale();
-            if (precision != NScheme::DECIMAL_PRECISION) {
+            if (precision > NScheme::DECIMAL_MAX_PRECISION) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Bad decimal precision. Only Decimal(%" PRIu32
-                                    ",%" PRIu32 ") is supported for table columns",
-                                    NScheme::DECIMAL_PRECISION,
-                                    NScheme::DECIMAL_SCALE);
+                error = Sprintf("Decimal precision %u should be less or equal %u",
+                                    precision,
+                                    NScheme::DECIMAL_MAX_PRECISION);
                 return false;
             }
-            if (scale != NScheme::DECIMAL_SCALE) {
+            if (scale > precision) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Bad decimal scale. Only Decimal(%" PRIu32
-                                    ",%" PRIu32 ") is supported for table columns",
-                                    NScheme::DECIMAL_PRECISION,
-                                    NScheme::DECIMAL_SCALE);
+                error = Sprintf("Decimal precision %u should be greater than scale %u",
+                                    precision, scale);
                 return false;
             }
             outTypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));
@@ -691,6 +696,10 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         }
         cd->SetType(NScheme::TypeName(typeInfo, typeMod));
 
+        if(NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+            NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *cd->MutableTypeInfo());
+        }
+
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());
         }
@@ -736,8 +745,13 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
         if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
             return false;
         }
+        columnDesc->SetTypeId(typeInfo.GetTypeId());
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
         columnDesc->SetNotNull(column.not_null());
+
+        if(NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+            NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
+        }
     }
 
     return true;

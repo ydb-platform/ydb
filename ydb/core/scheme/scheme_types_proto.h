@@ -2,6 +2,8 @@
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/scheme_types/scheme_decimal_type.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 namespace NKikimr::NScheme {
 
@@ -20,5 +22,13 @@ struct TTypeInfoMod {
 TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo);
 
 NKikimrProto::TTypeInfo DefaultDecimalProto();
+
+void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringType& typeMod, ::NKikimrProto::TTypeInfo& typeInfoProto);
+
+NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrProto::TTypeInfo& typeInfoProto);
+
+void ProtoFromDecimalType(const NScheme::TDecimalType& decimal, ::Ydb::DecimalType& decimalProto);
+
+NScheme::TDecimalType DecimalTypeFromProto(const ::Ydb::DecimalType& decimalProto);
 
 } // namespace NKikimr::NScheme

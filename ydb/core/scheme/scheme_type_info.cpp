@@ -11,9 +11,7 @@ namespace NKikimr::NScheme {
     case NScheme::NTypeIds::Pg:
         return NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc(), typeMod);
     case NScheme::NTypeIds::Decimal: {
-        const TDecimalType decimal = typeInfo.GetDecimalType();
-        if (decimal.GetPrecision() == DECIMAL_PRECISION && decimal.GetScale() == DECIMAL_SCALE)
-            return "Decimal";
+        const TDecimalType& decimal = typeInfo.GetDecimalType();
         return Sprintf("Decimal(%u,%u)", decimal.GetPrecision(), decimal.GetScale());
     }
     default:

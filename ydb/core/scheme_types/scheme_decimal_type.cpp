@@ -22,23 +22,25 @@ void TDecimalType::CellValueToStream(const std::pair<ui64, i64>& cellValue, IOut
 }    
 
 const std::optional<TDecimalType> TDecimalType::ParseTypeName(const TStringBuf& typeName) {
-    ui32 precision = 0;
-    ui32 scale = 0;
     if (strcasecmp(typeName.data(), "decimal") == 0) {
-        precision = DECIMAL_PRECISION;
-        scale = DECIMAL_SCALE;
+        return TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE);
     } else {
         static const std::regex regex("decimal\\((\\d+),(\\d+)\\)", std::regex_constants::icase);
         std::smatch match;
         if (std::regex_search(typeName.data(), match, regex)) {
-            precision = FromString<ui32>(match[1].str());
-            scale = FromString<ui32>(match[2].str());
+            ui32 precision = FromString<ui32>(match[1].str());
+            ui32 scale = FromString<ui32>(match[2].str());
+
+            if (precision > DECIMAL_MAX_PRECISION)
+                return {};
+            if (scale > precision)
+                return {};
+
+            return TDecimalType(precision, scale);
+        } else {
+            return {};
         }
     }
-    if (precision == 0 || scale == 0) {
-        return {};
-    }
-    return TDecimalType(precision, scale);
 }
 
 } // namespace NKikimr::NScheme

@@ -51,24 +51,5 @@ TTypeRegistry::TTypeRegistry()
 void TTypeRegistry::CalculateMetadataEtag() {
 }
 
-bool TTypeRegistry::GetTypeInfo(const TStringBuf& typeName, const TStringBuf& columnName, NScheme::TTypeInfo &typeInfo, ::TString& errorStr) const {
-    if (const NScheme::IType* type = GetType(typeName)) {
-        // Only allow YQL types
-        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errorStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", typeName.data(), columnName.data());
-            return false;
-        }
-        typeInfo = NScheme::TTypeInfo(type->GetTypeId());
-    } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
-        typeInfo = NScheme::TTypeInfo(*decimalType);
-    } else if (const auto pgTypeDesc = NPg::TypeDescFromPgTypeName(typeName)) {
-        typeInfo = NScheme::TTypeInfo(pgTypeDesc);
-    } else {
-        errorStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", typeName.data(), columnName.data());
-        return false;
-    }
-    return true;
-}
-
 } // namespace NScheme
 } // namespace NKikimr

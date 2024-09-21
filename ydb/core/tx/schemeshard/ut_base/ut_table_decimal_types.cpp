@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
             NLs::PathExist,
             NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal")
+            NLs::CheckColumnType(0, "Decimal(22,9)")
         });
     }
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
             NLs::PathExist,
             NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal")
+            NLs::CheckColumnType(0, "Decimal(22,9)")
         });        
     }
 

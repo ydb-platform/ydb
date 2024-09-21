@@ -307,7 +307,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             errStr = Sprintf("Invalid name for %s column '%s'", allowSystemColumns ? "any" : "user", colName.data());
             return nullptr;
         }
-
+        
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
 
         NKikimrSchemeOp::TFamilyDescription* columnFamily = nullptr;
@@ -445,10 +445,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             NScheme::TTypeInfo typeInfo;
-            if (!typeRegistry.GetTypeInfo(typeName, colName, typeInfo, errStr)) {
+            if (!GetTypeInfo(typeRegistry.GetType(typeName), col.GetTypeInfo(), typeName, colName, typeInfo, errStr)) {
                 return nullptr;
             }
-
+                    
             switch (typeInfo.GetTypeId()) {
             case NScheme::NTypeIds::Date32:
             case NScheme::NTypeIds::Datetime64:
@@ -2527,6 +2527,35 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
     }
 
     return {{dataTypeMinValue, dataTypeMaxValue}};
+}
+
+bool GetTypeInfo(const NScheme::IType* type, const NKikimrProto::TTypeInfo& typeInfoProto, const TStringBuf& typeName, const TStringBuf& columnName, NScheme::TTypeInfo &typeInfo, ::TString& errorStr) {
+    if (type) {
+        // Only allow YQL types
+        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+            errorStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", typeName.data(), columnName.data());
+            return false;
+        }
+        typeInfo = NScheme::TTypeInfo(type->GetTypeId());
+        return true;
+    } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
+        if (typeInfoProto.HasDecimalPrecision() && typeInfoProto.HasDecimalScale()) {
+            typeInfo = NScheme::TypeInfoFromProto(NScheme::NTypeIds::Decimal, typeInfoProto);
+        } else {
+            typeInfo = *decimalType;
+        }
+        return true;
+    } else if (const auto pgTypeDesc = NPg::TypeDescFromPgTypeName(typeName)) {
+        if (typeInfoProto.HasPgTypeId()) {
+            typeInfo = NScheme::TypeInfoFromProto(NScheme::NTypeIds::Pg, typeInfoProto);
+        } else {
+            typeInfo = pgTypeDesc;
+        }
+        return true;
+    } else {
+        errorStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", typeName.data(), columnName.data());
+        return false;
+    }
 }
 
 } // namespace NSchemeShard

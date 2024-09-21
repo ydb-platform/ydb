@@ -32,7 +32,7 @@ public:
     TCommittedData(const std::shared_ptr<TUserData>& userData, const TSnapshot& ss, const ui64 generation, const TInsertWriteId ephemeralWriteId)
         : TBase(userData)
         , Snapshot(ss)
-        , InsertWriteId(insertWriteId)
+        , InsertWriteId(ephemeralWriteId)
         , DedupId(ToString(generation) + ":" + ToString((ui64)insertWriteId)) {
     }
 

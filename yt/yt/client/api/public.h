@@ -203,8 +203,8 @@ inline const TString BannedAttributeName("banned");
 inline const TString RoleAttributeName("role");
 inline const TString AddressesAttributeName("addresses");
 inline const TString BalancersAttributeName("balancers");
-inline const TString DefaultRpcProxyRole("default");
-inline const TString DefaultHttpProxyRole("data");
+inline const std::string DefaultRpcProxyRole("default");
+inline const std::string DefaultHttpProxyRole("data");
 inline const TString JournalPayloadKey("payload");
 inline const TString HunkPayloadKey("payload");
 

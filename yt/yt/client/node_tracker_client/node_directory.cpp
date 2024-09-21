@@ -58,9 +58,9 @@ namespace {
 constexpr int TypicalTagCount = 16;
 
 // Cf. YT-10645
-TCompactVector<TStringBuf, TypicalTagCount> GetSortedTags(const std::vector<TString>& tags)
+TCompactVector<std::string, TypicalTagCount> GetSortedTags(const std::vector<std::string>& tags)
 {
-    TCompactVector<TStringBuf, TypicalTagCount> result;
+    TCompactVector<std::string, TypicalTagCount> result;
     result.reserve(tags.size());
     for (const auto& tag : tags) {
         result.push_back(tag);
@@ -94,7 +94,7 @@ TNodeDescriptor::TNodeDescriptor(
     const std::optional<std::string>& host,
     const std::optional<std::string>& rack,
     const std::optional<std::string>& dc,
-    const std::vector<TString>& tags,
+    const std::vector<std::string>& tags,
     std::optional<TInstant> lastSeenTime)
     : Addresses_(std::move(addresses))
     , DefaultAddress_(NNodeTrackerClient::GetDefaultAddress(Addresses_))
@@ -145,7 +145,7 @@ const std::optional<std::string>& TNodeDescriptor::GetDataCenter() const
     return DataCenter_;
 }
 
-const std::vector<TString>& TNodeDescriptor::GetTags() const
+const std::vector<std::string>& TNodeDescriptor::GetTags() const
 {
     return Tags_;
 }
@@ -380,7 +380,7 @@ void FromProto(NNodeTrackerClient::TNodeDescriptor* descriptor, const NNodeTrack
         protoDescriptor.has_host() ? std::make_optional(protoDescriptor.host()) : std::nullopt,
         protoDescriptor.has_rack() ? std::make_optional(protoDescriptor.rack()) : std::nullopt,
         protoDescriptor.has_data_center() ? std::make_optional(protoDescriptor.data_center()) : std::nullopt,
-        FromProto<std::vector<TString>>(protoDescriptor.tags()),
+        FromProto<std::vector<std::string>>(protoDescriptor.tags()),
         protoDescriptor.has_last_seen_time() ? std::make_optional(FromProto<TInstant>(protoDescriptor.last_seen_time())) : std::nullopt);
 }
 
@@ -434,7 +434,7 @@ bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs
     }
 
     const auto& lhsTags = lhs.GetTags();
-    auto rhsTags = FromProto<std::vector<TString>>(rhs.tags());
+    auto rhsTags = FromProto<std::vector<std::string>>(rhs.tags());
     if (GetSortedTags(lhsTags) != GetSortedTags(rhsTags)) {
         return false;
     }

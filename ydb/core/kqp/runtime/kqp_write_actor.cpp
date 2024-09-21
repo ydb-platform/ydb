@@ -898,6 +898,7 @@ public:
         TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
+        , MessageSettings(GetWriteActorSettings())
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
@@ -1147,6 +1148,7 @@ public:
     TKqpBufferWriteActor(
         TKqpBufferWriterSettings&& settings)
         : SessionActorId(settings.SessionActorId)
+        , MessageSettings(GetWriteActorSettings())
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
     {
@@ -1472,9 +1474,8 @@ public:
 
 private:
     TString LogPrefix;
-    TWriteActorSettings MessageSettings;
-
     const TActorId SessionActorId;
+    TWriteActorSettings MessageSettings;
 
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
@@ -1513,6 +1514,7 @@ public:
         TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
+        , MessageSettings(GetWriteActorSettings())
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)

@@ -211,6 +211,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
+    settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
@@ -950,6 +951,23 @@ void TFixture::RestartLongTxService()
                      0,
                      true);
     }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_39, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    AddConsumer("topic_A", {"consumer"});
+
+    CommitTx(tx, EStatus::SUCCESS);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)

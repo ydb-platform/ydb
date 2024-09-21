@@ -745,7 +745,6 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
         if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
             return false;
         }
-        columnDesc->SetTypeId(typeInfo.GetTypeId());
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
         columnDesc->SetNotNull(column.not_null());
 

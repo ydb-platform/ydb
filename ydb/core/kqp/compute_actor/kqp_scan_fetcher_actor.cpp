@@ -46,8 +46,9 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
     for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
         NScheme::TTypeId typeId = Meta.GetKeyColumnTypes().at(i);
-        const auto& typeInfoProto = Meta.GetKeyColumnTypeInfos().at(i);
-        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(typeId, typeInfoProto);
+        NScheme::TTypeInfo typeInfo = NScheme::NTypeIds::IsParametrizedType(typeId) ?
+            NScheme::TypeInfoFromProto(typeId,Meta.GetKeyColumnTypeInfos().at(i)) :
+            NScheme::TTypeInfo(typeId);  
         KeyColumnTypes.push_back(typeInfo);
     }
 }

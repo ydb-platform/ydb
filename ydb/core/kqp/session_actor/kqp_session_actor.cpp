@@ -1298,7 +1298,7 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        if (Settings.TableService.GetEnableOltpSink() && !BufferActorId && QueryState->TxCtx->TxHasEffects()) {
+        if (Settings.TableService.GetEnableOltpSink() && !BufferActorId && txCtx->HasOltpTable && request.AcquireLocksTxId.Defined()) {
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
             };

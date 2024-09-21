@@ -39,25 +39,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(EnableParameterizedDecimal));
         ui64 txId = 100;
 
-        auto expectedResult = []() {
-            if constexpr (EnableParameterizedDecimal) {
-                return TExpectedResult(NKikimrScheme::StatusAccepted);
-            } else {
-                return TExpectedResult(NKikimrScheme::StatusSchemeError, "Type 'Decimal(22,9)' specified for column 'key', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)");
-            }
-        }();        
-
         AsyncCreateTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table1"
             Columns { Name: "key"   Type: "Decimal(22,9)" }
             Columns { Name: "value" Type: "Decimal(22,9)" }
             KeyColumnNames: ["key"]
         )_");
-        TestModificationResults(runtime, txId, {expectedResult});
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
-
-        if constexpr (!EnableParameterizedDecimal)
-            return;
 
         AsyncAlterTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table1"

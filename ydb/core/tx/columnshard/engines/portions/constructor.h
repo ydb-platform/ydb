@@ -236,6 +236,16 @@ public:
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
     }
 
+    const TBlobRange RestoreBlobRangeSlow(const TBlobRangeLink16& linkRange, const TChunkAddress& address) const {
+        for (auto&& i : BlobIdxs) {
+            if (i.GetAddress() == address) {
+                return linkRange.RestoreRange(GetBlobId(i.GetBlobIdx()));
+            }
+        }
+        AFL_VERIFY(false);
+        return TBlobRange();
+    }
+
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
         AFL_VERIFY(linkId < BlobIds.size());
         return BlobIds[linkId];

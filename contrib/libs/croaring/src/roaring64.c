@@ -178,6 +178,43 @@ roaring64_bitmap_t *roaring64_bitmap_copy(const roaring64_bitmap_t *r) {
     return result;
 }
 
+/**
+ * Steal the containers from a 32-bit bitmap and insert them into a 64-bit
+ * bitmap (with an offset)
+ *
+ * After calling this function, the original bitmap will be empty, and the
+ * returned bitmap will contain all the values from the original bitmap.
+ */
+static void move_from_roaring32_offset(roaring64_bitmap_t *dst,
+                                       roaring_bitmap_t *src,
+                                       uint32_t high_bits) {
+    uint64_t key_base = ((uint64_t)high_bits) << 32;
+    uint32_t r32_size = ra_get_size(&src->high_low_container);
+    for (uint32_t i = 0; i < r32_size; ++i) {
+        uint16_t key = ra_get_key_at_index(&src->high_low_container, i);
+        uint8_t typecode;
+        container_t *container = ra_get_container_at_index(
+            &src->high_low_container, (uint16_t)i, &typecode);
+
+        uint8_t high48[ART_KEY_BYTES];
+        uint64_t high48_bits = key_base | ((uint64_t)key << 16);
+        split_key(high48_bits, high48);
+        leaf_t *leaf = create_leaf(container, typecode);
+        art_insert(&dst->art, high48, (art_val_t *)leaf);
+    }
+    // We stole all the containers, so leave behind a size of zero
+    src->high_low_container.size = 0;
+}
+
+roaring64_bitmap_t *roaring64_bitmap_move_from_roaring32(
+    roaring_bitmap_t *bitmap32) {
+    roaring64_bitmap_t *result = roaring64_bitmap_create();
+
+    move_from_roaring32_offset(result, bitmap32, 0);
+
+    return result;
+}
+
 roaring64_bitmap_t *roaring64_bitmap_from_range(uint64_t min, uint64_t max,
                                                 uint64_t step) {
     if (step == 0 || max <= min) {
@@ -1947,22 +1984,8 @@ roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(
         read_bytes += bitmap32_size;
 
         // Insert all containers of the 32-bit bitmap into the 64-bit bitmap.
-        uint32_t r32_size = ra_get_size(&bitmap32->high_low_container);
-        for (size_t i = 0; i < r32_size; ++i) {
-            uint16_t key16 =
-                ra_get_key_at_index(&bitmap32->high_low_container, (uint16_t)i);
-            uint8_t typecode;
-            container_t *container = ra_get_container_at_index(
-                &bitmap32->high_low_container, (uint16_t)i, &typecode);
-
-            uint64_t high48_bits =
-                (((uint64_t)high32) << 32) | (((uint64_t)key16) << 16);
-            uint8_t high48[ART_KEY_BYTES];
-            split_key(high48_bits, high48);
-            leaf_t *leaf = create_leaf(container, typecode);
-            art_insert(&r->art, high48, (art_val_t *)leaf);
-        }
-        roaring_bitmap_free_without_containers(bitmap32);
+        move_from_roaring32_offset(r, bitmap32, high32);
+        roaring_bitmap_free(bitmap32);
     }
     return r;
 }

@@ -4,6 +4,7 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme_types/scheme_decimal_type.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 

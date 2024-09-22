@@ -1,5 +1,4 @@
 #include "scheme_types_proto.h"
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 

@@ -55,4 +55,12 @@ TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTy
     }
 }
 
+NKikimrProto::TTypeInfo DefaultDecimalProto() {
+    NKikimrProto::TTypeInfo typeInfoProto;
+    typeInfoProto.SetDecimalPrecision(NScheme::DECIMAL_PRECISION);
+    typeInfoProto.SetDecimalScale(NScheme::DECIMAL_SCALE);
+    return typeInfoProto;
+}
+
+
 } // namespace NKikimr::NScheme

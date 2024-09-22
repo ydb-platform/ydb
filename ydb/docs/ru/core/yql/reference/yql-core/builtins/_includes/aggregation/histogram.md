@@ -110,8 +110,6 @@ SELECT
 FROM my_table;
 ```
 
-`AGGREGATE_BY` не поддерживается для колоночных таблиц.
-
 ## LinearHistogram, LogarithmicHistogram и LogHistogram {#linearhistogram}
 
 Построение гистограммы по явно указанной фиксированной шкале корзин.

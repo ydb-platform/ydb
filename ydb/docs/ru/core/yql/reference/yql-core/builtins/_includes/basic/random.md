@@ -46,13 +46,13 @@ RandomUuid(T1[, T2, ...])->Uuid
 
 ```yql
 SELECT
-    Random(key) -- [0, 1]
+    Random(key) -- [0, 1)
 FROM my_table;
 ```
 
 ```yql
 SELECT
-    RandomNumber(key) -- [0, Max<Uint64>]
+    RandomNumber(key) -- [0, Max<Uint64>)
 FROM my_table;
 ```
 

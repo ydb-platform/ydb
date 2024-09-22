@@ -114,6 +114,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             if (dataColumnIds.contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
                 pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
             }
+            dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::WRITE_ID);
         }
         resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
         {

@@ -284,7 +284,7 @@ void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobsResult>& portions, NBlo
             blobsData.emplace(blobId, b.GetResultBlob());
         }
         for (auto&& rec : portion.GetPortionConstructor().GetRecords()) {
-            auto range = portion.GetPortionConstructor().RestoreBlobRange(rec.BlobRange);
+            auto range = portion.GetPortionConstructor().RestoreBlobRangeSlow(rec.BlobRange, rec.GetAddress());
             auto it = blobsData.find(range.BlobId);
             AFL_VERIFY(it != blobsData.end());
             const TString& data = it->second;

@@ -3,6 +3,7 @@
 #include "change_record.h"
 #include "change_sender_base.h"
 #include "datashard_impl.h"
+#include "incr_restore_scan.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -35,7 +36,7 @@ class TIncrRestoreChangeSenderMain
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[IncrRestoreChangeSenderMain]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                // << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
                 << SelfId() /* contains brackets */ << " ";
         }
 
@@ -149,6 +150,10 @@ class TIncrRestoreChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
+
+        if (NoMoreData && IsAllSendersReady()) {
+            Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
@@ -169,8 +174,18 @@ class TIncrRestoreChangeSenderMain
         RemoveRecords(std::move(ev->Get()->Records));
     }
 
+    void Handle(TEvIncrementalRestoreScan::TEvNoMoreData::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        NoMoreData = true;
+
+        if (IsAllSendersReady()) {
+            Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
+        }
+    }
+
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        RenderHtmlPage(DataShard.TabletId, ev, ctx);
+        // RenderHtmlPage(DataShard.TabletId, ev, ctx);
+        Y_UNUSED(ev, ctx);
     }
 
     void PassAway() override {
@@ -183,11 +198,10 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_MAIN;
     }
 
-    explicit TIncrRestoreChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
+    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TChangeSender(this, this, this, this, dataShard.ActorId)
+        , TChangeSender(this, this, this, this, changeServerActor)
         , IndexPathId(indexPathId)
-        , DataShard(dataShard)
         , UserTableId(userTableId)
         , TargetTableVersion(0)
     {
@@ -199,6 +213,7 @@ public:
 
     STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvIncrementalRestoreScan::TEvNoMoreData, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvForgetRecords, Handle);
@@ -225,7 +240,6 @@ public:
 
 private:
     const TPathId IndexPathId;
-    const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
 
@@ -235,6 +249,11 @@ private:
     TPathId TargetTablePathId;
     ui64 TargetTableVersion;
     THolder<TKeyDesc> KeyDesc;
+    bool NoMoreData = false;
 }; // TIncrRestoreChangeSenderMain
+
+IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& restoreTargetPathId) {
+    return new TIncrRestoreChangeSenderMain(changeServerActor, userTableId, restoreTargetPathId);
+}
 
 } // namespace NKikimr::NDataShard

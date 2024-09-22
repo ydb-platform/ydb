@@ -1,10 +1,19 @@
 #include "incr_restore_scan.h"
+#include "change_exchange_impl.h"
 
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/util/testactorsys.h>
+#include <ydb/core/tx/scheme_board/helpers.h>
 
 namespace NKikimr::NDataShard {
+
+using namespace NDataShard::NKqpHelpers;
+using namespace NSchemeShard;
+using namespace NSchemeBoard;
+using namespace Tests;
 
 class TDriverMock
     : public NTable::IDriver
@@ -101,6 +110,35 @@ private:
     TActorId Impl;
 };
 
+static void SetupLogging(TTestActorRuntime& runtime) {
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::CONTINUOUS_BACKUP, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+}
+
+TShardedTableOptions SimpleTable() {
+    return TShardedTableOptions();
+}
+
+TMaybe<TPathId> GetTablePathId(TTestActorRuntime& runtime, TActorId sender, TString path) {
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+
+    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+    if (reply->Get()->GetRecord().GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
+        return {};
+    }
+
+    return GetPathId(reply->Get()->GetRecord());
+}
+
 Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
     Y_UNIT_TEST(Empty) {
         TPortManager pm;
@@ -113,8 +151,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         auto sender = runtime.AllocateEdgeActor();
         auto sender2 = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        SetupLogging(runtime);
 
         TUserTable::TPtr table = new TUserTable;
         NTable::TScheme::TTableSchema tableSchema;
@@ -164,6 +201,38 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         });
 
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);
+    }
+
+    Y_UNIT_TEST(ChangeSender) {
+        TPortManager pm;
+        Tests::TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        TPathId targetPathId = *GetTablePathId(runtime, edgeActor, "/Root/Table");
+
+        CreateShardedTable(server, edgeActor, "/Root", "IncrBackupTable", SimpleTable());
+
+        TPathId sourcePathId = *GetTablePathId(runtime, edgeActor, "/Root/IncrBackupTable");
+
+        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, sourcePathId, targetPathId);
+
+        auto changeSenderActor = runtime.Register(changeSender);
+        runtime.EnableScheduleForActor(changeSenderActor);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();
+        runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+
+        runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(edgeActor);
     }
 }
 

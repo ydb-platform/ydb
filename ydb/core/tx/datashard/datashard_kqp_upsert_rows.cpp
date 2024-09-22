@@ -235,8 +235,8 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
                 "row key type mismatch with table key type"
             );
         } else {
-            auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
-            MKQL_ENSURE_S(typeId == columnInfo.Type.GetTypeId(), "row key type mismatch with table key type");
+            NScheme::TTypeInfo typeInfo = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
+            MKQL_ENSURE_S(typeInfo == columnInfo.Type, "row key type mismatch with table key type");
         }
         keyIndices[i] = it->second;
     }

@@ -295,6 +295,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSmallSizeDetector(Max<ui32>());
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

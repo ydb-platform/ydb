@@ -36,7 +36,7 @@ class TIncrRestoreChangeSenderMain
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[IncrRestoreChangeSenderMain]"
-                // << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                << "[" << GetChangeSenderIdentity() << "]" // maybe better add something else
                 << SelfId() /* contains brackets */ << " ";
         }
 
@@ -151,7 +151,7 @@ class TIncrRestoreChangeSenderMain
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
 
-        if (NoMoreData && IsAllSendersReady()) {
+        if (NoMoreData && IsAllSendersReadyOrUninit()) {
             Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
         }
     }
@@ -178,14 +178,9 @@ class TIncrRestoreChangeSenderMain
         LOG_D("Handle " << ev->Get()->ToString());
         NoMoreData = true;
 
-        if (IsAllSendersReady()) {
+        if (IsAllSendersReadyOrUninit()) {
             Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
         }
-    }
-
-    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        // RenderHtmlPage(DataShard.TabletId, ev, ctx);
-        Y_UNUSED(ev, ctx);
     }
 
     void PassAway() override {
@@ -195,14 +190,14 @@ class TIncrRestoreChangeSenderMain
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_MAIN;
+        return NKikimrServices::TActivity::CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN;
     }
 
-    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& indexPathId)
+    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& targetPathId)
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, changeServerActor)
-        , IndexPathId(indexPathId)
         , UserTableId(userTableId)
+        , TargetTablePathId(targetPathId)
         , TargetTableVersion(0)
     {
     }
@@ -220,7 +215,6 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
-            HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -229,17 +223,15 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
-            HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
     TPathId GetChangeSenderIdentity() const override final {
-        return IndexPathId;
+        return TargetTablePathId;
     }
 
 private:
-    const TPathId IndexPathId;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
 

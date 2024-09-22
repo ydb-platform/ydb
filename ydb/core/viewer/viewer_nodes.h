@@ -774,6 +774,16 @@ public:
                 PDisksResponse = RequestBSControllerPDisks();
             }
         }
+        if (FieldsRequired.test(+ENodeFields::PDisks)) {
+            if (!PDisksResponse) {
+                PDisksResponse = RequestBSControllerPDisks();
+            }
+        }
+        if (FieldsRequired.test(+ENodeFields::VDisks)) {
+            if (!VSlotsResponse) {
+                VSlotsResponse = RequestBSControllerVSlots();
+            }
+        }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
             TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
             HivesToAsk.push_back(rootHiveId);
@@ -2040,18 +2050,22 @@ public:
         bool result = false;
         if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (GroupsResponse && GroupsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (VSlotsResponse && VSlotsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (PDisksResponse && PDisksResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         return result;
@@ -2066,6 +2080,7 @@ public:
                 if (it->second.Error(error)) {
                     AddProblem("hive-error");
                     ProcessResponses();
+                    RequestDone();
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
@@ -2073,8 +2088,8 @@ public:
                     AddProblem("bsc-error");
                 }
             }
+            FailPipeConnect(ev->Get()->TabletId);
         }
-        TBase::Handle(ev); // all RequestDone() are handled by base handler
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
@@ -2083,28 +2098,34 @@ public:
         if (ev->Get()->Tag == TimeoutTablets) {
             if (NodesInfoResponse && NodesInfoResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (NodeStateResponse && NodeStateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (DatabaseNavigateResponse && DatabaseNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (ResourceNavigateResponse && ResourceNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (PathNavigateResponse && PathNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (OnBscError(error)) {
                 AddProblem("bsc-timeout");
+                FailPipeConnect(GetBSControllerId());
             }
-            RequestDone(FailPipeConnect(GetBSControllerId()));
             for (auto& [hiveId, response] : HiveNodeStats) {
                 if (response.Error(error)) {
                     AddProblem("hive-timeout");
                     ProcessResponses();
-                    RequestDone(FailPipeConnect(hiveId));
+                    RequestDone();
+                    FailPipeConnect(hiveId);
                 }
             }
         }
@@ -2219,28 +2240,28 @@ public:
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks)) {
+                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
+                        return a.path() < b.path();
+                    });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
                         (*jsonNode.AddPDisks()) = std::move(pDisk);
                     }
-                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
-                        return a.pdiskid() < b.pdiskid();
-                    });
                 }
                 if (FieldsAvailable.test(+ENodeFields::VDisks)) {
-                    for (NKikimrWhiteboard::TVDiskStateInfo& vDisk : node->VDisks) {
-                        (*jsonNode.AddVDisks()) = std::move(vDisk);
-                    }
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
+                    for (NKikimrWhiteboard::TVDiskStateInfo& vDisk : node->VDisks) {
+                        (*jsonNode.AddVDisks()) = std::move(vDisk);
+                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::Tablets)) {
-                    for (NKikimrViewer::TTabletStateInfo& tablet : node->Tablets) {
-                        (*jsonNode.AddTablets()) = std::move(tablet);
-                    }
                     std::sort(node->Tablets.begin(), node->Tablets.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) {
                         return a.type() < b.type();
                     });
+                    for (NKikimrViewer::TTabletStateInfo& tablet : node->Tablets) {
+                        (*jsonNode.AddTablets()) = std::move(tablet);
+                    }
                 }
             }
         } else {

@@ -1,7 +1,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "export_common.h"
 #include "export_s3_buffer_raw.h"
+#include "type_serialization.h"
 
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/library/binary_json/read.h>

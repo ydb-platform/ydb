@@ -25,10 +25,10 @@ public:
         , DedupId(dedupId) {
     }
 
-    TCommittedData(const std::shared_ptr<TUserData>& userData, const TSnapshot& ss, const TInsertWriteId insertWriteId)
+    TCommittedData(const std::shared_ptr<TUserData>& userData, const TSnapshot& ss, const ui64 generation, const TInsertWriteId ephemeralWriteId)
         : TBase(userData)
         , Snapshot(ss)
-        , DedupId(ToString(ss.GetPlanStep()) + ":" + ToString((ui64)insertWriteId)) {
+        , DedupId(ToString(generation) + ":" + ToString(ephemeralWriteId)) {
     }
 
     void SetRemove() {

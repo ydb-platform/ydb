@@ -8,10 +8,11 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -132,14 +133,14 @@ public:
         const TGUCSettings::TPtr& GUCSettings,
         const TShardIdToTableInfoPtr& shardIdToTableInfo, const TActorId bufferActorId)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
+            userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            "DataExecuter", streamResult, bufferActorId)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
-        , BufferActorId(bufferActorId)
     {
         Target = creator;
 
@@ -209,6 +210,30 @@ public:
     }
 
     void Finalize() {
+        if (!BufferActorId || ReadOnlyTx) {
+            MakeResponseAndPassAway();
+        } else {
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
+            event->ExecuterActorId = SelfId();
+            Send(BufferActorId, event.release());
+            Become(&TKqpDataExecuter::FinalizeState);
+        }
+    }
+
+    STATEFN(FinalizeState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
+            default:
+                LOG_W("Unexpected event: " << ev->GetTypeName() << ", at state: FinalizeState");
+        }
+    }
+
+    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr&) {
+        MakeResponseAndPassAway();
+    }
+
+    void MakeResponseAndPassAway() {
         YQL_ENSURE(!AlreadyReplied);
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
@@ -259,12 +284,12 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty()) {
+        //if (!Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
-        }
+        //    BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+        //}
 
         auto resultSize = ResponseEv->GetByteSize();
         if (resultSize > (int)ReplySizeLimit) {
@@ -331,6 +356,8 @@ private:
             return "WaitResolveState";
         } else if (func == &TThis::WaitShutdownState) {
             return "WaitShutdownState";
+        } else if (func == &TThis::FinalizeState) {
+            return "FinalizeState";
         } else {
             return TBase::CurrentStateFuncName();
         }
@@ -1858,6 +1885,23 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
+        if (BufferActorId && Request.LocksOp == ELocksOp::Commit) {
+            // TODO: skip resolving phase? Move it to session actor?
+            YQL_ENSURE(Request.Transactions.empty());
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
+            event->ExecuterActorId = SelfId();
+            Send(BufferActorId, event.release());
+            Become(&TKqpDataExecuter::FinalizeState);
+            return;
+        } else if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
+            YQL_ENSURE(Request.Transactions.empty());
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
+            event->ExecuterActorId = SelfId();
+            Send(BufferActorId, event.release());
+            Become(&TKqpDataExecuter::FinalizeState);
+            return;
+        }
+
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
@@ -2850,7 +2894,6 @@ private:
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
-    TActorId BufferActorId;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;

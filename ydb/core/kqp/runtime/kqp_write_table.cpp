@@ -869,7 +869,7 @@ struct TBatchWithMetadata {
     IPayloadSerializer::IBatchPtr Data = nullptr;
 
     bool IsCoveringBatch() const {
-        return Data != nullptr;
+        return Data == nullptr;
     }
 
     i64 GetMemory() const {
@@ -1301,7 +1301,7 @@ public:
     bool IsEmpty() const override {
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
             const auto& writeInfo = WriteInfos.at(token);
-            if (writeInfo.Serializer && writeInfo.Serializer->IsEmpty()) {
+            if (writeInfo.Serializer && !writeInfo.Serializer->IsEmpty()) {
                 return false;
             }
         }

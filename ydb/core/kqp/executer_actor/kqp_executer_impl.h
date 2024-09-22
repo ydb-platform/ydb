@@ -130,8 +130,10 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
+        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
+        bool streamResult = false, const TActorId bufferActorId = {})
         : Request(std::move(request))
+        , BufferActorId(bufferActorId)
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
@@ -940,6 +942,7 @@ protected:
                 settings.SetLockTxId(*lockTxId);
                 settings.SetLockNodeId(SelfId().NodeId());
             }
+            ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {
@@ -1996,6 +1999,7 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    TActorId BufferActorId;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;

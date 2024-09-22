@@ -320,6 +320,7 @@ public:
             return;
         }
 
+        // TODO: support buffer actor
         bool replied = ExecutePhyTx(/*tx*/ nullptr, /*commit*/ true);
         if (!replied) {
             Become(&TKqpSessionActor::ExecuteState);
@@ -1218,7 +1219,7 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations() || !!BufferActorId) {
+            if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations() || !!txCtx.BufferActorId) {
                 if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
                     LOG_D("TExecPhysicalRequest, tx has commit locks");
                     request.LocksOp = ELocksOp::Commit;
@@ -1298,12 +1299,12 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        if (Settings.TableService.GetEnableOltpSink() && !BufferActorId && txCtx->HasOltpTable && request.AcquireLocksTxId.Defined()) {
+        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId && txCtx->HasOltpTable && request.AcquireLocksTxId.Defined()) {
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
-            BufferActorId = RegisterWithSameMailbox(actor);
+            txCtx->BufferActorId = RegisterWithSameMailbox(actor);
         }
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -1311,7 +1312,7 @@ public:
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings,
-            txCtx->ShardIdToTableInfo, BufferActorId);
+            txCtx->ShardIdToTableInfo, txCtx->BufferActorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2077,7 +2078,8 @@ public:
             auto dsLock = ExtractLock(lock.GetValueRef(txCtx->Locks.LockType));
             request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
         }
-
+        
+        // TODO: support buffer actor
         SendToExecuter(txCtx, std::move(request), true);
     }
 
@@ -2086,6 +2088,11 @@ public:
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->Finish();
+
+            if (QueryState->TxCtx->BufferActorId) {
+                Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+                QueryState->TxCtx->BufferActorId = {};
+            }
         }
     }
 
@@ -2095,11 +2102,6 @@ public:
 
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || QueryState && !QueryState->KeepSession;
-
-        if (BufferActorId) {
-            Send(BufferActorId, new TEvKqpBuffer::TEvTerminate{});
-            BufferActorId = {};
-        }
 
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
@@ -2613,7 +2615,6 @@ private:
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 
     TGUCSettings::TPtr GUCSettings;
-    TActorId BufferActorId;
 };
 
 } // namespace

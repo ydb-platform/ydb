@@ -3706,7 +3706,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 REPLACE INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 

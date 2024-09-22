@@ -334,6 +334,8 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
 
+    TActorId BufferActorId;
+
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
 

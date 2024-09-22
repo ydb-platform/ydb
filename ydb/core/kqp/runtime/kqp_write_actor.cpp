@@ -655,10 +655,11 @@ public:
     //    Mode = EMode::COMMIT;
     //}
 
-    void SetImmediateCommit(ui64 txId) {
+    void SetImmediateCommit() {
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::IMMEDIATE_COMMIT;
-        PrepareSettings->TxId = txId;
+
+        // TODO: check only one shard
         ShardedWriteController->AddCoveringMessages();
     }
 
@@ -699,7 +700,6 @@ public:
         if (isImmediateCommit) {
             const auto lock = LocksManager.GetLock(shardId);
             if (lock) {
-                evWrite->Record.SetTxId(PrepareSettings->TxId);
                 auto* locks = evWrite->Record.MutableLocks();
                 locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 locks->AddSendingShards(shardId);
@@ -753,7 +753,7 @@ public:
         }
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
-        YQL_ENSURE(serializationResult.TotalDataSize > 0);
+        YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", isPrepare=" << isPrepare << ", isImmediateCommit=" << isImmediateCommit << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
@@ -1153,6 +1153,7 @@ public:
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
     {
+        State = EState::WRITING;
         Alloc->Release();
     }
 
@@ -1167,6 +1168,8 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvFlush, Handle);
+                hFunc(TEvKqpBuffer::TEvCommit, Handle);
                 hFunc(TEvBufferWrite, Handle);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
@@ -1269,6 +1272,9 @@ public:
         while (!AckQueue.empty()) {
             const auto& item = AckQueue.front();
             if (GetTotalFreeSpace() >= item.DataSize) {
+                auto result = std::make_unique<TEvBufferWriteResult>();
+                result->Token = AckQueue.front().Token;
+                Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
                 return;
@@ -1291,7 +1297,7 @@ public:
             }
         }
 
-        if (State == EState::PREPARING) {
+        /*if (State == EState::PREPARING) {
             bool isFinished = true;
             for (auto& [_, info] : WriteInfos) {
                 isFinished &= info.WriteTableActor->IsFinished();
@@ -1299,7 +1305,7 @@ public:
             if (isFinished) {
                 OnFinished();
             }
-        }
+        }*/
         if (State == EState::FLUSHING) {
             bool isEmpty = true;
             for (auto& [_, info] : WriteInfos) {
@@ -1355,11 +1361,11 @@ public:
     //    // TODO: need it?
     //}
 
-    void ImmediateCommit(ui64 txId) {
+    void ImmediateCommit() {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetImmediateCommit(txId);
+            info.WriteTableActor->SetImmediateCommit();
         }
         Close();
         Process();
@@ -1428,6 +1434,16 @@ public:
         PassAway();
     }
 
+    void Handle(TEvKqpBuffer::TEvFlush::TPtr& ev) {
+        ExecuterActorId = ev->Get()->ExecuterActorId;
+        Flush();
+    }
+
+    void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
+        ExecuterActorId = ev->Get()->ExecuterActorId;
+        ImmediateCommit();
+    }
+
     void OnReady() override {
         Process();
     }
@@ -1442,7 +1458,12 @@ public:
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
         AFL_ENSURE(State == EState::COMMITTING);
         Y_UNUSED(shardId, dataSize);
-        // TODO: send result
+        // TODO: check if everything is committed
+        if (true) {
+            Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+            ExecuterActorId = {};
+        }
+        // Process(); // Don't need it?
     }
 
     void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
@@ -1456,7 +1477,8 @@ public:
 
     void OnFlushed() {
         State = EState::WRITING;
-        // TODO: send ok
+        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        ExecuterActorId = {};
     }
 
     void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) override {
@@ -1477,6 +1499,8 @@ private:
     TString LogPrefix;
     const TActorId SessionActorId;
     TWriteActorSettings MessageSettings;
+
+    TActorId ExecuterActorId;
 
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;

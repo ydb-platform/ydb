@@ -26,24 +26,22 @@ struct TPreparedInfo {
 struct TEvKqpBuffer {
 
 struct TEvPrepare : public TEventLocal<TEvPrepare, TKqpBufferWriterEvents::EvPrepare> {
-    TPrepareSettings Settings;
-};
-
-struct TEvPrepared : public TEventLocal<TEvPrepared, TKqpBufferWriterEvents::EvPrepared> {
-    TPreparedInfo Result;
+    TActorId ExecuterActorId;
 };
 
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
-};
-
-struct TEvCommitted : public TEventLocal<TEvCommitted, TKqpBufferWriterEvents::EvCommitted> {
-    ui64 ShardId;
+    TActorId ExecuterActorId;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
+    TActorId ExecuterActorId;
 };
 
 struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> {
+    TActorId ExecuterActorId;
+};
+
+struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

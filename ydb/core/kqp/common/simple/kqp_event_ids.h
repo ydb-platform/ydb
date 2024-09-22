@@ -186,11 +186,10 @@ struct TKqpWorkloadServiceEvents {
 struct TKqpBufferWriterEvents {
     enum EKqpBufferWriterEvents {
         EvPrepare = EventSpaceBegin(TKikimrEvents::ES_KQP) + 800,
-        EvPrepared,
         EvCommit,
-        EvCommitted,
         EvRollback,
         EvFlush,
+        EvResult,
         EvError,
         EvTerminate,
     };

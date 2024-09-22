@@ -28,6 +28,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto selectQuery = TString(R"(
             SELECT PathId, Kind, TabletId, Sum(Rows) as Rows
             FROM `/Root/olapStore/.sys/store_primary_index_portion_stats`
+            WHERE Activity == 1
             GROUP BY PathId, Kind, TabletId
             ORDER BY TabletId, Kind, PathId
         )");
@@ -61,13 +62,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
         }
-        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
+                WHERE Activity = 1
                 GROUP BY PathId, TabletId, Kind
                 ORDER BY PathId, TabletId, Kind
             )");
@@ -82,6 +84,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_2/.sys/primary_index_stats`
+                WHERE Activity = 1
                 GROUP BY PathId, TabletId, Kind
                 ORDER BY PathId, TabletId, Kind
             )");
@@ -168,10 +171,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);");
             csController->WaitCompactions(TDuration::Seconds(10));
         }
-        const ui64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;
-        const ui64 bytesUnpack = bytesUnpack1PK - bytesPK1;
-        const ui64 rawBytesPack = rawBytesPackAndUnpack2PK - rawBytesUnpack1PK - rawBytesPK1;
-        const ui64 bytesPack = bytesPackAndUnpack2PK - bytesUnpack1PK - bytesPK1;
+        const i64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;
+        const i64 bytesUnpack = bytesUnpack1PK - bytesPK1;
+        const i64 rawBytesPack = rawBytesPackAndUnpack2PK - rawBytesUnpack1PK - rawBytesPK1;
+        const i64 bytesPack = bytesPackAndUnpack2PK - bytesUnpack1PK - bytesPK1;
         TStringBuilder result;
         result << "unpacked data: " << rawBytesUnpack << " / " << bytesUnpack << Endl;
         result << "packed data: " << rawBytesPack << " / " << bytesPack << Endl;
@@ -292,6 +295,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSmallSizeDetector(Max<ui32>());
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -308,6 +312,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(40));
+            csController->WaitCompactions(TDuration::Seconds(5));
             {
                 ui64 rawBytes2;
                 ui64 bytes2;
@@ -316,7 +321,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3);
+                AFL_VERIFY(stats.size() == 3)("count", stats.size());
                 for (auto&& i : stats) {
                     AFL_VERIFY(i.IsArray());
                     AFL_VERIFY(i.GetArraySafe().size() == 1);
@@ -396,6 +401,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT SUM(BlobRangeSize) as Bytes, SUM(Rows) as Rows, PathId, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE Activity == 1
                 GROUP BY PathId, TabletId
                 ORDER BY Bytes
             )");
@@ -409,6 +415,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT Sum(Rows) as Rows, Kind, Sum(ColumnRawBytes) as RawBytes, PathId
                 FROM `/Root/olapStore/.sys/store_primary_index_portion_stats`
+                WHERE Activity == 1
                 GROUP BY Kind, PathId
                 ORDER BY PathId, Kind, Rows
             )");
@@ -529,6 +536,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT PathId, Kind, TabletId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE Activity == 1
                 GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
@@ -542,6 +550,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT PathId, Kind, TabletId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE Activity == 1
                 GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
@@ -569,6 +578,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE Kind IN ('SPLIT_COMPACTED', 'INACTIVE', 'EVICTED', 'INSERTED')
+                AND Activity == 1
                 GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
@@ -700,6 +710,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT PathId, TabletId, Kind
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE Activity == 1
                 GROUP BY PathId, TabletId, Kind
             )");
 
@@ -715,6 +726,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                     count(distinct(Kind)) as KindsCount,
                     count(distinct(TabletId)) as TabletsCount
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE Activity == 1
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -727,6 +739,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT PathId, count(*), sum(Rows), sum(BlobRangeSize), sum(RawBytes)
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE Activity == 1
                 GROUP BY PathId
                 ORDER BY PathId
             )");

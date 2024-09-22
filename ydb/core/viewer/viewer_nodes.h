@@ -769,6 +769,16 @@ public:
                 PDisksResponse = RequestBSControllerPDisks();
             }
         }
+        if (FieldsRequired.test(+ENodeFields::PDisks)) {
+            if (!PDisksResponse) {
+                PDisksResponse = RequestBSControllerPDisks();
+            }
+        }
+        if (FieldsRequired.test(+ENodeFields::VDisks)) {
+            if (!VSlotsResponse) {
+                VSlotsResponse = RequestBSControllerVSlots();
+            }
+        }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
             TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
             HivesToAsk.push_back(rootHiveId);
@@ -2006,18 +2016,22 @@ public:
         bool result = false;
         if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (GroupsResponse && GroupsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (VSlotsResponse && VSlotsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (PDisksResponse && PDisksResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         return result;
@@ -2032,6 +2046,7 @@ public:
                 if (it->second.Error(error)) {
                     AddProblem("hive-error");
                     ProcessResponses();
+                    RequestDone();
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
@@ -2039,8 +2054,8 @@ public:
                     AddProblem("bsc-error");
                 }
             }
+            FailPipeConnect(ev->Get()->TabletId);
         }
-        TBase::Handle(ev); // all RequestDone() are handled by base handler
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
@@ -2049,28 +2064,34 @@ public:
         if (ev->Get()->Tag == TimeoutTablets) {
             if (NodesInfoResponse && NodesInfoResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (NodeStateResponse && NodeStateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (DatabaseNavigateResponse && DatabaseNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (ResourceNavigateResponse && ResourceNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (PathNavigateResponse && PathNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (OnBscError(error)) {
                 AddProblem("bsc-timeout");
+                FailPipeConnect(GetBSControllerId());
             }
-            RequestDone(FailPipeConnect(GetBSControllerId()));
             for (auto& [hiveId, response] : HiveNodeStats) {
                 if (response.Error(error)) {
                     AddProblem("hive-timeout");
                     ProcessResponses();
-                    RequestDone(FailPipeConnect(hiveId));
+                    RequestDone();
+                    FailPipeConnect(hiveId);
                 }
             }
         }

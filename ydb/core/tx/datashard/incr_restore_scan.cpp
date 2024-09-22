@@ -207,7 +207,6 @@ public:
 
     EScan Progress() {
         auto rows = Buffer.Flush();
-        TVector<TChange> changeRecords;
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
         for (auto& [k, v] : rows) {

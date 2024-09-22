@@ -15,7 +15,8 @@ using namespace NActors;
 
 struct TEvIncrementalRestoreScan {
     enum EEv {
-        EvNoMoreData = EventSpaceBegin(TKikimrEvents::ES_INCREMENTAL_RESTORE_SCAN),
+        EvServe = EventSpaceBegin(TKikimrEvents::ES_INCREMENTAL_RESTORE_SCAN),
+        EvNoMoreData,
         EvFinished,
 
         EvEnd,
@@ -23,6 +24,7 @@ struct TEvIncrementalRestoreScan {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_INCREMENTAL_RESTORE_SCAN));
 
+    struct TEvServe: public TEventLocal<TEvServe, EvServe> {};
     struct TEvNoMoreData: public TEventLocal<TEvNoMoreData, EvNoMoreData> {};
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {};
 };

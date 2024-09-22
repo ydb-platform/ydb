@@ -83,6 +83,7 @@ class TIncrRestoreChangeSenderMain
     }
 
     void NextState(TResolveUserTableState::TStateTag) {
+        Y_ABORT_UNLESS(MainColumnToTag.contains("__ydb_incrBackupImpl_deleted"));
         ResolveTargetTable();
     }
 
@@ -91,6 +92,10 @@ class TIncrRestoreChangeSenderMain
     }
 
     void NextState(TResolveKeysState::TStateTag) {
+        if (!FirstServe) {
+            FirstServe = true;
+            Send(ChangeServer, new TEvIncrementalRestoreScan::TEvServe());
+        }
         Serve();
     }
 
@@ -242,6 +247,7 @@ private:
     ui64 TargetTableVersion;
     THolder<TKeyDesc> KeyDesc;
     bool NoMoreData = false;
+    bool FirstServe = false;
 }; // TIncrRestoreChangeSenderMain
 
 IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& restoreTargetPathId) {

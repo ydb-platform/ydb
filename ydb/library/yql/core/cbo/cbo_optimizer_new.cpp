@@ -74,23 +74,30 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     stream << *Stats << "\n";
 }
 
-TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool leftAny, bool rightAny, bool nonReorderable) :
-    IBaseOptimizerNode(JoinNodeType),
-    LeftArg(left),
-    RightArg(right),
-    JoinConditions(joinConditions),
-    JoinType(joinType),
-    JoinAlgo(joinAlgo),
-    LeftAny(leftAny),
-    RightAny(rightAny),
-    IsReorderable(!nonReorderable)
-    {
-        for (auto [l,r] : joinConditions ) {
-            LeftJoinKeys.push_back(l.AttributeName);
-            RightJoinKeys.push_back(r.AttributeName);
-        }
+TJoinOptimizerNode::TJoinOptimizerNode(
+    const std::shared_ptr<IBaseOptimizerNode>& left, 
+    const std::shared_ptr<IBaseOptimizerNode>& right,
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, 
+    const EJoinKind joinType, 
+    const EJoinAlgoType joinAlgo, 
+    bool leftAny,
+    bool rightAny, 
+    bool nonReorderable
+)   : IBaseOptimizerNode(JoinNodeType)
+    , LeftArg(left)
+    , RightArg(right)
+    , JoinConditions(joinConditions)
+    , JoinType(joinType)
+    , JoinAlgo(joinAlgo)
+    , LeftAny(leftAny)
+    , RightAny(rightAny)
+    , IsReorderable(!nonReorderable)
+{
+    for (const auto& [l,r] : joinConditions ) {
+        LeftJoinKeys.push_back(l.AttributeName);
+        RightJoinKeys.push_back(r.AttributeName);
     }
+}
 
 TVector<TString> TJoinOptimizerNode::Labels() {
     auto res = LeftArg->Labels();

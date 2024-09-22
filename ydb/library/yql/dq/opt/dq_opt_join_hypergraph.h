@@ -102,8 +102,11 @@ public:
         TVector<TString> relNameByNodeId(Nodes_.size());
         res.append("Nodes: ").append("\n");
         for (const auto& [name, idx]: NodeIdByRelationName_) {
-            res.append(Sprintf("%ld: %s\n", idx, name.c_str()));
             relNameByNodeId[idx] = name;
+        }
+
+        for (size_t idx = 0; idx < relNameByNodeId.size(); ++idx) {
+            res.append(Sprintf("%ld: %s\n", idx, relNameByNodeId[idx].c_str()));
         }
 
         res.append("Edges: ").append("\n");

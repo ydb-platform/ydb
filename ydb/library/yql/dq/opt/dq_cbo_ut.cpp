@@ -63,7 +63,8 @@ Y_UNIT_TEST(JoinSearch2Rels) {
     auto res = optimizer->JoinSearch(op);
     std::stringstream ss;
     res->Print(ss);
-    TString expected = R"__(Join: (InnerJoin,MapJoin) b.1=a.1,
+    Cout << ss.str() << '\n';
+    TString expected = R"__(Join: (InnerJoin,MapJoin,RightAny) b.1=a.1,
 Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel: 1, Storage: NA
     Rel: b
     Type: BaseTable, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06, Sel: 1, Storage: NA
@@ -118,8 +119,9 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     auto res = optimizer->JoinSearch(op2);
     std::stringstream ss;
     res->Print(ss);
+    Cout << ss.str() << '\n';
 
-    TString expected = R"__(Join: (InnerJoin,MapJoin) a.1=b.1,a.1=c.1,
+    TString expected = R"__(Join: (InnerJoin,MapJoin,LeftAny) a.1=b.1,a.1=c.1,
 Type: ManyManyJoin, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.004e+13, Sel: 1, Storage: NA
     Join: (InnerJoin,MapJoin) b.1=a.1,
     Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel: 1, Storage: NA

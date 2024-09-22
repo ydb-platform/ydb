@@ -57,14 +57,14 @@ public:
 private:
     auto GetLeftConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
                 );
             }
 
-            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
@@ -77,18 +77,18 @@ private:
 
     auto GetRightConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType) || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
                 );
             }
 
-            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType) || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
-                );     
+                );
             }
         };
 
@@ -105,6 +105,20 @@ private:
         auto childJoinNode = std::static_pointer_cast<TJoinOptimizerNode>(child);
         VisitJoinTree(childJoinNode->LeftArg, visitor);
         VisitJoinTree(childJoinNode->RightArg, visitor);
+
+        if (childJoinNode->LeftAny) {
+            ConflictRules_.emplace_back(
+                SubtreeNodes_[childJoinNode->LeftArg], 
+                SubtreeNodes_[childJoinNode->LeftArg]
+            );
+        }
+
+        if (childJoinNode->RightAny) {
+            ConflictRules_.emplace_back(
+                SubtreeNodes_[childJoinNode->RightArg], 
+                SubtreeNodes_[childJoinNode->RightArg]
+            );
+        }
 
         visitor(childJoinNode);
     }

@@ -307,7 +307,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             errStr = Sprintf("Invalid name for %s column '%s'", allowSystemColumns ? "any" : "user", colName.data());
             return nullptr;
         }
-        
+
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
 
         NKikimrSchemeOp::TFamilyDescription* columnFamily = nullptr;
@@ -448,7 +448,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (!GetTypeInfo(typeRegistry.GetType(typeName), col.GetTypeInfo(), typeName, colName, typeInfo, errStr)) {
                 return nullptr;
             }
-                    
+
             switch (typeInfo.GetTypeId()) {
             case NScheme::NTypeIds::Date32:
             case NScheme::NTypeIds::Datetime64:

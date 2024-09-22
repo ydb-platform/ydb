@@ -173,20 +173,23 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         return root;
     }
 
-    Y_UNIT_TEST(AnyJoinConstraints) {
-        auto anyJoin = Join(Join("A", "B"), "C", /*on=*/ "B,C");
+    Y_UNIT_TEST(AnyJoinConstraints1) {
+        auto anyJoin = Join(Join(Join("A", "B"), "C", /*on=*/ "B,C"), "D", "C,D");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
-        auto join = Join(anyJoin,"D", /*on=*/ "A,D");
+        auto join = Join(anyJoin,"E", /*on=*/ "A,E");
         
         auto graph = MakeJoinHypergraph<TNodeSet>(join);
         Cout << graph.String() << Endl;
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges.size());
+    }
 
-        auto* e1 = graph.FindEdgeBetween(graph.GetNodesByRelNames({"A", "B"}), graph.GetNodesByRelNames({"D"}));
-        UNIT_ASSERT(e1 != nullptr);
-        UNIT_ASSERT(!e1.IsSimple());
-
-        auto* e2 = graph.FindEdgeBetween(graph.GetNodesByRelNames({"A", "B"}), graph.GetNodesByRelNames({"C"}));
-        UNIT_ASSERT(e2 != nullptr);
-        UNIT_ASSERT(!e2.IsSimple());    
+    Y_UNIT_TEST(AnyJoinConstraints2) {
+        auto anyJoin = Join(Join("A", "B"), Join("C", "D"), /*on=*/"B,C");
+        std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->RightAny = true;
+        auto join = Join(anyJoin,"E", /*on=*/ "C,E");
+        
+        auto graph = MakeJoinHypergraph<TNodeSet>(join);
+        Cout << graph.String() << Endl;
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges.size());
     }
 }

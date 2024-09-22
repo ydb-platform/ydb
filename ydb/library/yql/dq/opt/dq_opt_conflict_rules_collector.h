@@ -57,14 +57,14 @@ public:
 private:
     auto GetLeftConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
                 );
             }
 
-            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !child->IsReorderable) {
+            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
@@ -77,14 +77,14 @@ private:
 
     auto GetRightConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType) || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
                 );
             }
 
-            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType) || !child->IsReorderable) {
+            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
@@ -109,14 +109,14 @@ private:
         if (childJoinNode->LeftAny) {
             ConflictRules_.emplace_back(
                 SubtreeNodes_[childJoinNode->LeftArg], 
-                SubtreeNodes_[childJoinNode->LeftArg]
+                SubtreeNodes_[childJoinNode]
             );
         }
 
         if (childJoinNode->RightAny) {
             ConflictRules_.emplace_back(
                 SubtreeNodes_[childJoinNode->RightArg], 
-                SubtreeNodes_[childJoinNode->RightArg]
+                SubtreeNodes_[childJoinNode]
             );
         }
 

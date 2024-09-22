@@ -85,8 +85,8 @@ protected:
             }
             if (!IsDone()) {
                 Span.EndOk();
+                Response = std::move(response);
             }
-            Response = std::move(response);
         }
 
         void Set(TAutoPtr<TEventHandle<T>>&& response) {

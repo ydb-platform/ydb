@@ -176,37 +176,54 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     }
 }
 
-bool SetColumnType(Ydb::Type& protoType, const TString& typeName, const TString& paramOne, const TString& paramTwo, bool notNull, TString& error) {
-    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-    if (typeDesc) {
-        Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
-        auto* pg = protoType.mutable_pg_type();
-        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
-        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-        pg->set_typlen(0);
-        pg->set_typmod(0);
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
+    switch (typeNode->GetKind()) {
+    case ETypeAnnotationKind::Pg: {
+        const auto pgTypeNode = typeNode->Cast<TPgExprType>();
+        const TString typeName = pgTypeNode->GetName();
+        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+        if (typeDesc) {
+            Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
+            auto* pg = protoType.mutable_pg_type();
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
+            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_typlen(0);
+            pg->set_typmod(0);
+            return true;
+        }
+    }
+    case ETypeAnnotationKind::Data: {
+        const auto dataTypeNode = typeNode->Cast<TDataExprType>();
+        const TStringBuf typeName = dataTypeNode->GetName();
+        NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
+        if (dataSlot == NUdf::EDataSlot::Decimal) {
+            auto dataExprTypeNode = typeNode->Cast<TDataExprParamsType>();  
+            ui32 precision = FromString(dataExprTypeNode->GetParamOne());
+            ui32 scale = FromString(dataExprTypeNode->GetParamTwo());
+            if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
+                error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
+                return false;
+            }
+            if (scale > precision) {
+                error = Sprintf("Decimal precision %u should be more than scale %u", precision, scale);
+                return false;
+            }
+            auto decimal = notNull ? protoType.mutable_decimal_type() :
+                protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
+            decimal->set_precision(precision);
+            decimal->set_scale(scale);
+        } else {
+            auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
+            auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
+            primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+        }
         return true;
     }
-
-    NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
-    if (dataSlot == NUdf::EDataSlot::Decimal) {
-        ui32 precision = FromString(paramOne);
-        ui32 scale = FromString(paramTwo);
-        if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
-            error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
-            return false;
-        }
-        auto decimal = notNull ? protoType.mutable_decimal_type() :
-            protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        decimal->set_precision(precision);
-        decimal->set_scale(scale);
-    } else {
-        auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
-        auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
-        primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+    default: {
+        YQL_ENSURE(false, "Unexpected node kind: " << typeNode->GetKind());
     }
-    return true;
+    }
 }
 
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,

@@ -1374,9 +1374,9 @@ public:
                         auto type = columnType->Cast<TTypeExprType>()->GetType();
                         auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
                         auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-                        auto dataType = actualType->Cast<TDataExprParamsType>();
+
                         TString error;
-                        if (!SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), TString(dataType->GetParamOne()), TString(dataType->GetParamTwo()), notNull, error)) {
+                        if (!SetColumnType(actualType, notNull, *add_column->mutable_type(), error)) {
                             ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), error));
                             return SyncError();
                         }

@@ -425,10 +425,10 @@ std::pair<
     return { std::move(result), std::move(otherInputIndexes) };
 }
 
-template <typename IndexType, typename GetterType>
-THashMap<TStringBuf, size_t> GetNameToIndex(IndexType size, GetterType&& getter) {
+template <typename TIndex, typename TGetter>
+THashMap<TStringBuf, size_t> GetNameToIndex(TIndex size, TGetter&& getter) {
     THashMap<TStringBuf, size_t> result;
-    for (IndexType i = 0; i != size; ++i) {
+    for (TIndex i = 0; i != size; ++i) {
         result[getter(i)] = i;
     }
     return result;
@@ -446,11 +446,11 @@ THashMap<TStringBuf, size_t> GetNameToIndex(const NMiniKQL::TStructType* type) {
     });
 }
 
-template <typename IndexType, typename GetterType>
-TVector<size_t> GetJoinColumnIndexes(IndexType size, GetterType&& getter, const THashMap<TStringBuf, size_t>& joinColumns) {
+template <typename TIndex, typename TGetter>
+TVector<size_t> GetJoinColumnIndexes(TIndex size, TGetter&& getter, const THashMap<TStringBuf, size_t>& joinColumns) {
     TVector<size_t> result;
     result.reserve(size);
-    for (IndexType i = 0; i != size; ++i) {
+    for (TIndex i = 0; i != size; ++i) {
         if (auto p = joinColumns.FindPtr(getter(i))) {
             result.push_back(*p);
         }

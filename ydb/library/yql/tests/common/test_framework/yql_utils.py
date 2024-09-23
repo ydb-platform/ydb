@@ -618,7 +618,7 @@ def get_default_mount_point_config_content():
             Library: true
         }
     ''' % (
-        escape_backslash(yql_source_path('ydb/library/yql/mount/lib'))
+        escape_backslash(yql_source_path('contrib/ydb/library/yql/mount/lib'))
     )
 
 
@@ -686,13 +686,13 @@ def yson_to_csv(yson_content, columns=None, with_header=True, strict=False):
         headers = sorted(columns)
     else:
         headers = set()
-        for item in yson.loads(yson_content, yson_type='list_fragment'):
+        for item in yson.loads(yson_content):
             headers.update(six.iterkeys(item))
         headers = sorted(headers)
     csv_content = []
     if with_header:
         csv_content.append(';'.join(headers))
-    for item in yson.loads(yson_content, yson_type='list_fragment'):
+    for item in yson.loads(yson_content):
         if strict and sorted(six.iterkeys(item)) != headers:
             return None
         csv_content.append(';'.join([str(item[h]).replace('YsonEntity', '').encode('string_escape') if h in item else '' for h in headers]))
@@ -704,7 +704,7 @@ udfs_lock = Lock()
 
 def get_udfs_path(extra_paths=None):
     udfs_build_path = yatest.common.build_path('yql/udfs')
-    ydb_udfs_build_path = yatest.common.build_path('ydb/library/yql/udfs')
+    ydb_udfs_build_path = yatest.common.build_path('contrib/ydb/library/yql/udfs')
     contrib_ydb_udfs_build_path = yatest.common.build_path('contrib/ydb/library/yql/udfs')
     rthub_udfs_build_path = yatest.common.build_path('robot/rthub/yql/udfs')
     kwyt_udfs_build_path = yatest.common.build_path('robot/kwyt/yql/udfs')
@@ -720,7 +720,7 @@ def get_udfs_path(extra_paths=None):
         udfs_project_path = None
 
     try:
-        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
+        ydb_udfs_project_path = yql_binary_path('contrib/ydb/library/yql/tests/common/test_framework/udfs_deps')
     except Exception:
         ydb_udfs_project_path = None
 

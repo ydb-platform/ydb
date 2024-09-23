@@ -55,7 +55,7 @@ ALTER TOPIC `my_topic` SET (
 
 ### Включение и приостановка автопартиционирования {#autopartitioning}
 
-Следующая команда включает [автопартиционирование](../../../../concepts/topic#autopartitioning) или снимает его с паузы:
+Следующая команда включает [автопартиционирование](../../../../concepts/topic#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -72,6 +72,13 @@ ALTER TOPIC `my_topic` SET (
     auto_partitioning_strategy = 'paused'
 );
 ```
+
+Следующая команда снимает [автопартиционирование](../../../../concepts/topic#autopartitioning) с паузы:
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    auto_partitioning_strategy = 'scale_up'
+);
 
 {% if feature_topic_settings_reset %}
 

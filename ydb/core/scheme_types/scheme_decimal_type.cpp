@@ -23,7 +23,7 @@ void TDecimalType::CellValueToStream(const std::pair<ui64, i64>& cellValue, IOut
 
 const std::optional<TDecimalType> TDecimalType::ParseTypeName(const TStringBuf& typeName) {
     if (strcasecmp(typeName.data(), "decimal") == 0) {
-        return TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE);
+        return TDecimalType::Default();
     } else {
         static const std::regex regex("decimal\\((\\d+),(\\d+)\\)", std::regex_constants::icase);
         std::smatch match;

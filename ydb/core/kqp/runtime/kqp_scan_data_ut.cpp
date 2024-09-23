@@ -37,7 +37,7 @@ struct TDataRow {
             {20, TTypeInfo(NTypeIds::Datetime64), ""},
             {21, TTypeInfo(NTypeIds::Timestamp64), ""},
             {22, TTypeInfo(NTypeIds::Interval64), ""},
-            {23, TTypeInfo(NScheme::TDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)), ""},
+            {23, TTypeInfo(NScheme::TDecimalType::Default()), ""},
         };
     }
 

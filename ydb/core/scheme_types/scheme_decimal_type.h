@@ -23,6 +23,10 @@ public:
     void CellValueToStream(const std::pair<ui64, i64>& cellValue, IOutputStream& out) const;    
 
     static const std::optional<TDecimalType> ParseTypeName(const TStringBuf& typeName);
+
+    constexpr static TDecimalType Default() {
+        return TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE);
+    }
 private:
     YDB_READONLY_CONST(ui32, Precision);
     YDB_READONLY_CONST(ui32, Scale);

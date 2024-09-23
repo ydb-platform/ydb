@@ -8369,7 +8369,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(TDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType::Default()).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8449,7 +8449,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType::Default()).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;

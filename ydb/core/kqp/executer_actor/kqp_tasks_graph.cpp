@@ -876,9 +876,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             const auto& keyColumn = tableInfo->Columns.at(keyColumnName);
             auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
             protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
-            if (columnType.TypeInfo) {
-                *protoTaskMeta.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
-            }
+            *protoTaskMeta.AddKeyColumnTypeInfos() = columnType.TypeInfo ?
+                *columnType.TypeInfo :
+                NKikimrProto::TTypeInfo();
         }
 
         for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {

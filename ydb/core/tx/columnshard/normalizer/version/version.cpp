@@ -58,7 +58,7 @@ public:
                 while (!rowset.EndOfSet()) {
                     usedSchemaVersions.insert(rowset.GetValue<Schema::IndexPortions::SchemaVersion>());
                     if (!rowset.Next()) {
-                        break;
+                        return std::nullopt;
                     }
                 }
             }
@@ -70,7 +70,7 @@ public:
                     if (rowset.HaveValue<Schema::InsertTable::SchemaVersion>()) {
                         usedSchemaVersions.insert(rowset.GetValue<Schema::InsertTable::SchemaVersion>());
                         if (!rowset.Next()) {
-                            break;
+                            return std::nullopt;
                         }
                     }
                 }
@@ -99,19 +99,15 @@ public:
                     }
 
                     if (!rowset.Next()) {
-                        break;
+                        return std::nullopt;
                     }
                 }
             }
         }
 
-        if (unusedSchemaIds.size() > 0) {
-            std::vector<INormalizerChanges::TPtr> changes;
-            changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(unusedSchemaIds), maxVersion));
-            return changes;
-        } else {
-            return std::nullopt;
-        }
+        std::vector<INormalizerChanges::TPtr> changes;
+        changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(unusedSchemaIds), maxVersion));
+        return changes;
     }
 };
 

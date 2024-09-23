@@ -42,8 +42,8 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
-        const size_t cacheLimit,
-        const  std::chrono::seconds cacheTtl
+        size_t cacheLimit,
+        std::chrono::seconds cacheTtl
     )
         : Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -64,11 +64,17 @@ public:
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
         , CacheTtl(cacheTtl)
-        , AwaitingQueue()
         , ReadyQueue(OutputRowType)
         , WaitingForLookupResults(false)
     {
         Y_ABORT_UNLESS(Alloc);
+        for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
+            Y_DEBUG_ABORT_UNLESS(LookupInputIndexes[i] < InputRowType->GetElementsCount());
+        }
+        for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
+            Y_DEBUG_ABORT_UNLESS(OtherInputIndexes[i] < InputRowType->GetElementsCount());
+        }
+        Y_DEBUG_ABORT_UNLESS(LookupInputIndexes.size() == LookupKeyType->GetMembersCount());
     }
 
     void Bootstrap() {
@@ -97,12 +103,12 @@ private: //events
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
     )
 
-    void AddReadyQueue(NUdf::TUnboxedValue &lookupKey, NUdf::TUnboxedValue &inputOther, NUdf::TUnboxedValue *lookupPayload) {
+    void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
             for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
                 const auto& [source, index] = OutputRowColumnOrder[i];
-                switch(source) {
+                switch (source) {
                     case EOutputRowItemSource::InputKey:
                         outputRowItems[i] = lookupKey.GetElement(index);
                         break;
@@ -132,8 +138,9 @@ private: //events
         for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
             auto& [lookupKey, inputOther] = AwaitingQueue.front();
             auto lookupPayload = lookupResult.FindPtr(lookupKey);
-            if (lookupPayload == nullptr)
+            if (lookupPayload == nullptr) {
                 continue;
+            }
             AddReadyQueue(lookupKey, inputOther, lookupPayload);
         }
         for (auto&& [k, v]: lookupResult) {
@@ -382,11 +389,11 @@ std::pair<
     const NMiniKQL::TStructType* type,
     TStringBuf leftLabel,
     TStringBuf rightLabel,
-    const auto &rightNames,
-    const THashMap<TStringBuf, size_t> &leftJoinColumns,
-    const THashMap<TStringBuf, size_t> &lookupKeyColumns,
-    const THashMap<TStringBuf, size_t> &lookupPayloadColumns,
-    const THashMap<TStringBuf, size_t> &inputColumns
+    const auto& rightNames,
+    const THashMap<TStringBuf, size_t>& leftJoinColumns,
+    const THashMap<TStringBuf, size_t>& lookupKeyColumns,
+    const THashMap<TStringBuf, size_t>& lookupPayloadColumns,
+    const THashMap<TStringBuf, size_t>& inputColumns
 )
 {
     TOutputRowColumnOrder result(type->GetMembersCount());
@@ -397,20 +404,21 @@ std::pair<
             prefixedName.length() > leftLabel.length() &&
             prefixedName[leftLabel.length()] == '.') {
             const auto name = prefixedName.SubStr(leftLabel.length() + 1); //skip prefix and dot
-            if (auto j = leftJoinColumns.FindPtr(name))
-                result[i] = { EOutputRowItemSource::InputKey, *lookupKeyColumns.FindPtr(rightNames[*j]) };
-            else {
+            if (auto j = leftJoinColumns.FindPtr(name)) {
+                result[i] = { EOutputRowItemSource::InputKey, lookupKeyColumns.at(rightNames[*j]) };
+            } else {
                 result[i] = { EOutputRowItemSource::InputOther, otherInputIndexes.size() };
-                otherInputIndexes.push_back(*inputColumns.FindPtr(name));
+                otherInputIndexes.push_back(inputColumns.at(name));
             }
         } else if (prefixedName.starts_with(rightLabel) &&
                    prefixedName.length() > rightLabel.length() &&
                    prefixedName[rightLabel.length()] == '.') {
             const auto name = prefixedName.SubStr(rightLabel.length() + 1); //skip prefix and dot
-            if (auto j = lookupKeyColumns.FindPtr(name))
+            if (auto j = lookupKeyColumns.FindPtr(name)) {
                 result[i] = { EOutputRowItemSource::LookupKey, *j };
-            else
-                result[i] = { EOutputRowItemSource::LookupOther, *lookupPayloadColumns.FindPtr(name) };
+            } else {
+                result[i] = { EOutputRowItemSource::LookupOther, lookupPayloadColumns.at(name) };
+            }
         } else {
             Y_ABORT();
         }
@@ -418,9 +426,10 @@ std::pair<
     return { std::move(result), std::move(otherInputIndexes) };
 }
 
-THashMap<TStringBuf, size_t> GetNameToIndex(auto size, auto &&getter) {
+template <typename IndexType, typename GetterType>
+THashMap<TStringBuf, size_t> GetNameToIndex(IndexType size, GetterType&& getter) {
     THashMap<TStringBuf, size_t> result;
-    for (decltype(size) i = 0; i != size; ++i) {
+    for (IndexType i = 0; i != size; ++i) {
         result[getter(i)] = i;
     }
     return result;
@@ -438,10 +447,11 @@ THashMap<TStringBuf, size_t> GetNameToIndex(const NMiniKQL::TStructType* type) {
     });
 }
 
-TVector<size_t> GetJoinColumnIndexes(auto size, auto &&getter, const THashMap<TStringBuf, size_t>& joinColumns) {
+template <typename IndexType, typename GetterType>
+TVector<size_t> GetJoinColumnIndexes(IndexType size, GetterType&& getter, const THashMap<TStringBuf, size_t>& joinColumns) {
     TVector<size_t> result;
     result.reserve(size);
-    for (decltype(size) i = 0; i != size; ++i) {
+    for (IndexType i = 0; i != size; ++i) {
         if (auto p = joinColumns.FindPtr(getter(i))) {
             result.push_back(*p);
         }
@@ -494,7 +504,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupKeyType->GetMembersCount(),
             [&leftJoinKeyNames = settings.GetLeftJoinKeyNames(),
              &rightJoinColumns, &lookupKeyType = lookupKeyType](auto idx) {
-                return leftJoinKeyNames[*rightJoinColumns.FindPtr(lookupKeyType->GetMemberName(idx))];
+                return leftJoinKeyNames[rightJoinColumns.at(lookupKeyType->GetMemberName(idx))];
             }, inputColumns);
 
     auto&& [outputColumnsOrder, otherInputIndexes] = CategorizeOutputRowItems(

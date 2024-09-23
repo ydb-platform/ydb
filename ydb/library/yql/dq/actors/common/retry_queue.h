@@ -9,6 +9,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/system/types.h>
+#include <util/datetime/base.h>
 
 namespace NYql::NDq {
 
@@ -16,9 +17,9 @@ struct TEvRetryQueuePrivate {
     // Event ids.
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-
         EvRetry = EvBegin,
-
+        EvPing,
+        EvSessionClosed,        // recipientId does not exist anymore
         EvEnd
     };
 
@@ -29,9 +30,22 @@ struct TEvRetryQueuePrivate {
     struct TEvRetry : NActors::TEventLocal<TEvRetry, EvRetry> {
         explicit TEvRetry(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
-        {
-        }
+        { }
+        const ui64 EventQueueId;
+    };
 
+    struct TEvPing : NActors::TEventLocal<TEvPing, EvPing> {
+        explicit TEvPing(ui64 eventQueueId)
+            : EventQueueId(eventQueueId)
+        { }
+        const ui64 EventQueueId;
+    };
+
+
+    struct TEvSessionClosed : NActors::TEventLocal<TEvSessionClosed, EvSessionClosed> {
+        explicit TEvSessionClosed(ui64 eventQueueId)
+            : EventQueueId(eventQueueId)
+        { }
         const ui64 EventQueueId;
     };
 
@@ -55,6 +69,7 @@ template <class T>
 concept TProtobufEventWithTransportMeta = TProtobufEvent<T> && THasTransportMeta<T>;
 
 class TRetryEventsQueue {
+
 public:
     class IRetryableEvent : public TSimpleRefCount<IRetryableEvent> {
     public:
@@ -64,7 +79,9 @@ public:
         virtual ui64 GetSeqNo() const = 0;
     };
 
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0);
+    TRetryEventsQueue() {}
+
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -93,6 +110,7 @@ public:
 
     template <TProtobufEventWithTransportMeta T>
     bool OnEventReceived(const T* ev) { // Returns true if event was not processed (== it was received first time).
+        LastReceivedDataTime = TInstant::Now();
         if (LocalRecipient) {
             return true;
         }
@@ -120,7 +138,7 @@ public:
         }
         return false;
     }
-    
+
     bool RemoveConfirmedEvents() {
         RemoveConfirmedEvents(MyConfirmedSeqNo);
         return !Events.empty();
@@ -131,7 +149,9 @@ public:
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Retry();
+    void Ping();
     void Unsubscribe();
+    void PrintInternalState(TStringStream& stream) const;
 
 private:
     template <TProtobufEventWithTransportMeta T>
@@ -144,6 +164,7 @@ private:
     void RemoveConfirmedEvents(ui64 confirmedSeqNo);
     void SendRetryable(const IRetryableEvent::TPtr& ev);
     void ScheduleRetry();
+    void SchedulePing();
     void Connect();
 
 private:
@@ -199,8 +220,11 @@ private:
     std::set<ui64> ReceivedEventsSeqNos;
     bool Connected = false;
     bool RetryScheduled = false;
+    bool PingScheduled = false;
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
+    bool KeepAlive = false;
+    TInstant LastReceivedDataTime = TInstant::Now();
 };
 
 } // namespace NYql::NDq

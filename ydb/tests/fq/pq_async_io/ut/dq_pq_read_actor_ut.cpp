@@ -1,4 +1,4 @@
-#include "ut_helpers.h"
+#include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
 

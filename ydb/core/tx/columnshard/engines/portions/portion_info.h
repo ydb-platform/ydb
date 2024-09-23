@@ -518,6 +518,8 @@ public:
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
                 result += i.GetMeta().GetNumRows();
                 columnIdFirst = i.ColumnId;
+            } else {
+                break;
             }
         }
         return result;

@@ -191,7 +191,6 @@ void Init(
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
         auto rowDispatcher = NFq::NewRowDispatcherService(
             protoConfig.GetRowDispatcher(),
-            protoConfig.GetCommon(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,
@@ -207,7 +206,14 @@ void Init(
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
-        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
+        // NYql::TPqGatewayServices pqServices(
+        //     driver,
+        //     nullptr,
+        //     nullptr,
+        //     std::make_shared<TPqGatewayConfig>(),
+        //     nullptr
+        // );
+        // RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, CreatePqNativeGateway(pqServices), yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());

@@ -81,8 +81,12 @@
 #include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
+
 #include <ydb/core/util/pb.h>
 
 #include <yt/cpp/mapreduce/interface/init.h>
@@ -173,6 +177,15 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 
     if (config->HasSqlCore()) {
         sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
+    }
+}
+
+void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
+    auto configData = TFileInput(fqCfgFile).ReadAll();
+
+    using ::google::protobuf::TextFormat;
+    if (!TextFormat::ParseFromString(configData, fqConfig)) {
+        ythrow yexception() << "Bad format of fq configuration";
     }
 }
 
@@ -327,7 +340,8 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
     NYql::NLog::ELevel loggingLevel,
-    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+    const TVector<TActorSystemManager::TSetupModifier>& setupModifiers
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -338,6 +352,9 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
     }
 
+    std::for_each(setupModifiers.cbegin(), setupModifiers.cend(), [&](const auto& mod) {
+        actorSystemManager->ApplySetupModifier(mod);
+    });
     // One can modify actor system setup via actorSystemManager->ApplySetupModifier().
     // TODO: https://st.yandex-team.ru/YQL-16131
     // This will be useful for DQ Gateway initialization refactoring.
@@ -482,6 +499,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
+    TString fqCfgFile;
     TString progFile;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
@@ -573,6 +591,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&gatewaysCfgFile);
+    opts.AddLongOption("fq-cfg", "federated query configuration file")
+        .Optional()
+        .RequiredArgument("FILE")
+        .StoreResult(&fqCfgFile);
     opts.AddLongOption("fs-cfg", "Path to file storage config")
         .Optional()
         .StoreResult(&fileStorageCfg);
@@ -848,6 +870,9 @@ int RunMain(int argc, const char* argv[])
         setting->SetValue("1");
     }
 
+    NFq::NConfig::TConfig fqConfig;
+    ReadFqConfig(fqCfgFile, &fqConfig);
+
     if (res.Has("enable-spilling")) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("SpillingEngine");
@@ -914,10 +939,36 @@ int RunMain(int argc, const char* argv[])
 
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
+    TVector<TActorSystemManager::TSetupModifier> setupModifiers;
+
+    NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
+        fqConfig,
+        NKikimr::CreateYdbCredentialsProviderFactory,
+        MakeIntrusive<NMonitoring::TDynamicCounters>());
+    NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
+
+    if (fqConfig.GetRowDispatcher().GetEnabled()) {
+        setupModifiers.push_back([&](TActorSystemSetup& setup) {
+            auto rowDispatcher = NFq::NewRowDispatcherService(
+                fqConfig.GetRowDispatcher(),
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                yqSharedResources,
+                credentialsFactory,
+                "/tenant",
+                MakeIntrusive<NMonitoring::TDynamicCounters>());
+
+            setup.LocalServices.push_back(
+            std::pair<TActorId, TActorSetupCmd>(
+                NFq::RowDispatcherServiceActorId(),
+                TActorSetupCmd(rowDispatcher.release(), TMailboxType::HTSwap, 0)));
+        });
+    }
+
+
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory, setupModifiers);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {

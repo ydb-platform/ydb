@@ -1425,7 +1425,6 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
         Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable)
 {
-
     NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
     if (indexedTable) {
         tableDesc = out.MutableCreateIndexedTable()->MutableTableDescription();
@@ -1467,7 +1466,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     return true;
 }
 
-bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+template <typename TYdbProto>
+bool FillSequenceDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     THashMap<TString, NKikimrSchemeOp::TSequenceDescription> sequences;
 
     for (const auto& sequenceDescription : in.GetSequences()) {
@@ -1566,6 +1566,14 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
         }
     }
     return true;
+}
+
+bool FillSequenceDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillSequenceDescriptionImpl(out, in, status, error);
+}
+
+bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillSequenceDescriptionImpl(out, in, status, error);
 }
 
 bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {

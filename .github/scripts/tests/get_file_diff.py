@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -45,8 +46,10 @@ def extract_diff_lines(file_path):
 
 def main(file_name):
     added_lines, removed_lines = extract_diff_lines(file_name)
-
-    print("done")
+    if added_lines or removed_lines:
+        print(f"file {file_name} changed")
+    else:
+        print(f"file {file_name} not changed")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

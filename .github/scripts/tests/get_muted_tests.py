@@ -5,6 +5,7 @@ import os
 import posixpath
 import re
 import requests
+import sys
 import ydb
 from mute_utils import mute_target, pattern_to_re
 from get_file_diff import extract_diff_lines
@@ -238,6 +239,14 @@ def upload_muted_tests(tests):
             full_path = posixpath.join(DATABASE_PATH, table_path)
             bulk_upsert(driver.table_client, full_path, tests)
 
+ 
+def to_str(data):
+    if isinstance(data, str):
+        return data
+    elif isinstance(data, bytes):
+        return data.decode('utf-8')
+    else:
+        raise ValueError("Unsupported type")
     
 def get_mute_details(args):
     output_path = args.output_folder
@@ -262,10 +271,10 @@ def get_mute_details(args):
             os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
                 "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
             ]
-        if args.job_id and args.branch_id:
-            all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch_id)
+        if args.job_id and args.branch:
+            all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch)
         else:
-            all_tests= get_all_tests(path=all_tests_file)
+            all_tests= get_all_tests(path=all_tests_file,branch=args.branch)
 
     if all_tests == 1:
         return 1
@@ -277,16 +286,16 @@ def get_mute_details(args):
 
     if args.mode == 'upload_muted_tests':
         for test in all_tests:
-            testsuite = test[0]
-            testcase = test[1]
+            testsuite = to_str(test[0])
+            testcase = to_str(test[1])
             test['branch'] = 'main'
             test['is_muted'] = int(mute_check(testsuite, testcase))
                 
         upload_muted_tests(all_tests)
     elif args.mode == 'get_mute_details':
         for test in all_tests:
-            testsuite = test[0]
-            testcase = test[1]
+            testsuite = to_str(test[0])
+            testcase = to_str(test[1])
             if mute_check(testsuite, testcase):
                 muted_tests.append(testsuite + ' ' + testcase + '\n')
    
@@ -345,16 +354,32 @@ def get_mute_details(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
-    parser.add_argument('--mode', default='upload_muted_tests',choices=['upload_muted_tests','get_mute_details'], 
-                        type=str, help='choose mode upload_muted or get_mute_details')
-    parser.add_argument('--output_folder', type=str, default=repo_path + '.github/config/mute_info/'  , 
-                        help=f'The folder to output results. Default is the value of repo_path = {repo_path}.github/config/mute_info/.')
-    parser.add_argument('--use_all_tests_s3_file', action='store_true', 
-                        help='pass s3 file url to use it as all test base')
-    parser.add_argument('--branch', action='store_true', 
-                        help='pass branch to extend list of tests by new tests from this pr (by job-id of PR-check branch)')
-    parser.add_argument('--job-id', action='store_true', 
-                    help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')    
+    
+    parser.add_argument('--use_all_tests_s3_file', 
+        help='pass s3 file url to use it as all test base')
+    parser.add_argument('--output_folder',
+        type=str, 
+        default=repo_path + '.github/config/mute_info/'  , 
+        help=f'The folder to output results. Default is the value of repo_path = {repo_path}.github/config/mute_info/.')
+    
+    subparsers = parser.add_subparsers(dest='mode', help="Mode to perform")
+    
+    upload_muted_tests_parser = subparsers.add_parser('upload_muted_tests',
+        help='apply mute rules for all tests in main and upload to database')
+    upload_muted_tests_parser.add_argument('--branch', 
+        required= True,
+        default='main',
+        help='branch for getting all tests')
+    
+    get_mute_details_parser = subparsers.add_parser('get_mute_details',
+        help='apply mute rules for all tests in main extended by new tests from pr and collect new muted and unmuted')
+
+    get_mute_details_parser.add_argument('--branch', 
+        required= True,
+        help='pass branch to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')
+    get_mute_details_parser.add_argument('--job-id',  
+        required= True,
+        help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')    
     args = parser.parse_args()
 
     get_mute_details(args)

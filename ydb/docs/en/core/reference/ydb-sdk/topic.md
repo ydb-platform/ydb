@@ -849,6 +849,25 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 {% list tabs %}
 
+- Go
+
+  Для записи в топик в транзакции необходимо создать транзакционного писателя, после чего можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
+
+  To write to a topic within a transaction, you need to create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter) with the tx argument. Once created, you can write messages as usual. There's no need to close the transactional writer manually - it will be closed automatically when the transaction ends.
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
+
+  ```go
+  err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+    writer, err := db.Topic().StartTransactionalWriter(tx, topicName)
+    if err != nil {
+      return err
+    }
+
+    return writer.Write(ctx, topicwriter.Message{Data: strings.NewReader("asd")})
+  })
+  ```
+
 - Java (sync)
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
@@ -1653,6 +1672,29 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   if (stopPartitionSessionEvent) {
       stopPartitionSessionEvent->Commit();
+  }
+  ```
+
+- Go
+
+  To read messages from a topic within a transaction, you need to use [Reader.PopMessagesBatchTx](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx) method. It reads a batch of messages and adds commit the commit to the transaction, so there's no need to commit them separately. You can reuse the reader across different transactions. However, it's important to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order.The simplest way to ensure this is by using the reader within a loop.
+
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
+
+  ```go
+  for {
+    err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+      batch, err := reader.PopMessagesBatchTx(ctx, tx) // батч закоммитится при общем коммите транзакции
+      if err != nil {
+        return err
+      }
+
+      return processBatch(ctx, batch)
+    })
+    if err != nil {
+      handleError(err)
+    }
   }
   ```
 

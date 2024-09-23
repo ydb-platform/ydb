@@ -181,7 +181,23 @@ A **consumer** is an entity that reads messages from a topic.
 
 ### Change data capture {#cdc}
 
-**Change data capture** or **CDC** is a mechanism that allows subscribing to a stream of changes to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
+**Change data capture** or **CDC** is a mechanism that allows subscribing to a **stream of changes** to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
+
+#### Changefeed {#changefeed}
+
+**Changefeed** or **stream of changes** is an ordered list of changes in a given [table](#table) published via a [topic](#topic).
+
+### Asynchronous replication instance {#async-replication-instance}
+
+**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
+
+#### Replicated object {#replicated-object}
+
+**Replicated object** is an object, for example, a table, that is asynchronously replicated to the target database.
+
+#### Replica object {#replica-object}
+
+**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#async-replication-instance). Replica objects are typically read-only.
 
 ### YQL {#yql}
 

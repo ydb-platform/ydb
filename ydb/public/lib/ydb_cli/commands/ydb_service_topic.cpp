@@ -394,7 +394,7 @@ namespace {
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
-        auto partitioningSettings = settings.BeginAlterPartitioningSettings();
+        auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
 
         if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions())) {
             partitioningSettings.MinActivePartitions(*MinActivePartitions_);

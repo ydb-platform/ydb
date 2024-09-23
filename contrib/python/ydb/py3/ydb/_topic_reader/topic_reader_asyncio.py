@@ -337,12 +337,12 @@ class ReaderStream:
 
         self._update_token_event.set()
 
-        self._background_tasks.add(asyncio.create_task(self._read_messages_loop(), name="read_messages_loop"))
-        self._background_tasks.add(asyncio.create_task(self._decode_batches_loop(), name="decode_batches"))
+        self._background_tasks.add(asyncio.create_task(self._read_messages_loop()))
+        self._background_tasks.add(asyncio.create_task(self._decode_batches_loop()))
         if self._get_token_function:
-            self._background_tasks.add(asyncio.create_task(self._update_token_loop(), name="update_token_loop"))
+            self._background_tasks.add(asyncio.create_task(self._update_token_loop()))
         self._background_tasks.add(
-            asyncio.create_task(self._handle_background_errors(), name="handle_background_errors")
+            asyncio.create_task(self._handle_background_errors())
         )
 
     async def wait_error(self):

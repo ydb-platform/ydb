@@ -4,8 +4,11 @@
 
 - С помощью [pg-dump](#pg-dump).
 - С помощью импорта данных [из файлов](#file-import).
+
 {% if oss == true %}
+
 - С помощью утилиты [ydb-importer](../integrations/ingestion/import-jdbc.md).
+
 {% endif %}
 
 |Способ импорта|Способ работы|Сценарии использования|

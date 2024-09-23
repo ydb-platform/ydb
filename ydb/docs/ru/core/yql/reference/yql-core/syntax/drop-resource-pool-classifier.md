@@ -1,6 +1,6 @@
 # DROP RESOURCE POOL CLASSIFIER
 
-`DROP RESOURCE POOL CLASSIFIER` удаляет [resource pool classifier](../../../../concepts/gloassary#resource-pool-classifier).
+`DROP RESOURCE POOL CLASSIFIER` удаляет [классификатор пула ресурсов](../../../../concepts/gloassary#resource-pool-classifier).
 
 ## Синтаксис
 
@@ -10,11 +10,7 @@ DROP RESOURCE POOL CLASSIFIER <name>
 
 ### Параметры
 
-* `name` - имя resource pool classifier, подлежащего удалению.
-
-## Замечания {#remarks}
-
-* `name` - не должно содержать в себе запрещенные символы для схемных объектов, но оно не привязано к иерархии схемы
+* `name` - имя классификатора пула ресурсов, подлежащего удалению.
 
 ## Разрешения
 
@@ -27,7 +23,7 @@ GRANT 'ALL' ON `/my_db` TO `user1@domain`;
 
 ## Примеры
 
-Следующая команда удалит resource pool classifier с именем olap_classifier:
+Следующая команда удалит классификатор пула ресурсов с именем olap_classifier:
 
 ```yql
 DROP RESOURCE POOL CLASSIFIER olap_classifier;

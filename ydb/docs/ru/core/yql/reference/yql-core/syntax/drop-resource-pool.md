@@ -1,6 +1,6 @@
 # DROP RESOURCE POOL
 
-`DROP RESOURCE POOL` удаляет [resource pool](../../../../concepts/gloassary#resource-pool).
+`DROP RESOURCE POOL` удаляет [пул ресурсов](../../../../concepts/gloassary#resource-pool).
 
 ## Синтаксис
 
@@ -10,11 +10,7 @@ DROP RESOURCE POOL <name>
 
 ### Параметры
 
-* `name` - имя resource pool, подлежащего удалению.
-
-## Замечания {#remarks}
-
-* `name` - не должно содержать в себе символ `/`, оно не привязано к иерархии схемы
+* `name` - имя пула ресурсов, подлежащего удалению.
 
 ## Разрешения
 
@@ -27,7 +23,7 @@ GRANT 'REMOVE SCHEMA`' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 
 ## Примеры
 
-Следующая команда удалит resource pool olap:
+Следующая команда удалит пул ресурсов olap:
 
 ```yql
 DROP RESOURCE POOL olap;

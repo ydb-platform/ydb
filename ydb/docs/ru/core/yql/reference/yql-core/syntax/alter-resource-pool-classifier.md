@@ -1,13 +1,13 @@
 # ALTER RESOURCE POOL CLASSIFIER
 
-`ALTER RESOURCE POOL CLASSIFIER` изменяет определение [resource pool classifier](../../../../concepts/gloassary#resource-pool-classifier.md).
+`ALTER RESOURCE POOL CLASSIFIER` изменяет определение [классификатора пула ресурсов](../../../../concepts/gloassary#resource-pool-classifier.md).
 
 ## Параметры
 {% include [x](_includes/resource_pool_classifier_parameters.md) %}
 
 ## Изменение параметров
 
-Синтаксис для изменения любого параметра resource pool classifier выглядит следующим образом:
+Синтаксис для изменения любого параметра классификатора пула ресурсов выглядит следующим образом:
 
 ```yql
 ALTER RESOURCE POOL CLASSIFIER <name> SET (<key> = <value>);
@@ -23,15 +23,15 @@ ALTER RESOURCE POOL CLASSIFIER olap_classifier SET (MEMBERNAME = "user2@domain")
 
 ## Сброс параметров
 
-Команда для сброса параметра resource pool classifier выглядит следующим образом:
+Команда для сброса параметра классификатора пула ресурсов выглядит следующим образом:
 
 ```yql
 ALTER RESOURCE POOL CLASSIFIER <name> RESET (<key>);
 ```
 
-```<key>``` — имя параметра.
+`<key>` — имя параметра.
 
-Например, такая команда сбросит настройки `MEMBERNAME` для resource pool classifier:
+Например, такая команда сбросит настройки `MEMBERNAME`:
 
 ```yql
 ALTER RESOURCE POOL CLASSIFIER olap_classifier RESET (MEMBERNAME);

@@ -3621,7 +3621,10 @@ ISqlLanguageParser* GetSqlLanguageParser() {
 void LoadSystemFunctions(ISystemFunctionsParser& parser) {
     auto& catalog = TCatalog::MutableInstance();
     with_lock (catalog.ExtensionsGuard) {
-        Y_ENSURE(!catalog.State->SystemFunctionInit);
+        if (catalog.State->SystemFunctionInit) {
+            return;
+        }
+        
         TString data;
         Y_ENSURE(NResource::FindExact("system_functions.sql", &data));
         TVector<TProcDesc> procs;

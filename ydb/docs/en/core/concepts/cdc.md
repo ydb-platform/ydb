@@ -1,6 +1,6 @@
 # Change Data Capture (CDC)
 
-Change Data Capture (CDC) captures changes to {{ ydb-short-name }} table rows, uses these changes to generate a _changefeed_, writes them to distributed storage, and provides access to these records for further processing. It uses a [topic](topic.md) as distributed storage to efficiently store the table change log.
+Change Data Capture (CDC) captures changes to {{ ydb-short-name }} table rows, uses these changes to generate a *changefeed*, writes them to distributed storage, and provides access to these records for further processing. It uses a [topic](topic.md) as distributed storage to efficiently store the table change log.
 
 When adding, updating, or deleting a table row, CDC generates a change record by specifying the [primary key](datamodel/table.md) of the row and writes it to the topic partition corresponding to this key.
 
@@ -15,10 +15,11 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 * The number of topic partitions is fixed as of changefeed creation and remains unchanged (unlike tables, topics are not elastic).
 * Changefeeds support records of the following types of operations:
-   * Updates
-   * Erases
 
-   Adding rows is a special update case, and a record of adding a row in a changefeed will look similar to an update record.
+  * Updates
+  * Erases
+
+Adding rows is a special update case, and a record of adding a row in a changefeed will look similar to an update record.
 
 ## Virtual timestamps {#virtual-timestamps}
 
@@ -31,7 +32,7 @@ Using these stamps, you can arrange records from different partitions of the top
 
 {% note info %}
 
-By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table.md#changefeed-options) when creating a changefeed.
+By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
 
 {% endnote %}
 
@@ -40,6 +41,7 @@ By default, virtual timestamps are not uploaded to the changefeed. To enable the
 By default, a changefeed only includes records about those table rows that changed after the changefeed was created. Initial table scan enables you to export, to the changefeed, the values of all the rows that existed at the time of changefeed creation.
 
 The scan runs in the background mode on top of the table snapshot. The following situations are possible:
+
 * A non-scanned row changes in the table. The changefeed will receive, one after another: a record with the source value and a record about the update.  When the same record is changed again, only the update record is exported.
 * A changed row is found during scanning. Nothing is exported to the changefeed because the source value has already been exported at the time of change (see the previous paragraph).
 * A scanned row changes in the table. Only an update record exports to the changefeed.
@@ -56,7 +58,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 ## Record structure {#record-structure}
 
-Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md#changefeed-options), the structure of a record may differ.
+Depending on the [changefeed parameters](../yql/reference/syntax/alter_table/changefeed.md), the structure of a record may differ.
 
 ### JSON format {#json-record-structure}
 
@@ -80,55 +82,58 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
 
-> Sample record of an update in `UPDATES` mode:
->
-> ```json
-> {
->    "key": [1, "one"],
->    "update": {
->        "payload": "lorem ipsum",
->        "date": "2022-02-22"
->    }
-> }
-> ```
->
-> Record of an erase:
-> ```json
-> {
->    "key": [2, "two"],
->    "erase": {}
-> }
-> ```
->
-> Record with row snapshots:
-> ```json
-> {
->    "key": [1, 2, 3],
->    "update": {},
->    "newImage": {
->        "textColumn": "value1",
->        "intColumn": 101,
->        "boolColumn": true
->    },
->    "oldImage": {
->        "textColumn": null,
->        "intColumn": 100,
->        "boolColumn": false
->    }
-> }
-> ```
->
-> Record with virtual timestamps:
-> ```json
-> {
->    "key": [1],
->    "update": {
->        "created": "2022-12-12T00:00:00.000000Z",
->        "customer": "Name123"
->    },
->    "ts": [1670792400890, 562949953607163]
-> }
-> ```
+Sample record of an update in `UPDATES` mode:
+
+```json
+{
+   "key": [1, "one"],
+   "update": {
+       "payload": "lorem ipsum",
+       "date": "2022-02-22"
+   }
+}
+```
+
+Record of an erase:
+
+```json
+{
+   "key": [2, "two"],
+   "erase": {}
+}
+```
+
+Record with row snapshots:
+
+```json
+{
+   "key": [1, 2, 3],
+   "update": {},
+   "newImage": {
+       "textColumn": "value1",
+       "intColumn": 101,
+       "boolColumn": true
+   },
+   "oldImage": {
+       "textColumn": null,
+       "intColumn": 100,
+       "boolColumn": false
+   }
+}
+```
+
+Record with virtual timestamps:
+
+```json
+{
+   "key": [1],
+   "update": {
+       "created": "2022-12-12T00:00:00.000000Z",
+       "customer": "Name123"
+   },
+   "ts": [1670792400890, 562949953607163]
+}
+```
 
 {% note info %}
 
@@ -146,6 +151,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 For [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html)-compatible document tables, {{ ydb-short-name }} can generate change records in the [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html)-compatible format.
 
 The record structure is the same as for [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_Record.html) records:
+
 * `awsRegion`: Includes the string delivered in the `AWS_REGION` option when creating a changefeed.
 * `dynamodb`: [StreamRecord](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_StreamRecord.html).
 * `eventID`: Unique record ID.
@@ -178,13 +184,16 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
 ```
 
 * `op`: Operation that was performed on a row:
+
   * `c` — create. Applicable only in `NEW_AND_OLD_IMAGES` mode.
   * `u` — update.
   * `d` — delete.
   * `r` — read from [snapshot](#initial-scan).
+
 * `before`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `after`: Row snapshot after the change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `source`: Source metadata for the event.
+
   * `connector`: Connector name. Current name is `ydb`.
   * `version`: Connector version that was used to generate the record. Current version is `1.0.0`.
   * `ts_ms`: Approximate time when the change was applied, in milliseconds.
@@ -214,11 +223,11 @@ Records whose retention time has expired are deleted, regardless of whether they
 
 Deleting records before they are processed by the client will cause [offset](topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
 
-To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table.md#changefeed-options) parameter when creating a changefeed.
+To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
 
 ## Topic partitions {#topic-partitions}
 
-By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table.md#changefeed-options) parameter when creating a changefeed.
+By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
 
 {% note info %}
 
@@ -228,7 +237,7 @@ Currently, the ability to explicitly specify the number of topic partitions is a
 
 ## Creating and deleting a changefeed {#ddl}
 
-You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
+You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
 
 ## CDC purpose and use {#best_practices}
 

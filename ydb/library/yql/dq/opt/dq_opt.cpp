@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
 
 using namespace NYql::NNodes;
 
@@ -158,6 +159,16 @@ bool CanPushDqExpr(const TExprBase& expr, const TDqStageBase& stage) {
 
 bool CanPushDqExpr(const TExprBase& expr, const TDqConnection& connection) {
     return CanPushDqExpr(expr, connection.Output().Stage());
+}
+
+IDqOptimization* GetDqOptCallback(const TExprBase& providerCall, const TTypeAnnotationContext& typeAnnCtx) {
+    if (providerCall.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerCall.Ref().Child(1))) {
+        auto dataSourceName = providerCall.Ref().Child(1)->Child(0)->Content();
+        auto datasource = typeAnnCtx.DataSourceMap.FindPtr(dataSourceName);
+        YQL_ENSURE(datasource);
+        return (*datasource)->GetDqOptimization();
+    }
+    return nullptr;
 }
 
 } // namespace NYql::NDq

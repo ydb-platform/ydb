@@ -34,13 +34,14 @@ DEFINE_REFCOUNTED_TYPE(TCounter)
 // ! Counters for TReplicationLagPenaltyProvider.
 struct TLagPenaltyProviderCounters final
 {
-    TLagPenaltyProviderCounters(const NProfiling::TRegistry& registry, const TVector<TString>& clusters);
-    TLagPenaltyProviderCounters(const TString& tablePath, const TVector<TString>& replicaClusters);
+    TLagPenaltyProviderCounters(const NProfiling::TRegistry& registry, const std::vector<TString>& clusters);
+    TLagPenaltyProviderCounters(const TString& tablePath, const std::vector<TString>& replicaClusters);
 
     NProfiling::TCounter SuccessRequestCount;
     NProfiling::TCounter ErrorRequestCount;
-    THashMap<TString, NProfiling::TGauge> LagTabletsCount; // cluster -> # of tablets
-    NProfiling::TGauge TotalTabletsCount;
+    // Mapping from cluster replica to number of tablets with lag.
+    THashMap<TString, NProfiling::TGauge> TabletWithLagCountPerReplica;
+    NProfiling::TGauge TotalTabletCount;
 };
 
 DEFINE_REFCOUNTED_TYPE(TLagPenaltyProviderCounters)

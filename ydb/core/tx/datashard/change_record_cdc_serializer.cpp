@@ -1,6 +1,6 @@
 #include "change_record_cdc_serializer.h"
 #include "change_record.h"
-#include "export_common.h"
+#include "type_serialization.h"
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -9,6 +9,7 @@
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/uuid/uuid.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -61,6 +62,7 @@ public:
         case TChangeRecord::EKind::CdcHeartbeat:
             return SerializeHeartbeat(cmd, record);
         case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::IncrementalRestore:
             Y_ABORT("Unexpected");
         }
     }
@@ -181,8 +183,7 @@ protected:
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
         case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            Y_ABORT("pg types are not supported");
+            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
         case NScheme::NTypeIds::Uuid:
             return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
         default:

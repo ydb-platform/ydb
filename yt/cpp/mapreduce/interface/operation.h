@@ -1557,10 +1557,17 @@ struct TOperationOptions
 
     ///
     /// @brief Path to directory to store temporary files.
+    /// Useful if you want to control how lifetime of uploaded files.
     FLUENT_FIELD_OPTION(TString, FileStorage);
 
     ///
     /// @brief Expiration timeout for uploaded files.
+    ///
+    /// Set attribute ExpirationTimeout for files being uploaded during operation preparation.
+    /// Useful when using custom FileStorage and don't want to create separate cleanup process.
+    ///
+    /// When using default FileStorage inside //tmp this parameter is almost useless.
+    /// //tmp directory is cleaned up by separate process and files can be deleted before FileExpiratoinTimeout is reached.
     FLUENT_FIELD_OPTION(TDuration, FileExpirationTimeout);
 
     ///

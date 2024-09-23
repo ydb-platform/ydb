@@ -6,7 +6,7 @@ Each such name within the query is replaced, at execution time, by a globally un
 
 This feature lets you ignore conflicts in paths to temporary tables between parallel operations, and also avoid deleting them explicitly when the query completes.
 
-**Examples:**
+## Examples
 
 ```yql
 INSERT INTO @my_temp_table

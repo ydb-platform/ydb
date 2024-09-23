@@ -461,4 +461,4 @@ namespace NYql {
             return ValidationError(clusterConfig, context, "empty field 'Protocol'");
         }
     }
-}
+} // namespace NYql

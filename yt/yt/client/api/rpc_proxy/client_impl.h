@@ -200,13 +200,13 @@ public:
         const NApi::TRemoveMemberOptions& options) override;
 
     TFuture<TCheckPermissionResponse> CheckPermission(
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const NApi::TCheckPermissionOptions& options) override;
 
     TFuture<TCheckPermissionByAclResult> CheckPermissionByAcl(
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const NApi::TCheckPermissionByAclOptions& options) override;
@@ -273,7 +273,7 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobSpecOptions& options) override;
 
-    TFuture<TSharedRef> GetJobStderr(
+    TFuture<TGetJobStderrResponse> GetJobStderr(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;
@@ -491,24 +491,24 @@ public:
     // Authentication
 
     virtual TFuture<void> SetUserPassword(
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options) override;
 
     TFuture<TIssueTokenResult> IssueToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options) override;
 
     TFuture<void> RevokeToken(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options) override;
 
     TFuture<TListUserTokensResult> ListUserTokens(
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
@@ -563,6 +563,26 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
+
+    // Shuffle service client
+    TFuture<TShuffleHandlePtr> StartShuffle(
+        const TString& account,
+        int partitionCount,
+        const TStartShuffleOptions& options) override;
+
+    TFuture<void> FinishShuffle(
+        const TShuffleHandlePtr& shuffleHandle,
+        const TFinishShuffleOptions& options) override;
+
+    TFuture<IRowBatchReaderPtr> CreateShuffleReader(
+        const TShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        const NTableClient::TTableReaderConfigPtr& config) override;
+
+    TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
+        const TShuffleHandlePtr& shuffleHandle,
+        const TString& partitionColumn,
+        const NTableClient::TTableWriterConfigPtr& config) override;
 
 private:
     const TConnectionPtr Connection_;

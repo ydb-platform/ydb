@@ -34,6 +34,7 @@ message TEvCreateImportRequest {
     optional string DatabaseName = 2;
     optional string UserSID = 3;
     optional TCreateImportRequest Request = 4;
+    optional string PeerName = 5;
 }
 
 message TCreateImportResponse {
@@ -68,8 +69,10 @@ message TCancelImportRequest {
 
 message TEvCancelImportRequest {
     optional uint64 TxId = 1;
-    optional string DatabaseName = 3;
     optional TCancelImportRequest Request = 2;
+    optional string DatabaseName = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
 }
 
 message TCancelImportResponse {
@@ -88,8 +91,10 @@ message TForgetImportRequest {
 
 message TEvForgetImportRequest {
     optional uint64 TxId = 1;
-    optional string DatabaseName = 3;
     optional TForgetImportRequest Request = 2;
+    optional string DatabaseName = 3;
+    optional string UserSID = 4;
+    optional string PeerName = 5;
 }
 
 message TForgetImportResponse {

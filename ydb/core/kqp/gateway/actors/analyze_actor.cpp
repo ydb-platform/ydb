@@ -46,6 +46,12 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
 
     const auto& record = ev->Get()->Record;
     const TString operationId = record.GetOperationId();
+    const auto status = record.GetStatus(); 
+
+    if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
+        ALOG_CRIT(NKikimrServices::KQP_GATEWAY, 
+            "TAnalyzeActor, TEvAnalyzeResponse has status=" << status);
+    }
 
     if (operationId != OperationId) {
         ALOG_CRIT(NKikimrServices::KQP_GATEWAY, 
@@ -99,9 +105,8 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
                     TStringBuilder() << "Can't get statistics aggregator ID.", {}
                 )
             );
+            this->Die(ctx);
         }
-
-        this->Die(ctx);
         return;
     }
     

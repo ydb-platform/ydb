@@ -19,7 +19,7 @@ from zope.interface import classImplements
 
 class IException(Interface):
     "Interface for `Exception`"
-classImplements(Exception, IException)
+classImplements(Exception, IException)  # noqa E305
 
 
 class IStandardError(IException):
@@ -28,117 +28,117 @@ class IStandardError(IException):
 
 class IWarning(IException):
     "Interface for `Warning`"
-classImplements(Warning, IWarning)
+classImplements(Warning, IWarning)  # noqa E305
 
 
 class ISyntaxError(IStandardError):
     "Interface for `SyntaxError`"
-classImplements(SyntaxError, ISyntaxError)
+classImplements(SyntaxError, ISyntaxError)  # noqa E305
 
 
 class ILookupError(IStandardError):
     "Interface for `LookupError`"
-classImplements(LookupError, ILookupError)
+classImplements(LookupError, ILookupError)  # noqa E305
 
 
 class IValueError(IStandardError):
     "Interface for `ValueError`"
-classImplements(ValueError, IValueError)
+classImplements(ValueError, IValueError)  # noqa E305
 
 
 class IRuntimeError(IStandardError):
     "Interface for `RuntimeError`"
-classImplements(RuntimeError, IRuntimeError)
+classImplements(RuntimeError, IRuntimeError)  # noqa E305
 
 
 class IArithmeticError(IStandardError):
     "Interface for `ArithmeticError`"
-classImplements(ArithmeticError, IArithmeticError)
+classImplements(ArithmeticError, IArithmeticError)  # noqa E305
 
 
 class IAssertionError(IStandardError):
     "Interface for `AssertionError`"
-classImplements(AssertionError, IAssertionError)
+classImplements(AssertionError, IAssertionError)  # noqa E305
 
 
 class IAttributeError(IStandardError):
     "Interface for `AttributeError`"
-classImplements(AttributeError, IAttributeError)
+classImplements(AttributeError, IAttributeError)  # noqa E305
 
 
 class IDeprecationWarning(IWarning):
     "Interface for `DeprecationWarning`"
-classImplements(DeprecationWarning, IDeprecationWarning)
+classImplements(DeprecationWarning, IDeprecationWarning)  # noqa E305
 
 
 class IEOFError(IStandardError):
     "Interface for `EOFError`"
-classImplements(EOFError, IEOFError)
+classImplements(EOFError, IEOFError)  # noqa E305
 
 
 class IEnvironmentError(IStandardError):
     "Interface for `EnvironmentError`"
-classImplements(EnvironmentError, IEnvironmentError)
+classImplements(EnvironmentError, IEnvironmentError)  # noqa E305
 
 
 class IFloatingPointError(IArithmeticError):
     "Interface for `FloatingPointError`"
-classImplements(FloatingPointError, IFloatingPointError)
+classImplements(FloatingPointError, IFloatingPointError)  # noqa E305
 
 
 class IIOError(IEnvironmentError):
     "Interface for `IOError`"
-classImplements(IOError, IIOError)
+classImplements(IOError, IIOError)  # noqa E305
 
 
 class IImportError(IStandardError):
     "Interface for `ImportError`"
-classImplements(ImportError, IImportError)
+classImplements(ImportError, IImportError)  # noqa E305
 
 
 class IIndentationError(ISyntaxError):
     "Interface for `IndentationError`"
-classImplements(IndentationError, IIndentationError)
+classImplements(IndentationError, IIndentationError)  # noqa E305
 
 
 class IIndexError(ILookupError):
     "Interface for `IndexError`"
-classImplements(IndexError, IIndexError)
+classImplements(IndexError, IIndexError)  # noqa E305
 
 
 class IKeyError(ILookupError):
     "Interface for `KeyError`"
-classImplements(KeyError, IKeyError)
+classImplements(KeyError, IKeyError)  # noqa E305
 
 
 class IKeyboardInterrupt(IStandardError):
     "Interface for `KeyboardInterrupt`"
-classImplements(KeyboardInterrupt, IKeyboardInterrupt)
+classImplements(KeyboardInterrupt, IKeyboardInterrupt)  # noqa E305
 
 
 class IMemoryError(IStandardError):
     "Interface for `MemoryError`"
-classImplements(MemoryError, IMemoryError)
+classImplements(MemoryError, IMemoryError)  # noqa E305
 
 
 class INameError(IStandardError):
     "Interface for `NameError`"
-classImplements(NameError, INameError)
+classImplements(NameError, INameError)  # noqa E305
 
 
 class INotImplementedError(IRuntimeError):
     "Interface for `NotImplementedError`"
-classImplements(NotImplementedError, INotImplementedError)
+classImplements(NotImplementedError, INotImplementedError)  # noqa E305
 
 
 class IOSError(IEnvironmentError):
     "Interface for `OSError`"
-classImplements(OSError, IOSError)
+classImplements(OSError, IOSError)  # noqa E305
 
 
 class IOverflowError(IArithmeticError):
     "Interface for `ArithmeticError`"
-classImplements(OverflowError, IOverflowError)
+classImplements(OverflowError, IOverflowError)  # noqa E305
 
 
 class IOverflowWarning(IWarning):
@@ -151,59 +151,59 @@ class IOverflowWarning(IWarning):
 
 class IReferenceError(IStandardError):
     "Interface for `ReferenceError`"
-classImplements(ReferenceError, IReferenceError)
+classImplements(ReferenceError, IReferenceError)  # noqa E305
 
 
 class IRuntimeWarning(IWarning):
     "Interface for `RuntimeWarning`"
-classImplements(RuntimeWarning, IRuntimeWarning)
+classImplements(RuntimeWarning, IRuntimeWarning)  # noqa E305
 
 
 class IStopIteration(IException):
     "Interface for `StopIteration`"
-classImplements(StopIteration, IStopIteration)
+classImplements(StopIteration, IStopIteration)  # noqa E305
 
 
 class ISyntaxWarning(IWarning):
     "Interface for `SyntaxWarning`"
-classImplements(SyntaxWarning, ISyntaxWarning)
+classImplements(SyntaxWarning, ISyntaxWarning)  # noqa E305
 
 
 class ISystemError(IStandardError):
     "Interface for `SystemError`"
-classImplements(SystemError, ISystemError)
+classImplements(SystemError, ISystemError)  # noqa E305
 
 
 class ISystemExit(IException):
     "Interface for `SystemExit`"
-classImplements(SystemExit, ISystemExit)
+classImplements(SystemExit, ISystemExit)  # noqa E305
 
 
 class ITabError(IIndentationError):
     "Interface for `TabError`"
-classImplements(TabError, ITabError)
+classImplements(TabError, ITabError)  # noqa E305
 
 
 class ITypeError(IStandardError):
     "Interface for `TypeError`"
-classImplements(TypeError, ITypeError)
+classImplements(TypeError, ITypeError)  # noqa E305
 
 
 class IUnboundLocalError(INameError):
     "Interface for `UnboundLocalError`"
-classImplements(UnboundLocalError, IUnboundLocalError)
+classImplements(UnboundLocalError, IUnboundLocalError)  # noqa E305
 
 
 class IUnicodeError(IValueError):
     "Interface for `UnicodeError`"
-classImplements(UnicodeError, IUnicodeError)
+classImplements(UnicodeError, IUnicodeError)  # noqa E305
 
 
 class IUserWarning(IWarning):
     "Interface for `UserWarning`"
-classImplements(UserWarning, IUserWarning)
+classImplements(UserWarning, IUserWarning)  # noqa E305
 
 
 class IZeroDivisionError(IArithmeticError):
     "Interface for `ZeroDivisionError`"
-classImplements(ZeroDivisionError, IZeroDivisionError)
+classImplements(ZeroDivisionError, IZeroDivisionError)  # noqa E305

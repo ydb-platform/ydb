@@ -339,9 +339,10 @@ public:
         ILogWriterHost* host) noexcept override
     {
         auto config = ParseConfig(configNode);
+        auto eventProvider = CreateDefaultSystemLogEventProvider(config);
         return CreateFileLogWriter(
             std::move(formatter),
-            CreateDefaultSystemLogEventProvider(config),
+            std::move(eventProvider),
             std::move(name),
             std::move(config),
             host);

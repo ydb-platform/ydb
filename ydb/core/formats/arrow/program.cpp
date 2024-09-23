@@ -19,6 +19,18 @@ enum class AggFunctionId {
     AGG_MIN = 3,
     AGG_MAX = 4,
     AGG_SUM = 5,
+    AGG_AVG = 6,
+    //AGG_VAR = 7,
+    //AGG_COVAR = 8,
+    //AGG_STDDEV = 9,
+    //AGG_CORR = 10,
+    //AGG_ARG_MIN = 11,
+    //AGG_ARG_MAX = 12,
+    //AGG_COUNT_DISTINCT = 13,
+    //AGG_QUANTILES = 14,
+    //AGG_TOP_COUNT = 15,
+    //AGG_TOP_SUM = 16,
+    AGG_NUM_ROWS = 17,
 };
 struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
     struct Assign {

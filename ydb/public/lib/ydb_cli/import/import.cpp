@@ -270,7 +270,7 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
 
 TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath, const TImportFileSettings& settings) {
     FilesCount = filePaths.size();
-    if (settings.Format_ == EOutputFormat::Tsv && settings.Delimiter_ != "\t") {
+    if (settings.Format_ == EDataFormat::Tsv && settings.Delimiter_ != "\t") {
         return MakeStatus(EStatus::BAD_REQUEST,
             TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
     }
@@ -364,19 +364,19 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
             IInputStream& input = fileInput ? *fileInput : Cin;
 
             switch (settings.Format_) {
-                case EOutputFormat::Default:
-                case EOutputFormat::Csv:
-                case EOutputFormat::Tsv:
+                case EDataFormat::Default:
+                case EDataFormat::Csv:
+                case EDataFormat::Tsv:
                     if (settings.NewlineDelimited_) {
                         return UpsertCsvByBlocks(filePath, dbPath, settings);
                     } else {
                         return UpsertCsv(input, dbPath, settings, filePath, fileSizeHint, progressCallback);
                     }
-                case EOutputFormat::Json:
-                case EOutputFormat::JsonUnicode:
-                case EOutputFormat::JsonBase64:
+                case EDataFormat::Json:
+                case EDataFormat::JsonUnicode:
+                case EDataFormat::JsonBase64:
                     return UpsertJson(input, dbPath, settings, fileSizeHint, progressCallback);
-                case EOutputFormat::Parquet:
+                case EDataFormat::Parquet:
                     return UpsertParquet(filePath, dbPath, settings, progressCallback);
                 default: ;
             }
@@ -617,7 +617,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
     const TType tableType = GetTableType();
     ValidateTValueUpsertTable();
     const NYdb::EBinaryStringEncoding stringEncoding =
-        (settings.Format_ == EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
+        (settings.Format_ == EDataFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
             NYdb::EBinaryStringEncoding::Unicode;
 
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);

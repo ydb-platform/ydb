@@ -78,6 +78,7 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
         case VT_STRING:
         case VT_UTF8:
         case VT_JSON:
+        case VT_UUID:
             return EWireType::String32;
 
         case VT_ANY:

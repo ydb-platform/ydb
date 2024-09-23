@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         dsi.Setdatabase("some_db");
         dsi.Setuse_tls(true);
         dsi.set_protocol(::NYql::NConnector::NApi::EProtocol::NATIVE);
-        auto token = dsi.mutable_credentials() -> mutable_token();
+        auto token = dsi.mutable_credentials()->mutable_token();
         token->Settype("IAM");
         token->Setvalue("TEST_TOKEN");
 

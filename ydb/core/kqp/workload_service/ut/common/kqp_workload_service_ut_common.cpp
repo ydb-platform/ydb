@@ -230,6 +230,10 @@ private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
 
         return appConfig;
@@ -238,7 +242,7 @@ private:
     void SetLoggerSettings(TServerSettings& serverSettings) const {
         auto loggerInitializer = [](TTestActorRuntime& runtime) {
             runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_TRACE);
         };
 
         serverSettings.SetLoggerInitializer(loggerInitializer);
@@ -255,16 +259,50 @@ private:
             .SetAppConfig(appConfig)
             .SetFeatureFlags(appConfig.GetFeatureFlags());
 
+        if (Settings_.CreateSampleTenants_) {
+            serverSettings
+                .SetDynamicNodeCount(2)
+                .AddStoragePoolType(Settings_.GetDedicatedTenantName())
+                .AddStoragePoolType(Settings_.GetSharedTenantName());
+        }
+
         SetLoggerSettings(serverSettings);
 
         return serverSettings;
+    }
+
+    void SetupResourcesTenant(Ydb::Cms::CreateDatabaseRequest& request, Ydb::Cms::StorageUnits* storage, const TString& name) {
+        request.set_path(name);
+        storage->set_unit_kind(name);
+        storage->set_count(1);
+    }
+
+    void CreateTenants() {
+        {  // Dedicated
+            Ydb::Cms::CreateDatabaseRequest request;
+            SetupResourcesTenant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTenantName());
+            Tenants_->CreateTenant(std::move(request));
+        }
+
+        {  // Shared
+            Ydb::Cms::CreateDatabaseRequest request;
+            SetupResourcesTenant(request, request.mutable_shared_resources()->add_storage_units(), Settings_.GetSharedTenantName());
+            Tenants_->CreateTenant(std::move(request));
+        }
+
+        {  // Serverless
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path(Settings_.GetServerlessTenantName());
+            request.mutable_serverless_resources()->set_shared_database_path(Settings_.GetSharedTenantName());
+            Tenants_->CreateTenant(std::move(request));
+        }
     }
 
     void InitializeServer() {
         ui32 grpcPort = PortManager_.GetPort();
         TServerSettings serverSettings = GetServerSettings(grpcPort);
 
-        Server_ = std::make_unique<TServer>(serverSettings);
+        Server_ = MakeIntrusive<TServer>(serverSettings);
         Server_->EnableGRpc(grpcPort);
         GetRuntime()->SetDispatchTimeout(FUTURE_WAIT_TIMEOUT);
 
@@ -277,10 +315,15 @@ private:
 
         TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
         TableClientSession_ = std::make_unique<NYdb::NTable::TSession>(TableClient_->CreateSession().GetValueSync().GetSession());
+
+        Tenants_ = std::make_unique<TTenants>(Server_);
+        if (Settings_.CreateSampleTenants_) {
+            CreateTenants();
+        }
     }
 
     void CreateSamplePool() const {
-        if (!Settings_.EnableResourcePools_) {
+        if (!Settings_.EnableResourcePools_ || Settings_.CreateSampleTenants_) {
             return;
         }
 
@@ -477,13 +520,13 @@ private:
         UNIT_ASSERT_C(settings.PoolId_, "Query pool id is not specified");
 
         auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
-        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, {}).SerializeAsString());
+        event->Record.SetUserToken(NACLib::TUserToken("", settings.UserSID_, settings.GroupSIDs_).SerializeAsString());
 
         auto request = event->Record.MutableRequest();
         request->SetQuery(query);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->SetDatabase(Settings_.DomainName_);
+        request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
         request->SetPoolId(*settings.PoolId_);
 
         return event;
@@ -525,9 +568,10 @@ private:
     const TYdbSetupSettings Settings_;
 
     TPortManager PortManager_;
-    std::unique_ptr<TServer> Server_;
+    TServer::TPtr Server_;
     std::unique_ptr<TClient> Client_;
     std::unique_ptr<TDriver> YdbDriver_;
+    std::unique_ptr<TTenants> Tenants_;
 
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient_;
     std::unique_ptr<NYdb::NTable::TSession> TableClientSession_;
@@ -584,6 +628,18 @@ NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
 
 TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);
+}
+
+TString TYdbSetupSettings::GetDedicatedTenantName() const {
+    return TStringBuilder() << CanonizePath(DomainName_) << "/test-dedicated";
+}
+
+TString TYdbSetupSettings::GetSharedTenantName() const {
+    return TStringBuilder() << CanonizePath(DomainName_) << "/test-shared";
+}
+
+TString TYdbSetupSettings::GetServerlessTenantName() const {
+    return TStringBuilder() << CanonizePath(DomainName_) << "/test-serverless";
 }
 
 //// IYdbSetup

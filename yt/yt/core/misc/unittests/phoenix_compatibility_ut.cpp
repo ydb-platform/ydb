@@ -77,8 +77,8 @@ struct TComponentV2
 
 void TComponentV2::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::C>("c")();
-    registrar.template Field<2, &TThis::D>("d")();
+    PHOENIX_REGISTER_FIELD(1, C)();
+    PHOENIX_REGISTER_FIELD(2, D)();
 }
 
 PHOENIX_DEFINE_TYPE(TComponentV2);
@@ -110,8 +110,8 @@ struct TCompositeV2
 
 void TCompositeV2::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::U>("u")();
-    registrar.template Field<2, &TThis::V>("v")();
+    PHOENIX_REGISTER_FIELD(1, U)();
+    PHOENIX_REGISTER_FIELD(2, V)();
 }
 
 PHOENIX_DEFINE_TYPE(TCompositeV2);
@@ -199,8 +199,8 @@ struct TBaseV2
 
 void TBaseV2::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::C>("c")();
-    registrar.template Field<2, &TThis::D>("d")();
+    PHOENIX_REGISTER_FIELD(1, C)();
+    PHOENIX_REGISTER_FIELD(2, D)();
 }
 
 PHOENIX_DEFINE_TYPE(TBaseV2);
@@ -243,8 +243,8 @@ void TDerivedV2::RegisterMetadata(auto&& registrar)
     registrar.template BaseType<TBaseV1>();
     registrar.template BaseType<TBaseV2>();
 
-    registrar.template Field<1, &TThis::E>("e")();
-    registrar.template Field<2, &TThis::F>("f")();
+    PHOENIX_REGISTER_FIELD(1, E)();
+    PHOENIX_REGISTER_FIELD(2, F)();
 }
 
 PHOENIX_DEFINE_TYPE(TDerivedV2);
@@ -327,8 +327,8 @@ struct TBaseV2
 
 void TBaseV2::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::C>("c")();
-    registrar.template Field<2, &TThis::D>("d")();
+    PHOENIX_REGISTER_FIELD(1, C)();
+    PHOENIX_REGISTER_FIELD(2, D)();
 }
 
 PHOENIX_DEFINE_TYPE(TBaseV2);
@@ -372,8 +372,8 @@ void TDerivedV2::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBaseV1>();
 
-    registrar.template Field<1, &TThis::E>("e")();
-    registrar.template Field<2, &TThis::F>("f")();
+    PHOENIX_REGISTER_FIELD(1, E)();
+    PHOENIX_REGISTER_FIELD(2, F)();
 }
 
 PHOENIX_DEFINE_TYPE(TDerivedV2);

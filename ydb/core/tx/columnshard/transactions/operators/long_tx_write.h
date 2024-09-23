@@ -24,6 +24,8 @@ namespace NKikimr::NColumnShard {
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
         }
+        virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override;
+
         virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
@@ -66,7 +68,7 @@ namespace NKikimr::NColumnShard {
             owner.Counters.GetTabletCounters()->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
             NIceDb::TNiceDb db(txc.DB);
-            for (TWriteId writeId : WriteIds) {
+            for (TInsertWriteId writeId : WriteIds) {
                 AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             owner.UpdateInsertTableCounters();
@@ -82,7 +84,7 @@ namespace NKikimr::NColumnShard {
 
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             NIceDb::TNiceDb db(txc.DB);
-            for (TWriteId writeId : WriteIds) {
+            for (TInsertWriteId writeId : WriteIds) {
                 AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             TBlobGroupSelector dsGroupSelector(owner.Info());
@@ -95,7 +97,7 @@ namespace NKikimr::NColumnShard {
         }
 
     private:
-        THashSet<TWriteId> WriteIds;
+        THashSet<TInsertWriteId> WriteIds;
     };
 
 }   // namespace NKikimr::NColumnShard

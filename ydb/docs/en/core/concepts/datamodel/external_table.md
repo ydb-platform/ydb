@@ -12,7 +12,7 @@ A special entity, `EXTERNAL TABLE,` describes the stored data in such sources. E
 
 A record in YQL might look like this:
 
-```sql
+```yql
 CREATE EXTERNAL TABLE s3_test_data (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL
@@ -26,7 +26,7 @@ CREATE EXTERNAL TABLE s3_test_data (
 
 Data can be inserted into external tables just like regular tables. For example, to write data to an external table, you need to execute the following query:
 
-```sql
+```yql
 INSERT INTO s3_test_data
 SELECT * FROM Table
 ```

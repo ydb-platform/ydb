@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
         }
 
         auto port = FromString<int>(argv[1]);
-        auto fast = TString{"--fast"} == TString{argv[2]};
+        auto fast = std::string{"--fast"} == std::string{argv[2]};
         auto poller = CreateThreadPoolPoller(1, "Example");
         auto server = CreateServer(port, poller);
         auto actionQueue = New<TActionQueue>("Control");

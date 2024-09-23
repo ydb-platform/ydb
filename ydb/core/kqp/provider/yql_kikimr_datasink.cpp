@@ -186,9 +186,9 @@ private:
     }
 
     TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
@@ -886,8 +886,13 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
+            return true;
+        }
+
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
             return true;
         }
 

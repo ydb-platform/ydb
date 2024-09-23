@@ -31,6 +31,7 @@ SRCS(
     api/persistent_queue.cpp
     api/sticky_transaction_pool.cpp
     api/options.cpp
+    api/shuffle_client.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp
@@ -227,6 +228,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    api/unittests
     table_client/unittests
     unittests
 )

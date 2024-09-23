@@ -19,4 +19,4 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
         const TString& domainRoot = "Root");
-}
+} // namespace NKikimr::NKqp::NFederatedQueryTest

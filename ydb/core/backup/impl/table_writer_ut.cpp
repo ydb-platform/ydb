@@ -1,4 +1,5 @@
-#include "table_writer_impl.h"
+#include "change_record.h"
+#include "table_writer.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -48,8 +49,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Backup);
-            record->Serialize(result, ctx);
+            record->Serialize(result, EWriterType::Backup);
 
             TVector<TCell> outCells{
                 TCell::Make<ui64>(4567),
@@ -89,8 +89,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Backup);
-            record->Serialize(result, ctx);
+            record->Serialize(result, EWriterType::Backup);
 
             TVector<TCell> outCells{
                 TCell(),
@@ -144,8 +143,7 @@ Y_UNIT_TEST_SUITE(TableWriter) {
                     .Build();
 
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
-            TChangeRecordBuilderContextTrait<NBackup::NImpl::TChangeRecord> ctx(EWriterType::Restore);
-            record->Serialize(result, ctx);
+            record->Serialize(result, EWriterType::Restore);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
             UNIT_ASSERT(result.GetUpsert().TagsSize() == 1);

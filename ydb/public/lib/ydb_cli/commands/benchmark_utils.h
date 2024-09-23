@@ -91,6 +91,8 @@ void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
 TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client);
 TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client);
+TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client);
+TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);

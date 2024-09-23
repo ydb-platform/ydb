@@ -18,6 +18,11 @@ struct TCompletionAction {
     NWilson::TTraceId TraceId;
     EIoResult Result = EIoResult::Unknown;
     TString ErrorReason;
+    // Only reads should be executed in a separate thread since their completions consist of
+    // time-consuming deciphering of read data. But currently some completion actions can write
+    // to BlockDevice from Exec() and it's more safe to use WhiteList to allow only
+    // LogWrite and ChunkWrite to be executed from GetThread
+    bool ShouldBeExecutedInCompletionThread = true;
 
     mutable NLWTrace::TOrbit Orbit;
 protected:

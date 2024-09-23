@@ -278,6 +278,7 @@ struct TAlterReplicationCardOptions
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
+    NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
 };
 
 struct TGetReplicationCardOptions

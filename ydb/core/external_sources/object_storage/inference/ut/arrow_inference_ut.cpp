@@ -49,9 +49,10 @@ public:
     }
 
     NActors::TActorId RegisterInferencinator(TStringBuf formatStr) {
-        auto format = NInference::ConvertFileFormat(formatStr);
-        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, format, {}), 1);
-        return ActorSystem.Register(NInference::CreateArrowInferencinator(arrowFetcher, format, {}), 1);
+        THashMap<TString, TString> params;
+        params["format"] = formatStr;
+        auto arrowFetcher = ActorSystem.Register(NInference::CreateArrowFetchingActor(S3ActorId, params), 1);
+        return ActorSystem.Register(NInference::CreateArrowInferencinator(arrowFetcher), 1);
     }
 
     void TearDown() override {

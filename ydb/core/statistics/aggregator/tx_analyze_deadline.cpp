@@ -46,6 +46,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
                     "Send TEvAnalyzeResponse for deleted operation, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
                 auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
                 response->Record.SetOperationId(OperationId);
+                response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
                 ctx.Send(ReplyToActorId, response.release());
             } else {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. No ActorId to send reply. OperationId=" << OperationId);

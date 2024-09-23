@@ -446,10 +446,7 @@ TTraceContextPtr CreateCallTraceContext(std::string service, std::string method)
         return oldTraceContext;
     }
 
-    auto traceContext = oldTraceContext->CreateChild(Format("RpcClient:%v.%v", service, method));
-    traceContext->SetAllocationTagsPtr(oldTraceContext->GetAllocationTagsPtr());
-
-    return traceContext;
+    return oldTraceContext->CreateChild(Format("RpcClient:%v.%v", service, method));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

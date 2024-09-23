@@ -5,26 +5,29 @@
 * [PRAGMA Library](../pragma.md#library) помечает приложенный файл как доступный для импорта.
 ## `Export`
 * В `EXPORT $my_symbol1, $my_symbol2, ...;` перечисляется список именованных выражений в библиотеке, доступных для импорта.
+
 ## `Import`
+
 * `IMPORT my_library SYMBOLS $my_symbol1, $my_symbol2, ...;` делает перечисленные именованные выражения доступными для использования ниже.
 
-{% note info "Примечание" %}
+{% note info %}
 
 В библиотеку могут быть вынесены [лямбды](../expressions.md#lambda), [действия](../action.md){% if feature_subquery %}, [именованные подзапросы](../subquery.md){% endif %}, константы и выражения, но __не подзапросы и не агрегатные функции__.
 
 {% endnote %}
 
-{% note warning "Предупреждение" %}
+{% note warning %}
 
 Файл, на который ссылается [PRAGMA Library](../pragma.md#library) должен быть приложен к запросу. __Использовать для этой цели [PRAGMA File](../pragma.md#file) нельзя__.
 
 {% endnote %}
 
 
-**Примеры:**
+### Примеры
 
 my_lib.sql:
-``` yql
+
+```yql
 $Square = ($x) -> { RETURN $x * $x; };
 $Sqrt = ($x) -> { RETURN Math::Sqrt($x); };
 
@@ -37,7 +40,8 @@ EXPORT $Square, $Sqrt, $Agg_sum, $Agg_max;
 ```
 
 Запрос:
-``` yql
+
+```yql
 PRAGMA Library("my_lib.sql");
 IMPORT my_lib SYMBOLS $Square, $Sqrt, $Agg_sum, $Agg_max;
 SELECT
@@ -53,4 +57,3 @@ FROM (
   SELECT 3 AS x
 )
 ```
-

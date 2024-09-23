@@ -4,6 +4,7 @@ import dataclasses
 import os
 import sys
 import traceback
+from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
@@ -35,6 +36,7 @@ class TestResult:
     log_urls: Dict[str, str]
     elapsed: float
     count_of_passed: int
+    owners: str
 
     @property
     def status_display(self):
@@ -94,7 +96,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0)
+        return cls(classname, name, status, log_urls, elapsed, 0,'')
 
 
 class TestSummaryLine:
@@ -241,6 +243,14 @@ def render_testlist_html(rows, fn, build_preset):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
+    # get testowners
+    all_tests = [test for status in status_order for test in status_test.get(status)]
+        
+    dir = os.path.dirname(__file__)
+    git_root = f"{dir}/../../.."
+    codeowners = f"{git_root}/.github/TESTOWNERS"
+    get_codeowners_for_tests(codeowners, all_tests)
+    
     # statuses for history
     status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
     status_for_history = [s for s in status_for_history if s in status_test]
@@ -299,6 +309,20 @@ def write_summary(summary: TestSummary):
 
     if summary_fn:
         fp.close()
+
+
+def get_codeowners_for_tests(codeowners_file_path, tests_data):
+    with open(codeowners_file_path, 'r') as file:
+        data = file.read()
+        owners_odj = CodeOwners(data)
+
+        tests_data_with_owners = []
+        for test in tests_data:
+            target_path = test.classname
+            owners = owners_odj.of(target_path)
+            test.owners = joined_owners = ";;".join(
+                [(":".join(x)) for x in owners])
+            tests_data_with_owners.append(test)
 
 
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):

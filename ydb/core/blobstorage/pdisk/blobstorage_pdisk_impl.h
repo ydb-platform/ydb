@@ -46,11 +46,13 @@ class TCompletionEventSender;
 
 class TPDisk : public IPDisk {
 public:
-    ui32 PDiskId;
-    TActorId PDiskActor;
+    std::shared_ptr<TPDiskCtx> PCtx;
+    // ui32 PDiskId; // deprecated, moved to PCtx
+    // TActorId PDiskActor; // deprecated, moved to PCtx
+    // TActorSystem *ActorSystem; // deprecated, moved to PCtx
 
     // Monitoring
-    TPDiskMon Mon;
+    TPDiskMon Mon; // deprecated, will be moved to PCtx
 
 
     // Static state
@@ -119,7 +121,6 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    TActorSystem *ActorSystem;
     alignas(16) TDiskFormat Format;
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
@@ -200,9 +201,11 @@ public:
     // Metadata storage
     NMeta::TInfo Meta;
 
+    NLWTrace::TOrbit UpdateCycleOrbit;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
-    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     TCheckDiskFormatResult ReadChunk0Format(ui8* formatSectors, const TMainKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize, const TMainKey& mainKey); // Called by actor
@@ -393,7 +396,7 @@ public:
 
     // Schedules EvReadLogResult event for the system log
     void ResetInit();
-    bool Initialize(TActorSystem *actorSystem, const TActorId &pDiskActorId); // Called by actor
+    bool Initialize(); // Called by actor
     void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
 

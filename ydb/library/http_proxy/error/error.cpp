@@ -1,4 +1,5 @@
 #include "error.h"
+#include "util/generic/maybe.h"
 
 namespace NKikimr::NSQS {
 
@@ -42,6 +43,13 @@ ui32 TErrorClass::GetId(const TString& code) {
         : it->second;
 };
 
+TMaybe<ui32> TErrorClass::GetHttpStatus(const TString& code) {
+    auto idIt = NKikimr::NSQS::TErrorClass::ErrorToId.find(code);
+    if (idIt == NKikimr::NSQS::TErrorClass::ErrorToId.end()) {
+        return Nothing();
+    }
+    return get<1>(IdToErrorAndCode.find(idIt->second)->second);
+};
 
 namespace NErrors {
 extern const TErrorClass ACCESS_DENIED = {

@@ -253,6 +253,7 @@ class TDataShard
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
     class TTxHandleSafeSampleKScan;
+    class TTxHandleSafeLocalKMeansScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -321,7 +322,7 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
-    friend class TAsyncIndexChangeSenderShard;
+    friend class TBaseChangeSenderShard;
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
@@ -1324,6 +1325,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1925,7 +1928,7 @@ public:
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     // TODO(ilnaz): remove 'afterMove' after #6541
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0, bool afterMove = false);
-    ui32 GetFreeChangeQueueCapacity(ui64 cookie);
+    ui32 GetFreeChangeQueueCapacity(ui64 cookie) const;
     ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
@@ -3114,6 +3117,7 @@ protected:
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
+            HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);

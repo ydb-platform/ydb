@@ -7,9 +7,8 @@ namespace NYT::NClient::NCache {
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(IClientsCache)
-
-class TConfig;
-class TClustersConfig;
+DECLARE_REFCOUNTED_STRUCT(TClientsCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TClientsCacheAuthentificationOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 

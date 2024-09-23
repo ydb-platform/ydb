@@ -3,7 +3,9 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
+#include <util/generic/string.h>
 #include <util/str_stl.h>
+#include <util/string/builder.h>
 
 #include <tuple>
 
@@ -38,6 +40,14 @@ struct TKqpQuerySettings {
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(DocumentApiRestricted, IsInternalCall, QueryType, Syntax);
         return THash<decltype(tuple)>()(tuple);
+    }
+
+    TString SerializeToString() const {
+        TStringBuilder result = TStringBuilder() << "{"
+            << "DocumentApiRestricted: " << DocumentApiRestricted << ", "
+            << "IsInternalCall: " << IsInternalCall << ", "
+            << "QueryType: " << QueryType << "}";
+        return result;
     }
 };
 

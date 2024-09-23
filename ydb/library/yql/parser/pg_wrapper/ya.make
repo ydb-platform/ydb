@@ -88,6 +88,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/public/decimal
+    ydb/library/yql/public/result_format
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/uuid

@@ -56,6 +56,7 @@ public:
                         if (!leader.WasAliveSinceCutHistory) {
                             BLOG_ERROR("THive::TTxStartTablet::Execute Tablet " << TabletId << " failed to start after cutting history - will restore history");
                             Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_RESTORED].Increment(leader.DeletedHistory.size());
+                            Self->UpdateCounterTabletChannelHistorySize();
                             leader.RestoreDeletedHistory(txc);
                         } else {
                             leader.WasAliveSinceCutHistory = false;

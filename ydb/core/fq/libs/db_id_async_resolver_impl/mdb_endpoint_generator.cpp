@@ -13,9 +13,8 @@ namespace NFq {
     constexpr ui32 CLICKHOUSE_HTTP_SECURE_PORT = 8443;
     constexpr ui32 CLICKHOUSE_HTTP_INSECURE_PORT = 8123;
 
-    // Managed PostgreSQL provides the only port both for secure and insecure connections
+    // Managed PostgreSQL and Greenplum provide the only port both for secure and insecure connections
     constexpr ui32 POSTGRESQL_PORT = 6432;
-
     constexpr ui32 GREENPLUM_PORT = 6432;
 
     constexpr ui32 MYSQL_PORT = 3306;

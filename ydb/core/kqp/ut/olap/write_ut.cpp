@@ -47,6 +47,27 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
     }
 
+    Y_UNIT_TEST(TestRemoveTableBeforeIndexation) {
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
+        csController->SetIndexWriteControllerEnabled(false);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+        auto tableClient = kikimr.GetTableClient();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        TTypedLocalHelper("Utf8", kikimr).ExecuteSchemeQuery("DROP TABLE `/Root/olapStore/olapTable`;");
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->WaitIndexation(TDuration::Seconds(5));
+        csController->WaitCompactions(TDuration::Seconds(5));
+    }
+
     Y_UNIT_TEST(TierDraftsGCWithRestart) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);

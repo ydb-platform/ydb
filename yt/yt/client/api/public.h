@@ -140,6 +140,9 @@ DECLARE_REFCOUNTED_STRUCT(IInternalClient)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
 
+DECLARE_REFCOUNTED_STRUCT(IRowBatchReader)
+DECLARE_REFCOUNTED_STRUCT(IRowBatchWriter)
+
 DECLARE_REFCOUNTED_STRUCT(ITableReader)
 DECLARE_REFCOUNTED_STRUCT(ITableWriter)
 
@@ -186,6 +189,8 @@ DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
 
 DECLARE_REFCOUNTED_CLASS(TDistributedWriteSession)
 DECLARE_REFCOUNTED_CLASS(TDistributedWriteCookie)
+
+DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 
 ////////////////////////////////////////////////////////////////////////////////
 

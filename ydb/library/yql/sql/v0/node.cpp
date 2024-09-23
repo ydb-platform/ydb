@@ -1771,7 +1771,7 @@ bool TryStringContent(const TString& str, TString& result, ui32& flags, TString&
 
         auto unescapeResult = UnescapeArbitraryAtom(atom, quoteChar, &sout, &readBytes);
         if (unescapeResult != EUnescapeResult::OK) {
-            TTextWalker walker(pos);
+            TTextWalker walker(pos, false);
             walker.Advance(atom.Trunc(readBytes));
             error = UnescapeResultToString(unescapeResult);
             return false;
@@ -1839,7 +1839,7 @@ TString IdContent(TContext& ctx, const TString& s) {
 
     auto unescapeResult = UnescapeArbitraryAtom(atom, endSym, &sout, &readBytes);
     if (unescapeResult != EUnescapeResult::OK) {
-        TTextWalker walker(pos);
+        TTextWalker walker(pos, false);
         walker.Advance(atom.Trunc(readBytes));
         ctx.Error(pos) << "Cannot parse broken identifier: " << UnescapeResultToString(unescapeResult);
         return {};

@@ -42,11 +42,15 @@ TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTy
         return res;
     }
     case NTypeIds::Decimal: {
-        Y_ABORT_UNLESS(typeInfo, "no type info for decimal type");
-        TTypeInfoMod res = {
-            .TypeInfo = {{typeInfo->GetDecimalPrecision(), typeInfo->GetDecimalScale()}},
-            .TypeMod = {}
-        };
+        ui32 precision, scale;
+        if (!typeInfo) {
+            precision = DECIMAL_PRECISION;
+            scale = DECIMAL_SCALE;
+        } else {
+            precision = typeInfo->GetDecimalPrecision();
+            scale = typeInfo->GetDecimalScale();
+        }
+        TTypeInfoMod res = {{TDecimalType(precision, scale)}, {}};
         return res;
     }
     default: {

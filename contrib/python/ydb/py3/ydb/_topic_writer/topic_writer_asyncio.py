@@ -231,8 +231,8 @@ class WriterAsyncIOReconnector:
         self._new_messages = asyncio.Queue()
         self._stop_reason = self._loop.create_future()
         self._background_tasks = [
-            asyncio.create_task(self._connection_loop(), name="connection_loop"),
-            asyncio.create_task(self._encode_loop(), name="encode_loop"),
+            asyncio.create_task(self._connection_loop()),
+            asyncio.create_task(self._encode_loop()),
         ]
 
         self._state_changed = asyncio.Event()
@@ -366,8 +366,8 @@ class WriterAsyncIOReconnector:
 
                 self._stream_connected.set()
 
-                send_loop = asyncio.create_task(self._send_loop(stream_writer), name="writer send loop")
-                receive_loop = asyncio.create_task(self._read_loop(stream_writer), name="writer receive loop")
+                send_loop = asyncio.create_task(self._send_loop(stream_writer))
+                receive_loop = asyncio.create_task(self._read_loop(stream_writer))
 
                 tasks = [send_loop, receive_loop]
                 done, _ = await asyncio.wait([send_loop, receive_loop], return_when=asyncio.FIRST_COMPLETED)
@@ -653,7 +653,7 @@ class WriterAsyncIOStream:
 
         if self._update_token_interval is not None:
             self._update_token_event.set()
-            self._update_token_task = asyncio.create_task(self._update_token_loop(), name="update_token_loop")
+            self._update_token_task = asyncio.create_task(self._update_token_loop())
 
     @staticmethod
     def _ensure_ok(message: WriterMessagesFromServerToClient):

@@ -174,8 +174,8 @@ namespace NKqp {
         return str;
     }
 
-    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(NScheme::TTypeId typeId) {
-        TypeInfo = NScheme::TTypeInfo(typeId);
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(NScheme::TTypeInfo typeInfo) {
+        TypeInfo = typeInfo;
         return *this;
     }
 

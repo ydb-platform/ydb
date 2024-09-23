@@ -962,6 +962,8 @@ private:
                            TEvKeyValue::TEvRequest* request,
                            const TActorContext& ctx);
     ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
+
+    void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 };
 
 } // namespace NKikimr::NPQ

@@ -528,9 +528,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAfterWriteCounters(true);
 
     //All ok
-    for (auto& avg : AvgWriteBytes) {
-        avg.Update(WriteNewSize, now);
-    }
+    UpdateAvgWriteBytes(WriteNewSize, now);
+
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
     }
@@ -572,6 +571,13 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
+}
+
+void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
+{
+    for (auto& avg : AvgWriteBytes) {
+        avg.Update(size, now);
+    }
 }
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {

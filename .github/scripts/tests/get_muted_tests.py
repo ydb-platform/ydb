@@ -21,6 +21,7 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
+#copied as is from .github/scripts/tests/transform-ya-junit.py:26 to simulate working of mute algorythm
 class YaMuteCheck:
     def __init__(self):
         self.regexps = set()
@@ -54,6 +55,7 @@ class YaMuteCheck:
             if ps.match(suite_name) and pt.match(test_name):
                 return True
         return False
+#end of copy as is from .github/scripts/tests/transform-ya-junit.py:56
 
 def get_all_tests(**kwargs):
     print(f'Getting all tests')
@@ -85,7 +87,7 @@ def get_all_tests(**kwargs):
                     suite_folder,
                     test_name,
                     full_name
-                    from  `test_results/analytics/testowners`
+                    from `test_results/analytics/testowners`
                 where  
                     run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                     and run_timestamp_last <= Date('{today}') + Interval("P1D")
@@ -94,7 +96,7 @@ def get_all_tests(**kwargs):
                     suite_folder,
                     test_name,
                     suite_folder || '/' || test_name as full_name
-                from  `test_results/test_runs_column`
+                from `test_results/test_runs_column`
                 where
                     job_id = {job_id} 
                     and branch = '{branch}'
@@ -110,7 +112,7 @@ def get_all_tests(**kwargs):
                 owners,
                 run_timestamp_last,
                 Date('{today}') as date
-            from  `test_results/analytics/testowners`
+            from `test_results/analytics/testowners`
             where  
                 run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                 and run_timestamp_last <= Date('{today}') + Interval("P1D")
@@ -172,23 +174,8 @@ def bulk_upsert(table_client, table_path, rows):
     )
     table_client.bulk_upsert(table_path, rows, column_types)
         
-def read_file(path):
-    line_list = []
-    with open(path, "r") as fp:
-        for line in fp:
-            line = line.strip()
-            try:
-                testsuite, testcase = line.split(" ", maxsplit=1)
-            except ValueError:
-                log_print(f"SKIP INVALID MUTE CONFIG LINE: {line!r}")
-                continue
-            line_list.append((testsuite,testcase))
-            
-        return line_list
         
-
 def write_to_file(text, file):
-    #os.remove(file)
     os.makedirs(os.path.dirname(file), exist_ok=True)
     with open(file, 'w') as f:
         f.writelines(text)
@@ -285,7 +272,6 @@ def mute_applier(args):
         #checking added lines
         mute_check = YaMuteCheck()
         mute_check.load(added_lines_file)
-        added_muted_line = read_file(added_lines_file)
         added_muted_tests=[]
         print("New muted tests captured")
         for test in all_tests:
@@ -298,7 +284,6 @@ def mute_applier(args):
         mute_check = YaMuteCheck()
         mute_check.load(removed_lines_file)
     
-        removed_muted_line = read_file(removed_lines_file)
         removed_muted_tests=[]
         print("Unmuted tests captured")
         for test in all_tests:

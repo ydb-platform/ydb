@@ -289,11 +289,11 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         }
 
         if (diffColumn.GetSerializer()) {
-            if (IsKeyColumn()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "Cannot alter column family `" << ColumnFamilyName << "` for PK column `" << GetName() << "`");
-                return false;
-            }
+            // if (IsKeyColumn()) {
+            //     errors.AddError(NKikimrScheme::StatusSchemeError,
+            //         TStringBuilder() << "Can't alter compression for PK column `" << GetName() << "`");
+            //     return false;
+            // }
             Serializer = diffColumn.GetSerializer();
         } else {
             if (HasColumnFamily() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {

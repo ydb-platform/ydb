@@ -968,6 +968,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_39, TFixture)
     AddConsumer("topic_A", {"consumer"});
 
     CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", "consumer", TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)

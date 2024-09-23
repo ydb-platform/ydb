@@ -11,6 +11,7 @@ SRCS(
     kqp_script_executions.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
+    kqp_tx_manager.cpp
     kqp_tx.cpp
     kqp_types.cpp
     kqp_types.h

@@ -1306,13 +1306,16 @@ public:
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
         }
+        if (Settings.TableService.GetEnableOltpSink() && request.AcquireLocksTxId.Defined()) {
+            txCtx->TxManager = CreateKqpTransactionManager();
+        }
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings,
-            txCtx->ShardIdToTableInfo, txCtx->BufferActorId);
+            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2089,6 +2092,7 @@ public:
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->Finish();
 
+            QueryState->TxCtx->TxManager = nullptr;
             if (QueryState->TxCtx->BufferActorId) {
                 Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
                 QueryState->TxCtx->BufferActorId = {};

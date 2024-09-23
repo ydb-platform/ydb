@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
@@ -131,10 +132,12 @@ public:
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
-        const TShardIdToTableInfoPtr& shardIdToTableInfo, const TActorId bufferActorId)
+        const TShardIdToTableInfoPtr& shardIdToTableInfo,
+        const IKqpTransactionManagerPtr& txManager,
+        const TActorId bufferActorId)
         : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", streamResult, bufferActorId)
+            "DataExecuter", streamResult, bufferActorId, txManager)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
         , FederatedQuerySetup(federatedQuerySetup)
@@ -2939,11 +2942,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const TActorId bufferActorId)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
-        std::move(asyncIoFactory), creator, userRequestContext,
-        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo, bufferActorId);
+        std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
+        shardIdToTableInfo, txManager, bufferActorId);
 }
 
 } // namespace NKqp

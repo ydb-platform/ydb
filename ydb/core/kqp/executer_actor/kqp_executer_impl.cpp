@@ -82,7 +82,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const TActorId bufferActorId)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -91,7 +91,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             std::move(asyncIoFactory), creator, 
             userRequestContext, statementResultIndex, 
             federatedQuerySetup, /*GUCSettings*/nullptr,
-            shardIdToTableInfo, bufferActorId
+            shardIdToTableInfo, txManager, bufferActorId
         );
     }
 
@@ -115,7 +115,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(asyncIoFactory), creator, 
                 userRequestContext, statementResultIndex, 
                 federatedQuerySetup, /*GUCSettings*/nullptr,
-                shardIdToTableInfo, bufferActorId
+                shardIdToTableInfo, txManager, bufferActorId
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
@@ -131,7 +131,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 tableServiceConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings,
-                shardIdToTableInfo, bufferActorId
+                shardIdToTableInfo, txManager, bufferActorId
             );
 
         default:

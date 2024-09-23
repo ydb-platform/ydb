@@ -8,6 +8,8 @@ PEERDIR(
     ydb/core/tx/columnshard/normalizer/portion
     ydb/core/tx/columnshard/normalizer/insert_table
     ydb/core/tx/columnshard/normalizer/version
+    ydb/core/tx/columnshard/normalizer/insert_table
+>>>>>>> Fixed wrong syntax after conflict resolution
 )
 
 END()

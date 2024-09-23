@@ -662,7 +662,7 @@ public:
             return true;
         }
 
-        const auto& database = event->Get()->GetDatabase();
+        const auto& database = CanonizePath(event->Get()->GetDatabase());
         auto& databaseInfo = DatabasesCache[database];
         if (databaseInfo.DatabaseId) {
             event->Get()->SetDatabaseId(databaseInfo.DatabaseId);
@@ -682,7 +682,11 @@ public:
     }
 
     void UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext) {
-        auto it = DatabasesCache.find(event->Get()->Database);
+        const auto& database = event->Get()->Database;
+        auto it = DatabasesCache.find(database);
+        if (it == DatabasesCache.end()) {
+            it = DatabasesCache.insert({database, TDatabaseInfo{}}).first;
+        }
         it->second.DatabaseId = event->Get()->DatabaseId;
 
         bool success = event->Get()->Status == Ydb::StatusIds::SUCCESS;

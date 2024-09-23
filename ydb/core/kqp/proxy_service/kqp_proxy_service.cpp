@@ -646,6 +646,8 @@ public:
             return;
         }
 
+        Cerr << "------------------------------- DatabaseId: " << ev->Get()->GetDatabaseId() << "\n";
+
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
         const auto queryType = ev->Get()->GetType();

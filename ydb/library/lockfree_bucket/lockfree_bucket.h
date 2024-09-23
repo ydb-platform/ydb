@@ -24,7 +24,7 @@ public:
     }
 
     void FillAndTake(ui64 tokens) {
-        TTime prev = LastUpdate.load(std::memory_order_relaxed);
+        TTime prev = LastUpdate.load(std::memory_order_acquire);
         TTime now = TTimer::Now();
         i64 duration = TTimer::Duration(prev, now);
 
@@ -35,13 +35,13 @@ public:
             }
 
             if (LastUpdate.compare_exchange_weak(prev, now,
-                    std::memory_order_relaxed,
-                    std::memory_order_relaxed)) {
+                    std::memory_order_release,
+                    std::memory_order_acquire)) {
                 break;
             }
         }
 
-        i64 currentTokens = Tokens.load(std::memory_order_relaxed);
+        i64 currentTokens = Tokens.load(std::memory_order_acquire);
 
         ui64 rawInflow = InflowPerSecond.load(std::memory_order_relaxed) * duration;
         i64 minTokens = MinTokens.load(std::memory_order_relaxed);
@@ -58,8 +58,8 @@ public:
                 break;
             }
 
-            if (Tokens.compare_exchange_weak(currentTokens, newTokens, std::memory_order_relaxed,
-                    std::memory_order_relaxed)) {
+            if (Tokens.compare_exchange_weak(currentTokens, newTokens, std::memory_order_release,
+                    std::memory_order_acquire)) {
                 break;
             }
         }

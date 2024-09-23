@@ -106,17 +106,17 @@ private:
         VisitJoinTree(childJoinNode->LeftArg, visitor);
         VisitJoinTree(childJoinNode->RightArg, visitor);
 
-        if (childJoinNode->LeftAny) {
+        if (childJoinNode->LeftAny || !childJoinNode->IsReorderable) {
             ConflictRules_.emplace_back(
                 SubtreeNodes_[childJoinNode->LeftArg], 
-                SubtreeNodes_[childJoinNode]
+                SubtreeNodes_[childJoinNode->RightArg]
             );
         }
 
-        if (childJoinNode->RightAny) {
+        if (childJoinNode->RightAny || !childJoinNode->IsReorderable) {
             ConflictRules_.emplace_back(
                 SubtreeNodes_[childJoinNode->RightArg], 
-                SubtreeNodes_[childJoinNode]
+                SubtreeNodes_[childJoinNode->LeftArg]
             );
         }
 

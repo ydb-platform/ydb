@@ -6,18 +6,19 @@
 #include <util/string/split.h>
 
 #include "dq_opt_make_join_hypergraph.h"
+#include "dq_opt_log.h"
 
 using namespace NYql;
 using namespace NNodes;
 using namespace NYql::NDq;
 
 std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute, TString tablePrefix="e") {
-    std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", nullptr);
+    std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", std::make_shared<TOptimizerStatistics>());
     for (size_t i = 1; i < size; ++i) {
         auto eiStr = tablePrefix + ToString(i + 1);
         auto eiPrevStr = tablePrefix + ToString(i);
 
-        auto ei = std::make_shared<TRelOptimizerNode>(eiStr, nullptr);
+        auto ei = std::make_shared<TRelOptimizerNode>(eiStr, std::make_shared<TOptimizerStatistics>());
 
         std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
         joinConditions.insert({TJoinColumn(eiPrevStr, onAttribute), TJoinColumn(eiStr, onAttribute)});
@@ -28,6 +29,19 @@ std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute
     }
 
     return root;
+}
+
+
+std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root) {
+    auto ctx = TBaseProviderContext();
+    auto optimizer = MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max());
+    
+    Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
+    auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root));
+    Cout << "Optimized Tree:" << Endl;
+    std::stringstream ss; res->Print(ss);
+    Cout << ss.str() << Endl;
+    return res;
 }
 
 Y_UNIT_TEST_SUITE(HypergraphBuild) {
@@ -59,6 +73,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         UNIT_ASSERT(graph.GetEdges().size() == 6);
 
         CheckClique(graph); 
+        Enumerate(root);
     }
 
     Y_UNIT_TEST(SimpleChain4NodesTransitiveClosure) {
@@ -68,6 +83,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         UNIT_ASSERT(graph.GetEdges().size() == 12);
 
         CheckClique(graph); 
+        Enumerate(root);
     }
 
     Y_UNIT_TEST(SimpleChain5NodesTransitiveClosure) {
@@ -77,6 +93,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         UNIT_ASSERT(graph.GetEdges().size() == 20);
 
         CheckClique(graph); 
+        Enumerate(root);
     }
 
     Y_UNIT_TEST(ComplexTransitiveClosure) {
@@ -133,7 +150,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         if constexpr (std::is_same_v<TJoinArg, std::shared_ptr<IBaseOptimizerNode>>) {
             return joinArg;
         } else if (std::is_convertible_v<TJoinArg, std::string>) {
-            std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(joinArg, nullptr);
+            std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(joinArg, std::make_shared<TOptimizerStatistics>());
             return root;
         } else {
             static_assert(std::is_convertible_v<TJoinArg, std::string> || 
@@ -174,22 +191,51 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
     }
 
     Y_UNIT_TEST(AnyJoinConstraints1) {
-        auto anyJoin = Join(Join(Join("A", "B"), "C", /*on=*/ "B,C"), "D", "C,D");
+        auto anyJoin = Join(Join("A", "B"), "C", /*on=*/ "B,C");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
-        auto join = Join(anyJoin,"E", /*on=*/ "A,E");
+        auto join = Join(anyJoin, "D", /*on=*/"A,D");
         
         auto graph = MakeJoinHypergraph<TNodeSet>(join);
         Cout << graph.String() << Endl;
-        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges.size());
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
+
+        Enumerate(join);
     }
 
+
     Y_UNIT_TEST(AnyJoinConstraints2) {
-        auto anyJoin = Join(Join("A", "B"), Join("C", "D"), /*on=*/"B,C");
-        std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->RightAny = true;
-        auto join = Join(anyJoin,"E", /*on=*/ "C,E");
+        auto anyJoin = Join(Join(Join("A", "B"), "C", /*on=*/ "B,C"), "D", "C,D");
+        std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
+        auto join = Join(anyJoin, "E", /*on=*/ "A,E");
         
         auto graph = MakeJoinHypergraph<TNodeSet>(join);
         Cout << graph.String() << Endl;
-        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges.size());
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
+
+        Enumerate(join);
+    }
+
+    Y_UNIT_TEST(AnyJoinConstraints3) {
+        auto anyJoin = Join(Join("A", "B"), Join("C", "D"), /*on=*/"B,C");
+        std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->RightAny = true;
+        auto join = Join(anyJoin, "E", /*on=*/ "C,E");
+        
+        auto graph = MakeJoinHypergraph<TNodeSet>(join);
+        Cout << graph.String() << Endl;
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
+
+        Enumerate(join);
+    }
+
+    Y_UNIT_TEST(IsReorderableConstraint) {
+        auto nonReorderable = Join(Join(Join("A", "B"), "C", /*on=*/ "B,C"), "D", "C,D");
+        std::static_pointer_cast<TJoinOptimizerNode>(nonReorderable)->IsReorderable = false;
+        auto join = Join(nonReorderable, "E", /*on=*/ "A,E");
+        
+        auto graph = MakeJoinHypergraph<TNodeSet>(join);
+        Cout << graph.String() << Endl;
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
+
+        Enumerate(join);
     }
 }

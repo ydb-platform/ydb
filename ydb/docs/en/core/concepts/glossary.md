@@ -183,7 +183,7 @@ A **consumer** is an entity that reads messages from a topic.
 
 **Change data capture** or **CDC** is a mechanism that allows subscribing to a **stream of changes** to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
 
-#### Stream of changes {#changefeed}
+#### Changefeed {#changefeed}
 
 **Changefeed** is a sorted list of changes in a given [table](#table) in a [topic](#topic).
 

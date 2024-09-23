@@ -35,9 +35,7 @@ public:
 
     TPortionsNormalizer(const TNormalizationController::TInitContext& info)
         : TPortionsNormalizerBase(info)
-    {
-        LOG_S_CRIT("TPortionsNormalizer created\n");
-    }
+    {}
 
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
     virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;

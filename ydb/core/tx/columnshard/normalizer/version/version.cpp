@@ -34,7 +34,6 @@ public:
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
-        LOG_S_CRIT("TSchemaVersionNormalizer::TNormalizerResult::ApplyOnExecute called");
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key: VersionsToRemove) {
@@ -78,10 +77,6 @@ public:
             }
         }
 
-        for (ui64 version: usedSchemaVersions) {
-            LOG_S_CRIT("Used schema version " << version);
-        }
-
         TVector<TKey> unusedSchemaIds;
         std::optional<ui64> maxVersion = 0;
 
@@ -95,7 +90,6 @@ public:
                     Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
                     if (info.HasSchema()) {
                         ui64 version = info.GetSchema().GetVersion();
-                        LOG_S_CRIT("Got schema version " << version);
                         if (emptyUsed && ((!maxVersion.has_value()) || (version > maxVersion))) {
                             maxVersion = version;
                         }
@@ -111,7 +105,6 @@ public:
             }
         }
 
-        LOG_S_CRIT("Unused schema count " << unusedSchemaIds.size());
         if (unusedSchemaIds.size() > 0) {
             std::vector<INormalizerChanges::TPtr> changes;
             changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(unusedSchemaIds), maxVersion));
@@ -123,7 +116,6 @@ public:
 };
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TSchemaVersionNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
-    LOG_S_CRIT("SchemaVersionNormalizer::DoInit called");
     auto changes = TNormalizerResult::Init(txc);
     if (!changes) {
         return TConclusionStatus::Fail("Not ready");;

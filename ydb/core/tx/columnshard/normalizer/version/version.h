@@ -34,7 +34,6 @@ public:
     }
 
     TSchemaVersionNormalizer(const TNormalizationController::TInitContext&) {
-        LOG_S_CRIT("SchemaVersionNormalizer created\n");
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;

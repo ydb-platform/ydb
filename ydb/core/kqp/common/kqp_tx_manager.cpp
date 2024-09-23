@@ -39,6 +39,7 @@ public:
         bool isInvalidated = (lock.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
                             || (lock.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
         bool isLocksAcquireFailure = isError && !isInvalidated;
+        bool broken = false;
 
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
@@ -51,6 +52,7 @@ public:
                 isInvalidated |= lockPtr->Lock.Invalidated(lock);
                 lockPtr->Invalidated |= isInvalidated;
             }
+            broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
         } else {
             shardInfo.Locks.emplace(
                 lock.GetKey(),
@@ -59,9 +61,33 @@ public:
                     .Invalidated = isInvalidated,
                     .LocksAcquireFailure = isLocksAcquireFailure,
                 });
+            broken = isInvalidated || isLocksAcquireFailure;
         }
 
-        return !isError && !isInvalidated;
+        if (broken && !LocksIssue) {
+            const auto& lockInfo = shardInfo.Locks.at(lock.GetKey());
+            if (lockInfo.LocksAcquireFailure) {
+                LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE);
+                return false;
+            } else if (lockInfo.Invalidated) {
+                TStringBuilder message;
+                message << "Transaction locks invalidated. Tables: ";
+                bool first = true;
+                // TODO: add error by lock key (pathid)
+                for (const auto& path : shardInfo.Pathes) {
+                    if (!first) {
+                        message << ", ";
+                        first = false;
+                    }
+                    message << "`" << path << "`";
+                }
+                LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+                return false;
+            }
+            YQL_ENSURE(false);
+        }
+
+        return true;
     }
 
     TTableInfo GetShardTableInfo(ui64 shardId) const override {
@@ -106,6 +132,10 @@ public:
         return GetShardsCount() == 1;
     }
 
+    bool IsEmpty() const override {
+        return GetShardsCount() == 0;
+    }
+
     bool HasSnapshot() const override {
         return ValidSnapshot;
     }
@@ -114,7 +144,7 @@ public:
         ValidSnapshot = hasSnapshot;
     }
 
-    TCheckLocksResult CheckLocks() const override {
+    /*TCheckLocksResult CheckLocks() const override {
         TCheckLocksResult result;
         result.Ok = true;
         if (HasSnapshot() && IsReadOnly()) {
@@ -135,6 +165,14 @@ public:
             }
         }
         return result;
+    }*/
+
+    bool BrokenLocks() const override {
+        return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
+    }
+
+    const std::optional<NYql::TIssue>& GetLockIssue() const override {
+        return LocksIssue;
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -272,6 +310,7 @@ private:
 
     bool ReadOnly = true;
     bool ValidSnapshot = false;
+    std::optional<NYql::TIssue> LocksIssue;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;

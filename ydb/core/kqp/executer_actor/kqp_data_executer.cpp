@@ -147,6 +147,7 @@ public:
     {
         Target = creator;
 
+        YQL_ENSURE(UseEvWriteForOltp || !TxManager);
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
@@ -251,21 +252,37 @@ public:
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 for (auto& lock : info.GetLocks()) {
-                    Locks.push_back(lock);
+                    if (!TxManager) {
+                        Locks.push_back(lock);
+                    }
 
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+
+                    if (TxManager) {
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                        //TxManager->AddLock(lock.GetDataShard(), lock);
+                    }
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 for (auto& lock : info.GetLocks()) {
-                    Locks.push_back(lock);
+                    if (!TxManager) {
+                        Locks.push_back(lock);
+                    }
 
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                    if (TxManager) {
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::WRITE);
+                        // ??? TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                        //TxManager->AddLock(lock.GetDataShard(), lock);
+                    }
                 }
             }
         };
@@ -287,12 +304,12 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        //if (!Locks.empty()) {
+        if (!Locks.empty() || (TxManager && !TxManager->IsEmpty()) || true) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-        //    BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
-        //}
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+        }
 
         auto resultSize = ResponseEv->GetByteSize();
         if (resultSize > (int)ReplySizeLimit) {
@@ -1229,6 +1246,7 @@ private:
     }
 
     void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+        YQL_ENSURE(!TxManager);
         TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
         ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
@@ -2264,6 +2282,7 @@ private:
             TDatashardTxs& datashardTxs,
             TEvWriteTxs& evWriteTxs,
             TTopicTabletTxs& topicTxs) {
+        YQL_ENSURE(UseEvWriteForOltp);
         for (auto& [shardId, tasks]: datashardTasks) {
             auto [it, success] = datashardTxs.emplace(
                 shardId,

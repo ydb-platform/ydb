@@ -96,6 +96,9 @@ public:
 
     using TActionFlags = ui8;
 
+    // TODO: ???
+    // virutal std::optional<ui64> GetLockTxId() const = 0;
+
     virtual void AddShard(ui64 shardId, bool isOlap, const TString& path) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
     virtual bool AddLock(ui64 shardId, TKqpTxLock lock) = 0;
@@ -110,16 +113,19 @@ public:
 
     virtual bool IsReadOnly() const = 0;
     virtual bool IsSingleShard() const = 0;
+    virtual bool IsEmpty() const = 0;
 
     virtual bool HasSnapshot() const = 0;
     virtual void SetHasSnapshot(bool hasSnapshot) = 0;
 
-    struct TCheckLocksResult {
+    /*struct TCheckLocksResult {
         bool Ok = false;
         std::vector<TKqpTxLock> BrokenLocks;
         bool LocksAcquireFailure = false;
     };
-    virtual TCheckLocksResult CheckLocks() const = 0;
+    virtual TCheckLocksResult CheckLocks() const = 0;*/
+    virtual bool BrokenLocks() const = 0;
+    virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;
 
     virtual const THashSet<ui64>& GetShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;

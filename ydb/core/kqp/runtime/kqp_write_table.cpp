@@ -867,6 +867,7 @@ struct TMetadata {
 struct TBatchWithMetadata {
     IShardedWriteController::TWriteToken Token = std::numeric_limits<IShardedWriteController::TWriteToken>::max();
     IPayloadSerializer::IBatchPtr Data = nullptr;
+    bool HasRead = false;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -921,11 +922,16 @@ public:
             return Batches.at(index);
         }
 
-        std::optional<ui64> PopBatches(const ui64 cookie) {
+        struct TBatchInfo {
+            ui64 DataSize = 0;
+            bool HasRead = false;
+        };
+        std::optional<TBatchInfo> PopBatches(const ui64 cookie) {
             if (BatchesInFlight != 0 && Cookie == cookie) {
-                ui64 dataSize = 0;
+                TBatchInfo result;
                 for (size_t index = 0; index < BatchesInFlight; ++index) {
-                    dataSize += Batches.front().GetMemory();
+                    result.DataSize += Batches.front().GetMemory();
+                    result.HasRead = Batches.front().HasRead;
                     Batches.pop_front();
                 }
 
@@ -933,8 +939,8 @@ public:
                 SendAttempts = 0;
                 BatchesInFlight = 0;
 
-                Memory -= dataSize;
-                return dataSize;
+                Memory -= result.DataSize;
+                return result;
             }
             return std::nullopt;
         }
@@ -1051,8 +1057,8 @@ private:
 
 class TShardedWriteController : public IShardedWriteController {
 public:
-    void OnPartitioningChanged(NSchemeCache::TSchemeCacheNavigate::TEntry&& schemeEntry) override {
-        SchemeEntry = std::move(schemeEntry);
+    void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
+        SchemeEntry = schemeEntry;
         BeforePartitioningChanged();
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
             auto& writeInfo = WriteInfos.at(token);
@@ -1064,9 +1070,9 @@ public:
     }
 
     void OnPartitioningChanged(
-        NSchemeCache::TSchemeCacheNavigate::TEntry&& schemeEntry,
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) override {
-        SchemeEntry = std::move(schemeEntry);
+        SchemeEntry = schemeEntry;
         PartitionsEntry = std::move(partitionsEntry);
         BeforePartitioningChanged();
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
@@ -1230,11 +1236,12 @@ public:
     std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
         auto allocGuard = TypeEnv.BindAllocator();
         auto& shardInfo = ShardsInfo.GetShard(shardId);
-        const auto removedDataSize = shardInfo.PopBatches(cookie);
-        if (removedDataSize) {
+        const auto result = shardInfo.PopBatches(cookie);
+        if (result) {
             return TMessageAcknowledgedResult {
-                .DataSize = *removedDataSize,
+                .DataSize = result->DataSize,
                 .IsShardEmpty = shardInfo.IsEmpty(),
+                .HasRead = result->HasRead,
             };
         }
         return std::nullopt;
@@ -1339,6 +1346,8 @@ private:
                     ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .Data = std::move(batch),
+                        .HasRead = (writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE
+                            && writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
                     });
                 }
             }
@@ -1354,6 +1363,8 @@ private:
                     shard.PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .Data = std::move(batch),
+                        .HasRead = (writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE
+                            && writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
                     });
                 }
             }

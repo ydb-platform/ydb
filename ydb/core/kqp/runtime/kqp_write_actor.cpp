@@ -8,10 +8,12 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/kqp/common/buffer/buffer.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
@@ -21,7 +23,6 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 
 
 namespace {
@@ -109,7 +110,7 @@ struct IKqpTableWriterCallbacks {
     // EvWrite statuses
     virtual void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) = 0;
     virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
-    virtual void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) = 0;
+    virtual void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) = 0;
 
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
@@ -203,6 +204,15 @@ public:
 
     bool IsEmpty() const {
         return ShardedWriteController->IsEmpty();
+    }
+
+    bool IsOlap() const {
+        YQL_ENSURE(SchemeEntry);
+        return SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable;
+    }
+
+    const TString& GetTablePath() const {
+        return TablePath;
     }
 
     const THashMap<ui64, TLockInfo>& GetLocks() const {
@@ -612,6 +622,7 @@ public:
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        YQL_ENSURE(SchemeEntry);
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
@@ -638,7 +649,7 @@ public:
         if (result && (Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT)) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
-            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), result->DataSize, result->IsShardEmpty);
+            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), SchemeEntry->TableId, result->DataSize, result->HasRead);
         }
     }
 
@@ -832,12 +843,11 @@ public:
 
         try {
             if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-                ShardedWriteController->OnPartitioningChanged(std::move(*SchemeEntry));
+                ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
             } else {
-                ShardedWriteController->OnPartitioningChanged(std::move(*SchemeEntry), std::move(*SchemeRequest));
+                ShardedWriteController->OnPartitioningChanged(*SchemeEntry, std::move(*SchemeRequest));
+                SchemeRequest.reset();
             }
-            SchemeEntry.reset();
-            SchemeRequest.reset();
         } catch (...) {
             RuntimeError(
                 CurrentExceptionMessage(),
@@ -1026,6 +1036,7 @@ private:
 
     void PassAway() override {
         WriteTableActor->Terminate();
+        //TODO: wait for writer actors?
         TActorBootstrapped<TKqpDirectWriteActor>::PassAway();
     }
 
@@ -1047,8 +1058,8 @@ private:
         AFL_ENSURE(false);
     }
 
-    void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
-        Y_UNUSED(shardId, isShardEmpty);
+    void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
+        Y_UNUSED(shardId, tableId, hasRead);
         EgressStats.Bytes += dataSize;
         EgressStats.Chunks++;
         EgressStats.Splits++;
@@ -1150,6 +1161,7 @@ public:
         TKqpBufferWriterSettings&& settings)
         : SessionActorId(settings.SessionActorId)
         , MessageSettings(GetWriteActorSettings())
+        , TxManager(settings.TxManager)
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
     {
@@ -1317,7 +1329,7 @@ public:
         }
     }
 
-    THashMap<ui64, NKikimrDataEvents::TLock> GetLocks(TWriteToken token) const {
+    /*THashMap<ui64, NKikimrDataEvents::TLock> GetLocks(TWriteToken token) const {
         auto& info = WriteInfos.at(token.TableId);
         THashMap<ui64, NKikimrDataEvents::TLock> result;
         for (const auto& [shardId, lockInfo] : info.WriteTableActor->GetLocks()) {
@@ -1338,7 +1350,7 @@ public:
             }
         }
         return result;
-    }
+    }*/
 
     void Flush() {
         YQL_ENSURE(State == EState::WRITING);
@@ -1466,8 +1478,21 @@ public:
         // Process(); // Don't need it?
     }
 
-    void OnMessageAcknowledged(ui64 shardId, ui64 dataSize, bool isShardEmpty) override {
-        Y_UNUSED(shardId, dataSize, isShardEmpty);
+    void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
+        Y_UNUSED(dataSize);
+        auto& info = WriteInfos.at(tableId);
+        const auto& lockInfo = info.WriteTableActor->GetLocks().at(shardId);
+
+        const auto lock = lockInfo.GetLock();
+        YQL_ENSURE(lock);
+        YQL_ENSURE(shardId == lock->GetDataShard());
+        TxManager->AddShard(shardId, info.WriteTableActor->IsOlap(), info.WriteTableActor->GetTablePath());
+        TxManager->AddAction(shardId, IKqpTransactionManager::EAction::WRITE);
+        if (hasRead) {
+            TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
+        }
+        //TxManager->AddLock(lock->GetDataShard(), lock);
+
         Process();
     }
 
@@ -1501,6 +1526,7 @@ private:
     TWriteActorSettings MessageSettings;
 
     TActorId ExecuterActorId;
+    IKqpTransactionManagerPtr TxManager;
 
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;

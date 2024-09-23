@@ -13,9 +13,9 @@ namespace NKqp {
 class IShardedWriteController : public TThrRefBase {
 public:
     virtual void OnPartitioningChanged(
-        NSchemeCache::TSchemeCacheNavigate::TEntry&& schemeEntry) = 0;
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        NSchemeCache::TSchemeCacheNavigate::TEntry&& schemeEntry,
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
     using TWriteToken = ui64;
@@ -57,6 +57,7 @@ public:
     struct TMessageAcknowledgedResult {
         ui64 DataSize = 0;
         bool IsShardEmpty = 0;
+        bool HasRead = false;
     };
 
     virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;

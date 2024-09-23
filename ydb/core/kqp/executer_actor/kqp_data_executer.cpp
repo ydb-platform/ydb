@@ -278,10 +278,8 @@ public:
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                     if (TxManager) {
-                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::WRITE);
-                        // ??? TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        //TxManager->AddLock(lock.GetDataShard(), lock);
+                        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
+                        // TODO:
                     }
                 }
             }

@@ -1305,15 +1305,16 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
+        if (Settings.TableService.GetEnableOltpSink() && request.AcquireLocksTxId.Defined()) {
+            txCtx->TxManager = CreateKqpTransactionManager();
+        }
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId && txCtx->HasOltpTable && request.AcquireLocksTxId.Defined()) {
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
+                .TxManager = txCtx->TxManager,
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
-        }
-        if (Settings.TableService.GetEnableOltpSink() && request.AcquireLocksTxId.Defined()) {
-            txCtx->TxManager = CreateKqpTransactionManager();
         }
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -1580,7 +1581,7 @@ public:
         const auto& msg = *ev->Get();
 
         TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName();
-        LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId);
+        LOG_W(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId);
 
         TString reason = TStringBuilder() << msg.Message << "; " << msg.SubIssues.ToString();
 

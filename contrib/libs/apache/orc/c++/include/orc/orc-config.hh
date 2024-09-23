@@ -1,7 +1,11 @@
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -15,14 +19,9 @@
 #ifndef ORC_CONFIG_HH
 #define ORC_CONFIG_HH
 
-#define ORC_VERSION "1.8.0"
+#define ORC_VERSION "2.0.1"
 
 #define ORC_CXX_HAS_CSTDINT
-#define ORC_CXX_HAS_INITIALIZER_LIST
-#define ORC_CXX_HAS_NOEXCEPT
-#define ORC_CXX_HAS_NULLPTR
-#define ORC_CXX_HAS_OVERRIDE
-#define ORC_CXX_HAS_UNIQUE_PTR
 
 #ifdef ORC_CXX_HAS_CSTDINT
   #include <cstdint>
@@ -30,49 +29,10 @@
   #include <stdint.h>
 #endif
 
-#ifdef ORC_CXX_HAS_NOEXCEPT
-  #define ORC_NOEXCEPT noexcept
-#else
-  #define ORC_NOEXCEPT throw ()
-#endif
-
-#ifdef ORC_CXX_HAS_NULLPTR
-  #define ORC_NULLPTR nullptr
-#else
-  namespace orc {
-    class nullptr_t {
-    public:
-      template<class T>
-      operator T*() const {
-       return 0;
-      }
-
-      template<class C, class T>
-      operator T C::*() const {
-        return 0;
-      }
-    private:
-      void operator&() const;    // whose address can't be taken
-    };
-    const nullptr_t nullptr = {};
-  }
-  #define ORC_NULLPTR orc::nullptr
-#endif
-
-#ifdef ORC_CXX_HAS_OVERRIDE
-  #define ORC_OVERRIDE override
-#else
-  #define ORC_OVERRIDE
-#endif
-
-#ifdef ORC_CXX_HAS_UNIQUE_PTR
-  #define ORC_UNIQUE_PTR std::unique_ptr
-#else
-  #define ORC_UNIQUE_PTR std::auto_ptr
-  namespace std {
-    template<typename T>
-    inline T move(T& x) { return x; }
-  }
-#endif
+// Following MACROS should be keeped for backward compatibility.
+#define ORC_NOEXCEPT noexcept
+#define ORC_NULLPTR nullptr
+#define ORC_OVERRIDE override
+#define ORC_UNIQUE_PTR std::unique_ptr
 
 #endif

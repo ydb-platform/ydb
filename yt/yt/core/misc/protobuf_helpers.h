@@ -2,7 +2,6 @@
 
 #include "guid.h"
 #include "mpl.h"
-#include "optional.h"
 #include "object_pool.h"
 #include "range.h"
 #include "serialize.h"
@@ -14,10 +13,13 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
+
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace NYT {
 
@@ -62,20 +64,22 @@ template <class T>
 void FromProto(T* original, ui64 serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
-template <class TSerialized, class TOriginalArray>
+template <class TSerialized, class TOriginalArray, class... TArgs>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TOriginalArray& originalArray);
+    const TOriginalArray& originalArray,
+    TArgs&&... args);
 
 template <class TSerialized, class TOriginalArray>
 void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
-template <class TOriginalArray, class TSerialized>
+template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
-    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray);
+    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray,
+    TArgs&&... args);
 
 template <class TOriginalArray, class TSerialized>
 void FromProto(
@@ -207,6 +211,11 @@ void DeserializeProtoWithCompression(
 TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec);
 TSharedRef PushEnvelope(const TSharedRef& data);
 TSharedRef PopEnvelope(const TSharedRef& data);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <std::derived_from<::google::protobuf::MessageLite> T>
+void FormatValue(TStringBuilderBase* builder, const T& message, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -374,12 +383,113 @@ google::protobuf::Timestamp GetProtoNow();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! This macro may be used to extract std::optional<T> from protobuf message field of type T.
-#define YT_PROTO_OPTIONAL(message, field) (((message).has_##field()) ? std::make_optional((message).field()) : std::nullopt)
+//! This macro may be used to extract std::optional<T> from protobuf message
+//! field. Macro accepts desired target type as optional third parameter.
+//! Usage:
+//!     // Get as is.
+//!     int instantInt = YT_PROTO_OPTIONAL(message, instant);
+//!     // Get with conversion.
+//!     TInstant instant = YT_PROTO_OPTIONAL(message, instant, TInstant);
+#define YT_PROTO_OPTIONAL(message, field, ...) \
+    (((message).has_##field()) \
+        ? std::optional(YT_PROTO_OPTIONAL_CONVERT(__VA_ARGS__)((message).field())) \
+        : std::nullopt)
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO(gritukan): This is a hack that allows to use proper string type in the protobuf-related code.
+// In Arcadia, protobuf is patched and TString is used as a string in it.
+// In vanilla protobuf, std::string is used.
+// TProtobufString is a type that you should use in code that works both with
+// Arcadia and vanilla protobuf.
+// It is an alias for TString in Arcadia and for std::string in vanilla protobuf.
+using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
+
+constexpr bool IsVanillaProtobuf = std::is_same_v<TProtobufString, std::string>;
+constexpr bool IsArcadiaProtobuf = std::is_same_v<TProtobufString, TString>;
+
+// If this assert fails, something went very wrong. Refer to a comment above.
+static_assert(IsVanillaProtobuf || IsArcadiaProtobuf, "Unknown protobuf string type");
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TProtobufInputStream
+    : public ::google::protobuf::io::CopyingInputStream
+{
+public:
+    explicit TProtobufInputStream(IInputStream* stream);
+
+    int Read(void* buffer, int size) override;
+
+    // Arcadia-style streams throw errors instead of returning -1,
+    // so we intercept these errors and store them in a flag.
+    bool HasError() const;
+
+private:
+    IInputStream* const Stream_;
+
+    bool HasError_ = false;
+};
+
+class TProtobufInputStreamAdaptor
+    : public TProtobufInputStream
+    , public ::google::protobuf::io::CopyingInputStreamAdaptor
+{
+public:
+    explicit TProtobufInputStreamAdaptor(IInputStream* stream);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TProtobufOutputStream
+    : public ::google::protobuf::io::CopyingOutputStream
+{
+public:
+    explicit TProtobufOutputStream(IOutputStream* stream);
+
+    bool Write(const void* buffer, int size) override;
+
+    // Arcadia-style streams throw errors instead of returning -1,
+    // so we intercept these errors and store them in a flag.
+    bool HasError() const;
+
+private:
+    IOutputStream* const Stream_;
+
+    bool HasError_ = false;
+};
+
+class TProtobufOutputStreamAdaptor
+    : public TProtobufOutputStream
+    , public ::google::protobuf::io::CopyingOutputStreamAdaptor
+{
+public:
+    explicit TProtobufOutputStreamAdaptor(IOutputStream* stream);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+namespace google::protobuf {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+void FormatValue(
+    NYT::TStringBuilderBase* builder,
+    const ::google::protobuf::RepeatedField<T>& collection,
+    TStringBuf /*spec*/);
+
+template <class T>
+void FormatValue(
+    NYT::TStringBuilderBase* builder,
+    const ::google::protobuf::RepeatedPtrField<T>& collection,
+    TStringBuf /*spec*/);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace google::protobuf
 
 #define PROTOBUF_HELPERS_INL_H_
 #include "protobuf_helpers-inl.h"

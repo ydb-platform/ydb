@@ -13,6 +13,13 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TThreadOptions
+{
+    NThreading::EThreadPriority ThreadPriority = NThreading::EThreadPriority::Normal;
+    std::function<void()> ThreadInitializer;
+    int ShutdownPriority = 0;
+};
+
 //! A shutdown-aware thread wrapper.
 class TThread
     : public virtual TRefCounted
@@ -20,8 +27,7 @@ class TThread
 public:
     explicit TThread(
         TString threadName,
-        EThreadPriority threadPriority = EThreadPriority::Normal,
-        int shutdownPriority = 0);
+        TThreadOptions options = {});
     ~TThread();
 
     //! Ensures the thread is started.
@@ -55,8 +61,7 @@ protected:
 
 private:
     const TString ThreadName_;
-    const EThreadPriority ThreadPriority_;
-    const int ShutdownPriority_;
+    const TThreadOptions Options_;
 
     const TThreadId UniqueThreadId_;
 

@@ -115,13 +115,14 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
     const TTableSchema& tableSchema,
     int schemafulColumnCount,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
+    bool validateDuplicateAndRequiredValueColumns,
+    bool preserveIds,
     std::optional<TUnversionedValue> addend)
 {
     int valueCount = schemafulColumnCount;
 
-    if (columnPresenceBuffer) {
-        ValidateDuplicateAndRequiredValueColumns(row, tableSchema, idMapping, columnPresenceBuffer);
+    if (validateDuplicateAndRequiredValueColumns) {
+        ValidateDuplicateAndRequiredValueColumns(row, tableSchema, idMapping);
     }
 
     for (const auto& value : row) {
@@ -154,7 +155,9 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
         }
         int pos = mappedId < schemafulColumnCount ? mappedId : valueCount++;
         capturedRow[pos] = value;
-        capturedRow[pos].Id = mappedId;
+        if (!preserveIds) {
+            capturedRow[pos].Id = mappedId;
+        }
     }
     if (addend) {
         capturedRow[valueCount++] = *addend;
@@ -209,7 +212,7 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
     TVersionedRow row,
     const TTableSchema& tableSchema,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
+    bool validateDuplicateAndRequiredValueColumns,
     bool allowMissingKeyColumns)
 {
     int keyColumnCount = tableSchema.GetKeyColumnCount();
@@ -239,12 +242,11 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
     writeTimestamps.erase(std::unique(writeTimestamps.begin(), writeTimestamps.end()), writeTimestamps.end());
     int writeTimestampCount = static_cast<int>(writeTimestamps.size());
 
-    if (columnPresenceBuffer) {
+    if (validateDuplicateAndRequiredValueColumns) {
         ValidateDuplicateAndRequiredValueColumns(
             row,
             tableSchema,
             idMapping,
-            columnPresenceBuffer,
             writeTimestamps.data(),
             writeTimestampCount);
     }

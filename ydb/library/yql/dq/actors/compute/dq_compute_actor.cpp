@@ -41,7 +41,9 @@ public:
         ::NMonitoring::TDynamicCounterPtr taskCounters)
         : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, true, false, taskCounters)
         , TaskRunnerFactory(taskRunnerFactory)
-    {}
+    {
+        InitializeTask();
+    }
 
     void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
@@ -54,7 +56,7 @@ public:
             };
         }
 
-        auto taskRunner = TaskRunnerFactory(GetAllocator(), Task, RuntimeSettings.StatsMode, logger);
+        auto taskRunner = TaskRunnerFactory(GetAllocatorPtr(), Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);
         auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
         TDqTaskRunnerExecutionContext execCtx(TxId, std::move(wakeup));

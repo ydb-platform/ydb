@@ -10,6 +10,7 @@
 #include <util/system/unaligned_mem.h>
 #include <util/memory/pool.h>
 
+#include <deque>
 #include <type_traits>
 
 namespace NKikimr {
@@ -263,7 +264,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     }
 
     default:
-        Y_DEBUG_ABORT_UNLESS(false, "Unknown type");
+        Y_DEBUG_ABORT("Unknown type");
     };
 
     return 0;
@@ -362,7 +363,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
-    Y_DEBUG_ABORT_UNLESS(false, "Type not supported for user columns: %d", typeId);
+    Y_DEBUG_ABORT("Type not supported for user columns: %d", typeId);
     return 0;
 }
 
@@ -650,6 +651,29 @@ private:
     TVector<TCell> Cells;
     ui32 RowCount;
     ui16 ColCount;
+};
+
+class TCellsBatcher {
+public:
+    explicit TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch);
+
+    bool IsEmpty() const;
+
+    struct TBatch {
+        ui64 Memory = 0;
+        ui64 MemorySerialized = 0;
+        TVector<TCell> Data;
+    };
+
+    TBatch Flush(bool force);
+
+    ui64 AddRow(TArrayRef<TCell> cells);
+
+private:
+    std::deque<TBatch> Batches;
+
+    ui16 ColCount;
+    ui64 MaxBytesPerBatch;
 };
 
 class TCellsStorage

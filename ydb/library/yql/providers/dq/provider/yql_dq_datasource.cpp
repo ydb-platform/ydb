@@ -50,7 +50,7 @@ public:
         , ExecTransformer_([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State_)); })
         , TypeAnnotationTransformer_([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
         , ConstraintsTransformer_([] () { return CreateDqDataSourceConstraintTransformer(); })
-        , StatisticsTransformer_([this]() { return CreateDqsStatisticsTransformer(State_, TDummyProviderContext::instance()); })
+        , StatisticsTransformer_([this]() { return CreateDqsStatisticsTransformer(State_, TBaseProviderContext::Instance()); })
     { }
 
     TStringBuf GetName() const override {

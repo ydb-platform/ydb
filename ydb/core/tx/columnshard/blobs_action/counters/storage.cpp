@@ -1,4 +1,6 @@
 #include "storage.h"
+#include <util/generic/serialized_enum.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NBlobOperations {
 
@@ -6,10 +8,18 @@ TStorageCounters::TStorageCounters(const TString& storageId)
     : TBase("BlobStorages")
 {
     DeepSubGroup("StorageId", storageId);
+    Consumers.resize((ui32)EConsumer::COUNT);
+    for (auto&& i : GetEnumAllValues<EConsumer>()) {
+        if (i == EConsumer::COUNT) {
+            continue;
+        }
+        Consumers[(ui32)i] = std::make_shared<TConsumerCounters>(::ToString(i), *this);
+    }
 }
 
-std::shared_ptr<NKikimr::NOlap::NBlobOperations::TConsumerCounters> TStorageCounters::GetConsumerCounter(const TString& consumerId) {
-    return std::make_shared<TConsumerCounters>(consumerId, *this);
+std::shared_ptr<NKikimr::NOlap::NBlobOperations::TConsumerCounters> TStorageCounters::GetConsumerCounter(const EConsumer consumer) {
+    AFL_VERIFY((ui32)consumer < Consumers.size());
+    return Consumers[(ui32)consumer];
 }
 
 TConsumerCounters::TConsumerCounters(const TString& consumerId, const TStorageCounters& parent)

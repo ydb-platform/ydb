@@ -10,6 +10,7 @@ struct THttpHeader {
     struct TOptions {
         TString UserPwd;
         TString AwsSigV4;
+        bool CurlSignature = false;
     };
 
     TSmallVec<TString> Fields;

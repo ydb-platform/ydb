@@ -1,6 +1,0 @@
-/** pqxx::connection_base abstract base class.
- *
- * pqxx::connection_base encapsulates a frontend-to-backend connection.
- */
-// Actual definitions in .hxx file so editors and such recognize file type.
-#include "pqxx/connection_base.hxx"

@@ -67,7 +67,7 @@ def do(args):
                         names_remaining.remove(group.VirtualGroupInfo.Name)
                     elif group.VirtualGroupInfo.State == common.EVirtualGroupState.CREATE_FAILED:
                         names_remaining.remove(group.VirtualGroupInfo.Name)
-                        errors.append(f'{group.VirtualGroupInfo.Name}: {group.ErrorReason}')
+                        errors.append(f'{group.VirtualGroupInfo.Name}: {group.VirtualGroupInfo.ErrorReason}')
 
             if names_remaining:
                 time.sleep(1)

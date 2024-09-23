@@ -17,18 +17,14 @@ using EComponentId = NKikimrConfig::TCompatibilityRule;
 using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 
 TCompatibilityInfo::TCompatibilityInfo() {
-    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
     using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
-    // using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
     using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
 
     /////////////////////////////////////////////////////////
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
 
-    auto current = TCurrentConstructor{
-        .Application = "ydb"
-    }.ToPB();
+    auto current = MakeCurrent();
 
     // bool success = CompleteFromTag(current);
     // Y_ABORT_UNLESS(success);

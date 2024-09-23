@@ -101,10 +101,12 @@ void TPqIoTestFixture::InitAsyncOutput(
             0,
             NYql::NDq::TCollectStatsLevel::None,
             "query_1",
+            0,
             secureParams,
             Driver,
             nullptr,
             &actor.GetAsyncOutputCallbacks(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);

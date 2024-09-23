@@ -1,4 +1,47 @@
 --
+-- SELECT_DISTINCT
+--
+--
+-- awk '{print $3;}' onek.data | sort -n | uniq
+--
+SELECT DISTINCT two FROM tmp ORDER BY 1;
+ two 
+-----
+   0
+   1
+(2 rows)
+
+--
+-- awk '{print $5;}' onek.data | sort -n | uniq
+--
+SELECT DISTINCT ten FROM tmp ORDER BY 1;
+ ten 
+-----
+   0
+   1
+   2
+   3
+   4
+   5
+   6
+   7
+   8
+   9
+(10 rows)
+
+--
+-- awk '{print $16;}' onek.data | sort -d | uniq
+--
+SELECT DISTINCT string4 FROM tmp ORDER BY 1;
+ string4 
+---------
+ AAAAxx
+ HHHHxx
+ OOOOxx
+ VVVVxx
+(4 rows)
+
+--
 -- Also, some tests of IS DISTINCT FROM, which doesn't quite deserve its
 -- very own regression file.
 --

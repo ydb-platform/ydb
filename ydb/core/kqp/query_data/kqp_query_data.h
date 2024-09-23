@@ -100,7 +100,7 @@ struct TKqpExecuterTxResult {
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
     Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
-    Ydb::ResultSet* GetTrailingYdb(google::protobuf::Arena* arena);
+    Ydb::ResultSet* ExtractTrailingYdb(google::protobuf::Arena* arena);
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
     void FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite);
@@ -166,7 +166,7 @@ struct TTimeAndRandomProvider {
 
 class TTxAllocatorState: public TTimeAndRandomProvider {
 public:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     NKikimr::NMiniKQL::THolderFactory HolderFactory;
@@ -253,7 +253,7 @@ public:
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
     Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
-    Ydb::ResultSet* GetTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
+    Ydb::ResultSet* ExtractTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);

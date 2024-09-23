@@ -8,6 +8,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
@@ -28,6 +29,21 @@ using namespace NColumnShard;
 
 class TFastTTLCompactionController: public NKikimr::NYDBTest::ICSController {
 public:
+    virtual bool NeedForceCompactionBacketsConstruction() const override {
+        return true;
+    }
+    virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
+    virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
+        return 0;
+    }
+    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
+        return TDuration::Zero();
+    }
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Seconds(1);
     }
@@ -320,8 +336,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(true)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetEnableMetadataProvider(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -410,7 +425,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetForceColumnTablesCompositeMarks(true)
             .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -541,8 +555,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableBackgroundTasks(true)
-            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -627,9 +639,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             UNIT_ASSERT(check);
         }
-#ifdef S3_TEST_USAGE
         Cerr << "storage initialized..." << Endl;
-#endif
 /*
         lHelper.DropTable("/Root/olapStore/olapTable");
         lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");
@@ -851,9 +861,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableBackgroundTasks(true)
-            .SetForceColumnTablesCompositeMarks(true);
         ;
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
+        csControllerGuard->SetCompactionsLimit(5);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
@@ -918,8 +928,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             return false;
         };
         runtime.SetEventFilter(captureEvents);
-
+        Cerr << "START data loading..." << Endl;
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
+        Cerr << "Data loading FINISHED" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(200));
 
         {
             TVector<THashMap<TString, NYdb::TValue>> result;
@@ -932,6 +944,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
         const ui32 reduceStepsCount = 1;
         for (ui32 i = 0; i < reduceStepsCount; ++i) {
+            Cerr << "START data cleaning..." << Endl;
             runtime.AdvanceCurrentTime(TDuration::Seconds(numRecords * (i + 1) / reduceStepsCount + 500000));
             const ui64 purposeSize = 800000000.0 * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeRecords = numRecords * (1 - 1.0 * (i + 1) / reduceStepsCount);
@@ -941,7 +954,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
-            Cerr << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
+            Cerr << "CLEANED: " << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
 
             TVector<THashMap<TString, NYdb::TValue>> result;
             lHelper.StartScanRequest("SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);

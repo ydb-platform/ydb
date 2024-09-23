@@ -1,5 +1,6 @@
 #include "transaction.h"
 #include "utils.h"
+#include "partition_log.h"
 
 namespace NKikimr::NPQ {
 
@@ -32,7 +33,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
         Y_FAIL_S("unknown transaction type");
     }
- 
+
     if (tx.HasSelfPredicate()) {
         SelfDecision =
             tx.GetSelfPredicate() ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT;
@@ -60,6 +61,10 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
+        if (!o.HasBegin()) {
+            HasWriteOperations = true;
+        }
+
         Operations.push_back(o);
         Partitions.insert(o.GetPartitionId());
     }
@@ -79,14 +84,8 @@ void TDistributedTransaction::InitPartitions()
 {
     Partitions.clear();
 
-    if (TabletConfig.PartitionsSize()) {
-        for (const auto& partition : TabletConfig.GetPartitions()) {
-            Partitions.emplace(partition.GetPartitionId());
-        }
-    } else {
-        for (auto partitionId : TabletConfig.GetPartitionIds()) {
-            Partitions.emplace(partitionId);
-        }
+    for (const auto& partition : TabletConfig.GetPartitions()) {
+        Partitions.emplace(partition.GetPartitionId());
     }
 }
 
@@ -139,7 +138,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
     InitPartitions(txBody.GetOperations());
 
-    if (txBody.HasWriteId()) {
+    if (txBody.HasWriteId() && HasWriteOperations) {
         WriteId = txBody.GetWriteId();
     } else {
         WriteId = Nothing();
@@ -186,7 +185,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             }
         }
     }
-    
+
     InitPartitions();
 
     PartitionRepliesCount = 0;
@@ -244,7 +243,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
         ++ReadSetCount;
     } else {
-        Y_DEBUG_ABORT_UNLESS(false, "unknown sender tablet %" PRIu64, event.GetTabletProducer());
+        Y_DEBUG_ABORT("unknown sender tablet %" PRIu64, event.GetTabletProducer());
     }
 }
 
@@ -325,6 +324,8 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
+    PQ_LOG_D("save tx " << tx.DebugString());
+
     TString value;
     Y_ABORT_UNLESS(tx.SerializeToString(&value));
 
@@ -380,7 +381,7 @@ TString TDistributedTransaction::GetKey() const
 {
     return GetTxKey(TxId);
 }
- 
+
 void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
 {
     Y_ABORT_UNLESS(event.IsSerializable());
@@ -396,7 +397,7 @@ void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
     OutputMsgs.erase(tabletId);
 }
 
-auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>& 
+auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>&
 {
     if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
         return p->second;

@@ -11,20 +11,39 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PROVIDES(protobuf)
 
-VERSION(3.19.0)
+VERSION(3.20.2)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.19.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.20.2.tar.gz)
+
+IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE
+        Protobuf
+        CMAKE_TARGET
+        protobuf::libprotobuf
+        protobuf::libprotoc
+        CONAN
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        "&& conan-requires"
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        "&& conan_require_tool"
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        "&& conan-tool_requires"
+        protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+        "&& conan_import \"bin, protoc* -> ./bin\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
+    )
+ELSE()
+    ADDINCL(
+        GLOBAL contrib/libs/protobuf/src
+        GLOBAL FOR
+        proto
+        contrib/libs/protobuf/src
+    )
+ENDIF()
 
 PEERDIR(
     contrib/libs/zlib
     library/cpp/sanitizer/include
-)
-
-ADDINCL(
-    GLOBAL contrib/libs/protobuf/src
-    GLOBAL FOR
-    proto
-    contrib/libs/protobuf/src
 )
 
 NO_COMPILER_WARNINGS()
@@ -47,6 +66,7 @@ SRCS(
     src/google/protobuf/api.pb.cc
     src/google/protobuf/arena.cc
     src/google/protobuf/arenastring.cc
+    src/google/protobuf/arenaz_sampler.cc
     src/google/protobuf/descriptor.cc
     src/google/protobuf/descriptor.pb.cc
     src/google/protobuf/descriptor_database.cc
@@ -59,8 +79,6 @@ SRCS(
     src/google/protobuf/generated_enum_util.cc
     src/google/protobuf/generated_message_bases.cc
     src/google/protobuf/generated_message_reflection.cc
-    src/google/protobuf/generated_message_table_driven.cc
-    src/google/protobuf/generated_message_table_driven_lite.cc
     src/google/protobuf/generated_message_tctable_full.cc
     src/google/protobuf/generated_message_tctable_lite.cc
     src/google/protobuf/implicit_weak_message.cc

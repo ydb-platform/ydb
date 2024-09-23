@@ -82,16 +82,16 @@ struct TDqState: public TThrRefBase {
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const IDqGateway::TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard) {
+                bool discard, ui64 executionTimeout) {
         with_lock(Mutex_) {
             if (!OperationSemaphore) {
                 const auto parallelOperationsLimit = Settings->ParallelOperationsLimit.Get().GetOrElse(TDqSettings::TDefault::ParallelOperationsLimit);
                 OperationSemaphore = NThreading::TAsyncSemaphore::Make(parallelOperationsLimit);
             }
         }
-        return OperationSemaphore->AcquireAsync().Apply([this_=TIntrusivePtr<TDqState>(this), sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard](const auto& f) mutable {
+        return OperationSemaphore->AcquireAsync().Apply([this_=TIntrusivePtr<TDqState>(this), sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
             auto lock = f.GetValue()->MakeAutoRelease();
-            return this_->DqGateway->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard).Apply([unlock = lock.DeferRelease()](const auto& f) {
+            return this_->DqGateway->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout).Apply([unlock = lock.DeferRelease()](const auto& f) {
                 unlock(NThreading::MakeFuture());
                 return f;
             });

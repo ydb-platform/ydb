@@ -223,6 +223,8 @@ TExecFunc arrow_pg_current_logfile() { return MakeIndirectExec<false, false>(&pg
 TExecFunc arrow_pg_current_logfile_1arg() { return MakeIndirectExec<false, false>(&pg_current_logfile_1arg); }
 TExecFunc arrow_pg_drop_replication_slot() { return MakeIndirectExec<true, true>(&pg_drop_replication_slot); }
 TExecFunc arrow_pg_get_replica_identity_index() { return MakeIndirectExec<true, true>(&pg_get_replica_identity_index); }
+TExecFunc arrow_pg_num_nonnulls() { return MakeIndirectExec<false, true>(&pg_num_nonnulls); }
+TExecFunc arrow_pg_num_nulls() { return MakeIndirectExec<false, true>(&pg_num_nulls); }
 TExecFunc arrow_pg_relation_is_updatable() { return MakeIndirectExec<true, true>(&pg_relation_is_updatable); }
 TExecFunc arrow_pg_replication_slot_advance() { return MakeIndirectExec<true, false>(&pg_replication_slot_advance); }
 TExecFunc arrow_pg_sleep() { return MakeIndirectExec<true, true>(&pg_sleep); }

@@ -91,10 +91,10 @@ struct TEvReadLogContinue : public TEventLocal<TEvReadLogContinue, TEvBlobStorag
     void *Data;
     ui32 Size;
     ui64 Offset;
-    TCompletionAction *CompletionAction;
+    std::weak_ptr<TCompletionAction> CompletionAction;
     TReqId ReqId;
 
-    TEvReadLogContinue(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId)
+    TEvReadLogContinue(void *data, ui32 size, ui64 offset, std::weak_ptr<TCompletionAction> completionAction, TReqId reqId)
         : Data(data)
         , Size(size)
         , Offset(offset)

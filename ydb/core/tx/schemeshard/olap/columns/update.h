@@ -6,6 +6,7 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,6 +16,7 @@ private:
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
+    YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
         Name = columnSchema.GetName();
@@ -24,6 +26,9 @@ public:
         if (!Name) {
             errors.AddError("empty field name");
             return false;
+        }
+        if (columnSchema.HasDefaultValue()) {
+            DefaultValue = columnSchema.GetDefaultValue();
         }
         if (columnSchema.HasSerializer()) {
             if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
@@ -49,6 +54,7 @@ private:
     YDB_FLAG_ACCESSOR(NotNull, false);
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
+    YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
         : KeyOrder(keyOrder) {
@@ -62,7 +68,8 @@ public:
         return !!KeyOrder;
     }
     static bool IsAllowedType(ui32 typeId);
-    static bool IsAllowedFirstPkType(ui32 typeId);
+    static bool IsAllowedPkType(ui32 typeId);
+    static bool IsAllowedPgType(ui32 pgTypeId);
 };
 
 class TOlapColumnsUpdate {

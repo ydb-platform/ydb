@@ -1,9 +1,9 @@
 RECURSE(
     actors
     audit
-    checkpoint_storage
     checkpointing
     checkpointing_common
+    checkpoint_storage
     cloud_audit
     common
     compute
@@ -21,10 +21,10 @@ RECURSE(
     http_api_client
     init
     logs
+    metrics
     mock
     pretty_printers
     private_client
-    protos
     quota_manager
     rate_limiter
     read_rule

@@ -57,6 +57,7 @@
                                                         "ReadRanges": [
                                                             "Group (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_write_write_group_by_script_script/Temp"
                                                     }
                                                 ],
@@ -181,6 +182,7 @@
                                                                             "Group (-\u221e, +\u221e)",
                                                                             "Name (-\u221e, +\u221e)"
                                                                         ],
+                                                                        "Scan": "Parallel",
                                                                         "Table": "base_write_write_group_by_script_script/Input1"
                                                                     }
                                                                 ],

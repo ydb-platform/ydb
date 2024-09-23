@@ -48,6 +48,8 @@ def main(argv):
                     out_file.write(line)
                 for line in in_file:
                     line=line.replace("inline ","")
+                    if 'Generated::' in line and line.endswith('_default_instance_._instance,\n'):
+                        line = f'reinterpret_cast<const ::_pb::Message*>({line.removesuffix('._instance,\n')}),'
                     if line.startswith("#"):
                         out_file.write(line)
                         continue
@@ -66,7 +68,8 @@ def main(argv):
                            in_class_def=False
                         continue
                     if line.startswith("PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT"):
-                        type_name=line.split(" ")[2]
+                        # MOD1 MOD2 MOD3 ... type_name varibale_name;
+                        type_name=line.split(" ")[-2]
                         if type_name in current_types:
                             out_file.write(line)
                         continue

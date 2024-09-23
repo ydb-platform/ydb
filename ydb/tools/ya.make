@@ -2,8 +2,9 @@ RECURSE(
     blobsan
     cfg
     query_replay
+    query_replay_yt
     simple_queue
-    ydbd_slice
     tsserver
     tstool
+    ydbd_slice
 )

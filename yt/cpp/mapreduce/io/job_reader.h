@@ -17,9 +17,12 @@ public:
     explicit TJobReader(int fd);
     explicit TJobReader(const TFile& file);
 
-    virtual bool Retry( const TMaybe<ui32>& /*rangeIndex*/, const TMaybe<ui64>& /*rowIndex*/) override;
-    virtual void ResetRetries() override;
-    virtual bool HasRangeIndices() const override;
+    bool Retry(
+        const TMaybe<ui32>& rangeIndex,
+        const TMaybe<ui64>& rowIndex,
+        const std::exception_ptr& error) override;
+    void ResetRetries() override;
+    bool HasRangeIndices() const override;
 
 protected:
     size_t DoRead(void* buf, size_t len) override;

@@ -81,12 +81,18 @@ struct TKqpReadTableSettings {
 struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
     static constexpr TStringBuf IsUpdateSettingName = "IsUpdate";
+    static constexpr TStringBuf AllowInconsistentWritesSettingName = "AllowInconsistentWrites";
+    static constexpr TStringBuf ModeSettingName = "Mode";
 
     bool Inplace = false;
     bool IsUpdate = false;
+    bool AllowInconsistentWrites = false;
+    TString Mode = "";
 
     void SetInplace() { Inplace = true; }
     void SetIsUpdate() { IsUpdate = true; }
+    void SetAllowInconsistentWrites() { AllowInconsistentWrites = true; }
+    void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);
@@ -123,5 +129,9 @@ TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx);
 TString KqpExprToPrettyString(const NNodes::TExprBase& expr, TExprContext& ctx);
 
 TString PrintKqpStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
+
+class IGraphTransformer;
+struct TTypeAnnotationContext;
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx);
 
 } // namespace NYql

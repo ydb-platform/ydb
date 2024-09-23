@@ -6,15 +6,15 @@ Managing a cluster's disk subsystem includes the following actions:
 
    * [{#T}](cluster_expansion.md)
    * [{#T}](adding_storage_groups.md)
-   * [{#T}](../../administration/state-storage-move.md)
-   * [{#T}](../../administration/static-group-move.md)
+   * [{#T}](../../devops/manual/state-storage-move.md)
+   * [{#T}](../../devops/manual/static-group-move.md)
 
 * Maintenance:
 
    * [{#T}](node_restarting.md)
    * [{#T}](scrubbing.md)
    * [{#T}](selfheal.md)
-   * [{#T}](../../administration/decommissioning.md)
+   * [{#T}](../../devops/manual/decommissioning.md)
    * [{#T}](moving_vdisks.md)
 
 * Troubleshooting:

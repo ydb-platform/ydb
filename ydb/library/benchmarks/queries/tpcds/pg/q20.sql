@@ -6,7 +6,7 @@ select  i_item_id
        ,i_class
        ,i_current_price
        ,sum(cs_ext_sales_price) as itemrevenue
-       ,sum(cs_ext_sales_price)*100::numeric/sum(sum(cs_ext_sales_price)) over
+       ,sum(cs_ext_sales_price)*100/sum(sum(cs_ext_sales_price)) over
            (partition by i_class) as revenueratio
  from	{{catalog_sales}}
      ,{{item}}

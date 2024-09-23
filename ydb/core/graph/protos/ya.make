@@ -1,10 +1,5 @@
 PROTO_LIBRARY()
 
-OWNER(
-    xenoxeno
-    g:kikimr
-)
-
 SRCS(
     graph.proto
 )

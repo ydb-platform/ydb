@@ -9,35 +9,39 @@ namespace NYql {
 
 TConfigClusters::TConfigClusters(const TYtGatewayConfig& config) {
     for (auto& cluster: config.GetClusterMapping()) {
-        if (!cluster.GetName()) {
-            ythrow yexception() << "TYtGatewayConfig: Cluster name must be specified";
-        }
-        if (Clusters_.contains(cluster.GetName())) {
-            ythrow yexception() << "TYtGatewayConfig: Duplicate cluster name: " << cluster.GetName();
-        }
+        AddCluster(cluster, true);
+    }
+}
 
-        TClusterInfo& info = Clusters_[cluster.GetName()];
-        if (cluster.GetCluster()) {
-            info.RealName = cluster.GetCluster();
-            info.YtName = cluster.HasYTName() ? cluster.GetYTName() : cluster.GetName();
-            TString ytName = info.YtName;
-            ytName.to_lower();
-            YtName2Name_.emplace(ytName, cluster.GetName());
-        } else {
-            ythrow yexception() << "TYtGatewayConfig: Cluster address must be specified";
-        }
+void TConfigClusters::AddCluster(const TYtClusterConfig& cluster, bool checkDuplicate) {
+    if (!cluster.GetName()) {
+        ythrow yexception() << "TYtGatewayConfig: Cluster name must be specified";
+    }
+    if (checkDuplicate && Clusters_.contains(cluster.GetName())) {
+        ythrow yexception() << "TYtGatewayConfig: Duplicate cluster name: " << cluster.GetName();
+    }
 
-        if (cluster.HasYTToken()) {
-            info.Token = cluster.GetYTToken();
-        }
+    TClusterInfo& info = Clusters_[cluster.GetName()];
+    if (cluster.GetCluster()) {
+        info.RealName = cluster.GetCluster();
+        info.YtName = cluster.HasYTName() ? cluster.GetYTName() : cluster.GetName();
+        TString ytName = info.YtName;
+        ytName.to_lower();
+        YtName2Name_.emplace(ytName, cluster.GetName());
+    } else {
+        ythrow yexception() << "TYtGatewayConfig: Cluster address must be specified";
+    }
 
-        if (cluster.GetDefault()) {
-            if (DefaultClusterName_) {
-                ythrow yexception() << "TYtGatewayConfig: More than one default cluster (current: "
-                    << cluster.GetName() << ", previous: " << DefaultClusterName_ << ")";
-            }
-            DefaultClusterName_ = cluster.GetName();
+    if (cluster.HasYTToken()) {
+        info.Token = cluster.GetYTToken();
+    }
+
+    if (cluster.GetDefault()) {
+        if (DefaultClusterName_) {
+            ythrow yexception() << "TYtGatewayConfig: More than one default cluster (current: "
+                << cluster.GetName() << ", previous: " << DefaultClusterName_ << ")";
         }
+        DefaultClusterName_ = cluster.GetName();
     }
 }
 

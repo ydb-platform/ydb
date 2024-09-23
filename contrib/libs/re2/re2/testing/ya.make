@@ -10,6 +10,7 @@ PEERDIR(
     contrib/libs/re2
     contrib/restricted/abseil-cpp/absl/base
     contrib/restricted/abseil-cpp/absl/flags
+    contrib/restricted/abseil-cpp/absl/log
     contrib/restricted/abseil-cpp/absl/strings
 )
 

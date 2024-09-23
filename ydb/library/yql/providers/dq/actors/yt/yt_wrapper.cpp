@@ -129,6 +129,9 @@ namespace NYql {
         }
     };
 
+    struct TReadFileRequest;
+    void ReadNext(TWeakPtr<TReadFileRequest> request);
+
     struct TReadFileRequest: public TRequest {
         IClientPtr Client;
         TString LocalPath;
@@ -141,38 +144,6 @@ namespace NYql {
             : TRequest(selfId, sender, ctx, requestId)
         { }
 
-        TFuture<void> ReadNext()
-        {
-            return Reader->Read()
-                .Apply(BIND([self = MakeWeak(this)](const TSharedRef& blob) {
-                    auto this_ = self.Lock();
-                    if (!this_) {
-                        return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
-                    }
-                    try {
-                        YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes ";
-                        if (blob.Size() > 0) {
-                            this_->Md5.Update(blob.Begin(), blob.Size());
-                            this_->Output->Write(blob.Begin(), blob.Size());
-                            return this_->ReadNext();
-                        } else {
-                            TString buf;
-                            buf.ReserveAndResize(32);
-                            this_->Md5.End(buf.begin());
-
-                            if (buf == this_->Digest) {
-                                this_->Output.reset();
-                                return VoidFuture;
-                            } else {
-                                return MakeFuture(TErrorOr<void>(yexception() << "md5 mismatch"));
-                            }
-                        }
-                    } catch (...) {
-                        return MakeFuture(TErrorOr<void>(yexception() << CurrentExceptionMessage()));
-                    }
-                }).AsyncVia(Client->GetConnection()->GetInvoker()));
-        }
-
         TFuture<void> ReadFile()
         {
             auto pos = LocalPath.rfind('/');
@@ -184,9 +155,49 @@ namespace NYql {
             }
 
             Output = std::make_shared<TFileOutput>(LocalPath);
-            return ReadNext();
+            return BIND([self = MakeWeak(this)]() {
+                ReadNext(self);
+            }).AsyncVia(Client->GetConnection()->GetInvoker()).Run();
         }
     };
+
+    void ReadNext(TWeakPtr<TReadFileRequest> request)
+    {
+        auto lockedRequest = [&] () {
+            auto this_ = request.Lock();
+            if (!this_) {
+                ythrow yexception() << "request complete";
+            }
+            return this_;
+        };
+
+        while(true) {
+            TFuture<TSharedRef> part = lockedRequest()->Reader->Read();
+            auto blob = NYT::NConcurrency::WaitFor(part).ValueOrThrow();
+
+            auto this_ = lockedRequest();
+            if (!this_) {
+                ythrow yexception() << "request complete";
+            }
+
+            YQL_CLOG(DEBUG, ProviderDq) << "Store " << blob.Size() << " bytes to " << this_->LocalPath;
+            if (blob.Size() == 0) {
+                TString buf;
+                buf.ReserveAndResize(32);
+                this_->Md5.End(buf.begin());
+
+                if (buf == this_->Digest) {
+                    this_->Output.reset();
+                    return;
+                } else {
+                    ythrow yexception() << "md5 mismatch";
+                }
+            }
+
+            this_->Md5.Update(blob.Begin(), blob.Size());
+            this_->Output->Write(blob.Begin(), blob.Size());
+        }
+    }
 
     using TRequestPtr = NYT::TIntrusivePtr<TRequest>;
 

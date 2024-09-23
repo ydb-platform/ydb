@@ -28,10 +28,12 @@ public:
     TTestService(
         IInvokerPtr invoker,
         bool secure,
-        TTestCreateChannelCallback createChannel)
+        TTestCreateChannelCallback createChannel,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : TServiceBase(
             invoker,
             TTestProxy::GetDescriptor(),
+            std::move(memoryUsageTracker),
             NLogging::TLogger("Main"))
         , Secure_(secure)
         , CreateChannel_(createChannel)
@@ -47,7 +49,9 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(SlowCall)
             .SetCancelable(true)
             .SetConcurrencyLimit(10)
-            .SetQueueSizeLimit(20));
+            .SetQueueSizeLimit(20)
+            .SetConcurrencyByteLimit(10_MB)
+            .SetQueueByteSizeLimit(20_MB));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(SlowCanceledCall)
             .SetCancelable(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
@@ -378,9 +382,14 @@ private:
 ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
-    TTestCreateChannelCallback createChannel)
+    TTestCreateChannelCallback createChannel,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTestService>(invoker, secure, createChannel);
+    return New<TTestService>(
+        invoker,
+        secure,
+        createChannel,
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

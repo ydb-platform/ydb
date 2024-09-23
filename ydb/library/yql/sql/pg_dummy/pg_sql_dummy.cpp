@@ -5,17 +5,19 @@
 
 namespace NSQLTranslationPG {
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo) {
     Y_UNUSED(query);
     Y_UNUSED(settings);
+    Y_UNUSED(stmtParseInfo);
     NYql::TAstParseResult result;
     result.Issues.AddIssue(NYql::TIssue("PostgreSQL parser is not available"));
     return result;
 }
 
-TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<NYql::TStmtParseInfo>* stmtParseInfo) {
     Y_UNUSED(query);
     Y_UNUSED(settings);
+    Y_UNUSED(stmtParseInfo);
     return {};
 }
 
@@ -153,6 +155,16 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(GUCSettings);
+}
+
+std::optional<std::string> PGGetGUCSetting(const std::string& key) {
+    Y_UNUSED(key);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
     Y_UNUSED(typeLen);
     Y_UNUSED(value);
@@ -277,9 +289,9 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     return {};
 }
 
-TMaybe<ui32> ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
+ui32 ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
-    return Nothing();
+    throw yexception() << "PG types are not supported";
 }
 
 TMaybe<NKikimr::NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {

@@ -134,7 +134,7 @@ from hypothesis.strategies._internal.strategies import (
     one_of,
 )
 from hypothesis.strategies._internal.strings import (
-    FixedSizeBytes,
+    BytesStrategy,
     OneCharStringStrategy,
     TextStrategy,
 )
@@ -963,11 +963,7 @@ def binary(
     values.
     """
     check_valid_sizes(min_size, max_size)
-    if min_size == max_size:
-        return FixedSizeBytes(min_size)
-    return lists(
-        integers(min_value=0, max_value=255), min_size=min_size, max_size=max_size
-    ).map(bytes)
+    return BytesStrategy(min_size, max_size)
 
 
 @cacheable
@@ -1814,7 +1810,7 @@ def _composite(f):
         )
     if params[0].default is not sig.empty:
         raise InvalidArgument("A default value for initial argument will never be used")
-    if not is_first_param_referenced_in_function(f):
+    if not (f is typing._overload_dummy or is_first_param_referenced_in_function(f)):
         note_deprecation(
             "There is no reason to use @st.composite on a function which "
             "does not call the provided draw() function internally.",

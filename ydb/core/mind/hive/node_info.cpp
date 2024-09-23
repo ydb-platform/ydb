@@ -30,7 +30,6 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Disconnected:
         case EVolatileState::Connecting:
             RegisterInDomains();
-            Hive.UpdateCounterNodesConnected(+1);
             break;
 
         default:
@@ -43,7 +42,6 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Connected:
         case EVolatileState::Disconnecting:
             DeregisterInDomains();
-            Hive.UpdateCounterNodesConnected(-1);
             break;
 
         default:
@@ -55,6 +53,10 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
 }
 
 bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState) {
+    if (Freeze) {
+        tablet->PreferredNodeId = Id;
+        FrozenTablets.push_back(tablet->GetFullTabletId());
+    }
     TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
     if (IsResourceDrainingState(oldState)) {
         if (Tablets[oldState].erase(tablet) != 0) {
@@ -202,17 +204,23 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
 }
 
 i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
+    i32 priority = 0;
+
     auto it = TabletAvailability.find(tablet.GetTabletType());
-    if (it == TabletAvailability.end()) {
-        return 0;
+    if (it != TabletAvailability.end()) {
+        priority = it->second.FromLocal.GetPriority();
     }
 
-    return it->second.FromLocal.GetPriority();
+    if (tablet.FailedNodeId == Id) {
+        --priority;
+    }
+
+    return priority;
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
     if (tablet.IsAliveOnLocal(Local)) {
-        return !IsOverloaded();
+        return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
         const TLeaderTabletInfo& leader = tablet.AsLeader();
@@ -270,7 +278,7 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         }
     }
 
-    if (tablet.IsAlive() && IsOverloaded()) {
+    if (tablet.IsAlive() && IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources)) {
         // we don't move already running tablet to another overloaded node
         if (debugState) {
             debugState->NodesWithoutResources++;
@@ -317,7 +325,9 @@ ui64 TNodeInfo::GetMaxCountForTabletType(TTabletTypes::EType tabletType) const {
 }
 
 bool TNodeInfo::IsOverloaded() const {
-    return GetNodeUsage() >= Hive.GetMaxNodeUsageToKick();
+    auto maxValues = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
+    auto normValues = NormalizeRawValues(GetResourceCurrentValues(), maxValues);
+    return GetNodeUsage(normValues) >= Hive.GetMaxNodeUsageToKick();
 }
 
 bool TNodeInfo::BecomeConnected() {
@@ -366,7 +376,22 @@ void TNodeInfo::SetDown(bool down) {
 
 void TNodeInfo::SetFreeze(bool freeze) {
     Freeze = freeze;
-    if (!Freeze) {
+    if (Freeze) {
+        for (const auto& [state, tablets] : Tablets) {
+            FrozenTablets.reserve(FrozenTablets.size() + tablets.size());
+            for (auto* tablet : tablets) {
+                FrozenTablets.push_back(tablet->GetFullTabletId());
+                tablet->PreferredNodeId = Id;
+            }
+        }
+    } else {
+        for (auto tabletId : FrozenTablets) {
+            auto tablet = Hive.FindTablet(tabletId);
+            if (tablet) {
+                tablet->PreferredNodeId = 0;
+            }
+        }
+        FrozenTablets.clear();
         Hive.ProcessWaitQueue();
     }
 }
@@ -409,7 +434,7 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet) const {
 
 double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource) const {
     double usage = TTabletInfo::ExtractResourceUsage(normValues, resource);
-    if (resource == EResourceToBalance::Dominant && AveragedNodeTotalUsage.IsValueStable()) {
+    if (resource == EResourceToBalance::ComputeResources && AveragedNodeTotalUsage.IsValueStable()) {
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;

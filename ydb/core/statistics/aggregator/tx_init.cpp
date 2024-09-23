@@ -20,9 +20,15 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         { // precharge
             auto sysParamsRowset = db.Table<Schema::SysParams>().Range().Select();
             auto baseStatsRowset = db.Table<Schema::BaseStats>().Range().Select();
+            auto statisticsRowset = db.Table<Schema::Statistics>().Range().Select();
+            auto scanTablesRowset = db.Table<Schema::ScanTables>().Range().Select();
+            auto scanOperationsRowset = db.Table<Schema::ScanOperations>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
-                !baseStatsRowset.IsReady())
+                !baseStatsRowset.IsReady() ||
+                !statisticsRowset.IsReady() ||
+                !scanTablesRowset.IsReady() ||
+                !scanOperationsRowset.IsReady())
             {
                 return false;
             }
@@ -44,6 +50,33 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         Self->Database = value;
                         SA_LOG_D("[" << Self->TabletID() << "] Loading database: " << Self->Database);
                         break;
+                    case Schema::SysParam_StartKey:
+                        Self->StartKey = TSerializedCellVec(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading start key");
+                        break;
+                    case Schema::SysParam_ScanTableOwnerId:
+                        Self->ScanTableId.PathId.OwnerId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading scan table owner id: "
+                            << Self->ScanTableId.PathId.OwnerId);
+                        break;
+                    case Schema::SysParam_ScanTableLocalPathId:
+                        Self->ScanTableId.PathId.LocalPathId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading scan table local path id: "
+                            << Self->ScanTableId.PathId.LocalPathId);
+                        break;
+                    case Schema::SysParam_ScanStartTime: {
+                        auto us = FromString<ui64>(value);
+                        Self->ScanStartTime = TInstant::MicroSeconds(us);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading scan start time: " << us);
+                        break;
+                    }
+                    case Schema::SysParam_LastScanOperationId: {
+                        auto id = FromString<ui64>(value);
+                        Self->LastScanOperationId = id;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading last scan operation id: " << id);
+                        break;
+                    }
+
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }
@@ -78,6 +111,99 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 << "schemeshard count# " << Self->BaseStats.size());
         }
 
+        // Statistics
+        {
+            Self->CountMinSketches.clear();
+
+            auto rowset = db.Table<Schema::Statistics>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui32 columnTag = rowset.GetValue<Schema::Statistics::ColumnTag>();
+                TString sketch = rowset.GetValue<Schema::Statistics::CountMinSketch>();
+
+                Self->CountMinSketches[columnTag].reset(
+                    TCountMinSketch::FromString(sketch.data(), sketch.size()));
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loading statistics: "
+                << "column count# " << Self->CountMinSketches.size());
+        }
+
+        // ScanTables
+        {
+            Self->ScanTablesByTime.Clear();
+            Self->ScanTablesBySchemeShard.clear();
+            Self->ScanTables.clear();
+
+            auto rowset = db.Table<Schema::ScanTables>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui64 ownerId = rowset.GetValue<Schema::ScanTables::OwnerId>();
+                ui64 localPathId = rowset.GetValue<Schema::ScanTables::LocalPathId>();
+                ui64 lastUpdateTime = rowset.GetValue<Schema::ScanTables::LastUpdateTime>();
+                ui64 schemeShardId = rowset.GetValue<Schema::ScanTables::SchemeShardId>();
+
+                auto pathId = TPathId(ownerId, localPathId);
+
+                TScanTable scanTable;
+                scanTable.PathId = pathId;
+                scanTable.SchemeShardId = schemeShardId;
+                scanTable.LastUpdateTime = TInstant::MicroSeconds(lastUpdateTime);
+
+                auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
+                Self->ScanTablesByTime.Add(&it->second);
+                Self->ScanTablesBySchemeShard[schemeShardId].insert(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loading scan tables: "
+                << "table count# " << Self->ScanTables.size());
+        }
+
+        // ScanOperations
+        {
+            Self->ScanOperations.Clear();
+            Self->ScanOperationsByPathId.clear();
+
+            auto rowset = db.Table<Schema::ScanOperations>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui64 operationId = rowset.GetValue<Schema::ScanOperations::OperationId>();
+                ui64 ownerId = rowset.GetValue<Schema::ScanOperations::OwnerId>();
+                ui64 localPathId = rowset.GetValue<Schema::ScanOperations::LocalPathId>();
+
+                auto pathId = TPathId(ownerId, localPathId);
+
+                TScanOperation& operation = Self->ScanOperationsByPathId[pathId];
+                operation.PathId = pathId;
+                operation.OperationId = operationId;
+                Self->ScanOperations.PushBack(&operation);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loading scan operations: "
+                << "table count# " << Self->ScanOperationsByPathId.size());
+        }
+
         return true;
     }
 
@@ -87,9 +213,17 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SignalTabletActive(ctx);
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
+        Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
+        Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
+
+        Self->InitializeStatisticsTable();
+
+        if (Self->ScanTableId.PathId) {
+            Self->Navigate();
+        }
 
         Self->Become(&TThis::StateWork);
     }

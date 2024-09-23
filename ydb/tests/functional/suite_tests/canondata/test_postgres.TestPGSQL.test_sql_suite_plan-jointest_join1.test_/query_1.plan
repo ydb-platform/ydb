@@ -152,6 +152,7 @@
                                                     "j (-\u221e, +\u221e)",
                                                     "t (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join1.test_plan/J1_TBL"
                                             }
                                         ],

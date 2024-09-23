@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -12,16 +13,16 @@ namespace {
 
 class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
 public:
-    TKqpFinalizeScriptService(const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory)
-        : FinalizeScriptServiceConfig_(finalizeScriptServiceConfig)
-        , MetadataProviderConfig_(metadataProviderConfig)
-        , FederatedQuerySetupFactory_(federatedQuerySetupFactory)
+    TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
+        : QueryServiceConfig(queryServiceConfig)
+        , FederatedQuerySetupFactory(federatedQuerySetupFactory)
+        , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        FederatedQuerySetup_ = FederatedQuerySetupFactory_->Make(ctx.ActorSystem());
+        FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         
         Become(&TKqpFinalizeScriptService::MainState);
     }
@@ -40,10 +41,10 @@ public:
     void Handle(TEvScriptFinalizeRequest::TPtr& ev) {
         TString executionId = ev->Get()->Description.ExecutionId;
 
-        if (!FinalizationRequestsQueue_.contains(executionId)) {
-            WaitingFinalizationExecutions_.push(executionId);
+        if (!FinalizationRequestsQueue.contains(executionId)) {
+            WaitingFinalizationExecutions.push(executionId);
         }
-        FinalizationRequestsQueue_[executionId].emplace_back(std::move(ev));
+        FinalizationRequestsQueue[executionId].emplace_back(std::move(ev));
 
         TryStartFinalizeRequest();
     }
@@ -60,14 +61,14 @@ public:
 
 private:
     void TryStartFinalizeRequest() {
-        if (FinalizationRequestsInFlight_ >= FinalizeScriptServiceConfig_.GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions_.empty()) {
+        if (FinalizationRequestsInFlight >= QueryServiceConfig.GetFinalizeScriptServiceConfig().GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions.empty()) {
             return;
         }
 
-        TString executionId = WaitingFinalizationExecutions_.front();
-        WaitingFinalizationExecutions_.pop();
+        TString executionId = WaitingFinalizationExecutions.front();
+        WaitingFinalizationExecutions.pop();
 
-        auto& queue = FinalizationRequestsQueue_[executionId];
+        auto& queue = FinalizationRequestsQueue[executionId];
         Y_ENSURE(!queue.empty());
 
         StartFinalizeRequest(std::move(queue.back()));
@@ -75,24 +76,24 @@ private:
     }
 
     void StartFinalizeRequest(TEvScriptFinalizeRequest::TPtr request) {
-        ++FinalizationRequestsInFlight_;
+        ++FinalizationRequestsInFlight;
 
         Register(CreateScriptFinalizerActor(
             std::move(request),
-            FinalizeScriptServiceConfig_,
-            MetadataProviderConfig_,
-            FederatedQuerySetup_
+            QueryServiceConfig,
+            FederatedQuerySetup,
+            S3ActorsFactory
         ));
     }
 
     void Handle(TEvScriptFinalizeResponse::TPtr& ev) {
-        --FinalizationRequestsInFlight_;
+        --FinalizationRequestsInFlight;
         TString executionId = ev->Get()->ExecutionId;
 
-        if (!FinalizationRequestsQueue_[executionId].empty()) {
-            WaitingFinalizationExecutions_.push(executionId);
+        if (!FinalizationRequestsQueue[executionId].empty()) {
+            WaitingFinalizationExecutions.push(executionId);
         } else {
-            FinalizationRequestsQueue_.erase(executionId);
+            FinalizationRequestsQueue.erase(executionId);
         }
         TryStartFinalizeRequest();
     }
@@ -122,23 +123,24 @@ private:
     }
 
 private:
-    NKikimrConfig::TFinalizeScriptServiceConfig FinalizeScriptServiceConfig_;
-    NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig_;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 
-    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory_;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup_;
+    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    ui32 FinalizationRequestsInFlight_ = 0;
-    std::queue<TString> WaitingFinalizationExecutions_;
-    std::unordered_map<TString, std::vector<TEvScriptFinalizeRequest::TPtr>> FinalizationRequestsQueue_;
+    ui32 FinalizationRequestsInFlight = 0;
+    std::queue<TString> WaitingFinalizationExecutions;
+    std::unordered_map<TString, std::vector<TEvScriptFinalizeRequest::TPtr>> FinalizationRequestsQueue;
+
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 };
 
 }  // anonymous namespace
 
-IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory) {
-    return new TKqpFinalizeScriptService(finalizeScriptServiceConfig, metadataProviderConfig, std::move(federatedQuerySetupFactory));
+IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
+    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

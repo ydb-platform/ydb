@@ -93,10 +93,12 @@ class NativeTransform:
                 write_leb128(block.column_count, output)
                 write_leb128(block.row_count, output)
                 for col_name, col_type, data in zip(block.column_names, block.column_types, block.column_data):
-                    write_leb128(len(col_name), output)
-                    output += col_name.encode()
-                    write_leb128(len(col_type.name), output)
-                    output += col_type.name.encode()
+                    col_enc = col_name.encode()
+                    write_leb128(len(col_enc), output)
+                    output += col_enc
+                    col_enc = col_type.name.encode()
+                    write_leb128(len(col_enc), output)
+                    output += col_enc
                     context.start_column(col_name)
                     try:
                         col_type.write_column(data, output, context)

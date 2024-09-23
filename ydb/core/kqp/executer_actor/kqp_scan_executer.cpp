@@ -49,10 +49,10 @@ public:
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
+            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
         , PreparedQuery(preparedQuery)
@@ -317,10 +317,30 @@ public:
 private:
     void ExecuteScanTx() {
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
-            Request.RlPath, ExecuterSpan, std::move(ResourcesSnapshot), ExecuterRetriesConfig, /* useDataQueryPool */ false, /* localComputeTasks */ false,
-            Request.MkqlMemoryLimit, nullptr, false, GetUserRequestContext());
+        Planner = CreateKqpPlanner({
+            .TasksGraph = TasksGraph,
+            .TxId = TxId,
+            .Executer = SelfId(),
+            .Snapshot = GetSnapshot(),
+            .Database = Database,
+            .UserToken = UserToken,
+            .Deadline = Deadline.GetOrElse(TInstant::Zero()),
+            .StatsMode = Request.StatsMode,
+            .WithSpilling = AppData()->EnableKqpSpilling,
+            .RlPath = Request.RlPath,
+            .ExecuterSpan = ExecuterSpan,
+            .ResourcesSnapshot = std::move(ResourcesSnapshot),
+            .ExecuterRetriesConfig = ExecuterRetriesConfig,
+            .UseDataQueryPool = false,
+            .LocalComputeTasks = false,
+            .MkqlMemoryLimit = Request.MkqlMemoryLimit,
+            .AsyncIoFactory = nullptr,
+            .AllowSinglePartitionOpt = false,
+            .UserRequestContext = GetUserRequestContext(),
+            .FederatedQuerySetup = std::nullopt,
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize,
+            .GUCSettings = nullptr
+        });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());
         auto err = Planner->PlanExecution();
@@ -368,10 +388,10 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex)
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig,
-        preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex);
+        preparedQuery, chanTransportVersion, userRequestContext, statementResultIndex);
 }
 
 } // namespace NKqp

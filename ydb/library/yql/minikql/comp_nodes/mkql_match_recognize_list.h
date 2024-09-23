@@ -135,14 +135,14 @@ class TSparseList {
             }
         }
 
-        void Save(TOutputSerializer& serializer) const {
+        void Save(TMrOutputSerializer& serializer) const {
             serializer(Storage.size());
             for (const auto& [key, item]: Storage) {
                 serializer(key, item.Value, item.LockCount);
             }
         }
 
-        void Load(TInputSerializer& serializer) {
+        void Load(TMrInputSerializer& serializer) {
             auto size = serializer.Read<TStorage::size_type>();
             Storage.reserve(size);
             for (size_t i = 0; i < size; ++i) {
@@ -268,11 +268,11 @@ public:
             ToIndex = -1;
         }
 
-        void Save(TOutputSerializer& serializer) const {
+        void Save(TMrOutputSerializer& serializer) const {
             serializer(Container, FromIndex, ToIndex);
        }
 
-        void Load(TInputSerializer& serializer) {
+        void Load(TMrInputSerializer& serializer) {
             serializer(Container, FromIndex, ToIndex);
         }
 
@@ -331,11 +331,11 @@ public:
         return Size() == 0;
     }
 
-    void Save(TOutputSerializer& serializer) const {
+    void Save(TMrOutputSerializer& serializer) const {
         serializer(Container, ListSize);
     }
 
-    void Load(TInputSerializer& serializer) {
+    void Load(TMrInputSerializer& serializer) {
         serializer(Container, ListSize);
     }
 

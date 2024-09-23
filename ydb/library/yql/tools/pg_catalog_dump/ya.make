@@ -1,7 +1,5 @@
 PROGRAM(pg_catalog_dump)
 
-OWNER(g:yql)
-
 SRCS(
     pg_catalog_dump.cpp
 )

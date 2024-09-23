@@ -41,7 +41,7 @@ public:
         , TxId(txId)
         , ShardIds(std::move(shardIds))
         , UseFollowers(useFollowers)
-        , TabletResolver(MakePipePeNodeCacheID(UseFollowers))
+        , TabletResolver(MakePipePerNodeCacheID(UseFollowers))
     {}
 
     void Bootstrap() {

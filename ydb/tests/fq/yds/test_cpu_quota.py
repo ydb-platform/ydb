@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import os
+import pytest
 import time
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -11,6 +13,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestCpuQuota(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_cpu_quota(self, kikimr, client):
         self.init_topics("cpu_quota")
 
@@ -19,15 +22,15 @@ class TestCpuQuota(TestYdsBase):
 
             INSERT INTO yds.`{output_topic}`
             SELECT Unwrap(ListConcat(ListReplicate(Data, 100000))) AS Data
-            FROM yds.`{input_topic}`;''' \
-            .format(
+            FROM yds.`{input_topic}`;'''.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
         )
 
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING,
-                                       vcpu_time_limit=1).result.query_id
+        query_id = client.create_query(
+            "simple", sql, type=fq.QueryContent.QueryType.STREAMING, vcpu_time_limit=1
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 

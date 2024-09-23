@@ -23,6 +23,8 @@
 
 #include <yt/yt/core/yson/config.h>
 
+#include <yt/yt/library/process/io_dispatcher.h>
+
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
@@ -42,7 +44,7 @@ public:
     std::optional<double> ContainerMemoryRatio;
 
     //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio.
-    bool IsHard;
+    bool Hard;
 
     REGISTER_YSON_STRUCT(THeapSizeLimit);
 
@@ -127,6 +129,7 @@ public:
     THashMap<TString, int> FiberStackPoolSizes;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
+    NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherConfigPtr RpcDispatcher;
     NRpc::NGrpc::TDispatcherConfigPtr GrpcDispatcher;
     NServiceDiscovery::NYP::TServiceDiscoveryConfigPtr YPServiceDiscovery;
@@ -156,8 +159,10 @@ class TSingletonsDynamicConfig
 {
 public:
     std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
+    ui64 MaxIdleFibers;
     NYTAlloc::TYTAllocConfigPtr YTAlloc;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
+    NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;

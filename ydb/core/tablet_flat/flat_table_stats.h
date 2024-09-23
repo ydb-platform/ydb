@@ -34,6 +34,11 @@ namespace NTable {
     struct TIteratorStats {
         ui64 DeletedRowSkips = 0;
         ui64 InvisibleRowSkips = 0;
+        // When true an observed erase may possibly change due to undecided or
+        // skipped changes above. This is a special case to simplify erase
+        // cache updates, i.e. when UncertainErase is true observed erases
+        // cannot be cached, since it might change in a different query.
+        bool UncertainErase = false;
     };
 
     struct TSelectStats : TIteratorStats {

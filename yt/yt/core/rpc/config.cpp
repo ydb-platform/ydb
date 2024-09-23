@@ -249,6 +249,7 @@ void TBalancingChannelConfig::Register(TRegistrar registrar)
         int endpointConfigCount = 0;
         if (config->Addresses) {
             ++endpointConfigCount;
+            SortUnique(*config->Addresses);
         }
         if (config->Endpoints) {
             ++endpointConfigCount;
@@ -310,6 +311,8 @@ void TDispatcherConfig::Register(TRegistrar registrar)
     registrar.Parameter("compression_pool_size", &TThis::CompressionPoolSize)
         .Default(DefaultCompressionPoolSize)
         .GreaterThan(0);
+    registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
+        .Default(TDuration::MilliSeconds(10));
     registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
         .Default(false);
 }
@@ -319,6 +322,7 @@ TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicCon
     auto mergedConfig = CloneYsonStruct(MakeStrong(this));
     UpdateYsonStructField(mergedConfig->HeavyPoolSize, dynamicConfig->HeavyPoolSize);
     UpdateYsonStructField(mergedConfig->CompressionPoolSize, dynamicConfig->CompressionPoolSize);
+    UpdateYsonStructField(mergedConfig->HeavyPoolPollingPeriod, dynamicConfig->HeavyPoolPollingPeriod);
     UpdateYsonStructField(mergedConfig->AlertOnMissingRequestInfo, dynamicConfig->AlertOnMissingRequestInfo);
     mergedConfig->Postprocess();
     return mergedConfig;
@@ -334,6 +338,8 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("compression_pool_size", &TThis::CompressionPoolSize)
         .Optional()
         .GreaterThan(0);
+    registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
+        .Optional();
     registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
         .Optional();
 }

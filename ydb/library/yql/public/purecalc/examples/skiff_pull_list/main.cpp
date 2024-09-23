@@ -56,6 +56,7 @@ int main() {
     auto factoryOptions = TProgramFactoryOptions();
     factoryOptions.SetNativeYtTypeFlags(0);
     factoryOptions.SetLLVMSettings("OFF");
+    factoryOptions.SetBlockEngineSettings("disable");
     auto factory = MakeProgramFactory(factoryOptions);
     auto program = factory->MakePullListProgram(
         inputSpec,

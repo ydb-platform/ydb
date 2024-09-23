@@ -72,10 +72,11 @@ protected:
     ui32 Timeout = 0;
     TString FilterTenant;
     THashSet<TString> FilterStoragePools;
-    TVector<TString> FilterGroupIds;
     TString Filter;
+    std::unordered_set<TString> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
-    THashSet<TString> EffectiveFilterGroupIds;
+    std::unordered_set<ui32> FilterPDiskIds;
+    THashSet<TString> EffectiveGroupFilter;
     std::unordered_set<TNodeId> NodeIds;
     bool NeedAdditionalNodesRequests;
 
@@ -133,9 +134,9 @@ protected:
             FilterStoragePools.emplace(filterStoragePool);
         }
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
+        SplitIds(params.Get("pdisk_id"), ',', FilterPDiskIds);
         NeedAdditionalNodesRequests = !FilterNodeIds.empty();
         SplitIds(params.Get("group_id"), ',', FilterGroupIds);
-        Sort(FilterGroupIds);
         Filter = params.Get("filter");
         if (params.Get("with") == "missing") {
             With = EWith::MissingDisks;
@@ -356,6 +357,14 @@ public:
         for (auto& vDiskStateInfo : *(vDiskInfo.MutableVDiskStateInfo())) {
             vDiskStateInfo.SetNodeId(nodeId);
             VDiskId2vDiskStateInfo[VDiskIDFromVDiskID(vDiskStateInfo.GetVDiskId())] = &vDiskStateInfo;
+
+            bool isNodeIdValid = FilterNodeIds.empty() || FilterNodeIds.contains(nodeId);
+            bool isPDiskIdValid = FilterNodeIds.empty() || FilterPDiskIds.empty() || FilterPDiskIds.contains(vDiskStateInfo.GetPDiskId());
+            bool isGroupIdValid = FilterGroupIds.empty() || FilterGroupIds.contains(ToString(vDiskStateInfo.GetVDiskId().GetGroupID()));
+
+            if (isNodeIdValid && isPDiskIdValid && isGroupIdValid) {
+                EffectiveGroupFilter.insert(ToString(vDiskStateInfo.GetVDiskId().GetGroupID()));
+            }
         }
         RequestDone();
     }
@@ -375,10 +384,6 @@ public:
             }
             if (FilterNodeIds.empty() || FilterNodeIds.contains(info.GetNodeId())) {
                 StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
-                TString groupId(ToString(info.GetGroupID()));
-                if (FilterGroupIds.empty() || BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {
-                    EffectiveFilterGroupIds.insert(groupId);
-                }
             }
             for (const auto& vDiskNodeId : info.GetVDiskNodeIds()) {
                 Group2NodeId[info.GetGroupID()].push_back(vDiskNodeId);

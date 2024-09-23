@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
@@ -41,7 +42,7 @@ struct TEvKqpCompute {
         ui32 ScanId;
         ui32 Generation;
         TVector<TOwnedCellVec> Rows;
-        std::shared_ptr<arrow::RecordBatch> ArrowBatch;
+        std::shared_ptr<arrow::Table> ArrowBatch;
         std::vector<std::vector<ui32>> SplittedBatches;
         
         TOwnedCellVec LastKey;
@@ -124,7 +125,7 @@ struct TEvKqpCompute {
             if (pbEv->Record.HasArrowBatch()) {
                 auto batch = pbEv->Record.GetArrowBatch();
                 auto schema = NArrow::DeserializeSchema(batch.GetSchema());
-                ev->ArrowBatch = NArrow::DeserializeBatch(batch.GetBatch(), schema);
+                ev->ArrowBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({NArrow::DeserializeBatch(batch.GetBatch(), schema)}));
             }
             return ev.Release();
         }
@@ -161,7 +162,7 @@ struct TEvKqpCompute {
                         Y_DEBUG_ABORT_UNLESS(ArrowBatch != nullptr);
                         auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                         protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
-                        protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
+                        protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch, true)));
                         break;
                     }
                 }

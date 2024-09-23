@@ -1,0 +1,40 @@
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Polls create, update or delete operation status. RPC waits 35 seconds, then returns regardless if operation finished. Check 'ready' flag to see if you need to poll again",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        },{
+            "name": "id",
+            "in": "query",
+            "description": "Operation identifier from create, update or delete response",
+            "required": true,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "Ok",
+                "schema": {
+                    "$ref": "#/definitions/TOperation"
+                }
+            },
+            "default": {
+                "description": "Error",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/TError"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

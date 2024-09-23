@@ -20,12 +20,14 @@ using namespace NChunkClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TRetentionConfigPtr& obj)
+void FormatValue(TStringBuilderBase* builder, const TRetentionConfigPtr& obj, TStringBuf spec)
 {
-    static const TString NullPtrName("<nullptr>");
-    return obj
-        ? NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text).ToString()
-        : NullPtrName;
+    static const TStringBuf NullPtrName("<nullptr>");
+    if (!obj) {
+        FormatValue(builder, NullPtrName, spec);
+        return;
+    }
+    FormatValue(builder, NYson::ConvertToYsonString(obj, NYson::EYsonFormat::Text), spec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +191,7 @@ void TKeyFilterWriterConfig::Register(TRegistrar registrar)
         .Optional();
 
     registrar.Parameter("false_positive_rate", &TThis::FalsePositiveRate)
-        .InRange(0, 1.0 / (1ll << 62))
+        .InRange(1.0 / (1ll << 62), 1)
         .Default()
         .Optional();
 
@@ -270,9 +272,6 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     registrar.Parameter("column_dictionary_size", &TThis::ColumnDictionarySize)
         .GreaterThanOrEqual(NCompression::GetDictionaryCompressionCodec()->GetMinDictionarySize())
         .Default(32_KB);
-    registrar.Parameter("compression_level", &TThis::CompressionLevel)
-        .InRange(1, NCompression::GetDictionaryCompressionCodec()->GetMaxCompressionLevel())
-        .Default(NCompression::GetDictionaryCompressionCodec()->GetDefaultCompressionLevel());
     registrar.Parameter("applied_policies", &TThis::AppliedPolicies)
         .Default({
             EDictionaryCompressionPolicy::LargeChunkFirst,
@@ -286,9 +285,6 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_acceptable_compression_ratio", &TThis::MaxAcceptableCompressionRatio)
         .Default(0.7)
         .InRange(0, 1);
-    registrar.Parameter("max_decompression_blob_size", &TThis::MaxDecompressionBlobSize)
-        .GreaterThan(0)
-        .Default(64_MB);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {
@@ -312,6 +308,18 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
                 EDictionaryCompressionPolicy::None);
         }
     });
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("compression_level", &TThis::CompressionLevel)
+        .InRange(1, NCompression::GetDictionaryCompressionCodec()->GetMaxCompressionLevel())
+        .Default(NCompression::GetDictionaryCompressionCodec()->GetDefaultCompressionLevel());
+    registrar.Parameter("max_decompression_blob_size", &TThis::MaxDecompressionBlobSize)
+        .GreaterThan(0)
+        .Default(64_MB);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -519,6 +527,18 @@ void TVersionedRowDigestConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("t_digest", &TThis::TDigest)
         .DefaultNew();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TSchemalessBufferedDynamicTableWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("max_batch_size", &TThis::MaxBatchSize)
+        .Default(1000);
+    registrar.Parameter("flush_period", &TThis::FlushPeriod)
+        .Default(TDuration::Seconds(5));
+    registrar.Parameter("retry_backoff", &TThis::RetryBackoff)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

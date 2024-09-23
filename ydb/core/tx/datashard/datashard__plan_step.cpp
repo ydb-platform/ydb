@@ -63,6 +63,13 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
                     << " at tablet " << Self->TabletID() << " " << Ev->Get()->Record);
     }
 
+    // We already know that max observed step is at least this step, avoid
+    // waiting for a TEvNotifyPlanStep which would be delayed until mediator
+    // processes all acks in the same time cast bucket.
+    Self->SendAfterMediatorStepActivate(step, ctx);
+    Self->Pipeline.ActivateWaitingTxOps(ctx);
+    Self->CheckMediatorStateRestored();
+
     Self->PlanQueue.Progress(ctx);
     Self->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
     return true;

@@ -91,7 +91,9 @@ using TAsyncListDirectoryResult = NThreading::TFuture<TListDirectoryResult>;
 
 struct TMakeDirectorySettings : public TOperationRequestSettings<TMakeDirectorySettings> {};
 
-struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {};
+struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {
+    FLUENT_SETTING_DEFAULT(bool, NotExistsIsOk, false);
+};
 
 struct TDescribePathSettings : public TOperationRequestSettings<TDescribePathSettings> {};
 

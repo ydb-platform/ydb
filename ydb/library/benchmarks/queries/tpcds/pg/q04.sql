@@ -9,7 +9,7 @@ with year_total as (
        ,c_login customer_login
        ,c_email_address customer_email_address
        ,d_year dyear
-       ,sum(((ss_ext_list_price-ss_ext_wholesale_cost-ss_ext_discount_amt)+ss_ext_sales_price)/2::numeric) year_total
+       ,sum(((ss_ext_list_price-ss_ext_wholesale_cost-ss_ext_discount_amt)+ss_ext_sales_price)/2) year_total
        ,'s' sale_type
  from {{customer}}
      ,{{store_sales}}
@@ -33,7 +33,7 @@ with year_total as (
        ,c_login customer_login
        ,c_email_address customer_email_address
        ,d_year dyear
-       ,sum((((cs_ext_list_price-cs_ext_wholesale_cost-cs_ext_discount_amt)+cs_ext_sales_price)/2::numeric) ) year_total
+       ,sum((((cs_ext_list_price-cs_ext_wholesale_cost-cs_ext_discount_amt)+cs_ext_sales_price)/2) ) year_total
        ,'c' sale_type
  from {{customer}}
      ,{{catalog_sales}}
@@ -57,7 +57,7 @@ union all
        ,c_login customer_login
        ,c_email_address customer_email_address
        ,d_year dyear
-       ,sum((((ws_ext_list_price-ws_ext_wholesale_cost-ws_ext_discount_amt)+ws_ext_sales_price)/2::numeric) ) year_total
+       ,sum((((ws_ext_list_price-ws_ext_wholesale_cost-ws_ext_discount_amt)+ws_ext_sales_price)/2) ) year_total
        ,'w' sale_type
  from {{customer}}
      ,{{web_sales}}
@@ -77,7 +77,7 @@ union all
                   t_s_secyear.customer_id
                  ,t_s_secyear.customer_first_name
                  ,t_s_secyear.customer_last_name
-                 ,t_s_secyear.customer_email_address
+                 ,t_s_secyear.customer_birth_country
  from year_total t_s_firstyear
      ,year_total t_s_secyear
      ,year_total t_c_firstyear
@@ -101,17 +101,17 @@ union all
    and t_c_secyear.dyear =  1999+1
    and t_w_firstyear.dyear = 1999
    and t_w_secyear.dyear = 1999+1
-   and t_s_firstyear.year_total > 0::numeric
-   and t_c_firstyear.year_total > 0::numeric
-   and t_w_firstyear.year_total > 0::numeric
-   and case when t_c_firstyear.year_total > 0::numeric then t_c_secyear.year_total / t_c_firstyear.year_total else null::numeric end
-           > case when t_s_firstyear.year_total > 0::numeric then t_s_secyear.year_total / t_s_firstyear.year_total else null::numeric end
-   and case when t_c_firstyear.year_total > 0::numeric then t_c_secyear.year_total / t_c_firstyear.year_total else null::numeric end
-           > case when t_w_firstyear.year_total > 0::numeric then t_w_secyear.year_total / t_w_firstyear.year_total else null::numeric end
+   and t_s_firstyear.year_total > 0
+   and t_c_firstyear.year_total > 0
+   and t_w_firstyear.year_total > 0
+   and case when t_c_firstyear.year_total > 0 then t_c_secyear.year_total / t_c_firstyear.year_total else null end
+           > case when t_s_firstyear.year_total > 0 then t_s_secyear.year_total / t_s_firstyear.year_total else null end
+   and case when t_c_firstyear.year_total > 0 then t_c_secyear.year_total / t_c_firstyear.year_total else null end
+           > case when t_w_firstyear.year_total > 0 then t_w_secyear.year_total / t_w_firstyear.year_total else null end
  order by t_s_secyear.customer_id
          ,t_s_secyear.customer_first_name
          ,t_s_secyear.customer_last_name
-         ,t_s_secyear.customer_email_address
+         ,t_s_secyear.customer_birth_country
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query4.tpl

@@ -119,6 +119,7 @@ message GetTaskResult {
         string execution_id = 36;
         NFq.NConfig.TYdbStorageConfig compute_connection = 37;
         google.protobuf.Duration result_ttl = 38;
+        map<string, Ydb.TypedValue> parameters = 39;
     }
     repeated Task tasks = 1;
 }
@@ -162,6 +163,9 @@ message PingTaskRequest {
     string operation_id = 35;
     string execution_id = 36;
     NYql.NDqProto.StatusIds.StatusCode pending_status_code = 37;
+    bool dump_raw_statistics = 38;
+    repeated Ydb.ValuePair flat_stats = 39;
+    int32 current_load = 40;
 }
 
 message PingTaskResult {

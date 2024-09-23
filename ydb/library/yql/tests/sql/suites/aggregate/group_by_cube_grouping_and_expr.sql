@@ -4,7 +4,7 @@ SELECT
     key,
     subkey,
     value,
-    2 * (2 * grouping(key) + grouping(subkey)) + grouping(value) as ggg3,
+    2u * (2u * grouping(key) + grouping(subkey)) + grouping(value) as ggg3,
 FROM
     (
     SELECT

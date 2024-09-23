@@ -12,3 +12,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    oauth2_token_exchange
+)

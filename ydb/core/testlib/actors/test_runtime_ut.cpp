@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
     TTestActorRuntime::TEgg MakeEgg()
     {
         return
-            { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
+            { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
     }
 
     Y_UNIT_TEST(TestHandleEvent) {

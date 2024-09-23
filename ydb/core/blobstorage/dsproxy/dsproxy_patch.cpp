@@ -35,7 +35,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
 
     TString Buffer;
 
-    ui32 OriginalGroupId;
+    TGroupId OriginalGroupId;
     TLogoBlobID OriginalId;
     TLogoBlobID PatchedId;
     ui32 MaskForCookieBruteForcing;
@@ -104,13 +104,13 @@ public:
     TBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
-            ui64 cookie, NWilson::TTraceId traceId, TInstant now,
+            ui64 cookie, NWilson::TSpan&& span, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             bool useVPatch = false)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Patch", std::move(ev->ExecutionRelay))
-        , OriginalGroupId(ev->OriginalGroupId)
+                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
+        , OriginalGroupId(TGroupId::FromValue(ev->OriginalGroupId))
         , OriginalId(ev->OriginalId)
         , PatchedId(ev->PatchedId)
         , MaskForCookieBruteForcing(ev->MaskForCookieBruteForcing)
@@ -120,8 +120,7 @@ public:
         , Deadline(ev->Deadline)
         , Orbit(std::move(ev->Orbit))
         , UseVPatch(useVPatch)
-    {
-    }
+    {}
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA02, "ReplyAndDie",
@@ -140,7 +139,7 @@ public:
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         ++*Mon->NodeMon->RestartPatch;
         TEvBlobStorage::TEvPatch *patch;
-        std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId, OriginalId, PatchedId,
+        std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId.GetRawId(), OriginalId, PatchedId,
                 MaskForCookieBruteForcing, std::move(Diffs), DiffCount, Deadline));
         patch->RestartCounter = counter;
         patch->Orbit = std::move(Orbit);
@@ -550,7 +549,7 @@ public:
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVMovedPatch>> events;
 
         ui64 cookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();
-        events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId, Info->GroupID,
+        events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId.GetRawId(), Info->GroupID.GetRawId(),
                 OriginalId, PatchedId, vDisk, false, cookie, Deadline));
         events.back()->Orbit = std::move(Orbit);
         for (ui64 diffIdx = 0; diffIdx < DiffCount; ++diffIdx) {
@@ -789,7 +788,7 @@ public:
         bool result = true;
         if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
             result = TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(OriginalId, &truePatchedBlobId,
-                    MaskForCookieBruteForcing, OriginalGroupId, Info->GroupID);
+                    MaskForCookieBruteForcing, OriginalGroupId.GetRawId(), Info->GroupID.GetRawId());
             if (result && PatchedId != truePatchedBlobId) {
                 TStringBuilder str;
                 str << "PatchedId wasn't from TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement;";
@@ -870,7 +869,12 @@ IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroup
         ui64 cookie, NWilson::TTraceId traceId, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
         bool useVPatch) {
-    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Patch");
+    if (span) {
+        span.Attribute("event", ev->ToString());
+    }
+
+    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(span), now,
         storagePoolCounters, useVPatch);
 }
 

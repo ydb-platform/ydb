@@ -510,6 +510,7 @@ message TCoreAttr {
 
 message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
+    optional TActivationPercentage QPlayerActivation = 2;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////
@@ -589,8 +590,13 @@ message TGenericClusterConfig {
 }
 
 message TGenericConnectorConfig {
-    // Connector instance network endpoint
+    // There are two options to configure Connector network address:
+    // 1. Set address statically via `Endpoint.Host` and `Endpoint.Port`;
+    // 2. Ask YDB to set `Endpoint.Port` to the value of expression `./ydbd --ic-port + OffsetFromIcPort`,
+    // while Connector's hostname will still be taken from `Endpoint.Host` (with 'localhost' as a default value).
     optional NYql.NConnector.NApi.TEndpoint Endpoint = 3;
+    optional uint32 OffsetFromIcPort = 6;
+
     // If true, Connector GRPC Client will use TLS encryption.
     optional bool UseSsl = 4;
     // Path to the custom CA certificate to verify Connector's certs.
@@ -608,8 +614,13 @@ message TGenericGatewayConfig {
     // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;
 
-    // MDB API endpoint (do not fill in case of on-prem deployment)
+    // MDB API endpoint (no need to fill in case of on-prem deployment).
     optional string MdbGateway = 4;
+
+    // YDB MVP API endpoint (no need to fill in case of on-prem deployment).
+    // Expected format:
+    // [http|https]://host:port/ydbc/cloud-prod/
+    optional string YdbMvpEndpoint = 7;
 
     repeated TAttr DefaultSettings = 6;
 
@@ -619,7 +630,8 @@ message TGenericGatewayConfig {
 /////////////////////////////// Db Resolver ///////////////////////////////////
 
 message TDbResolverConfig {
-    // Ydb / Yds MVP endpoint. Expected format: 
+    // Ydb / Yds MVP endpoint.
+    // Expected format: 
     // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 2;
 }

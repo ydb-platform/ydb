@@ -113,6 +113,8 @@ namespace NTabletFlatExecutor {
     XX(COMPACTION_READ_CACHE_MISSES, "CompactionReadCacheMisses") \
     XX(COMPACTION_READ_LOAD_BYTES, "CompactionReadLoadBytes") \
     XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \
+    XX(TX_BYTES_CACHED, "TxCachedBytes") \
+    XX(TX_BYTES_WASTED, "TxWastedBytes") \
 
 // don't change order!
 #define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \

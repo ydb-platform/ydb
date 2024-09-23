@@ -52,6 +52,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
         InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
     }
+    else if (TCoAsList::Match(input.Get())){
+        InferStatisticsForAsList(input, TypeCtx);
+    }
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {

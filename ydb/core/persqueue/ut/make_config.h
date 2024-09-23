@@ -20,7 +20,8 @@ struct TCreateConsumerParams {
 
 NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
                                       const TVector<TCreateConsumerParams>& consumers,
-                                      ui32 partitionsCount = 1);
+                                      ui32 partitionsCount = 1,
+                                      NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
 
 NKikimrPQ::TBootstrapConfig MakeBootstrapConfig();
 

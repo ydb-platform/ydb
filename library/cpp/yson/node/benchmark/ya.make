@@ -2,6 +2,7 @@ G_BENCHMARK()
 
 SRCS(
     reserve.cpp
+    saveload.cpp
 )
 
 PEERDIR(

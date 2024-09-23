@@ -5,6 +5,11 @@
 namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status) {
+        TBoxId boxId = cmd.GetBoxId();
+        if (!boxId && Boxes.Get().size() == 1) {
+            boxId = Boxes.Get().begin()->first;
+        }
+
         ui64 storagePoolId = cmd.GetStoragePoolId();
         if (!storagePoolId) {
             ui64 maxPoolId = 0;
@@ -12,8 +17,8 @@ namespace NKikimr::NBsController {
             // TODO: optimize linear search
 
             const auto &pools = StoragePools.Get();
-            for (auto it = pools.lower_bound({cmd.GetBoxId(), 0});
-                 it != pools.end() && std::get<0>(it->first) == cmd.GetBoxId();
+            for (auto it = pools.lower_bound({boxId, 0});
+                 it != pools.end() && std::get<0>(it->first) == boxId;
                  ++it) {
                 const ui64 id = std::get<1>(it->first);
                 const TStoragePoolInfo &info = it->second;
@@ -39,7 +44,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        const TBoxStoragePoolId id(cmd.GetBoxId(), storagePoolId);
+        const TBoxStoragePoolId id(boxId, storagePoolId);
         const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
 
         TStoragePoolInfo storagePool;
@@ -90,12 +95,12 @@ namespace NKikimr::NBsController {
         storagePool.RandomizeGroupMapping = cmd.GetRandomizeGroupMapping();
 
         for (const auto &userId : cmd.GetUserId()) {
-            storagePool.UserIds.emplace(cmd.GetBoxId(), storagePoolId, userId);
+            storagePool.UserIds.emplace(boxId, storagePoolId, userId);
         }
 
         for (const auto &item : cmd.GetPDiskFilter()) {
             TStoragePoolInfo::TPDiskFilter filter;
-            filter.BoxId = cmd.GetBoxId();
+            filter.BoxId = boxId;
             filter.StoragePoolId = storagePoolId;
 
             bool hasTypeProperty = false;
@@ -330,7 +335,7 @@ namespace NKikimr::NBsController {
 
             auto *existing = sp->MutableExistingGroups();
             for (TGroupId groupId : kv.second) {
-                existing->AddGroupId(groupId);
+                existing->AddGroupId(groupId.GetRawId());
             }
         }
 
@@ -342,11 +347,11 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
         // find matching TVSlotInfo entity
-        const TVDiskID vdiskId(cmd.GetGroupId(), cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(),
-            cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
+        const TVDiskID vdiskId(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId), cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(),
+                               cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
 
         // validate group and generation
-        const TGroupInfo *group = Groups.Find(cmd.GetGroupId());
+        const TGroupInfo *group = Groups.Find(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId));
         if (!group) {
             throw TExError() << "GroupId# " << cmd.GetGroupId() << " not found";
         } else if (group->Generation != cmd.GetGroupGeneration()) {
@@ -405,7 +410,8 @@ namespace NKikimr::NBsController {
 
         // create a list of groups to be moved
         const auto& m = cmd.GetExplicitGroupId();
-        TVector<TGroupId> groups(m.begin(), m.end());
+        TVector<TGroupId> groups;
+        std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
         if (!groups) {
             for (auto it = storagePoolGroups.lower_bound(originId); it != storagePoolGroups.end() && it->first == originId; ++it) {
                 groups.push_back(it->second);
@@ -441,21 +447,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadSettings& /*cmd*/, TStatus& status) {
-        auto settings = status.MutableSettings();
-
-        settings->AddDefaultMaxSlots(Self.DefaultMaxSlots);
-        settings->AddEnableSelfHeal(Self.SelfHealEnable);
-        settings->AddEnableDonorMode(Self.DonorMode);
-        settings->AddScrubPeriodicitySeconds(Self.ScrubPeriodicity.Seconds());
-        settings->AddPDiskSpaceMarginPromille(Self.PDiskSpaceMarginPromille);
-        settings->AddGroupReserveMin(Self.GroupReserveMin);
-        settings->AddGroupReservePartPPM(Self.GroupReservePart);
-        settings->AddMaxScrubbedDisksAtOnce(Self.MaxScrubbedDisksAtOnce);
-        settings->AddPDiskSpaceColorBorder(Self.PDiskSpaceColorBorder);
-        settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizerEnabled);
-        // TODO:
-        // settings->AddSerialManagementStage(Self.SerialManagementStage);
-        settings->AddAllowMultipleRealmsOccupation(Self.AllowMultipleRealmsOccupation);
+        Self.SerializeSettings(status.MutableSettings());
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
@@ -525,6 +517,8 @@ namespace NKikimr::NBsController {
         });
 
         if (!virtualGroupsOnly) {
+            const TMonotonic mono = TActivationContext::Monotonic();
+
             // apply static group
             for (const auto& [pdiskId, pdisk] : StaticPDisks) {
                 if (PDisks.Find(pdiskId)) {
@@ -553,7 +547,7 @@ namespace NKikimr::NBsController {
             for (const auto& [vslotId, vslot] : StaticVSlots) {
                 auto *x = pb->AddVSlot();
                 vslotId.Serialize(x->MutableVSlotId());
-                x->SetGroupId(vslot.VDiskId.GroupID);
+                x->SetGroupId(vslot.VDiskId.GroupID.GetRawId());
                 x->SetGroupGeneration(vslot.VDiskId.GroupGeneration);
                 x->SetFailRealmIdx(vslot.VDiskId.FailRealm);
                 x->SetFailDomainIdx(vslot.VDiskId.FailDomain);
@@ -564,11 +558,11 @@ namespace NKikimr::NBsController {
                     x->MutableVDiskMetrics()->ClearVDiskId();
                 }
                 x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
+                x->SetReady(vslot.ReadySince <= mono);
             }
             if (const auto& s = Self.StorageConfig; s.HasBlobStorageConfig()) {
                 if (const auto& bsConfig = s.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                     const auto& ss = bsConfig.GetServiceSet();
-                    const TMonotonic mono = TActivationContext::Monotonic();
                     for (const auto& group : ss.GetGroups()) {
                         auto *x = pb->AddGroup();
                         x->SetGroupId(group.GetGroupID());
@@ -662,6 +656,7 @@ namespace NKikimr::NBsController {
         for (auto& [nodeId, node] : nodes) {
             pb->AddNode()->Swap(&node);
         }
+        Self.SerializeSettings(pb->MutableSettings());
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& /*status*/) {
@@ -687,7 +682,6 @@ namespace NKikimr::NBsController {
         DestroyVSlot(vslotId);
     }
 
-
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& /*status*/) {
         // first, find matching vslot
         const TVSlotId& vslotId = cmd.GetVSlotId();
@@ -704,7 +698,7 @@ namespace NKikimr::NBsController {
 
         TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
         vslot->Mood = TMood::Wipe;
-        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
@@ -712,10 +706,10 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
         ui32 groupId = cmd.GetGroupId();
-        SanitizingRequests.emplace(groupId);
-        const TGroupInfo *group = Groups.Find(groupId);
+        SanitizingRequests.emplace(TGroupId::FromValue(groupId));
+        const TGroupInfo *group = Groups.Find(TGroupId::FromValue(groupId));
         if (group) {
-            Fit.PoolsAndGroups.emplace(group->StoragePoolId, groupId);
+            Fit.PoolsAndGroups.emplace(group->StoragePoolId, TGroupId::FromValue(groupId));
         } else {
             throw TExGroupNotFound(groupId);
         }
@@ -750,7 +744,7 @@ namespace NKikimr::NBsController {
 
         TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
         vslot->Mood = targetMood;
-        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();

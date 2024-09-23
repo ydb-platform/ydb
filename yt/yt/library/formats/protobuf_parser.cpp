@@ -441,7 +441,7 @@ private:
     {
         const auto inRoot = (depth == 0);
 
-        auto skipElements = [&](int count) {
+        auto skipElements = [&] (int count) {
             if (inRoot) {
                 return;
             }
@@ -484,7 +484,7 @@ private:
                 OutputChild(fieldRangeBegin, fieldIt, childDescription, depth);
                 lastOutputStructFieldIndex = structFieldIndex;
             } else {
-                auto isStructFieldPresentOrLegallyMissing = [&] () {
+                auto isStructFieldPresentOrLegallyMissing = [&] {
                     if (ShouldOutputValueImmediately(inRoot, childDescription)) {
                         if (RootChildOutputFlags_[childIndex]) {
                             // The value is already output.

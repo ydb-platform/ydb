@@ -35,6 +35,10 @@ TExecFunc arrow_event_trigger_out() { return MakeIndirectExec<true, false>(&even
 TExecFunc arrow_fdw_handler_in() { return MakeIndirectExec<false, true>(&fdw_handler_in); }
 TExecFunc arrow_fdw_handler_out() { return MakeIndirectExec<true, false>(&fdw_handler_out); }
 TExecFunc arrow_ginhandler() { return MakeIndirectExec<true, true>(&ginhandler); }
+TExecFunc arrow_hypothetical_cume_dist_final() { return MakeIndirectExec<false, true>(&hypothetical_cume_dist_final); }
+TExecFunc arrow_hypothetical_dense_rank_final() { return MakeIndirectExec<false, true>(&hypothetical_dense_rank_final); }
+TExecFunc arrow_hypothetical_percent_rank_final() { return MakeIndirectExec<false, true>(&hypothetical_percent_rank_final); }
+TExecFunc arrow_hypothetical_rank_final() { return MakeIndirectExec<false, true>(&hypothetical_rank_final); }
 TExecFunc arrow_index_am_handler_in() { return MakeIndirectExec<false, true>(&index_am_handler_in); }
 TExecFunc arrow_index_am_handler_out() { return MakeIndirectExec<true, false>(&index_am_handler_out); }
 TExecFunc arrow_internal_in() { return MakeIndirectExec<false, true>(&internal_in); }
@@ -44,6 +48,7 @@ TExecFunc arrow_language_handler_out() { return MakeIndirectExec<true, false>(&l
 TExecFunc arrow_mode_final() { return MakeIndirectExec<false, true>(&mode_final); }
 TExecFunc arrow_multirangesel() { return MakeIndirectExec<true, true>(&multirangesel); }
 TExecFunc arrow_ordered_set_transition() { return MakeIndirectExec<false, true>(&ordered_set_transition); }
+TExecFunc arrow_ordered_set_transition_multi() { return MakeIndirectExec<false, true>(&ordered_set_transition_multi); }
 TExecFunc arrow_percentile_cont_float8_final() { return MakeIndirectExec<false, true>(&percentile_cont_float8_final); }
 TExecFunc arrow_percentile_cont_float8_multi_final() { return MakeIndirectExec<false, false>(&percentile_cont_float8_multi_final); }
 TExecFunc arrow_percentile_cont_interval_final() { return MakeIndirectExec<false, false>(&percentile_cont_interval_final); }

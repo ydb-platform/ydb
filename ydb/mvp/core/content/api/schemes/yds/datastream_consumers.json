@@ -1,0 +1,78 @@
+{
+  "get": {
+    "consumes": [
+      "application/json"
+    ],
+    "description": "list datastream consumers",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database to update stream in",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "responses": {
+      "200": {
+        "description": "successful operation",
+        "scheam": {
+          "properties": {
+            "databaseName": {
+              "type": "string"
+            },
+            "streamName": {
+              "type": "string"
+            },
+            "consumers": {
+              "items": {
+                "properties": {
+                  "consumerName": {
+                    "type": "string"
+                  },
+                  "consumerCreationTimestamp": {
+                    "type": "number"
+                  },
+                  "consumerStatus": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "databaseId": {
+              "type": "string"
+            }
+          },
+          "type": "object",
+          "title": "simulate_datastream response"
+        }
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "list datastream consumers",
+    "tags": [
+      "YDBC"
+    ]
+  }
+}

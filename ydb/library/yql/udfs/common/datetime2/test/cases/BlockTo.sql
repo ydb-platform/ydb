@@ -9,7 +9,8 @@ insert into @t
         cast(ftzdate as TzDate) as `tzdate`,
         cast(ftzdatetime as TzDatetime) as `tzdatetime`,
         cast(ftztimestamp as TzTimestamp) as `tztimestamp`,
-        cast(null as Interval) as `interval_null`
+        cast(null as Interval) as `interval_null`,
+        -cast(finterval_1day as Interval) as `negative_1d`,
     from Input;
 
 commit;
@@ -42,6 +43,9 @@ select
     DateTime::ToMicroseconds(`tzdatetime`) as tzdatetime_to_usec,
     DateTime::ToMicroseconds(`tztimestamp`) as tztimestamp_to_usec,
 
-    DateTime::ToDays(`interval_null`) as interval_null
+    DateTime::ToDays(`interval_null`) as interval_null,
+
+    /* Overflow test */
+    DateTime::ToDays(`negative_1d`) as negative_1d,
 from @t;
 

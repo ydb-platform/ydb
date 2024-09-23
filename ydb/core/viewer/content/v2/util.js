@@ -247,7 +247,7 @@ PoolColors.prototype.getPoolColor = function(usage) {
     var G = a.G + ((usage - a.usage) / (b.usage - a.usage)) * (b.G - a.G);
     var B = a.B + ((usage - a.usage) / (b.usage - a.usage)) * (b.B - a.B);
     return 'rgb(' + R.toFixed() + ',' + G.toFixed() + ',' + B.toFixed() + ')';
-}
+};
 
 //code.iamkate.com
 function Queue(){var a=[],b=0;this.getLength=function(){return a.length-b};this.isEmpty=function(){return 0==a.length};this.enqueue=function(b){a.push(b)};this.dequeue=function(){if(0!=a.length){var c=a[b];2*++b>=a.length&&(a=a.slice(b),b=0);return c}};this.peek=function(){return 0<a.length?a[b]:void 0}};
@@ -265,15 +265,15 @@ UpdateQueue.prototype.enqueue = function(item) {
     } else {
         this.updateQueue.enqueue(item);
     }
-}
+};
 
 UpdateQueue.prototype.isEmpty = function() {
     return this.updateQueue.isEmpty();
-}
+};
 
 UpdateQueue.prototype.getLength = function() {
     return this.updateQueue.getLength();
-}
+};
 
 UpdateQueue.prototype.runUpdateQueue = function() {
     if (!this.updateQueue.isEmpty()) {
@@ -287,10 +287,22 @@ UpdateQueue.prototype.runUpdateQueue = function() {
         }
     }
     setTimeout(this.runUpdateQueue.bind(this), 100);
-}
+};
 
 UpdateQueue.prototype.flushUpdateQueue = function() {
     while (!this.updateQueue.isEmpty()) {
         this.onUpdate(this.updateQueue.dequeue());
     }
-}
+};
+
+(function() {
+    // Workaround for Safari. Always attach tooltip to <body>
+    var originalTooltipFn = $.fn.tooltip;
+    $.fn.tooltip = function() {
+        var arg0 = arguments[0];
+        if ('object' == typeof arg0) {
+            arg0['container'] = 'body';
+        }
+        return originalTooltipFn.apply(this, arguments);
+    };
+})();

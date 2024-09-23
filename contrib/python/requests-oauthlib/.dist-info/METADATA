@@ -1,19 +1,16 @@
 Metadata-Version: 2.1
 Name: requests-oauthlib
-Version: 1.3.1
+Version: 2.0.0
 Summary: OAuthlib authentication support for Requests.
 Home-page: https://github.com/requests/requests-oauthlib
 Author: Kenneth Reitz
 Author-email: me@kennethreitz.com
 License: ISC
-Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Natural Language :: English
 Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.4
 Classifier: Programming Language :: Python :: 3.5
@@ -21,20 +18,23 @@ Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*
+Requires-Python: >=3.4
 Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: oauthlib (>=3.0.0)
-Requires-Dist: requests (>=2.0.0)
+Requires-Dist: oauthlib >=3.0.0
+Requires-Dist: requests >=2.0.0
 Provides-Extra: rsa
-Requires-Dist: oauthlib[signedtoken] (>=3.0.0) ; extra == 'rsa'
+Requires-Dist: oauthlib[signedtoken] >=3.0.0 ; extra == 'rsa'
 
 Requests-OAuthlib |build-status| |coverage-status| |docs|
 =========================================================
 
-This project provides first-class OAuth library support for `Requests <http://python-requests.org>`_.
+This project provides first-class OAuth library support for `Requests <https://requests.readthedocs.io>`_.
 
 The OAuth 1 workflow
 --------------------
@@ -79,7 +79,7 @@ To install requests and requests_oauthlib you can use pip:
 
 .. code-block:: bash
 
-    $ pip install requests requests_oauthlib
+    pip install requests requests-oauthlib
 
 .. |build-status| image:: https://github.com/requests/requests-oauthlib/actions/workflows/run-tests.yml/badge.svg
    :target: https://github.com/requests/requests-oauthlib/actions
@@ -94,10 +94,37 @@ To install requests and requests_oauthlib you can use pip:
 History
 -------
 
+v2.0.0 (22 March 2024)
+++++++++++++++++++++++++
+
+Full set of changes are in [github](https://github.com/requests/requests-oauthlib/milestone/4?closed=1).
+
+Additions & changes:
+
+- ``OAuth2Session`` now correctly uses the ``self.verify`` value if ``verify``
+  is not overridden in ``fetch_token`` and ``refresh_token``. Fixes `#404
+  <https://github.com/requests/requests-oauthlib/issues/404>`_.
+- ``OAuth2Session`` constructor now uses its ``client.scope`` when a ``client``
+  is provided and ``scope`` is not overridden. Fixes `#408
+  <https://github.com/requests/requests-oauthlib/issues/408>`_
+- Add ``refresh_token_request`` and ``access_token_request`` compliance hooks
+- Add PKCE support and Auth0 example
+- Add support for Python 3.8-3.12
+- Remove support of Python 2.x, <3.7
+- Migrated to Github Action
+- Updated dependencies
+- Cleanup some docs and examples
+
+v1.4.0 (27 Feb 2024)
+++++++++++++++++++++++++
+
+- Version 2.0.0 published initially as 1.4.0, it was yanked eventually.
+
 v1.3.1 (21 January 2022)
 ++++++++++++++++++++++++
 
 - Add initial support for OAuth Mutual TLS (draft-ietf-oauth-mtls)
+- Removed outdated LinkedIn Compliance Fixes
 - Add eBay compliance fix
 - Add Spotify OAuth 2 Tutorial
 - Add support for python 3.8, 3.9
@@ -241,5 +268,3 @@ v0.4.0 (29 September 2013)
 - OAuth1 now updates r.headers instead of replacing it with non case insensitive dict
 - Remove last use of Response.content (in OAuth1Session). #44.
 - State param can now be supplied in OAuth2Session.authorize_url
-
-

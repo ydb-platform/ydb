@@ -60,6 +60,19 @@ public:
         }
     }
 
+    TEnv(const TFeatureFlags& featureFlags, bool init = true)
+        : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
+            .SetDomainName(DomainName)
+            .SetFeatureFlags(featureFlags)
+        )
+        , Server(Settings)
+        , Client(Settings)
+    {
+        if (init) {
+            Init();
+        }
+    }
+
     explicit TEnv(const TString& builtin)
         : TEnv(false)
     {
@@ -111,6 +124,11 @@ public:
     }
 
     template <typename... Args>
+    auto ModifyOwner(Args&&... args) {
+        return Client.ModifyOwner(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     auto Describe(Args&&... args) {
         return Client.Ls(std::forward<Args>(args)...);
     }
@@ -129,11 +147,20 @@ public:
         return TPathId(self.GetSchemeshardId(), self.GetPathId());
     }
 
+    ui64 GetSchemeshardId(const TString& path) {
+        return GetPathId(path).OwnerId;
+    }
+
     template <typename... Args>
     auto CreateTable(Args&&... args) {
         return Client.CreateTable(std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    auto CreateTableWithIndex(Args&&... args) {
+        return Client.CreateTableWithUniformShardedIndex(std::forward<Args>(args)...);
+    }
+    
     void SendAsync(const TActorId& recipient, IEventBase* ev) {
         Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
     }

@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -73,11 +74,176 @@ NLs::TCheckFunc LsCheckSubDomainParamsInMassiveCase(const TString name = "",
     };
 }
 
-NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool value = true, TString msg = TString()) {
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(
+    bool expectExceeded = true,
+    const TString& debugHint = ""
+) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         auto& desc = record.GetPathDescription().GetDomainDescription();
-        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetDomainState().GetDiskQuotaExceeded(), value, msg);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            desc.GetDomainState().GetDiskQuotaExceeded(),
+            expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+        );
     };
+}
+
+enum class EDiskUsageStatus {
+    AboveHardQuota,
+    InBetween,
+    BelowSoftQuota,
+};
+
+template <>
+void Out<EDiskUsageStatus>(IOutputStream& o, EDiskUsageStatus status) {
+    o << static_cast<int>(status);
+}
+
+struct TQuotasPair {
+    ui64 HardQuota = 0;
+    ui64 SoftQuota = 0;
+};
+
+TMap<TString, EDiskUsageStatus> CheckStoragePoolsQuotas(const THashMap<TString, ui64>& storagePoolsUsage,
+                                                        const THashMap<TString, TQuotasPair>& storagePoolsQuotas
+) {
+    TMap<TString, EDiskUsageStatus> exceeders;
+    for (const auto& [poolKind, totalSize] : storagePoolsUsage) {
+        if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
+            if (quota->HardQuota && totalSize > quota->HardQuota) {
+                exceeders.emplace(poolKind, EDiskUsageStatus::AboveHardQuota);
+            } else if (quota->SoftQuota && totalSize >= quota->SoftQuota) {
+                exceeders.emplace(poolKind, EDiskUsageStatus::InBetween);
+            }
+        }
+    }
+    return exceeders;
+}
+
+ui64 GetTotalDiskUsage(const NKikimrSubDomains::TDiskSpaceUsage& usage) {
+    const auto& tables = usage.GetTables();
+    const auto& topics = usage.GetTopics();
+    return tables.GetTotalSize() + topics.GetAccountSize();
+}
+
+constexpr const char* EntireDatabaseTag = "entire_database";
+
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(
+    const TMap<TString, EDiskUsageStatus>& expectedExceeders,
+    const TString& debugHint = ""
+) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& desc = record.GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            desc.GetDomainState().GetDiskQuotaExceeded(),
+            !expectedExceeders.empty(),
+            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+        );
+
+        if (!expectedExceeders.empty()) {
+            const auto& receivedUsage = desc.GetDiskSpaceUsage();
+            THashMap<TString, ui64> parsedUsage;
+            for (const auto& poolUsage : receivedUsage.GetStoragePoolsUsage()) {
+                parsedUsage.emplace(poolUsage.GetPoolKind(),
+                                    poolUsage.GetDataSize() + poolUsage.GetIndexSize()
+                );
+            }
+            UNIT_ASSERT_C(!parsedUsage.contains(EntireDatabaseTag), EntireDatabaseTag << " is reserved");
+            parsedUsage.emplace(EntireDatabaseTag, GetTotalDiskUsage(receivedUsage));
+
+            const auto& receivedQuotas = desc.GetDatabaseQuotas();
+            THashMap<TString, TQuotasPair> parsedQuotas;
+            for (const auto& poolQuotas : receivedQuotas.storage_quotas()) {
+                parsedQuotas.emplace(poolQuotas.unit_kind(),
+                                     TQuotasPair{poolQuotas.data_size_hard_quota(),
+                                                 poolQuotas.data_size_soft_quota()
+                                     }
+                );
+            }
+            UNIT_ASSERT_C(!parsedQuotas.contains(EntireDatabaseTag), EntireDatabaseTag << " is reserved");
+            parsedQuotas.emplace(EntireDatabaseTag,
+                                 TQuotasPair{receivedQuotas.data_size_hard_quota(),
+                                             receivedQuotas.data_size_soft_quota()
+                                 }
+            );
+            
+            TMap<TString, EDiskUsageStatus> exceeders = CheckStoragePoolsQuotas(parsedUsage, parsedQuotas);
+            UNIT_ASSERT_VALUES_EQUAL_C(exceeders, expectedExceeders,
+                debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+            );
+        }
+    };
+}
+
+void CheckQuotaExceedance(TTestActorRuntime& runtime,
+                          ui64 schemeShard,
+                          const TString& pathToSubdomain,
+                          bool expectExceeded,
+                          const TString& debugHint = ""
+) {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain),
+                       { LsCheckDiskQuotaExceeded(expectExceeded, debugHint) }
+    );
+}
+
+void CheckQuotaExceedance(TTestActorRuntime& runtime,
+                          ui64 schemeShard,
+                          const TString& pathToSubdomain,
+                          const TMap<TString, EDiskUsageStatus>& expectedExceeders,
+                          const TString& debugHint = ""
+) {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain),
+                       { LsCheckDiskQuotaExceeded(expectedExceeders, debugHint) }
+    );
+}
+
+TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
+                             ui64 schemeShard,
+                             const TString& path
+) {
+    TVector<ui64> shards;
+    const auto tableDescription = DescribePath(runtime, schemeShard, path, true);
+    for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
+        shards.emplace_back(part.GetDatashardId());
+    }
+
+    return shards;
+}
+
+TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
+    const auto response = Navigate(runtime, path);
+    return response->ResultSet.at(0).TableId;
+}
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 datashardId, ui64 minPartCount = 0) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& event) {
+            const auto& record = event->Get()->Record;
+            if (record.GetDatashardId() == datashardId && record.GetTableStats().GetPartCount() >= minPartCount) {
+                stats = record;
+                captured = true;
+            }
+        }
+    );
+
+    for (int i = 0; i < 5 && !captured; ++i) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() { return captured; };
+        runtime.DispatchEvents(options, TDuration::Seconds(5));
+    }
+
+    observer.Remove();
+
+    UNIT_ASSERT(captured);
+
+    return stats;
+}
+
+void CompactTableAndCheckResult(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
+    const auto compactionResult = CompactTable(runtime, shardId, tableId);
+    UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
@@ -3192,3 +3358,344 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
+
+#define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
+
+    Y_UNIT_TEST_FLAG(DisableWritesToDatabase, IsExternalSubdomain) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsDataSizeResolution = 1;
+        NDataShard::gDbStatsRowCountResolution = 1;
+
+        ui64 txId = 100;
+
+        // step 1: create a subdomain with a quoted storage pool
+        constexpr const char* databaseDescription = R"(
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "unquoted_storage_pool"
+                Kind: "unquoted_storage_pool_kind"
+            }
+            StoragePools {
+                Name: "quoted_storage_pool"
+                Kind: "quoted_storage_pool_kind"
+            }
+            DatabaseQuotas {
+                storage_quotas {
+                    unit_kind: "quoted_storage_pool_kind"
+                    data_size_hard_quota: 1
+                }
+            }
+        )";
+        if (IsExternalSubdomain) {
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                    Name: "SomeDatabase"
+                )"
+            );
+            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                    Name: "SomeDatabase"
+                    ExternalSchemeShard: true
+                )" << databaseDescription
+            );
+        } else {
+            TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                    Name: "SomeDatabase"
+                )" << databaseDescription
+            );
+        }
+        env.TestWaitNotification(runtime, {txId - 1, txId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/SomeDatabase"), {
+                NLs::PathExist,
+                IsExternalSubdomain ? NLs::IsExternalSubDomain("SomeDatabase") : NLs::IsSubDomain("SomeDatabase"),
+                LsCheckDiskQuotaExceeded(false, DEBUG_HINT)
+            }
+        );
+        ui64 tenantSchemeShard = TTestTxConfig::SchemeShard;
+        if (IsExternalSubdomain) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/SomeDatabase"), {
+                    NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+                }
+            );
+        }
+
+        // step 2: create a table inside the subdomain
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", R"(
+                Name: "SomeTable"
+                Columns { Name: "key"   Type: "Uint32" FamilyName: "default"}
+                Columns { Name: "value" Type: "Utf8"   FamilyName: "quoted_family"}
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Name: "default"
+                        StorageConfig {
+                            SysLog { PreferredPoolKind: "unquoted_storage_pool_kind" }
+                            Log { PreferredPoolKind: "unquoted_storage_pool_kind" }
+                            Data { PreferredPoolKind: "unquoted_storage_pool_kind" }
+                        }
+                    }
+                    ColumnFamilies {
+                        Name: "quoted_family"
+                        StorageConfig {
+                            Data { PreferredPoolKind: "quoted_storage_pool_kind" }
+                        }
+                    }
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        // step 3: insert data into the table
+        const auto shards = GetTableShards(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase/SomeTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        UpdateRow(runtime, "SomeTable", 1, "some_value_for_the_key", shards[0]);
+        {
+            const auto tableStats = WaitTableStats(runtime, shards[0]).GetTableStats();
+            // channels' usage statistics appears only after a table compaction 
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.ChannelsSize(), 0, tableStats.DebugString());
+        }
+        CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        // step 4: compact the table (statistics by channels does not appear in the messages from datashards otherwise)
+        const auto tableId = ResolveTableId(runtime, "/MyRoot/SomeDatabase/SomeTable");
+        CompactTableAndCheckResult(runtime, shards[0], tableId);
+        {
+            const auto tableStats = WaitTableStats(runtime, shards[0]).GetTableStats();
+            UNIT_ASSERT_GT_C(tableStats.ChannelsSize(), 0, tableStats.DebugString());
+        }
+        CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        // step 5: drop the table
+        TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    Y_UNIT_TEST_FLAG(QuoteNonexistentPool, IsExternalSubdomain) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        
+        ui64 txId = 100;
+
+        constexpr const char* databaseDescription = R"(
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            DatabaseQuotas {
+                storage_quotas {
+                    unit_kind: "nonexistent_storage_kind"
+                    data_size_hard_quota: 1
+                }
+            }
+        )";
+        if (IsExternalSubdomain) {
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                    Name: "SomeDatabase"
+                )"
+            );
+            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                    Name: "SomeDatabase"
+                    ExternalSchemeShard: true
+                )" << databaseDescription,
+                {{ NKikimrScheme::StatusInvalidParameter }}
+            );
+        } else {
+            TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                    Name: "SomeDatabase"
+                )"
+            );
+            TestAlterSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                    Name: "SomeDatabase"
+                )" << databaseDescription,
+                {{ NKikimrScheme::StatusInvalidParameter }}
+            );
+        }
+        env.TestWaitNotification(runtime, {txId - 1, txId});
+    }
+
+    // This test might start failing, because disk space usage of the created table might change
+    // due to changes in the storage implementation.
+    // To fix the test you need to update canonical quotas and / or batch sizes.
+    Y_UNIT_TEST_FLAG(DifferentQuotasInteraction, IsExternalSubdomain) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
+        
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsDataSizeResolution = 1;
+        NDataShard::gDbStatsRowCountResolution = 1;
+
+        ui64 txId = 100;
+
+        // Warning: calculated empirically, might need an update if the test fails.
+        // Test scenario that expects these particular quotas is described in the comments below.
+        const TString canonicalQuotas = Sprintf(R"(
+                DatabaseQuotas {
+                    data_size_hard_quota: %d
+                    data_size_soft_quota: %d
+                    storage_quotas {
+                        unit_kind: "fast_kind"
+                        data_size_hard_quota: %d
+                        data_size_soft_quota: %d
+                    }
+                    storage_quotas {
+                        unit_kind: "large_kind"
+                        data_size_hard_quota: %d
+                        data_size_soft_quota: %d
+                    }
+                }
+            )", 2800, 2200, 600, 500, 2200, 1700
+        );
+
+        // step 1: create a subdomain with a quoted storage pool
+        const TString databaseDescription = TStringBuilder() << R"(
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "fast"
+                Kind: "fast_kind"
+            }
+            StoragePools {
+                Name: "large"
+                Kind: "large_kind"
+            }
+        )" << canonicalQuotas;
+
+        if (IsExternalSubdomain) {
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                    Name: "SomeDatabase"
+                )"
+            );
+            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                    Name: "SomeDatabase"
+                    ExternalSchemeShard: true
+                )" << databaseDescription
+            );
+        } else {
+            TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                    Name: "SomeDatabase"
+                )" << databaseDescription
+            );
+        }
+        env.TestWaitNotification(runtime, {txId - 1, txId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/SomeDatabase"), {
+                NLs::PathExist,
+                IsExternalSubdomain ? NLs::IsExternalSubDomain("SomeDatabase") : NLs::IsSubDomain("SomeDatabase"),
+                LsCheckDiskQuotaExceeded(false, DEBUG_HINT)
+            }
+        );
+        ui64 tenantSchemeShard = TTestTxConfig::SchemeShard;
+        if (IsExternalSubdomain) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/SomeDatabase"), {
+                    NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+                }
+            );
+        }
+
+        // step 2: create a table inside the subdomain
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", R"(
+                Name: "SomeTable"
+                Columns { Name: "key"   Type: "Uint32" FamilyName: "default"}
+                Columns { Name: "value" Type: "Utf8"   FamilyName: "large"}
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Name: "default"
+                        StorageConfig {
+                            SysLog { PreferredPoolKind: "fast_kind" }
+                            Log { PreferredPoolKind: "fast_kind" }
+                            Data { PreferredPoolKind: "fast_kind" }
+                        }
+                    }
+                    ColumnFamilies {
+                        Name: "large"
+                        StorageConfig {
+                            Data { PreferredPoolKind: "large_kind" }
+                        }
+                    }
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        // step 3: insert data into the table in several batches
+        const auto shards = GetTableShards(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase/SomeTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        const auto tableId = ResolveTableId(runtime, "/MyRoot/SomeDatabase/SomeTable");
+
+        const auto updateAndCheck = [&](ui32 rowsToUpdate,
+                                        const TString& value,
+                                        bool compact,
+                                        const TMap<TString, EDiskUsageStatus>& expectedExceeders,
+                                        const TString& debugHint = ""
+        ) {
+            for (ui32 i = 0; i < rowsToUpdate; ++i) {
+                UpdateRow(runtime, "SomeTable", i, value, shards[0]);
+            }
+            if (compact) {
+                CompactTableAndCheckResult(runtime, shards[0], tableId);
+            }
+            WaitTableStats(runtime, shards[0]);
+            CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", expectedExceeders, debugHint);
+        };
+
+        // Warning: calculated empirically, might need an update if the test fails.
+        // The logic of the test expects:
+        // batchSizes[0] <= batchSizes[1] <= batchSizes[2],
+        // because rows are never deleted, only updated.
+        const std::array<ui32, 3> batchSizes = {25, 35, bTreeIndex ? 60u : 50u};
+
+        constexpr const char* longText = "this_text_is_very_long_and_takes_a_lot_of_disk_space";
+        constexpr const char* middleLengthText = "this_text_is_significantly_shorter";
+
+        // Test scenario:
+        // 1) break only the entire database hard quota, don't break others,
+        updateAndCheck(batchSizes[0], longText, false, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        updateAndCheck(0, "", true, {}, DEBUG_HINT);
+
+        // 2) break only the large_kind hard quota, don't break other hard quotas,
+        updateAndCheck(batchSizes[1], longText, true,
+            {{"large_kind", EDiskUsageStatus::AboveHardQuota}, {EntireDatabaseTag, EDiskUsageStatus::InBetween}}, DEBUG_HINT
+        );
+        updateAndCheck(batchSizes[1], middleLengthText, true, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
+        updateAndCheck(batchSizes[1], "extra_short_text", true, {}, DEBUG_HINT);
+
+        // 3) break only the fast_kind hard quota, don't break others.
+        updateAndCheck(batchSizes[2], "shortest", true, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+
+        // step 4: drop the table
+        TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+#undef DEBUG_HINT
+
+}

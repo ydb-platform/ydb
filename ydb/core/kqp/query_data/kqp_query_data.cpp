@@ -77,14 +77,12 @@ Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMa
     return ydbResult;
 }
 
-Ydb::ResultSet* TKqpExecuterTxResult::GetTrailingYdb(google::protobuf::Arena* arena) {
+Ydb::ResultSet* TKqpExecuterTxResult::ExtractTrailingYdb(google::protobuf::Arena* arena) {
     if (!HasTrailingResult)
         return nullptr;
 
     Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
-    if (TrailingResult.rows().size() > 0) {
-        ydbResult->Swap(&TrailingResult);
-    }
+    ydbResult->Swap(&TrailingResult);
 
     return ydbResult;
 }
@@ -119,19 +117,19 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
 
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-    : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
-    , TypeEnv(Alloc)
+    : Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators()))
+    , TypeEnv(*Alloc)
     , MemInfo("TQueryData")
-    , HolderFactory(Alloc.Ref(), MemInfo, functionRegistry)
+    , HolderFactory(Alloc->Ref(), MemInfo, functionRegistry)
 {
-    Alloc.Release();
+    Alloc->Release();
     TimeProvider = timeProvider;
     RandomProvider = randomProvider;
 }
 
 TTxAllocatorState::~TTxAllocatorState()
 {
-    Alloc.Acquire();
+    Alloc->Acquire();
 }
 
 std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TTxAllocatorState::GetInternalBindingValue(
@@ -237,10 +235,10 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
 
-Ydb::ResultSet* TQueryData::GetTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
+Ydb::ResultSet* TQueryData::ExtractTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
-    return TxResults[txIndex][resultIndex].GetTrailingYdb(arena);
+    return TxResults[txIndex][resultIndex].ExtractTrailingYdb(arena);
 }
 
 
@@ -368,7 +366,7 @@ const NKikimrMiniKQL::TParams* TQueryData::GetParameterMiniKqlValue(const TStrin
 
     auto it = Params.find(name);
     if (it == Params.end()) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             const auto& [type, uv] = GetParameterUnboxedValue(name);
             NKikimrMiniKQL::TParams param;
             ExportTypeToProto(type, *param.MutableType());
@@ -390,7 +388,7 @@ const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
 
     auto it = ParamsProtobuf.find(name);
     if (it == ParamsProtobuf.end()) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             const auto& [type, uv] = GetParameterUnboxedValue(name);
 
             auto& tv = ParamsProtobuf[name];

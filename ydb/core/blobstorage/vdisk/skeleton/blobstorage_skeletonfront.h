@@ -10,7 +10,6 @@ namespace NKikimr {
 
     struct TPDiskParams;
     class TBlobStorageGroupInfo;
-    class THugeBlobCtx;
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvFrontRecoveryStatus
@@ -25,13 +24,13 @@ namespace NKikimr {
         const EPhase Phase;
         const NKikimrProto::EReplyStatus Status;
         const TIntrusivePtr<TPDiskParams> Dsk;
-        const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
+        ui32 MinREALHugeBlobInBytes;
         const TVDiskIncarnationGuid VDiskIncarnationGuid;
 
         TEvFrontRecoveryStatus(EPhase phase,
                                NKikimrProto::EReplyStatus status,
                                const TIntrusivePtr<TPDiskParams> &dsk,
-                               std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
+                               ui32 MinREALHugeBlobInBytes,
                                TVDiskIncarnationGuid vdiskIncarnationGuid);
         ~TEvFrontRecoveryStatus();
     };

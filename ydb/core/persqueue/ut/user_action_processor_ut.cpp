@@ -379,8 +379,6 @@ void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
 
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetCookie(), 1);             // SET_OFFSET_COOKIE
-
     if (matcher.Count.Defined()) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
                                  event->Record.CmdWriteSize() + event->Record.CmdDeleteRangeSize());
@@ -457,7 +455,6 @@ void TUserActionProcessorFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseSt
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(status);
-    event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }

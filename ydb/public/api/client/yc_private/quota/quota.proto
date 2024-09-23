@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.quota;
+
+// Cloud service should implement grpc service with signature
+//
+//service QuotaService {
+//  rpc Get (quota.GetQuotaRequest) returns (quota.Quota);
+//
+//  rpc BatchUpdateMetric (quota.BatchUpdateQuotaMetricsRequest) returns (google.protobuf.Empty);
+//
+//  rpc DoubleUpdateMetric(quota.DoubleUpdateQuotaMetricRequest) returns (google.protobuf.Empty);
+//
+// TODO: implementation is postponed:
+//    rpc MoveMetric (quota.MoveQuotaMetricsRequest) returns (quota.MoveQuotaMetricsResponse);
+//}
+
+message Quota {
+  string cloud_id = 1;
+  repeated QuotaMetric metrics = 2;
+}
+
+message QuotaMetric {
+  string name = 1; // formatted as <domain>.<metric>.<unit>, e.g. mdb.hdd.size
+  int64 value = 2; // [deprecated=true]; // use 'usage' field instead
+  int64 limit = 3;
+  double usage = 4;
+}
+
+message MetricLimit {
+  string name = 1;
+  int64 limit = 2;
+}
+
+message GetQuotaRequest {
+  string cloud_id = 1; // [(required) = true, (length) = "<=50"];
+}
+
+message UpdateQuotaMetricRequest {
+  string cloud_id = 1; // [(required) = true, (length) = "<=50"];
+  MetricLimit metric = 2;
+}
+
+message BatchUpdateQuotaMetricsRequest {
+  string cloud_id = 1; // [(required) = true, (length) = "<=50"];
+  repeated MetricLimit metrics = 2;
+}
+
+message MoveQuotaMetricsRequest {
+  string source_cloud_id = 1; // [(required) = true, (length) = "<=50"];
+  string destination_cloud_id = 2; // [(required) = true, (length) = "<=50"];
+  repeated MetricLimit metrics_diff = 3;
+}
+
+message MoveQuotaMetricsResponse {
+  repeated MetricLimit source_cloud_updated_metrics = 1;
+  repeated MetricLimit destination_cloud_updated_metrics = 2;
+}
+
+message DoubleUpdateQuotaMetricRequest {
+  string source_cloud_id = 1; // [(required) = true, (length) = "<=50"];
+  repeated MetricLimit known_source_metrics = 2;
+  repeated MetricLimit updated_source_metrics = 3;
+
+  string destination_cloud_id = 4; // [(required) = true, (length) = "<=50"];
+  repeated MetricLimit known_destination_metrics = 5;
+  repeated MetricLimit updated_destination_metrics = 6;
+}
+
+message GetQuotaDefaultRequest {
+}
+
+message GetQuotaDefaultResponse {
+  repeated MetricLimit metrics = 1;
+}
+
+message QuotaFailure {
+  message Violation {
+    QuotaMetric metric = 1;
+    int64 required = 2; // new value for the MetricLimit.limit, so it is: old limit + delta
+  }
+  string cloud_id = 1;
+  repeated Violation violations = 2;
+}

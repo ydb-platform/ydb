@@ -133,6 +133,7 @@
                                                                                                                     "unique1 (-\u221e, +\u221e)",
                                                                                                                     "unique2 (-\u221e, +\u221e)"
                                                                                                                 ],
+                                                                                                                "Scan": "Parallel",
                                                                                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
                                                                                                             }
                                                                                                         ],
@@ -168,6 +169,7 @@
                                                                                                     "unique1 (-\u221e, +\u221e)",
                                                                                                     "unique2 (-\u221e, +\u221e)"
                                                                                                 ],
+                                                                                                "Scan": "Parallel",
                                                                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
                                                                                             }
                                                                                         ],
@@ -205,6 +207,7 @@
                                                                     "unique1 (1)",
                                                                     "unique2 (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
                                                             }
                                                         ],

@@ -77,14 +77,23 @@ public:
         TSharedRange<NApi::TRowModification> modifications,
         const NApi::TModifyRowsOptions& options) override;
 
-    using TQueueTransactionMixin::AdvanceConsumer;
-    TFuture<void> AdvanceConsumer(
+    using TQueueTransactionMixin::AdvanceQueueConsumer;
+    TFuture<void> AdvanceQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceConsumerOptions& options) override;
+        const TAdvanceQueueConsumerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TPushQueueProducerOptions& options) override;
 
     // IClientBase implementation.
     TFuture<NApi::ITransactionPtr> StartTransaction(

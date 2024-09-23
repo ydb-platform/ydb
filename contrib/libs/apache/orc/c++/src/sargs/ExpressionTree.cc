@@ -24,41 +24,28 @@
 namespace orc {
 
   ExpressionTree::ExpressionTree(Operator op)
-                                : mOperator(op)
-                                , mLeaf(UNUSED_LEAF)
-                                , mConstant(TruthValue::YES_NO_NULL) {
-  }
+      : mOperator(op), mLeaf(UNUSED_LEAF), mConstant(TruthValue::YES_NO_NULL) {}
 
-
-  ExpressionTree::ExpressionTree(Operator op,
-                                 std::initializer_list<TreeNode> children)
-                                : mOperator(op)
-                                , mChildren(children.begin(), children.end())
-                                , mLeaf(UNUSED_LEAF)
-                                , mConstant(TruthValue::YES_NO_NULL) {
+  ExpressionTree::ExpressionTree(Operator op, std::initializer_list<TreeNode> children)
+      : mOperator(op),
+        mChildren(children.begin(), children.end()),
+        mLeaf(UNUSED_LEAF),
+        mConstant(TruthValue::YES_NO_NULL) {
     // PASS
   }
 
   ExpressionTree::ExpressionTree(size_t leaf)
-                                : mOperator(Operator::LEAF)
-                                , mChildren()
-                                , mLeaf(leaf)
-                                , mConstant(TruthValue::YES_NO_NULL) {
+      : mOperator(Operator::LEAF), mChildren(), mLeaf(leaf), mConstant(TruthValue::YES_NO_NULL) {
     // PASS
   }
 
   ExpressionTree::ExpressionTree(TruthValue constant)
-                                : mOperator(Operator::CONSTANT)
-                                , mChildren()
-                                , mLeaf(UNUSED_LEAF)
-                                , mConstant(constant) {
+      : mOperator(Operator::CONSTANT), mChildren(), mLeaf(UNUSED_LEAF), mConstant(constant) {
     // PASS
   }
 
   ExpressionTree::ExpressionTree(const ExpressionTree& other)
-                                : mOperator(other.mOperator)
-                                , mLeaf(other.mLeaf)
-                                , mConstant(other.mConstant) {
+      : mOperator(other.mOperator), mLeaf(other.mLeaf), mConstant(other.mConstant) {
     for (TreeNode child : other.mChildren) {
       mChildren.emplace_back(std::make_shared<ExpressionTree>(*child));
     }
@@ -74,7 +61,7 @@ namespace orc {
 
   std::vector<TreeNode>& ExpressionTree::getChildren() {
     return const_cast<std::vector<TreeNode>&>(
-      const_cast<const ExpressionTree *>(this)->getChildren());
+        const_cast<const ExpressionTree*>(this)->getChildren());
   }
 
   const TreeNode ExpressionTree::getChild(size_t i) const {
@@ -83,7 +70,7 @@ namespace orc {
 
   TreeNode ExpressionTree::getChild(size_t i) {
     return std::const_pointer_cast<ExpressionTree>(
-      const_cast<const ExpressionTree *>(this)->getChild(i));
+        const_cast<const ExpressionTree*>(this)->getChild(i));
   }
 
   TruthValue ExpressionTree::getConstant() const {
@@ -105,20 +92,17 @@ namespace orc {
     mChildren.push_back(child);
   }
 
-  TruthValue ExpressionTree::evaluate(
-                                 const std::vector<TruthValue>& leaves) const {
+  TruthValue ExpressionTree::evaluate(const std::vector<TruthValue>& leaves) const {
     TruthValue result;
     switch (mOperator) {
-      case Operator::OR:
-      {
+      case Operator::OR: {
         result = mChildren.at(0)->evaluate(leaves);
         for (size_t i = 1; i < mChildren.size() && !isNeeded(result); ++i) {
           result = mChildren.at(i)->evaluate(leaves) || result;
         }
         return result;
       }
-      case Operator::AND:
-      {
+      case Operator::AND: {
         result = mChildren.at(0)->evaluate(leaves);
         for (size_t i = 1; i < mChildren.size() && isNeeded(result); ++i) {
           result = mChildren.at(i)->evaluate(leaves) && result;
@@ -189,4 +173,4 @@ namespace orc {
     return sstream.str();
   }
 
-} // namespace orc
+}  // namespace orc

@@ -12,12 +12,14 @@ ELSE()
 ENDIF()
 
 SRCS(
+    acceleration.cpp
     assimilation.cpp
     block_race.cpp
     counting_events.cpp
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp
+    ds_proxy_lwtrace.cpp
     encryption.cpp
     extra_block_checks.cpp
     gc_quorum_3dc.cpp
@@ -64,4 +66,5 @@ RECURSE_FOR_TESTS(
     ut_replication
     ut_scrub
     ut_vdisk_restart
+    ut_restart_pdisk
 )

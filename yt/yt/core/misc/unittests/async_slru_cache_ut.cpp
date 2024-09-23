@@ -347,6 +347,55 @@ TEST(TAsyncSlruCacheTest, UpdateWeight)
     }
 }
 
+TEST(TAsyncSlruCacheTest, CookieWeight)
+{
+    const int cacheSize = 10;
+    auto config = CreateCacheConfig(cacheSize);
+    auto cache = New<TSimpleSlruCache>(config);
+
+    for (int i = 0; i < cacheSize; ++i) {
+        auto cookie = cache->BeginInsert(i, 1);
+        EXPECT_TRUE(cookie.IsActive());
+        cookie.EndInsert(New<TSimpleCachedValue>(i, i));
+    }
+
+    // All values fit in cache.
+    EXPECT_EQ(cache->GetSize(), cacheSize);
+
+    auto key = cacheSize;
+
+    {
+        // Insert as 2, Trim 2 and cancel.
+        auto cookie = cache->BeginInsert(key, 2);
+        EXPECT_TRUE(cookie.IsActive());
+        EXPECT_EQ(cache->GetSize(), cacheSize - 1);
+        cookie.Cancel(TError("Cancelled"));
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+    }
+
+    {
+        // Insert as 0, resize to 3, trim 1, resize to 1 and cancel.
+        auto cookie = cache->BeginInsert(key);
+        EXPECT_TRUE(cookie.IsActive());
+        EXPECT_EQ(cache->GetSize(), cacheSize - 1);
+        cookie.UpdateWeight(3);
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+        cookie.UpdateWeight(1);
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+        cookie.Cancel(TError("Cancelled"));
+        EXPECT_EQ(cache->GetSize(), cacheSize - 3);
+    }
+
+    {
+        // Insert as 2, complete as 4 - trim 1.
+        auto cookie = cache->BeginInsert(key, 2);
+        EXPECT_TRUE(cookie.IsActive());
+        EXPECT_EQ(cache->GetSize(), cacheSize - 2);
+        cookie.EndInsert(New<TSimpleCachedValue>(key, key, 4));
+        EXPECT_EQ(cache->GetSize(), cacheSize - 3);
+    }
+}
+
 TEST(TAsyncSlruCacheTest, Touch)
 {
     const int cacheSize = 2;
@@ -920,6 +969,7 @@ DEFINE_ENUM(EStressOperation,
     ((UpdateWeight) (7))
     ((ReleaseValue) (8))
     ((Reconfigure) (9))
+    ((UpdateCookieWeight) (10))
 );
 
 class TAsyncSlruCacheStressTest
@@ -948,6 +998,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     }
 
     std::uniform_int_distribution<int> weightDistribution(1, 10);
+    std::uniform_int_distribution<int> cookieWeightDistribution(0, 10);
     std::uniform_int_distribution<int> keyDistribution(1, 20);
     std::uniform_int_distribution<int> capacityDistribution(50, 150);
     std::uniform_real_distribution<double> youngerSizeFractionDistribution(0.0, 1.0);
@@ -1018,7 +1069,8 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
             }
             case EStressOperation::BeginInsert: {
                 int key = keyDistribution(randomGenerator);
-                auto cookie = cache->BeginInsert(key);
+                auto cookieWeight = cookieWeightDistribution(randomGenerator);
+                auto cookie = cache->BeginInsert(key, cookieWeight);
                 if (cookie.IsActive()) {
                     activeInsertCookies.emplace_back(std::move(cookie));
                     lastInsertedValues[key] = nullptr;
@@ -1101,6 +1153,15 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                 config->Capacity = capacityDistribution(randomGenerator);
                 config->YoungerSizeFraction = youngerSizeFractionDistribution(randomGenerator);
                 cache->Reconfigure(std::move(config));
+                break;
+            }
+            case EStressOperation::UpdateCookieWeight: {
+                if (activeInsertCookies.empty()) {
+                    break;
+                }
+                size_t cookieIndex = randomGenerator() % activeInsertCookies.size();
+                auto cookieWeight = cookieWeightDistribution(randomGenerator);
+                activeInsertCookies[cookieIndex].UpdateWeight(cookieWeight);
                 break;
             }
         }

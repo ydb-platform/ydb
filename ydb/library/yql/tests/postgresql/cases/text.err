@@ -87,104 +87,24 @@ select 3 || 4.0;
  */
 select concat('one');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	/*
-	^
-        -stdin-:<main>:4:8: Error: At function: PgCall
-        	select concat('one');
-	       ^
-            -stdin-:<main>:4:8: Error: No such proc: concat
-            	select concat('one');
-	       ^
 <sql-statement>
 select concat(1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select concat(1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select concat(1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: concat
-            	select concat(1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
-	       ^
 <sql-statement>
 select concat_ws('#','one');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select concat_ws('#','one');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select concat_ws('#','one');
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: concat_ws
-            	select concat_ws('#','one');
-	       ^
 <sql-statement>
 select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: concat_ws
-            	select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
-	       ^
 <sql-statement>
 select concat_ws(',',10,20,null,30);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select concat_ws(',',10,20,null,30);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select concat_ws(',',10,20,null,30);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: concat_ws
-            	select concat_ws(',',10,20,null,30);
-	       ^
 <sql-statement>
 select concat_ws('',10,20,null,30);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select concat_ws('',10,20,null,30);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select concat_ws('',10,20,null,30);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: concat_ws
-            	select concat_ws('',10,20,null,30);
-	       ^
 <sql-statement>
 select concat_ws(NULL,10,20,null,30) is null;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select concat_ws(NULL,10,20,null,30) is null;
-	^
-        -stdin-:<main>:1:38: Error: At function: ToPg, At function: Not, At function: Exists
-        	select concat_ws(NULL,10,20,null,30) is null;
-	                                     ^
-            -stdin-:<main>:1:8: Error: At function: PgCall
-            	select concat_ws(NULL,10,20,null,30) is null;
-	       ^
-                -stdin-:<main>:1:8: Error: No such proc: concat_ws
-                	select concat_ws(NULL,10,20,null,30) is null;
-	       ^
 <sql-statement>
 select reverse('abcde');
 </sql-statement>
@@ -262,17 +182,6 @@ select format('Hello');
 <sql-statement>
 select format('Hello %s', 'World');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('Hello %s', 'World');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('Hello %s', 'World');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('Hello %s', 'World');
-	       ^
 <sql-statement>
 select format('Hello %%');
 </sql-statement>
@@ -283,17 +192,15 @@ select format('Hello %%%%');
 -- should fail
 select format('Hello %s %s', 'World');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- should fail
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('Hello %s %s', 'World');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('Hello %s %s', 'World');
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  too few arguments for format()
+
+        	-- should fail
+	^
 <sql-statement>
 select format('Hello %s');
 </sql-statement>
@@ -309,232 +216,131 @@ select format('Hello %s');
 <sql-statement>
 select format('Hello %x', 20);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select format('Hello %x', 20);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  unrecognized format() type specifier "x"
+HINT:  For a single "%" use "%%".
+
         	select format('Hello %x', 20);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4)
-            	select format('Hello %x', 20);
-	       ^
+	^
 <sql-statement>
 -- check literal and sql identifiers
 select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- check literal and sql identifiers
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,int4,unknown)
-            	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
-	       ^
 <sql-statement>
 select format('%s%s%s','Hello', NULL,'World');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('%s%s%s','Hello', NULL,'World');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('%s%s%s','Hello', NULL,'World');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,unknown,unknown)
-            	select format('%s%s%s','Hello', NULL,'World');
-	       ^
 <sql-statement>
 select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,int4,unknown)
-            	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL);
-	       ^
 <sql-statement>
 select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,unknown,unknown)
-            	select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
-	       ^
 <sql-statement>
 -- should fail, sql identifier cannot be NULL
 select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- should fail, sql identifier cannot be NULL
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,int4,unknown)
-            	select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  null values cannot be formatted as an SQL identifier
+
+        	-- should fail, sql identifier cannot be NULL
+	^
 <sql-statement>
 -- check positional placeholders
 select format('%1$s %3$s', 1, 2, 3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- check positional placeholders
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('%1$s %3$s', 1, 2, 3);
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,int4,int4)
-            	select format('%1$s %3$s', 1, 2, 3);
-	       ^
 <sql-statement>
 select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,int4,int4,int4,int4,int4,int4,int4,int4,int4,int4,int4)
-            	select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-	       ^
 <sql-statement>
 -- should fail
 select format('%1$s %4$s', 1, 2, 3);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	-- should fail
 	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('%1$s %4$s', 1, 2, 3);
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,int4,int4)
-            	select format('%1$s %4$s', 1, 2, 3);
-	       ^
+        -stdin-:<main>:1:1: Fatal: ERROR:  too few arguments for format()
+
+        	-- should fail
+	^
 <sql-statement>
 select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  too few arguments for format()
+
         	select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,int4,int4,int4,int4,int4,int4,int4,int4,int4,int4,int4)
-            	select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-	       ^
+	^
 <sql-statement>
 select format('%0$s', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select format('%0$s', 'Hello');
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  format specifies argument 0, but arguments are numbered from 1
+
         	select format('%0$s', 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('%0$s', 'Hello');
-	       ^
+	^
 <sql-statement>
 select format('%*0$s', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select format('%*0$s', 'Hello');
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  format specifies argument 0, but arguments are numbered from 1
+
         	select format('%*0$s', 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('%*0$s', 'Hello');
-	       ^
+	^
 <sql-statement>
 select format('%1$', 1);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select format('%1$', 1);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  unterminated format() type specifier
+HINT:  For a single "%" use "%%".
+
         	select format('%1$', 1);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4)
-            	select format('%1$', 1);
-	       ^
+	^
 <sql-statement>
 select format('%1$1', 1);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
+-stdin-:<main>: Fatal: Execution
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	select format('%1$1', 1);
 	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
+        -stdin-:<main>:1:1: Fatal: ERROR:  unterminated format() type specifier
+HINT:  For a single "%" use "%%".
+
         	select format('%1$1', 1);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4)
-            	select format('%1$1', 1);
-	       ^
+	^
 <sql-statement>
 -- check mix of positional and ordered placeholders
 select format('Hello %s %1$s %s', 'World', 'Hello again');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- check mix of positional and ordered placeholders
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('Hello %s %1$s %s', 'World', 'Hello again');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,unknown)
-            	select format('Hello %s %1$s %s', 'World', 'Hello again');
-	       ^
 <sql-statement>
 select format('Hello %s %s, %2$s %2$s', 'World', 'Hello again');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('Hello %s %s, %2$s %2$s', 'World', 'Hello again');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('Hello %s %s, %2$s %2$s', 'World', 'Hello again');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,unknown)
-            	select format('Hello %s %s, %2$s %2$s', 'World', 'Hello again');
-	       ^
 <sql-statement>
 -- check variadic labeled arguments
 select format('%s, %s', variadic array['Hello','World']);
@@ -608,238 +414,51 @@ from generate_series(1,200) g(i);
 -- check field widths and left, right alignment
 select format('>>%10s<<', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	-- check field widths and left, right alignment
-	^
-        -stdin-:<main>:2:8: Error: At function: PgCall
-        	select format('>>%10s<<', 'Hello');
-	       ^
-            -stdin-:<main>:2:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%10s<<', 'Hello');
-	       ^
 <sql-statement>
 select format('>>%10s<<', NULL);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%10s<<', NULL);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%10s<<', NULL);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%10s<<', NULL);
-	       ^
 <sql-statement>
 select format('>>%10s<<', '');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%10s<<', '');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%10s<<', '');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%10s<<', '');
-	       ^
 <sql-statement>
 select format('>>%-10s<<', '');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%-10s<<', '');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%-10s<<', '');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%-10s<<', '');
-	       ^
 <sql-statement>
 select format('>>%-10s<<', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%-10s<<', 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%-10s<<', 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%-10s<<', 'Hello');
-	       ^
 <sql-statement>
 select format('>>%-10s<<', NULL);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%-10s<<', NULL);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%-10s<<', NULL);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%-10s<<', NULL);
-	       ^
 <sql-statement>
 select format('>>%1$10s<<', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%1$10s<<', 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%1$10s<<', 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%1$10s<<', 'Hello');
-	       ^
 <sql-statement>
 select format('>>%1$-10I<<', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%1$-10I<<', 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%1$-10I<<', 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%1$-10I<<', 'Hello');
-	       ^
 <sql-statement>
 select format('>>%2$*1$L<<', 10, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%2$*1$L<<', 10, 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%2$*1$L<<', 10, 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,unknown)
-            	select format('>>%2$*1$L<<', 10, 'Hello');
-	       ^
 <sql-statement>
 select format('>>%2$*1$L<<', 10, NULL);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%2$*1$L<<', 10, NULL);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%2$*1$L<<', 10, NULL);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,unknown)
-            	select format('>>%2$*1$L<<', 10, NULL);
-	       ^
 <sql-statement>
 select format('>>%2$*1$L<<', -10, NULL);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%2$*1$L<<', -10, NULL);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%2$*1$L<<', -10, NULL);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,unknown)
-            	select format('>>%2$*1$L<<', -10, NULL);
-	       ^
 <sql-statement>
 select format('>>%*s<<', 10, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%*s<<', 10, 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%*s<<', 10, 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,unknown)
-            	select format('>>%*s<<', 10, 'Hello');
-	       ^
 <sql-statement>
 select format('>>%*1$s<<', 10, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%*1$s<<', 10, 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%*1$s<<', 10, 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,unknown)
-            	select format('>>%*1$s<<', 10, 'Hello');
-	       ^
 <sql-statement>
 select format('>>%-s<<', 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%-s<<', 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%-s<<', 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%-s<<', 'Hello');
-	       ^
 <sql-statement>
 select format('>>%10L<<', NULL);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%10L<<', NULL);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%10L<<', NULL);
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown)
-            	select format('>>%10L<<', NULL);
-	       ^
 <sql-statement>
 select format('>>%2$*1$L<<', NULL, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%2$*1$L<<', NULL, 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%2$*1$L<<', NULL, 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,unknown,unknown)
-            	select format('>>%2$*1$L<<', NULL, 'Hello');
-	       ^
 <sql-statement>
 select format('>>%2$*1$L<<', 0, 'Hello');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	select format('>>%2$*1$L<<', 0, 'Hello');
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	select format('>>%2$*1$L<<', 0, 'Hello');
-	       ^
-            -stdin-:<main>:1:8: Error: Unable to find an overload for proc format with given argument types: (unknown,int4,unknown)
-            	select format('>>%2$*1$L<<', 0, 'Hello');
-	       ^

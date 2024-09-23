@@ -126,6 +126,19 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                 }
             }
 
+            for (auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    YQL_ENSURE(sink.GetOutputIndex() == 0);
+                    YQL_ENSURE(stage.SinksSize() == 1);
+                    meta.TableId = MakeTableId(settings.GetTable());
+                    meta.TablePath = settings.GetTable().GetPath();
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                }
+            }
+
             bool stageAdded = tasksGraph.AddStageInfo(
                 TStageInfo(stageId, stage.InputsSize() + stage.SourcesSize(), stage.GetOutputsCount(), std::move(meta)));
             YQL_ENSURE(stageAdded);
@@ -437,7 +450,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TStageInfo& stageIn
 {
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-    if (stage.GetIsEffectsStage()) {
+    if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
         YQL_ENSURE(stageInfo.OutputsCount == 1);
 
         for (auto& taskId : stageInfo.Tasks) {
@@ -1104,9 +1117,14 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         transformProto->SetOutputType(input.Transform->OutputType);
         if (input.Meta.StreamLookupSettings) {
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            YQL_ENSURE(snapshot.IsValid(), "stream lookup cannot be performed without the snapshot.");
-            input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
-            input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+            if (snapshot.IsValid()) {
+                input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
+                input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+            } else {
+                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
+                input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
+            }
+
             if (lockTxId) {
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
             }
@@ -1123,6 +1141,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
     result->SetId(task.Id);
     result->SetStageId(stageInfo.Id.StageId);
     result->SetUseLlvm(task.GetUseLlvm());
+    result->SetEnableSpilling(false); // TODO: enable spilling
     if (task.HasMetaId()) {
         result->SetMetaId(task.GetMetaIdUnsafe());
     }

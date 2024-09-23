@@ -15,7 +15,6 @@ namespace NKikimr::NBlobDepot {
                 DIV_CLASS("panel-body") {
                     KEYVALUE_TABLE({
                         KEYVALUE_P("Loaded", Loaded ? "true" : "false");
-                        KEYVALUE_P("Last assimilated blob id", LastAssimilatedBlobId ? LastAssimilatedBlobId->ToString() : "<null>");
                         KEYVALUE_P("Data size, number of keys", Data.size());
                         KEYVALUE_P("RefCount size, number of blobs", RefCount.size());
                         KEYVALUE_P("Total stored data size, bytes", FormatByteSize(TotalStoredDataSize));

@@ -200,6 +200,7 @@ public:
         std::vector<std::unique_ptr<IEventHandle>>& replies);
     bool CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies);
+    size_t CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies);
     ui64 PlannedTxInFly() const;
     const TSet<TStepOrder> &GetPlan() const;
     bool HasProposeDelayers() const;
@@ -354,7 +355,7 @@ public:
     ui64 WaitingTxs() const { return WaitingDataTxOps.size(); } // note that without iterators
     bool CheckInflightLimit() const;
     bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
-    bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
 
@@ -517,12 +518,26 @@ private:
     TWaitingSchemeOpsOrder WaitingSchemeOpsOrder;
     TWaitingSchemeOps WaitingSchemeOps;
 
-    TMultiMap<TRowVersion, TAutoPtr<IEventHandle>> WaitingDataTxOps;
+    struct TWaitingDataTxOp {
+        TAutoPtr<IEventHandle> Event;
+        NWilson::TSpan Span;
+
+        TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev);
+    };
+
+    TMultiMap<TRowVersion, TWaitingDataTxOp> WaitingDataTxOps;
     TCommittingDataTxOps CommittingOps;
 
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
-    TMultiMap<TRowVersion, TEvDataShard::TEvRead::TPtr> WaitingDataReadIterators;
+    struct TWaitingReadIterator {
+        TEvDataShard::TEvRead::TPtr Event;
+        NWilson::TSpan Span;
+
+        TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev);
+    };
+
+    TMultiMap<TRowVersion, TWaitingReadIterator> WaitingDataReadIterators;
     THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);

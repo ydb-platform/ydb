@@ -146,17 +146,24 @@ TString TErrorCodeRegistry::ParseNamespace(const std::type_info& errorCodeEnumTy
     return name;
 }
 
-TString ToString(const TErrorCodeRegistry::TErrorCodeInfo& errorCodeInfo)
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TErrorCodeRegistry::TErrorCodeInfo& errorCodeInfo,
+    TStringBuf /*spec*/)
 {
     if (errorCodeInfo.Namespace.empty()) {
-        return Format("EErrorCode::%v", errorCodeInfo.Name);
+        Format(builder, "EErrorCode::%v", errorCodeInfo.Name);
+        return;
     }
-    return Format("%v::EErrorCode::%v", errorCodeInfo.Namespace, errorCodeInfo.Name);
+    Format(builder, "%v::EErrorCode::%v", errorCodeInfo.Namespace, errorCodeInfo.Name);
 }
 
-TString ToString(const TErrorCodeRegistry::TErrorCodeRangeInfo& errorCodeRangeInfo)
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TErrorCodeRegistry::TErrorCodeRangeInfo& errorCodeRangeInfo,
+    TStringBuf /*spec*/)
 {
-    return Format("%v-%v", errorCodeRangeInfo.From, errorCodeRangeInfo.To);
+    Format(builder, "%v-%v", errorCodeRangeInfo.From, errorCodeRangeInfo.To);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

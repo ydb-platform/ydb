@@ -110,6 +110,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
             issues.AddIssues(NKikimr::NExternalSource::ValidateDateFormatSetting(dataStreams.format_setting(), true));
+            issues.AddIssues(NKikimr::NExternalSource::ValidateRawFormat(dataStreams.format(), dataStreams.schema(), google::protobuf::RepeatedPtrField<TString>()));
             break;
         }
         case FederatedQuery::BindingSetting::BINDING_NOT_SET: {

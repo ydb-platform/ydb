@@ -15,7 +15,7 @@ select  ca_zip, ca_county, sum(ws_sales_price)
  	and ws_sold_date_sk = d_date_sk
  	and d_qoy = 1 and d_year = 1998
  group by ca_zip, ca_county
- order by ca_zip, ca_county
+ order by ca_zip nulls first, ca_county nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query45.tpl

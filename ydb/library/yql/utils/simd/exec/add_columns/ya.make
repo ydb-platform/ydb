@@ -1,5 +1,3 @@
-OWNER(g:yql)
-
 PROGRAM(add_columns)
 
 SRCS(main.cpp)

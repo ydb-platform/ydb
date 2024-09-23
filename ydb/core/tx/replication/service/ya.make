@@ -8,9 +8,11 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/tablet_flat
     ydb/core/io_formats/cell_maker
+    ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
     ydb/library/actors/core
     ydb/library/services
+    ydb/core/wrappers
     library/cpp/json
 )
 
@@ -26,6 +28,12 @@ GENERATE_ENUM_SERIALIZATION(worker.h)
 
 YQL_LAST_ABI_VERSION()
 
+IF (!OS_WINDOWS)
+    SRCS(
+        s3_writer.cpp
+    )
+ENDIF()
+
 END()
 
 RECURSE_FOR_TESTS(
@@ -33,3 +41,9 @@ RECURSE_FOR_TESTS(
     ut_topic_reader
     ut_worker
 )
+
+IF (!OS_WINDOWS)
+    RECURSE_FOR_TESTS(
+        ut_s3_writer
+    )
+END()

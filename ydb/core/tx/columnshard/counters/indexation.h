@@ -13,6 +13,7 @@ private:
 public:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr ReadErrors;
     NMonitoring::TDynamicCounters::TCounterPtr ReadBytes;
     NMonitoring::TDynamicCounters::TCounterPtr AnalizeCompactedPortions;
     NMonitoring::TDynamicCounters::TCounterPtr AnalizeInsertedPortions;

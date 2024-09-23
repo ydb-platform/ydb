@@ -134,7 +134,8 @@
                 {"Index": 0, "Name": "Table", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Ranges", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Stat", "Type": "TExprBase"}
+                {"Index": 3, "Name": "Stat", "Type": "TExprBase"},
+                {"Index": 4, "Name": "AdditionalAttributes", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

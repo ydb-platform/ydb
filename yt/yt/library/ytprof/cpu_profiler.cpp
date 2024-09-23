@@ -183,7 +183,7 @@ TCpuProfilerOptions::TSampleFilter GetActionMinExecTimeFilter(TDuration minExecT
 {
     auto minCpuDuration = DurationToCpuDuration(minExecTime);
 
-    return [minCpuDuration] () {
+    return [minCpuDuration] {
         auto fiberStartTime = GetTraceContextTimingCheckpoint();
         if (fiberStartTime == 0) {
             return false;

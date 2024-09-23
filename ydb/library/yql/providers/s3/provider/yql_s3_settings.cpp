@@ -26,6 +26,8 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, FileQueueBatchSizeLimit);
     REGISTER_SETTING(*this, FileQueueBatchObjectCountLimit);
     REGISTER_SETTING(*this, FileQueuePrefetchSize);
+    REGISTER_SETTING(*this, AsyncDecoding);
+    REGISTER_SETTING(*this, UsePredicatePushdown);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

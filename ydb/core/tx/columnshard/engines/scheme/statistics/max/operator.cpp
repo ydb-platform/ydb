@@ -6,10 +6,11 @@
 namespace NKikimr::NOlap::NStatistics::NMax {
 
 void TOperator::DoFillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const {
-    AFL_VERIFY(data.size() == 1);
     auto loader = index.GetColumnLoaderVerified(EntityId);
+    auto it = data.find(EntityId);
+    AFL_VERIFY(it != data.end());
     std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : data.begin()->second) {
+    for (auto&& i : it->second) {
         auto rb = NArrow::TStatusValidator::GetValid(loader->Apply(i->GetData()));
         AFL_VERIFY(rb->num_columns() == 1);
         auto res = NArrow::FindMinMaxPosition(rb->column(0));

@@ -9,7 +9,7 @@ select
 from
     `{path}lineitem`
 where
-    CAST(l_shipdate AS Timestamp) >= $border
-    and cast(l_shipdate as Timestamp) < ($border + Interval("P365D"))
+    l_shipdate >= $border 
+    and l_shipdate < ($border + Interval("P365D"))
     and l_discount between 0.07 - 0.01 and 0.07 + 0.01
     and l_quantity < 25;

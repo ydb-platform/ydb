@@ -171,6 +171,7 @@ struct TYtOutTableInfo: public TYtTableBaseInfo {
     NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const override;
 
     TYtOutTableInfo& SetUnique(const TDistinctConstraintNode* distinct, const TPositionHandle& pos, TExprContext& ctx);
+    NYT::TNode GetColumnGroups() const;
 };
 
 struct TYtRangesInfo: public TThrRefBase {
@@ -344,6 +345,7 @@ struct TYtPathInfo: public TThrRefBase {
     TYtColumnsInfo::TPtr Columns;
     TYtRangesInfo::TPtr Ranges;
     TYtTableStatInfo::TPtr Stat;
+    TMaybe<TString> AdditionalAttributes;
 private:
     const NCommon::TStructMemberMapper& GetColumnMapper();
 

@@ -251,6 +251,24 @@ static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem&
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
+template <typename TProto>
+TExplicitPartitions TExplicitPartitions::FromProto(const TProto& proto) {
+    TExplicitPartitions out;
+    for (const auto& splitPoint : proto.split_points()) {
+        TValue value(TType(splitPoint.type()), splitPoint.value());
+        out.AppendSplitPoints(value);
+    }
+    return out;
+}
+
+void TExplicitPartitions::SerializeTo(Ydb::Table::ExplicitPartitions& proto) const {
+    for (const auto& splitPoint : SplitPoints_) {
+        auto* boundary = proto.Addsplit_points();
+        boundary->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
+        boundary->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
+    }
+}
+
 class TTableDescription::TImpl {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -268,7 +286,11 @@ class TTableDescription::TImpl {
 
         // columns
         for (const auto& col : proto.columns()) {
-            Columns_.emplace_back(col.name(), col.type(), col.family(), col.not_null());
+            std::optional<bool> not_null;
+            if (col.has_not_null()) {
+                not_null = col.not_null();
+            }
+            Columns_.emplace_back(col.name(), col.type(), col.family(), not_null);
         }
 
         // indexes
@@ -415,13 +437,7 @@ public:
                 break;
 
             case Ydb::Table::CreateTableRequest::kPartitionAtKeys: {
-                TExplicitPartitions partitionAtKeys;
-                for (const auto& splitPoint : request.partition_at_keys().split_points()) {
-                    TValue value(TType(splitPoint.type()), splitPoint.value());
-                    partitionAtKeys.AppendSplitPoints(value);
-                }
-
-                SetPartitionAtKeys(partitionAtKeys);
+                SetPartitionAtKeys(TExplicitPartitions::FromProto(request.partition_at_keys()));
                 break;
             }
 
@@ -917,12 +933,7 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
     }
 
     if (const auto& partitionAtKeys = Impl_->GetPartitionAtKeys()) {
-        auto* borders = request.mutable_partition_at_keys();
-        for (const auto& splitPoint : partitionAtKeys->SplitPoints_) {
-            auto* border = borders->Addsplit_points();
-            border->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
-            border->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
-        }
+        partitionAtKeys->SerializeTo(*request.mutable_partition_at_keys());
     } else if (Impl_->GetProto().shard_key_bounds_size()) {
         request.mutable_partition_at_keys()->mutable_split_points()->CopyFrom(Impl_->GetProto().shard_key_bounds());
     }
@@ -2199,16 +2210,25 @@ bool TRenameItem::ReplaceDestination() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TIndexDescription::TIndexDescription(const TString& name, EIndexType type,
-        const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
-    : IndexName_(name)
+TIndexDescription::TIndexDescription(
+    const TString& name,
+    EIndexType type,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const TGlobalIndexSettings& settings
+)   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
     , DataColumns_(dataColumns)
+    , GlobalIndexSettings_(settings)
 {}
 
-TIndexDescription::TIndexDescription(const TString& name, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
-    : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns)
+TIndexDescription::TIndexDescription(
+    const TString& name,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const TGlobalIndexSettings& settings
+)   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, settings)
 {}
 
 TIndexDescription::TIndexDescription(const Ydb::Table::TableIndex& tableIndex)
@@ -2240,10 +2260,44 @@ ui64 TIndexDescription::GetSizeBytes() const {
 }
 
 template <typename TProto>
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const TProto& proto) {
+    auto partitionsFromProto = [](const auto& proto) -> TUniformOrExplicitPartitions {
+        switch (proto.partitions_case()) {
+        case TProto::kUniformPartitions:
+            return proto.uniform_partitions();
+        case TProto::kPartitionAtKeys:
+            return TExplicitPartitions::FromProto(proto.partition_at_keys());
+        default:
+            return {};
+        }
+    };
+
+    return {
+        .PartitioningSettings = TPartitioningSettings(proto.partitioning_settings()),
+        .Partitions = partitionsFromProto(proto)
+    };
+}
+
+void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings) const {
+    *settings.mutable_partitioning_settings() = PartitioningSettings.GetProto();
+
+    auto variantVisitor = [&settings](auto&& partitions) {
+        using T = std::decay_t<decltype(partitions)>;
+        if constexpr (std::is_same_v<T, ui64>) {
+            settings.set_uniform_partitions(partitions);
+        } else if constexpr (std::is_same_v<T, TExplicitPartitions>) {
+            partitions.SerializeTo(*settings.mutable_partition_at_keys());
+        }
+    };
+    std::visit(std::move(variantVisitor), Partitions);
+}
+
+template <typename TProto>
 TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     EIndexType type;
     TVector<TString> indexColumns;
     TVector<TString> dataColumns;
+    TGlobalIndexSettings globalIndexSettings;
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2251,19 +2305,22 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     switch (proto.type_case()) {
     case TProto::kGlobalIndex:
         type = EIndexType::GlobalSync;
+        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_index().settings());
         break;
     case TProto::kGlobalAsyncIndex:
         type = EIndexType::GlobalAsync;
+        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_async_index().settings());
         break;
     case TProto::kGlobalUniqueIndex:
         type = EIndexType::GlobalUnique;
+        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_unique_index().settings());
         break;
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
         break;
     }
 
-    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns);
+    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings);
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
         result.SizeBytes = proto.size_bytes();
     }
@@ -2281,13 +2338,13 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
 
     switch (IndexType_) {
     case EIndexType::GlobalSync:
-        *proto.mutable_global_index() = Ydb::Table::GlobalIndex();
+        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_index()->mutable_settings());
         break;
     case EIndexType::GlobalAsync:
-        *proto.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_async_index()->mutable_settings());
         break;
     case EIndexType::GlobalUnique:
-        *proto.mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
+        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_unique_index()->mutable_settings());
         break;
     case EIndexType::Unknown:
         break;
@@ -2339,6 +2396,38 @@ TChangefeedDescription::TChangefeedDescription(const Ydb::Table::Changefeed& pro
 TChangefeedDescription::TChangefeedDescription(const Ydb::Table::ChangefeedDescription& proto)
     : TChangefeedDescription(FromProto(proto))
 {}
+
+TChangefeedDescription::TInitialScanProgress::TInitialScanProgress()
+    : PartsTotal(0)
+    , PartsCompleted(0)
+{}
+
+TChangefeedDescription::TInitialScanProgress::TInitialScanProgress(ui32 total, ui32 completed)
+    : PartsTotal(total)
+    , PartsCompleted(completed)
+{}
+
+TChangefeedDescription::TInitialScanProgress& TChangefeedDescription::TInitialScanProgress::operator+=(const TInitialScanProgress& other) {
+    PartsTotal += other.PartsTotal;
+    PartsCompleted += other.PartsCompleted;
+    return *this;
+}
+
+ui32 TChangefeedDescription::TInitialScanProgress::GetPartsTotal() const {
+    return PartsTotal;
+}
+
+ui32 TChangefeedDescription::TInitialScanProgress::GetPartsCompleted() const {
+    return PartsCompleted;
+}
+
+float TChangefeedDescription::TInitialScanProgress::GetProgress() const {
+    if (PartsTotal == 0) {
+        return 0;
+    }
+
+    return 100 * float(PartsCompleted) / float(PartsTotal);
+}
 
 TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     VirtualTimestamps_ = true;
@@ -2416,6 +2505,10 @@ const TString& TChangefeedDescription::GetAwsRegion() const {
     return AwsRegion_;
 }
 
+const std::optional<TChangefeedDescription::TInitialScanProgress>& TChangefeedDescription::GetInitialScanProgress() const {
+    return InitialScanProgress_;
+}
+
 template <typename TProto>
 TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     EChangefeedMode mode;
@@ -2482,6 +2575,13 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         default:
             ret.State_ = EChangefeedState::Unknown;
             break;
+        }
+
+        if (proto.has_initial_scan_progress()) {
+            ret.InitialScanProgress_ = std::make_optional<TInitialScanProgress>(
+                proto.initial_scan_progress().parts_total(),
+                proto.initial_scan_progress().parts_completed()
+            );
         }
     }
 
@@ -2568,6 +2668,10 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
 
     if (AwsRegion_) {
         o << ", aws_region: " << AwsRegion_;
+    }
+
+    if (InitialScanProgress_) {
+        o << ", initial_scan_progress: " << InitialScanProgress_->GetProgress() << "%";
     }
 
     o << " }";
@@ -2849,11 +2953,3 @@ TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
 
 } // namespace NTable
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(, NYdb::NTable::TCreateSessionResult, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(, NYdb::NTable::TDescribeTableResult, o, x) {
-    return x.Out(o);
-}

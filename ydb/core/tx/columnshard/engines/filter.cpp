@@ -1,6 +1,6 @@
 #include "filter.h"
 #include "defs.h"
-#include "reader/read_metadata.h"
+#include "scheme/abstract/index_info.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/custom_registry.h>
@@ -82,8 +82,8 @@ public:
 template <class TGetter, class TData>
 NArrow::TColumnFilter MakeSnapshotFilterImpl(const std::shared_ptr<TData>& batch, const TSnapshot& snapshot) {
     Y_ABORT_UNLESS(batch);
-    auto steps = batch->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-    auto ids = batch->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
+    auto steps = batch->GetColumnByName(IIndexInfo::SPEC_COL_PLAN_STEP);
+    auto ids = batch->GetColumnByName(IIndexInfo::SPEC_COL_TX_ID);
     NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
     TGetter getter(steps, ids, snapshot);
     result.Reset(steps->length(), std::move(getter));

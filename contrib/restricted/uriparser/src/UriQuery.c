@@ -70,6 +70,7 @@
 
 
 #include <limits.h>
+#include <stddef.h> /* size_t */
 
 
 
@@ -177,10 +178,13 @@ int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
 	if (res != URI_SUCCESS) {
 		return res;
 	}
+	if (charsRequired == INT_MAX) {
+	    return URI_ERROR_MALLOC;
+	}
 	charsRequired++;
 
 	/* Allocate space */
-	queryString = memory->malloc(memory, charsRequired * sizeof(URI_CHAR));
+	queryString = memory->calloc(memory, charsRequired, sizeof(URI_CHAR));
 	if (queryString == NULL) {
 		return URI_ERROR_MALLOC;
 	}
@@ -218,16 +222,16 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_CHAR * const key = queryList->key;
 		const URI_CHAR * const value = queryList->value;
 		const int worstCase = (normalizeBreaks == URI_TRUE ? 6 : 3);
-		const int keyLen = (key == NULL) ? 0 : (int)URI_STRLEN(key);
+		const size_t keyLen = (key == NULL) ? 0 : URI_STRLEN(key);
 		int keyRequiredChars;
-		const int valueLen = (value == NULL) ? 0 : (int)URI_STRLEN(value);
+		const size_t valueLen = (value == NULL) ? 0 : URI_STRLEN(value);
 		int valueRequiredChars;
 
-		if ((keyLen >= INT_MAX / worstCase) || (valueLen >= INT_MAX / worstCase)) {
+		if ((keyLen >= (size_t)INT_MAX / worstCase) || (valueLen >= (size_t)INT_MAX / worstCase)) {
 			return URI_ERROR_OUTPUT_TOO_LARGE;
 		}
-		keyRequiredChars = worstCase * keyLen;
-		valueRequiredChars = worstCase * valueLen;
+		keyRequiredChars = worstCase * (int)keyLen;
+		valueRequiredChars = worstCase * (int)valueLen;
 
 		if (dest == NULL) {
 			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)

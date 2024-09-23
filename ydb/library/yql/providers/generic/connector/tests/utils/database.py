@@ -17,6 +17,10 @@ class Database:
                 self.name = name[:63].lower()
             case EDataSourceKind.CLICKHOUSE:
                 self.name = name[:255]
+            case EDataSourceKind.YDB:
+                # We use a different way of initialization when working with YDB.
+                # There is only one preinstalled database called
+                self.name = "local"
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -54,6 +58,8 @@ class Database:
                 return 'table does not exist'
             case EDataSourceKind.POSTGRESQL:
                 return 'table does not exist'
+            case EDataSourceKind.YDB:
+                raise Exception("Fix me first in YQ-3315")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

@@ -176,6 +176,10 @@ void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TStrin
 }
 
 Ydb::TOperationId::EKind ParseKind(const TStringBuf value) {
+    if (value.StartsWith("ss/backgrounds")) {
+        return Ydb::TOperationId::SS_BG_TASKS;
+    }
+
     if (value.StartsWith("export")) {
         return Ydb::TOperationId::EXPORT;
     }

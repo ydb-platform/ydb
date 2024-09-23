@@ -27,7 +27,7 @@ $avg_total_return_by_state =
      join $avg_total_return_by_state ctr2 on ctr1.ctr_state = ctr2.ctr_state
      cross join {{customer_address}} as customer_address
      cross join {{customer}} as customer
- where ctr1.ctr_total_return > 1.2*ctr2.avg_return
+ where ctr1.ctr_total_return > $z1_2_35*ctr2.avg_return
        and ca_address_sk = c_current_addr_sk
        and ca_state = 'GA'
        and ctr1.ctr_customer_sk = c_customer_sk

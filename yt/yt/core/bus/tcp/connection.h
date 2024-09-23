@@ -20,6 +20,7 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/public.h>
 
@@ -86,7 +87,8 @@ public:
         const std::optional<TString>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
-        IPacketTranscoderFactory* packetTranscoderFactory);
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker);
 
     ~TTcpConnection();
 
@@ -239,7 +241,7 @@ private:
     std::unique_ptr<IPacketDecoder> Decoder_;
     const NProfiling::TCpuDuration ReadStallTimeout_;
     std::atomic<NProfiling::TCpuInstant> LastIncompleteReadTime_ = std::numeric_limits<NProfiling::TCpuInstant>::max();
-    TBlob ReadBuffer_;
+    TMemoryTrackedBlob ReadBuffer_;
 
     TRingQueue<TPacketPtr> QueuedPackets_;
     TRingQueue<TPacketPtr> EncodedPackets_;
@@ -248,7 +250,7 @@ private:
     std::unique_ptr<IPacketEncoder> Encoder_;
     const NProfiling::TCpuDuration WriteStallTimeout_;
     std::atomic<NProfiling::TCpuInstant> LastIncompleteWriteTime_ = std::numeric_limits<NProfiling::TCpuInstant>::max();
-    std::vector<std::unique_ptr<TBlob>> WriteBuffers_;
+    std::vector<TMemoryTrackedBlob> WriteBuffers_;
     TRingQueue<TRef> EncodedFragments_;
     TRingQueue<size_t> EncodedPacketSizes_;
 
@@ -277,11 +279,13 @@ private:
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
 
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
     size_t MaxFragmentsPerWrite_ = 256;
 
-    void Open();
+    void Open(TGuard<NThreading::TSpinLock>& guard);
     void Close();
     void CloseSslSession(ESslState newSslState);
 

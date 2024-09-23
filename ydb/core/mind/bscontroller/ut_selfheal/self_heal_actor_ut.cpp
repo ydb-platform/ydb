@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/util/testactorsys.h>
 #include <ydb/core/mind/bscontroller/self_heal.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
 
@@ -51,7 +52,8 @@ TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup() {
     for (ui32 i = 0; i < 8; ++i) {
         actorIds.push_back(MakeBlobStorageVDiskID(1, 1000 + i, 1000));
     }
-    return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds);
+    return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds,
+        TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), TGroupId::FromValue(0x82000000));
 }
 
 TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -63,7 +65,12 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
     for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
         auto& x = res.VDisks[info->GetVDiskId(i)];
         x.Location = {1, 1000 + i, 1000};
-        x.Faulty = faultyIndexes.count(i);
+        x.Faulty = x.Bad = faultyIndexes.count(i);
+        x.Decommitted = false;
+        x.IsSelfHealReasonDecommit = false;
+        x.OnlyPhantomsRemain = false;
+        x.IsReady = !x.Faulty;
+        x.ReadySince = TMonotonic::Zero();
         x.VDiskStatus = i < status.size() ? status[i] : E::READY;
     }
     return res;
@@ -96,7 +103,7 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR});
             runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
-            ValidateCmd(parentId, runtime, 0, 1, 0, 0, 0);
+            ValidateCmd(parentId, runtime, 0x82000000, 1, 0, 0, 0);
         });
     }
 

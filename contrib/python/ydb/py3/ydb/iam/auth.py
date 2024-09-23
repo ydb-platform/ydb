@@ -8,13 +8,26 @@ import json
 import os
 
 try:
-    from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
-    from yandex.cloud.iam.v1 import iam_token_service_pb2
     import jwt
 except ImportError:
     jwt = None
-    iam_token_service_pb2_grpc = None
-    iam_token_service_pb2 = None
+
+try:
+    from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
+    from yandex.cloud.iam.v1 import iam_token_service_pb2
+except ImportError:
+    try:
+        # This attempt is to enable the IAM auth inside the YDB repository on GitHub
+        from ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
+        from ydb.public.api.client.yc_public.iam import iam_token_service_pb2
+    except ImportError:
+        try:
+            # This attempt is to enable the IAM auth inside the YDB repository on Arcadia
+            from contrib.ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
+            from contrib.ydb.public.api.client.yc_public.iam import iam_token_service_pb2
+        except ImportError:
+            iam_token_service_pb2_grpc = None
+            iam_token_service_pb2 = None
 
 try:
     import requests
@@ -23,22 +36,28 @@ except ImportError:
 
 
 DEFAULT_METADATA_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
+YANDEX_CLOUD_IAM_TOKEN_SERVICE_URL = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
+YANDEX_CLOUD_JWT_ALGORITHM = "PS256"
 
 
-def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout):
+def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout, algorithm, token_service_url, subject=None):
+    assert jwt is not None, "Install pyjwt library to use jwt tokens"
     now = time.time()
     now_utc = datetime.utcfromtimestamp(now)
     exp_utc = datetime.utcfromtimestamp(now + jwt_expiration_timeout)
+    payload = {
+        "iss": account_id,
+        "aud": token_service_url,
+        "iat": now_utc,
+        "exp": exp_utc,
+    }
+    if subject is not None:
+        payload["sub"] = subject
     return jwt.encode(
         key=private_key,
-        algorithm="PS256",
-        headers={"typ": "JWT", "alg": "PS256", "kid": access_key_id},
-        payload={
-            "iss": account_id,
-            "aud": "https://iam.api.cloud.yandex.net/iam/v1/tokens",
-            "iat": now_utc,
-            "exp": exp_utc,
-        },
+        algorithm=algorithm,
+        headers={"typ": "JWT", "alg": algorithm, "kid": access_key_id},
+        payload=payload,
     )
 
 
@@ -73,12 +92,15 @@ class TokenServiceCredentials(credentials.AbstractExpiringTokenCredentials):
 
 
 class BaseJWTCredentials(abc.ABC):
-    def __init__(self, account_id, access_key_id, private_key):
+    def __init__(self, account_id, access_key_id, private_key, algorithm, token_service_url, subject=None):
         self._account_id = account_id
         self._jwt_expiration_timeout = 60.0 * 60
         self._token_expiration_timeout = 120
         self._access_key_id = access_key_id
         self._private_key = private_key
+        self._algorithm = algorithm
+        self._token_service_url = token_service_url
+        self._subject = subject
 
     def set_token_expiration_timeout(self, value):
         self._token_expiration_timeout = value
@@ -87,16 +109,33 @@ class BaseJWTCredentials(abc.ABC):
     @classmethod
     def from_file(cls, key_file, iam_endpoint=None, iam_channel_credentials=None):
         with open(os.path.expanduser(key_file), "r") as r:
-            output = json.loads(r.read())
-        account_id = output.get("service_account_id", None)
+            key = r.read()
+
+        return cls.from_content(key, iam_endpoint=iam_endpoint, iam_channel_credentials=iam_channel_credentials)
+
+    @classmethod
+    def from_content(cls, key, iam_endpoint=None, iam_channel_credentials=None):
+        key_json = json.loads(key)
+        account_id = key_json.get("service_account_id", None)
         if account_id is None:
-            account_id = output.get("user_account_id", None)
+            account_id = key_json.get("user_account_id", None)
         return cls(
             account_id,
-            output["id"],
-            output["private_key"],
+            key_json["id"],
+            key_json["private_key"],
             iam_endpoint=iam_endpoint,
             iam_channel_credentials=iam_channel_credentials,
+        )
+
+    def _get_jwt(self):
+        return get_jwt(
+            self._account_id,
+            self._access_key_id,
+            self._private_key,
+            self._jwt_expiration_timeout,
+            self._algorithm,
+            self._token_service_url,
+            self._subject,
         )
 
 
@@ -110,17 +149,12 @@ class JWTIamCredentials(TokenServiceCredentials, BaseJWTCredentials):
         iam_channel_credentials=None,
     ):
         TokenServiceCredentials.__init__(self, iam_endpoint, iam_channel_credentials)
-        BaseJWTCredentials.__init__(self, account_id, access_key_id, private_key)
+        BaseJWTCredentials.__init__(
+            self, account_id, access_key_id, private_key, YANDEX_CLOUD_JWT_ALGORITHM, YANDEX_CLOUD_IAM_TOKEN_SERVICE_URL
+        )
 
     def _get_token_request(self):
-        return self._iam_token_service_pb2.CreateIamTokenRequest(
-            jwt=get_jwt(
-                self._account_id,
-                self._access_key_id,
-                self._private_key,
-                self._jwt_expiration_timeout,
-            )
-        )
+        return self._iam_token_service_pb2.CreateIamTokenRequest(jwt=self._get_jwt())
 
 
 class YandexPassportOAuthIamCredentials(TokenServiceCredentials):

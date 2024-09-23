@@ -74,13 +74,13 @@ public:
         const TPullQueueOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
+    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options),
+        const TPullQueueConsumerOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RegisterQueueConsumer, (
@@ -100,6 +100,20 @@ public:
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TCreateQueueProducerSessionOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, RemoveQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TRemoveQueueProducerSessionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
@@ -238,6 +252,10 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (
+        const TGetMasterConsistentStateOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, ExitReadOnly, (
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options),
@@ -327,7 +345,7 @@ public:
         const TResumeTabletCellsOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (
+    MOCK_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
@@ -335,7 +353,7 @@ public:
         const TAddMaintenanceOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (
+    MOCK_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,
@@ -645,6 +663,13 @@ public:
         const TAbortJobOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, DumpJobProxyLog, (
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const TDumpJobProxyLogOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
         (override));
@@ -789,9 +814,15 @@ public:
         const TPausePipelineOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    MOCK_METHOD(TFuture<TPipelineState>, GetPipelineState, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options),
+        const TGetPipelineStateOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options),
         (override));
 
 private:

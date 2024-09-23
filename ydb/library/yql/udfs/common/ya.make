@@ -10,10 +10,13 @@ RECURSE(
     ip_base
     json
     json2
+    knn
     math
     pire
     protobuf
+    python
     re2
+    roaring
     set
     stat
     streaming

@@ -1,6 +1,5 @@
 #include "kafka_produce_actor.h"
-#include "../kafka_metrics.h"
-
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
@@ -43,7 +42,7 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
     auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topicName);
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, TStringBuilder() << "api.kafka.produce." << name, "")));
-    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, "api.kafka.produce.total_messages", ""))); 
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, "api.kafka.produce.total_messages", "")));
 }
 
 void TKafkaProduceActor::Bootstrap(const NActors::TActorContext& /*ctx*/) {
@@ -82,7 +81,7 @@ void TKafkaProduceActor::PassAway() {
 void TKafkaProduceActor::CleanTopics(const TActorContext& ctx) {
     const auto now = ctx.Now();
 
-    std::map<TString, TTopicInfo> newTopics;    
+    std::map<TString, TTopicInfo> newTopics;
     for(auto& [topicPath, topicInfo] : Topics) {
         if (topicInfo.ExpirationTime > now) {
             newTopics[topicPath] = std::move(topicInfo);
@@ -242,7 +241,8 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
 THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
                                                      const TString& topicName,
                                                      ui64 cookie,
-                                                     const TString& clientDC) {
+                                                     const TString& clientDC,
+                                                     bool ruPerRequest) {
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
@@ -254,6 +254,9 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     partitionRequest->SetPartition(data.Index);
     // partitionRequest->SetCmdWriteOffset();
     partitionRequest->SetCookie(cookie);
+    if (ruPerRequest) {
+        partitionRequest->SetMeteringV2Enabled(true);
+    }
 
     ui64 totalSize = 0;
 
@@ -294,6 +297,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
+        w->SetExternalOperation(true);
 
         totalSize += record.Value ? record.Value->size() : 0;
     }
@@ -318,11 +322,11 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     pendingRequest->StartTime = ctx.Now();
 
     size_t position = 0;
+    bool ruPerRequest = Context->Config.GetMeteringV2Enabled();
     for(const auto& topicData : r->TopicData) {
         const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
-
             auto writer = PartitionWriter(topicPath, partitionId, ctx);
             if (OK == writer.first) {
                 auto ownCookie = ++Cookie;
@@ -335,7 +339,8 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 pendingRequest->WaitAcceptingCookies.insert(ownCookie);
                 pendingRequest->WaitResultCookies.insert(ownCookie);
 
-                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC);
+                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC, ruPerRequest);
+                ruPerRequest = false;
 
                 Send(writer.second, std::move(ev));
             } else {
@@ -442,7 +447,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
     // We send the results in the order of receipt of the request
     while (!PendingRequests.empty()) {
         auto pendingRequest = PendingRequests.front();
-        
+
         // We send the response by timeout. This is possible, for example, if the event was lost or the PartitionWrite died.
         bool expired = expireTime > pendingRequest->StartTime;
 

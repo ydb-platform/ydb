@@ -1,0 +1,27 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["na";["DataType";"Date"]];
+        ["nd";["DataType";"Datetime"]];
+        ["nt";["DataType";"Timestamp"]];
+        ["naz";["DataType";"TzDate"]];
+        ["ndz";["DataType";"TzDatetime"]];
+        ["ntz";["DataType";"TzTimestamp"]];
+        ["wa";["DataType";"Date32"]];
+        ["wd";["DataType";"Datetime64"]];
+        ["wt";["DataType";"Timestamp64"]];
+        ["ni";["DataType";"Interval"]];
+        ["wi";["DataType";"Interval64"]];
+        ["i8";["DataType";"Int8"]];
+        ["u8";["DataType";"Uint8"]];
+        ["i16";["DataType";"Int16"]];
+        ["u16";["DataType";"Uint16"]];
+        ["i32";["DataType";"Int32"]];
+        ["u32";["DataType";"Uint32"]];
+        ["i64";["DataType";"Int64"]];
+        ["u64";["DataType";"Uint64"]];
+        ["waz";["DataType";"TzDate32"]];
+        ["wdz";["DataType";"TzDatetime64"]];
+        ["wtz";["DataType";"TzTimestamp64"]];
+    ]];
+}}
+

@@ -4,8 +4,26 @@
 -- avoid bit-exact output here because operations may not be bit-exact.
 SET extra_float_digits = 0;
 SELECT avg(four) AS avg_1 FROM onek;
+SELECT avg(a) AS avg_32 FROM aggtest WHERE a < 100;
+-- In 7.1, avg(float4) is computed using float8 arithmetic.
+-- Round the result to 3 digits to avoid platform-specific results.
+SELECT avg(b)::numeric(10,3) AS avg_107_943 FROM aggtest;
+SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
 SELECT sum(four) AS sum_1500 FROM onek;
+SELECT sum(a) AS sum_198 FROM aggtest;
+SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
 SELECT max(four) AS max_3 FROM onek;
+SELECT max(a) AS max_100 FROM aggtest;
+SELECT max(aggtest.b) AS max_324_78 FROM aggtest;
+SELECT max(student.gpa) AS max_3_7 FROM student;
+SELECT stddev_pop(b) FROM aggtest;
+SELECT stddev_samp(b) FROM aggtest;
+SELECT var_pop(b) FROM aggtest;
+SELECT var_samp(b) FROM aggtest;
+SELECT stddev_pop(b::numeric) FROM aggtest;
+SELECT stddev_samp(b::numeric) FROM aggtest;
+SELECT var_pop(b::numeric) FROM aggtest;
+SELECT var_samp(b::numeric) FROM aggtest;
 -- population variance is defined for a single tuple, sample variance
 -- is not
 SELECT var_pop(1.0::float8), var_samp(2.0::float8);
@@ -61,6 +79,16 @@ SELECT avg(x::float8), var_pop(x::float8)
 FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x);
 SELECT avg(x::float8), var_pop(x::float8)
 FROM (VALUES (7000000000005), (7000000000007)) v(x);
+-- SQL2003 binary aggregates
+SELECT regr_count(b, a) FROM aggtest;
+SELECT regr_sxx(b, a) FROM aggtest;
+SELECT regr_syy(b, a) FROM aggtest;
+SELECT regr_sxy(b, a) FROM aggtest;
+SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
+SELECT regr_r2(b, a) FROM aggtest;
+SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
+SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
+SELECT corr(b, a) FROM aggtest;
 -- check single-tuple behavior
 SELECT covar_pop(1::float8,2::float8), covar_samp(3::float8,4::float8);
 SELECT covar_pop(1::float8,'inf'::float8), covar_samp(3::float8,'inf'::float8);

@@ -1,4 +1,4 @@
-OWNER(g:frontend-build-platform)
+SUBSCRIBER(g:frontend_build_platform)
 
 PY3_LIBRARY()
 
@@ -16,6 +16,7 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/six
+    library/python/archive
 )
 
 END()

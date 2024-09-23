@@ -20,7 +20,12 @@ namespace NKikimr::NStorage {
                     }
                     break;
 
+                case NPDisk::EPDiskMetadataOutcome::NO_METADATA:
+                    ev->NoMetadata.emplace_back(path, guid);
+                    break;
+
                 default:
+                    ev->Errors.emplace_back(path);
                     STLOGX(*actorSystem, PRI_INFO, BS_NODE, NWDC40, "ReadConfig failed to read metadata", (Path, path),
                         (Status, (int)status), (Cookie, cookie));
                     break;
@@ -86,15 +91,12 @@ namespace NKikimr::NStorage {
         }
 
         std::vector<TString> drives;
+        auto processDrive = [&](const auto& /*node*/, const auto& drive) { drives.push_back(drive.GetPath()); };
         if (item.Record.HasCommittedStorageConfig()) {
-            EnumerateConfigDrives(item.Record.GetCommittedStorageConfig(), 0, [&](const auto& /*node*/, const auto& drive) {
-                drives.push_back(drive.GetPath());
-            });
+            EnumerateConfigDrives(item.Record.GetCommittedStorageConfig(), SelfId().NodeId(), processDrive);
         }
         if (item.Record.HasProposedStorageConfig()) {
-            EnumerateConfigDrives(item.Record.GetProposedStorageConfig(), 0, [&](const auto& /*node*/, const auto& drive) {
-                drives.push_back(drive.GetPath());
-            });
+            EnumerateConfigDrives(item.Record.GetProposedStorageConfig(), SelfId().NodeId(), processDrive);
         }
         std::sort(drives.begin(), drives.end());
         drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
@@ -148,12 +150,8 @@ namespace NKikimr::NStorage {
                 THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposed;
 
                 auto *res = task.Response.MutableCollectConfigs();
-                for (auto& item : *res->MutableCommittedConfigs()) {
-                    committed.try_emplace(item.GetConfig(), &item);
-                }
-                for (auto& item : *res->MutableProposedConfigs()) {
-                    proposed.try_emplace(item.GetConfig(), &item);
-                }
+                Y_ABORT_UNLESS(!res->CommittedConfigsSize());
+                Y_ABORT_UNLESS(!res->ProposedConfigsSize());
 
                 for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                     auto addConfig = [&, path = path, guid = guid](const auto& config, auto func, auto& set) {
@@ -176,6 +174,21 @@ namespace NKikimr::NStorage {
                     if (m.HasProposedStorageConfig()) {
                         addConfig(m.GetProposedStorageConfig(), &TEvGather::TCollectConfigs::AddProposedConfigs, proposed);
                     }
+                }
+
+                for (const auto& [path, guid] : msg.NoMetadata) {
+                    auto *disk = res->AddNoMetadata();
+                    SelfNode.Serialize(disk->MutableNodeId());
+                    disk->SetPath(path);
+                    if (guid) {
+                        disk->SetGuid(*guid);
+                    }
+                }
+
+                for (const auto& path : msg.Errors) {
+                    auto *disk = res->AddErrors();
+                    SelfNode.Serialize(disk->MutableNodeId());
+                    disk->SetPath(path);
                 }
 
                 FinishAsyncOperation(it->first);
@@ -224,19 +237,19 @@ namespace NKikimr::NStorage {
 
 namespace NKikimr {
 
+    static const TString VaultLockFile = "/Berkanavt/kikimr/state/storage.lock";
     static const TString VaultPath = "/Berkanavt/kikimr/state/storage.txt";
+    static TMutex VaultMutex;
 
-    static bool ReadVault(TFile& file, NKikimrBlobStorage::TStorageFileContent& vault) {
-        TString buffer;
-        try {
-            buffer = TFileInput(file).ReadAll();
-        } catch (...) {
-            return false;
-        }
-        if (!buffer) {
+    static bool ReadVault(NKikimrBlobStorage::TStorageFileContent& vault) {
+        if (TFileHandle fh(VaultPath, OpenExisting | RdOnly); !fh.IsOpen()) {
+            return true;
+        } else if (TString buffer = TString::Uninitialized(fh.GetLength())) {
+            return fh.Read(buffer.Detach(), buffer.size()) == (i32)buffer.size() &&
+                google::protobuf::util::JsonStringToMessage(buffer, &vault).ok();
+        } else {
             return true;
         }
-        return google::protobuf::util::JsonStringToMessage(buffer, &vault).ok();
     }
 
     static bool WriteVault(NKikimrBlobStorage::TStorageFileContent& vault) {
@@ -245,30 +258,29 @@ namespace NKikimr {
         Y_ABORT_UNLESS(success);
 
         const TString tempPath = VaultPath + ".tmp";
-        TFileHandle fh1(tempPath, OpenAlways);
-        if (!fh1.IsOpen() || fh1.Write(buffer.data(), buffer.size()) != (i32)buffer.size()) {
+        if (TFileHandle fh(tempPath, CreateAlways | WrOnly); !fh.IsOpen()) {
+            return false;
+        } else if (fh.Flock(LOCK_EX | LOCK_NB)) {
+            Y_DEBUG_ABORT("unexpected lock race");
+            return false;
+        } else if (fh.Write(buffer.data(), buffer.size()) != (i32)buffer.size()) {
+            return false;
+        } else if (!NFs::Rename(tempPath, VaultPath)) {
             return false;
         }
-
-        if (!NFs::Rename(tempPath, VaultPath)) {
-            return false;
-        }
-
         return true;
     }
 
     NPDisk::EPDiskMetadataOutcome ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf& metadata,
             std::optional<ui64> *pdiskGuid) {
-        TFileHandle fh(VaultPath, OpenExisting | RdWr);
-        if (!fh.IsOpen()) {
-            return NPDisk::EPDiskMetadataOutcome::NO_METADATA;
-        } else if (fh.Flock(LOCK_SH)) {
+        TGuard<TMutex> guard(VaultMutex);
+        TFileHandle lock(VaultLockFile, OpenAlways);
+        if (!lock.IsOpen() || lock.Flock(LOCK_EX)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
-        TFile file(fh.Release());
 
         NKikimrBlobStorage::TStorageFileContent vault;
-        if (!ReadVault(file, vault)) {
+        if (!ReadVault(vault)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
 
@@ -323,14 +335,14 @@ namespace NKikimr {
 
     NPDisk::EPDiskMetadataOutcome WritePDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf&& metadata,
             std::optional<ui64> *pdiskGuid) {
-        TFileHandle fh(VaultPath, OpenAlways);
-        if (!fh.IsOpen() || fh.Flock(LOCK_EX)) {
+        TGuard<TMutex> guard(VaultMutex);
+        TFileHandle lock(VaultLockFile, OpenAlways);
+        if (!lock.IsOpen() || lock.Flock(LOCK_EX)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
-        TFile file(fh.Release());
 
         NKikimrBlobStorage::TStorageFileContent vault;
-        if (!ReadVault(file, vault)) {
+        if (!ReadVault(vault)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
 

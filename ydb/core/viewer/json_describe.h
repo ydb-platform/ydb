@@ -201,13 +201,12 @@ public:
     TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> GetCacheDescribeSchemeInfo() {
         const auto& entry = CacheResult->Request.Get()->ResultSet.front();
         const auto& path = Event->Get()->Request.GetParams().Get("path");
-        const auto& pathId = TPathId();
         const auto& schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
         TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
         result->SetPath(path);
-        result->SetPathId(pathId.LocalPathId);
-        result->SetPathOwnerId(pathId.OwnerId);
+        result->SetPathId(entry.Self->Info.GetPathId());
+        result->SetPathOwnerId(entry.Self->Info.GetSchemeshardId());
 
         auto* pathDescription = result->MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
@@ -232,7 +231,6 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (SchemeShardResult != nullptr && SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             DescribeResult = GetSchemeShardDescribeSchemeInfo();
         } else if (CacheResult != nullptr) {
@@ -264,7 +262,9 @@ public:
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
             if (DescribeResult->GetStatus() == accessDeniedStatus) {
-                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                PassAway();
+                return;
             }
             TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
             DecodeExternalTableContent(json);
@@ -272,7 +272,7 @@ public:
             json << "null";
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -320,43 +320,102 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonDescribe> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonDescribe> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"schemeshard_id","in":"query","description":"schemeshard identifier (tablet id)","required":false,"type":"integer"},
-                      {"name":"path_id","in":"query","description":"path id","required":false,"type":"integer"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"backup","in":"query","description":"return backup information","required":false,"type":"boolean","default":true},
-                      {"name":"private","in":"query","description":"return private tables","required":false,"type":"boolean","default":true},
-                      {"name":"children","in":"query","description":"return children","required":false,"type":"boolean","default":true},
-                      {"name":"boundaries","in":"query","description":"return boundaries","required":false,"type":"boolean","default":false},
-                      {"name":"partition_config","in":"query","description":"return partition configuration","required":false,"type":"boolean","default":true},
-                      {"name":"partition_stats","in":"query","description":"return partitions statistics","required":false,"type":"boolean","default":false},
-                      {"name":"partitioning_info","in":"query","description":"return partitioning information","required":false,"type":"boolean","default":true},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: schemeshard_id
+              in: query
+              description: schemeshard identifier (tablet id)
+              required: false
+              type: integer
+            - name: path_id
+              in: query
+              description: path id
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: backup
+              in: query
+              description: return backup information
+              required: false
+              type: boolean
+              default: true
+            - name: private
+              in: query
+              description: return private tables
+              required: false
+              type: boolean
+              default: true
+            - name: children
+              in: query
+              description: return children
+              required: false
+              type: boolean
+              default: true
+            - name: boundaries
+              in: query
+              description: return boundaries
+              required: false
+              type: boolean
+              default: false
+            - name: partition_config
+              in: query
+              description: return partition configuration
+              required: false
+              type: boolean
+              default: true
+            - name: partition_stats
+              in: query
+              description: return partitions statistics
+              required: false
+              type: boolean
+              default: false
+            - name: partitioning_info
+              in: query
+              description: return partitioning information
+              required: false
+              type: boolean
+              default: true
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonDescribe> {
     static TString GetSummary() {
-        return "\"Schema detailed information\"";
+        return "Schema detailed information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonDescribe> {
     static TString GetDescription() {
-        return "\"Returns detailed information about schema object\"";
+        return "Returns detailed information about schema object";
     }
 };
 

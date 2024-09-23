@@ -17,6 +17,7 @@ bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 struct TAsyncStats {
     // Data
     std::vector<ui64> Bytes;
+    std::vector<ui64> DecompressedBytes;
     std::vector<ui64> Rows;
     std::vector<ui64> Chunks;
     std::vector<ui64> Splits;
@@ -83,6 +84,7 @@ struct TStageExecutionStats {
     std::vector<ui64> ResultBytes;
     std::vector<ui64> IngressRows;
     std::vector<ui64> IngressBytes;
+    std::vector<ui64> IngressDecompressedBytes;
     std::vector<ui64> EgressRows;
     std::vector<ui64> EgressBytes;
 
@@ -163,6 +165,7 @@ public:
         NKikimrQueryStats::TTxStats&& txStats,
         TDuration collectLongTaskStatsTimeout = TDuration::Max()
     );
+    void AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats);
 
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
@@ -193,6 +196,7 @@ struct TTableStat {
 struct TProgressStatEntry {
     TDuration ComputeTime;
     TTableStat ReadIOStat;
+    bool Defined = false;
 
     TProgressStatEntry& operator+=(const TProgressStatEntry& rhs);
 

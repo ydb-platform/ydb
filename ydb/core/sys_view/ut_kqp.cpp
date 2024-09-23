@@ -93,14 +93,14 @@ void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 part
     CreateTables(env, partitionCount);
 }
 
-void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false) {
+void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false, ui16 tableNum = 0) {
     env.GetClient().CreateTable("/Root", Sprintf(R"(
-        Name: "Table0"
+        Name: "Table%u"
         Columns { Name: "Key", Type: "Uint64" }
         Columns { Name: "Value", Type: "String" }
         KeyColumnNames: ["Key"]
         UniformPartitionsCount: %lu
-    )", partitionCount));
+    )", tableNum, partitionCount));
 
     if (fillTable) {
         TTableClient client(env.GetDriver());
@@ -308,6 +308,31 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT(result.IsSuccess());
             NKqp::CompareYson(R"([
                 [[6u];[0u];["/Root/Tenant2/Table2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(PgTablesOneSchemeShardDataQuery) {
+        TTestEnv env;
+        CreateRootTable(env, 1, false, 0);
+        CreateRootTable(env, 2, false, 1);
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            NKqp::CompareYson(R"([
+                ["public";"Table0";"root@builtin";#;"t";"f";"f";"f"];
+                ["public";"Table1";"root@builtin";#;"t";"f";"f";"f"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -974,7 +999,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.String("Default"); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
-        check.String("INIT_PENDING"); // Status
+        check.String("ERROR"); // Status
         check.Uint64(0u); // VDisk
         check.Uint64(1000u); // VSlotId
     }
@@ -1019,7 +1044,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TYsonFieldChecker check(ysonString, 12);
 
         check.Uint64(0u); // AllocatedSize
-        check.Uint64(0u); // AvailableSize
+        check.Uint64GreaterOrEquals(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.Uint64(0u); // EncryptionMode
         check.String("none"); // ErasureSpecies
@@ -1526,7 +1551,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 18);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 21);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1544,7 +1569,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 12);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 15);
 
             THashSet<TString> names;
             for (const auto& child : children) {

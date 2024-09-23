@@ -47,14 +47,14 @@ using TJsonNodeInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest,
 template <>
 struct TJsonRequestSummary<TJsonNodeInfo> {
     static TString GetSummary() {
-        return "\"Interconnect information\"";
+        return "Interconnect information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodeInfo> {
     static TString GetDescription() {
-        return "\"Returns information about node connections\"";
+        return "Returns information about node connections";
     }
 };
 

@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:12:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT $optOptList("42");
+	^
+        <tmp_path>/program.sql:<main>:12:8: Error: At function: Apply
+        	SELECT $optOptList("42");
+	       ^
+            <tmp_path>/program.sql:<main>:2:24: Error: At function: ScriptUdf
+            	$optOptList = Python3::opt_opt_list(Callable<(String)->List<String>??>, @@
+	                       ^
+                <tmp_path>/program.sql:<main>:2:24: Error: Nested optionals are unsupported in script UDF
+                	$optOptList = Python3::opt_opt_list(Callable<(String)->List<String>??>, @@
+	                       ^

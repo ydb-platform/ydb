@@ -404,6 +404,12 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         followerIndex->clear();
     }
 
+    void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr ev) {
+        Info = ev->Get()->GroupConfig;
+        Y_ABORT_UNLESS(!ev->Get()->BoardConfig);
+        Y_ABORT_UNLESS(!ev->Get()->SchemeBoardConfig);
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_REPLICA;
@@ -432,6 +438,7 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+            hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
 
             default:
                 BLOG_W("Replica::StateInit unexpected event type# " << ev->GetTypeRewrite()

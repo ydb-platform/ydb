@@ -37,12 +37,30 @@ namespace NYdb::NConsoleClient {
         NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
     };
 
+    class TCommandWithAutoPartitioning {
+    protected:
+        void AddAutoPartitioning(TClientCommand::TConfig& config, bool withDefault);
+        void ParseAutoPartitioningStrategy();
+        TMaybe<NTopic::EAutoPartitioningStrategy> GetAutoPartitioningStrategy() const;
+        TMaybe<ui32> GetAutoPartitioningStabilizationWindowSeconds() const;
+        TMaybe<ui32> GetAutoPartitioningUpUtilizationPercent() const;
+        TMaybe<ui32> GetAutoPartitioninDownUtilizationPercent() const;
+
+    private:
+        TMaybe<ui32> ScaleThresholdTime_;
+        TMaybe<ui32> ScaleUpThresholdPercent_;
+        TMaybe<ui32> ScaleDownThresholdPercent_;
+
+        TString AutoPartitioningStrategyStr_;
+        TMaybe<NTopic::EAutoPartitioningStrategy> AutoPartitioningStrategy_;
+    };
+
     class TCommandTopic: public TClientCommandTree {
     public:
         TCommandTopic();
     };
 
-    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode {
+    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
     public:
         TCommandTopicCreate();
         void Config(TConfig& config) override;
@@ -52,11 +70,13 @@ namespace NYdb::NConsoleClient {
     private:
         ui64 RetentionPeriodHours_;
         ui64 RetentionStorageMb_;
-        ui32 PartitionsCount_;
+        ui32 MinActivePartitions_;
+        ui32 MaxActivePartitions_;
+
         ui32 PartitionWriteSpeedKbps_;
     };
 
-    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode {
+    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
     public:
         TCommandTopicAlter();
         void Config(TConfig& config) override;
@@ -66,7 +86,10 @@ namespace NYdb::NConsoleClient {
     private:
         TMaybe<ui64> RetentionPeriodHours_;
         TMaybe<ui64> RetentionStorageMb_;
-        TMaybe<ui32> PartitionsCount_;
+        TMaybe<ui32> MinActivePartitions_;
+        TMaybe<ui32> MaxActivePartitions_;
+
+
         TMaybe<ui32> PartitionWriteSpeedKbps_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);

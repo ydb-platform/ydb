@@ -1,6 +1,6 @@
-#pragma once 
+#pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
@@ -18,6 +18,8 @@ public:
 
     void CreateTopic(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
+    void CreateTopicWithAutoscale(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
+                     size_t maxPartitionCount = 100);
 
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TEST_TOPIC) const;

@@ -5,6 +5,10 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+void ThrowNotSupportedImplForClass(const TString& className, const char *func) {
+    THROW yexception() << "Unsupported access to '" << func << "' method of: " << className;
+} 
+
 template <class IComputationNodeInterface>
 void TRefCountedComputationNode<IComputationNodeInterface>::Ref() {
     ++Refs_;
@@ -84,9 +88,53 @@ EValueRepresentation TUnboxedImmutableComputationNode::GetRepresentation() const
     return RepresentationKind;
 }
 
+Y_NO_INLINE TStatefulComputationNodeBase::TStatefulComputationNodeBase(ui32 valueIndex, EValueRepresentation kind)
+    : ValueIndex(valueIndex)
+    , RepresentationKind(kind)
+{}
+
+Y_NO_INLINE TStatefulComputationNodeBase::~TStatefulComputationNodeBase()
+{}
+
+Y_NO_INLINE void TStatefulComputationNodeBase::AddDependenceImpl(const IComputationNode* node) {
+    Dependencies.emplace_back(node);
+}
+
+Y_NO_INLINE void TStatefulComputationNodeBase::CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner, 
+    IComputationNode::TIndexesMap& dependencies, bool stateless) const {
+    if (self == owner)
+        return;
+
+    if (const auto ins = dependencies.emplace(ValueIndex, RepresentationKind); ins.second) {
+        std::for_each(Dependencies.cbegin(), Dependencies.cend(), std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies)));
+
+        if (stateless) {
+            dependencies.erase(ins.first);
+        }
+    }
+}
+
+
+Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase()
+{}
+
+Y_NO_INLINE TStatefulSourceComputationNodeBase::~TStatefulSourceComputationNodeBase()
+{}
+
+Y_NO_INLINE void TStatefulSourceComputationNodeBase::PrepareStageOneImpl(const TConstComputationNodePtrVector& dependencies) {
+    if (!Stateless) {
+        Stateless = std::accumulate(dependencies.cbegin(), dependencies.cend(), 0,
+            std::bind(std::plus<i32>(), std::placeholders::_1, std::bind(&IComputationNode::GetDependencyWeight, std::placeholders::_2))) <= 1;
+    }
+}
+
+Y_NO_INLINE void TStatefulSourceComputationNodeBase::AddSource(IComputationNode* source) const {
+    Sources.emplace(source);
+}
+
 template <class IComputationNodeInterface, bool SerializableState>
 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind)
-    : ValueIndex(mutables.CurValueIndex++), RepresentationKind(kind)
+    : TStatefulComputationNodeBase(mutables.CurValueIndex++, kind)
 {
     if constexpr (SerializableState) {
         mutables.SerializableValues.push_back(ValueIndex);
@@ -95,7 +143,7 @@ TStatefulComputationNode<IComputationNodeInterface, SerializableState>::TStatefu
 
 template <class IComputationNodeInterface, bool SerializableState>
 IComputationNode* TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependence(const IComputationNode* node) {
-    Dependencies.emplace_back(node);
+    AddDependenceImpl(node);
     return this;
 }
 
@@ -103,6 +151,9 @@ template <class IComputationNodeInterface, bool SerializableState>
 EValueRepresentation TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetRepresentation() const {
     return RepresentationKind;
 }
+
+template <class IComputationNodeInterface, bool SerializableState>
+void TStatefulComputationNode<IComputationNodeInterface, SerializableState>::InitNode(TComputationContext&) const {}
 
 template <class IComputationNodeInterface, bool SerializableState>
 ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetIndex() const { return ValueIndex; }
@@ -116,6 +167,140 @@ template class TStatefulComputationNode<IComputationExternalNode, false>;
 template class TStatefulComputationNode<IComputationNode, true>;
 template class TStatefulComputationNode<IComputationWideFlowNode, true>;
 template class TStatefulComputationNode<IComputationExternalNode, true>;
+
+Y_NO_INLINE ui32 TStatelessFlowComputationNodeBase::GetIndexImpl() const {
+    THROW yexception() << "Failed to get stateless node index.";
+}
+
+Y_NO_INLINE void TStatelessFlowComputationNodeBase::CollectDependentIndexesImpl(const IComputationNode* self,
+    const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies,
+    const IComputationNode* dependence) const {
+    if (self == owner)
+        return;
+
+    if (dependence) {
+        dependence->CollectDependentIndexes(owner, dependencies);
+    }
+}
+
+Y_NO_INLINE TStatefulFlowComputationNodeBase::TStatefulFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation stateKind)
+    : StateIndex(stateIndex)
+    , StateKind(stateKind)
+{}
+
+Y_NO_INLINE void TStatefulFlowComputationNodeBase::CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner, 
+    IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const {
+    if (self == owner)
+        return;
+
+    const auto ins = dependencies.emplace(StateIndex, StateKind);
+    if (ins.second && dependence) {
+        dependence->CollectDependentIndexes(owner, dependencies);
+    }
+}
+
+Y_NO_INLINE TPairStateFlowComputationNodeBase::TPairStateFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation firstKind, EValueRepresentation secondKind)
+    : StateIndex(stateIndex)
+    , FirstKind(firstKind)
+    , SecondKind(secondKind)
+{}
+
+Y_NO_INLINE void TPairStateFlowComputationNodeBase::CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner, 
+    IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const {
+    if (self == owner)
+        return;
+
+    const auto ins1 = dependencies.emplace(StateIndex, FirstKind);
+    const auto ins2 = dependencies.emplace(StateIndex + 1U, SecondKind);
+    if (ins1.second && ins2.second && dependence) {
+        dependence->CollectDependentIndexes(owner, dependencies);
+    }
+}
+
+Y_NO_INLINE ui32 TStatelessWideFlowComputationNodeBase::GetIndexImpl() const {
+    THROW yexception() << "Failed to get stateless node index.";
+}
+
+Y_NO_INLINE void TStatelessWideFlowComputationNodeBase::CollectDependentIndexesImpl(const IComputationNode* self, const IComputationNode* owner, 
+    IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const {
+    if (self == owner)
+        return;
+
+    if (dependence) {
+        dependence->CollectDependentIndexes(owner, dependencies);
+    }
+}
+
+Y_NO_INLINE EValueRepresentation TWideFlowBaseComputationNodeBase::GetRepresentationImpl() const {
+    THROW yexception() << "Failed to get representation kind.";
+}
+
+Y_NO_INLINE NUdf::TUnboxedValue TWideFlowBaseComputationNodeBase::GetValueImpl(TComputationContext&) const {
+    THROW yexception() << "Failed to get value from wide flow node.";
+}
+
+Y_NO_INLINE TStatefulWideFlowComputationNodeBase::TStatefulWideFlowComputationNodeBase(ui32 stateIndex, EValueRepresentation stateKind)
+    : StateIndex(stateIndex)
+    , StateKind(stateKind)
+{}
+
+Y_NO_INLINE void TStatefulWideFlowComputationNodeBase::CollectDependentIndexesImpl(const IComputationNode* self,
+    const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const {
+    if (self == owner)
+        return;
+
+    const auto ins = dependencies.emplace(StateIndex, StateKind);
+    if (ins.second && dependence) {
+        dependence->CollectDependentIndexes(owner, dependencies);
+    }
+}
+
+Y_NO_INLINE TPairStateWideFlowComputationNodeBase::TPairStateWideFlowComputationNodeBase(
+    ui32 stateIndex, EValueRepresentation firstKind, EValueRepresentation secondKind)
+    : StateIndex(stateIndex)
+    , FirstKind(firstKind)
+    , SecondKind(secondKind)
+{}
+
+Y_NO_INLINE void TPairStateWideFlowComputationNodeBase::CollectDependentIndexesImpl(
+    const IComputationNode* self, const IComputationNode* owner, 
+    IComputationNode::TIndexesMap& dependencies, const IComputationNode* dependence) const {
+    if (self == owner)
+        return;
+
+    const auto ins1 = dependencies.emplace(StateIndex, FirstKind);
+    const auto ins2 = dependencies.emplace(StateIndex + 1U, SecondKind);
+    if (ins1.second && ins2.second && dependence) {
+        dependence->CollectDependentIndexes(owner, dependencies);
+    }
+}
+
+Y_NO_INLINE TDecoratorComputationNodeBase::TDecoratorComputationNodeBase(IComputationNode* node, EValueRepresentation kind)
+    : Node(node)
+    , Kind(kind)
+{}
+
+Y_NO_INLINE ui32 TDecoratorComputationNodeBase::GetIndexImpl() const {
+    THROW yexception() << "Can't get index from decorator node.";
+}
+
+Y_NO_INLINE TString TDecoratorComputationNodeBase::DebugStringImpl(const TString& typeName) const {
+    return typeName + "(" + Node->DebugString() + ")";
+}
+
+Y_NO_INLINE TBinaryComputationNodeBase::TBinaryComputationNodeBase(IComputationNode* left, IComputationNode* right, EValueRepresentation kind)
+    : Left(left)
+    , Right(right)
+    , Kind(kind)
+{}
+
+Y_NO_INLINE ui32 TBinaryComputationNodeBase::GetIndexImpl() const {
+    THROW yexception() << "Can't get index from decorator node.";
+}
+
+Y_NO_INLINE TString TBinaryComputationNodeBase::DebugStringImpl(const TString& typeName) const {
+    return typeName + "(" + Left->DebugString() + "," + Right->DebugString() + ")";
+}
 
 void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {
     map.emplace(ValueIndex, RepresentationKind);

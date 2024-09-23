@@ -114,6 +114,10 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
+    if (!Options.ApplyUpdate(schemaUpdate.GetOptions(), errors)) {
+        return false;
+    }
+
     if (!HasEngine()) {
         Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     } else {
@@ -132,24 +136,26 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Version = tableSchema.GetVersion();
     Y_ABORT_UNLESS(tableSchema.HasEngine());
     Engine = tableSchema.GetEngine();
-    CompositeMarksFlag = tableSchema.GetCompositeMarks();
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
+    Options.Parse(tableSchema);
     Statistics.Parse(tableSchema);
 }
 
-void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
-    tableSchema.SetNextColumnId(NextColumnId);
-    tableSchema.SetVersion(Version);
-    tableSchema.SetCompositeMarks(CompositeMarksFlag);
+void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
+    NKikimrSchemeOp::TColumnTableSchema resultLocal;
+    resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetVersion(Version);
 
     Y_ABORT_UNLESS(HasEngine());
-    tableSchema.SetEngine(GetEngineUnsafe());
+    resultLocal.SetEngine(GetEngineUnsafe());
 
-    Columns.Serialize(tableSchema);
-    Indexes.Serialize(tableSchema);
-    Statistics.Serialize(tableSchema);
+    Columns.Serialize(resultLocal);
+    Indexes.Serialize(resultLocal);
+    Options.Serialize(resultLocal);
+    Statistics.Serialize(resultLocal);
+    std::swap(resultLocal, tableSchemaExt);
 }
 
 bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
@@ -158,6 +164,10 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     }
 
     if (!Indexes.Validate(opSchema, errors)) {
+        return false;
+    }
+
+    if (!Options.Validate(opSchema, errors)) {
         return false;
     }
 

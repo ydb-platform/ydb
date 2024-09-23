@@ -105,6 +105,14 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
         case NScheme::NTypeIds::Interval:
             serialized = cell.ToStream<i64>(out, ErrorString);
             break;
+        case NScheme::NTypeIds::Date32:
+            serialized = cell.ToStream<i32>(out, ErrorString);
+            break;
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            serialized = cell.ToStream<i64>(out, ErrorString);
+            break;
         case NScheme::NTypeIds::Decimal:
             serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString);
             break;
@@ -124,6 +132,9 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             break;
         case NScheme::NTypeIds::Pg:
             serialized = PgToStream(cell.AsBuf(), column.Type.GetTypeDesc(), out, ErrorString);
+            break;
+        case NScheme::NTypeIds::Uuid:
+            serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
             break;
         default:
             Y_ABORT("Unsupported type");

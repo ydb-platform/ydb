@@ -1,9 +1,11 @@
 #include "ydb_json_value.h"
 
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/stream/format.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 #include <library/cpp/json/json_reader.h>
+#include <chrono>
 
 namespace NYdb {
 
@@ -107,6 +109,166 @@ namespace NYdb {
         size_t CurPos;
     };
 
+    ui32 ParseNumber(ui32& pos, const::std::string_view& buf, ui32& value, i8 dig_cnt) {
+        ui32 count = 0U;
+        for (value = 0U; dig_cnt && pos < buf.size(); --dig_cnt, ++pos) {
+            if (const auto c = buf[pos]; c >= '0' && c <= '9') {
+                value = value * 10U + (c - '0');
+                ++count;
+                continue;
+            }
+            break;
+        }
+
+        return count;
+    }
+
+    std::chrono::year_month_day ParseDate(ui32& pos, const std::string_view& buf) {
+        bool beforeChrist = false;
+        if (pos < buf.size()) {
+            switch (buf.data()[pos]) {
+                case '-':
+                    beforeChrist = true;
+                    [[fallthrough]];
+                case '+':
+                    ++pos;
+                    [[fallthrough]];
+                default:
+                    break;
+            }
+        }
+
+        ui32 year, month, day;
+        if (!ParseNumber(pos, buf, year, 6U) || pos == buf.size() || buf[pos] != '-' ||
+            !ParseNumber(++pos, buf, month, 2U) || pos == buf.size() || buf[pos] != '-' ||
+            !ParseNumber(++pos, buf, day, 2U)) {
+            return {};
+        }
+
+        const i32 iyear = beforeChrist ? -year : year;
+        return std::chrono::year_month_day{std::chrono::year{iyear}, std::chrono::month{month}, std::chrono::day{day}};
+    }
+
+    std::optional<ui32> ParseTime(ui32& pos, const std::string_view& buf) {
+        ui32 hour, minute, second;
+        if (pos == buf.size() || buf[pos] != 'T' ||
+            !ParseNumber(++pos, buf, hour, 2U) || pos == buf.size() || buf[pos] != ':' ||
+            !ParseNumber(++pos, buf, minute, 2U) || pos == buf.size() || buf[pos] != ':' ||
+            !ParseNumber(++pos, buf, second, 2U) || pos == buf.size() ||
+            hour >= 24U || minute >= 60U || second >= 60U) {
+            return std::nullopt;
+        }
+
+        return hour * 3600U + minute * 60U + second;
+    }
+
+    constexpr i64 SecondsInDay = 86400LL;
+    constexpr i64 MicroMiltiplier = 1000000LL;
+
+    std::optional<i64> ParseDateTime(ui32& pos, const std::string_view& buf) {
+        const auto date = ParseDate(pos, buf);
+        if (!date.ok())
+            return std::nullopt;
+
+        const auto time = ParseTime(pos, buf);
+        if (!time || buf[pos] != 'Z')
+            return std::nullopt;
+
+        return i64(std::chrono::sys_days(date).time_since_epoch().count()) * SecondsInDay + i64(*time);
+    }
+
+    std::optional<ui32> ParseMicroseconds(ui32& pos, const std::string_view& buf) {
+        if (buf[pos] == '.') {
+            ui32 ms = 0U;
+            auto prevPos = ++pos;
+            if (!ParseNumber(pos, buf, ms, 6U)) {
+                return std::nullopt;
+            }
+
+            for (prevPos = pos - prevPos; prevPos < 6U; ++prevPos) {
+                ms *= 10U;
+            }
+
+            // Skip unused digits
+            while (pos < buf.size() && '0' <= buf[pos] && buf[pos] <= '9') {
+                ++pos;
+            }
+            return ms;
+        }
+        return 0U;
+    }
+
+    std::optional<i64> ParseTimestamp(const std::string_view& buf) {
+        ui32 pos = 0U;
+        const auto date = ParseDate(pos, buf);
+        if (!date.ok())
+            return std::nullopt;
+
+        const auto time = ParseTime(pos, buf);
+        if (!time)
+            return std::nullopt;
+
+        const auto microseconds = ParseMicroseconds(pos, buf);
+        if (!microseconds || buf[pos] != 'Z')
+            return std::nullopt;
+
+        return (i64(std::chrono::sys_days(date).time_since_epoch().count()) * SecondsInDay + i64(*time)) * MicroMiltiplier + *microseconds;
+    }
+
+    void WriteDate(TStringBuilder& out, const i32 days) {
+        const std::chrono::year_month_day ymd{std::chrono::sys_days(std::chrono::days(days))};
+        if (!ymd.ok()) {
+            ThrowFatalError(TStringBuilder() << "Invalid value for date: " << days);
+        }
+        out << int(ymd.year()) << '-' << LeftPad(unsigned(ymd.month()), 2U, '0') << '-' << LeftPad(unsigned(ymd.day()), 2U, '0');
+    }
+
+    void WriteTime(TStringBuilder& out, const ui32 time) {
+        out << LeftPad(time / 3600, 2U, '0') << ':' << LeftPad(time % 3600 / 60, 2U, '0') << ':' << LeftPad(time % 60, 2U, '0');
+    }
+
+    void WriteDatetime(TStringBuilder& out, i64 datetime) {
+        auto date = datetime / SecondsInDay;
+        datetime -= date * SecondsInDay;
+        if (datetime < 0) {
+            --date;
+            datetime += SecondsInDay;
+        }
+
+        WriteDate(out, i32(date));
+        out << 'T';
+        WriteTime(out, ui32(datetime));
+    }
+
+    TString FormatDate(i32 days) {
+        TStringBuilder str;
+        WriteDate(str, days);
+        return str;
+    }
+
+    TString FormatDatetime(i64 datetime) {
+        TStringBuilder str;
+        WriteDatetime(str, datetime);
+        str << 'Z';
+        return str;
+    }
+
+    TString FormatTimestamp(i64 timestamp) {
+        auto datetime = timestamp / MicroMiltiplier;
+        timestamp -= datetime * MicroMiltiplier;
+        if (timestamp < 0) {
+            --datetime;
+            timestamp += MicroMiltiplier;
+        }
+        TStringBuilder str;
+        WriteDatetime(str, datetime);
+        if (timestamp) {
+            str << '.' << LeftPad(timestamp, 6U, '0');
+        }
+        str << 'Z';
+        return str;
+    }
+
     class TYdbToJsonConverter {
     public:
         TYdbToJsonConverter(TValueParser& parser, NJsonWriter::TBuf& writer, EBinaryStringEncoding encoding)
@@ -167,6 +329,18 @@ namespace NYdb {
                 break;
             case EPrimitiveType::Interval:
                 Writer.WriteLongLong(Parser.GetInterval());
+                break;
+            case EPrimitiveType::Date32:
+                Writer.WriteString(FormatDate(Parser.GetDate32()));
+                break;
+            case EPrimitiveType::Datetime64:
+                Writer.WriteString(FormatDatetime(Parser.GetDatetime64()));
+                break;
+            case EPrimitiveType::Timestamp64:
+                Writer.WriteString(FormatTimestamp(Parser.GetTimestamp64()));
+                break;
+            case EPrimitiveType::Interval64:
+                Writer.WriteLongLong(Parser.GetInterval64());
                 break;
             case EPrimitiveType::TzDate:
                 Writer.WriteString(Parser.GetTzDate());
@@ -548,6 +722,42 @@ namespace {
             case EPrimitiveType::Interval:
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
                 ValueBuilder.Interval(jsonValue.GetInteger());
+                break;
+            case EPrimitiveType::Date32:
+            {
+                EnsureType(jsonValue, NJson::JSON_STRING);
+                ui32 pos = 0U;
+                const auto date = ParseDate(pos, jsonValue.GetString());
+                if (!date.ok()) {
+                    ThrowFatalError(TStringBuilder() << "Can't parse date from string \"" << jsonValue.GetString() << "\"");
+                }
+                ValueBuilder.Date32(std::chrono::sys_days(date).time_since_epoch().count());
+                break;
+            }
+            case EPrimitiveType::Datetime64:
+            {
+                EnsureType(jsonValue, NJson::JSON_STRING);
+                ui32 pos = 0U;
+                const auto datetime = ParseDateTime(pos, jsonValue.GetString());
+                if (!datetime) {
+                    ThrowFatalError(TStringBuilder() << "Can't parse time point from string \"" << jsonValue.GetString() << "\"");
+                }
+                ValueBuilder.Datetime64(*datetime);
+                break;
+            }
+            case EPrimitiveType::Timestamp64:
+            {
+                EnsureType(jsonValue, NJson::JSON_STRING);
+                const auto timestamp = ParseTimestamp(jsonValue.GetString());
+                if (!timestamp) {
+                    ThrowFatalError(TStringBuilder() << "Can't parse timestamp from string \"" << jsonValue.GetString() << "\"");
+                }
+                ValueBuilder.Timestamp64(*timestamp);
+                break;
+            }
+            case EPrimitiveType::Interval64:
+                EnsureType(jsonValue, NJson::JSON_INTEGER);
+                ValueBuilder.Interval64(jsonValue.GetInteger());
                 break;
             case EPrimitiveType::TzDate:
                 EnsureType(jsonValue, NJson::JSON_STRING);

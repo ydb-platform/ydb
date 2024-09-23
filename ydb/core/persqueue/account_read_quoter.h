@@ -126,7 +126,7 @@ private:
     const TActorId TabletActor;
     const TActorId Recepient;
     const ui64 TabletId;
-    
+
     const ui64 CreditBytes = 0;
 
     ui64 ConsumedBytesInCredit = 0;
@@ -167,7 +167,7 @@ protected:
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 
 private:
-    TQuoterParams GetQuoterParams(const TString& user);
+    static TQuoterParams GetQuoterParams(const TString& user);
     const TString User;
     TString ConsumerPath;
 };

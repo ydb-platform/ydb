@@ -318,7 +318,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitPlanStep::TPtr &
         for (ui64 coordinatorId : mediator.Coordinators) {
             TMediatorCoordinator &coordinator = MediatorCoordinators[coordinatorId];
             if (coordinator.WaitingSteps.insert(planStep).second && !coordinator.RetryPending) {
-                Send(MakePipePeNodeCacheID(false),
+                Send(MakePipePerNodeCacheID(false),
                     new TEvPipeCache::TEvForward(
                         new TEvTxProxy::TEvRequirePlanSteps(coordinatorId, planStep),
                         coordinatorId,
@@ -370,7 +370,7 @@ void TMediatorTimecastProxy::Handle(TEvPrivate::TEvRetryCoordinator::TPtr &ev, c
     if (it != MediatorCoordinators.end() && it->second.RetryPending) {
         it->second.RetryPending = false;
         if (!it->second.WaitingSteps.empty()) {
-            Send(MakePipePeNodeCacheID(false),
+            Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvTxProxy::TEvRequirePlanSteps(msg->Coordinator, it->second.WaitingSteps),
                     msg->Coordinator,

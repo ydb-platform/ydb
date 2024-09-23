@@ -229,7 +229,7 @@ namespace {
         {
         }
 
-        bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&) override {
+        bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) override {
             return false;
         }
 

@@ -9,16 +9,16 @@ namespace NKikimr::NOlap {
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
-
+    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
 protected:
-    TSplitSettings SplitSettings;
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;
+    virtual void DoOnAfterCompile() override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
-        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
+    std::vector<TWritePortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
+        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const;
 
     virtual void DoDebugString(TStringOutput& out) const override {
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
@@ -28,29 +28,44 @@ protected:
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override final {
         auto actLock = DoBuildDataLockImpl();
-        auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(PortionsToRemove);
-        return std::make_shared<NDataLocks::TCompositeLock>(std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
+        if (actLock) {
+            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier() + "::REMOVE", PortionsToRemove);
+            return std::make_shared<NDataLocks::TCompositeLock>(TypeString() + "::" + GetTaskIdentifier(), std::vector<std::shared_ptr<NDataLocks::ILock>>({actLock, selfLock}));
+        } else {
+            auto selfLock = std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToRemove);
+            return selfLock;
+        }
     }
-
 public:
-    const TSplitSettings& GetSplitSettings() const {
-        return SplitSettings;
-    }
-
-    TChangesWithAppend(const TSplitSettings& splitSettings, const TSaverContext& saverContext, const TString& consumerId)
+    TChangesWithAppend(const TSaverContext& saverContext, const NBlobOperations::EConsumer consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
-        , SplitSettings(splitSettings)
         , SaverContext(saverContext)
     {
 
     }
 
-    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
-    std::vector<TPortionInfoWithBlobs> AppendedPortions;
+    const THashMap<TPortionAddress, TPortionInfo>& GetPortionsToRemove() const {
+        return PortionsToRemove;
+    }
+
+    ui32 GetPortionsToRemoveSize() const {
+        return PortionsToRemove.size();
+    }
+
+    bool HasPortionsToRemove() const {
+        return PortionsToRemove.size();
+    }
+
+    void AddPortionToRemove(const TPortionInfo& info) {
+        AFL_VERIFY(!info.HasRemoveSnapshot());
+        AFL_VERIFY(PortionsToRemove.emplace(info.GetAddress(), info).second);
+    }
+
+    std::vector<TWritePortionInfoWithBlobs> AppendedPortions;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }
-    virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) override {
+    virtual TWritePortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) override {
         Y_ABORT_UNLESS(index < AppendedPortions.size());
         return &AppendedPortions[index];
     }

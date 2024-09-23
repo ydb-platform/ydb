@@ -4,6 +4,7 @@ import time
 import logging
 import argparse
 import hashlib
+import base64
 
 import sky
 import fetch_from
@@ -77,11 +78,12 @@ def _fetch_via_http(tarball_url, integrity, integrity_algorithm, file_name):
 
     hashobj = hashlib.new(integrity_algorithm)
     fetched_file = fetch_from.fetch_url(url, False, file_name, tries=1, writers=[hashobj.update])
+    checksum = base64.b64encode(hashobj.digest()).decode('utf-8')
 
-    if hashobj.hexdigest() != integrity:
+    if checksum != integrity:
         raise fetch_from.BadChecksumFetchError("Expected {}, but got {} for {}".format(
             integrity,
-            hashobj.hexdigest(),
+            checksum,
             file_name,
         ))
 

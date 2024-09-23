@@ -14,7 +14,6 @@ import logging
 import io
 import os
 import shutil
-import sys
 import traceback
 from contextlib import suppress
 from enum import Enum
@@ -33,7 +32,7 @@ from typing import (
     Protocol,
     Tuple,
     TypeVar,
-    Union,
+    cast,
 )
 
 from .. import (
@@ -43,6 +42,8 @@ from .. import (
     errors,
     namespaces,
 )
+from .._path import StrPath
+from ..compat import py39
 from ..discovery import find_package_path
 from ..dist import Distribution
 from ..warnings import (
@@ -50,13 +51,17 @@ from ..warnings import (
     SetuptoolsDeprecationWarning,
     SetuptoolsWarning,
 )
+from .build import build as build_cls
 from .build_py import build_py as build_py_cls
+from .dist_info import dist_info as dist_info_cls
+from .egg_info import egg_info as egg_info_cls
+from .install import install as install_cls
+from .install_scripts import install_scripts as install_scripts_cls
 
 if TYPE_CHECKING:
-    from wheel.wheelfile import WheelFile  # noqa
+    from wheel.wheelfile import WheelFile  # type:ignore[import-untyped] # noqa
 
-_Path = Union[str, Path]
-_P = TypeVar("_P", bound=_Path)
+_P = TypeVar("_P", bound=StrPath)
 _logger = logging.getLogger(__name__)
 
 
@@ -156,7 +161,7 @@ class editable_wheel(Command):
 
     def _ensure_dist_info(self):
         if self.dist_info_dir is None:
-            dist_info = self.reinitialize_command("dist_info")
+            dist_info = cast(dist_info_cls, self.reinitialize_command("dist_info"))
             dist_info.output_dir = self.dist_dir
             dist_info.ensure_finalized()
             dist_info.run()
@@ -181,7 +186,7 @@ class editable_wheel(Command):
         return next(candidates, None)
 
     def _configure_build(
-        self, name: str, unpacked_wheel: _Path, build_lib: _Path, tmp_dir: _Path
+        self, name: str, unpacked_wheel: StrPath, build_lib: StrPath, tmp_dir: StrPath
     ):
         """Configure commands to behave in the following ways:
 
@@ -203,12 +208,18 @@ class editable_wheel(Command):
         scripts = str(Path(unpacked_wheel, f"{name}.data", "scripts"))
 
         # egg-info may be generated again to create a manifest (used for package data)
-        egg_info = dist.reinitialize_command("egg_info", reinit_subcommands=True)
+        egg_info = cast(
+            egg_info_cls, dist.reinitialize_command("egg_info", reinit_subcommands=True)
+        )
         egg_info.egg_base = str(tmp_dir)
         egg_info.ignore_egg_info_in_manifest = True
 
-        build = dist.reinitialize_command("build", reinit_subcommands=True)
-        install = dist.reinitialize_command("install", reinit_subcommands=True)
+        build = cast(
+            build_cls, dist.reinitialize_command("build", reinit_subcommands=True)
+        )
+        install = cast(
+            install_cls, dist.reinitialize_command("install", reinit_subcommands=True)
+        )
 
         build.build_platlib = build.build_purelib = build.build_lib = build_lib
         install.install_purelib = install.install_platlib = install.install_lib = wheel
@@ -216,12 +227,14 @@ class editable_wheel(Command):
         install.install_headers = headers
         install.install_data = data
 
-        install_scripts = dist.get_command_obj("install_scripts")
+        install_scripts = cast(
+            install_scripts_cls, dist.get_command_obj("install_scripts")
+        )
         install_scripts.no_ep = True
 
         build.build_temp = str(tmp_dir)
 
-        build_py = dist.get_command_obj("build_py")
+        build_py = cast(build_py_cls, dist.get_command_obj("build_py"))
         build_py.compile = False
         build_py.existing_egg_info_dir = self._find_egg_info_dir()
 
@@ -234,6 +247,7 @@ class editable_wheel(Command):
         """Set the ``editable_mode`` flag in the build sub-commands"""
         dist = self.distribution
         build = dist.get_command_obj("build")
+        # TODO: Update typeshed distutils stubs to overload non-None return type by default
         for cmd_name in build.get_sub_commands():
             cmd = dist.get_command_obj(cmd_name)
             if hasattr(cmd, "editable_mode"):
@@ -256,7 +270,11 @@ class editable_wheel(Command):
         return files, mapping
 
     def _run_build_commands(
-        self, dist_name: str, unpacked_wheel: _Path, build_lib: _Path, tmp_dir: _Path
+        self,
+        dist_name: str,
+        unpacked_wheel: StrPath,
+        build_lib: StrPath,
+        tmp_dir: StrPath,
     ) -> Tuple[List[str], Dict[str, str]]:
         self._configure_build(dist_name, unpacked_wheel, build_lib, tmp_dir)
         self._run_build_subcommands()
@@ -266,7 +284,7 @@ class editable_wheel(Command):
         self._run_install("data")
         return files, mapping
 
-    def _run_build_subcommands(self):
+    def _run_build_subcommands(self) -> None:
         """
         Issue #3501 indicates that some plugins/customizations might rely on:
 
@@ -280,7 +298,7 @@ class editable_wheel(Command):
         # TODO: Once plugins/customisations had the chance to catch up, replace
         #       `self._run_build_subcommands()` with `self.run_command("build")`.
         #       Also remove _safely_run, TestCustomBuildPy. Suggested date: Aug/2023.
-        build: Command = self.get_finalized_command("build")
+        build = self.get_finalized_command("build")
         for name in build.get_sub_commands():
             cmd = self.get_finalized_command(name)
             if name == "build_py" and type(cmd) != build_py_cls:
@@ -354,7 +372,7 @@ class editable_wheel(Command):
         self,
         name: str,
         tag: str,
-        build_lib: _Path,
+        build_lib: StrPath,
     ) -> "EditableStrategy":
         """Decides which strategy to use to implement an editable installation."""
         build_name = f"__editable__.{name}-{tag}"
@@ -424,12 +442,13 @@ class _LinkTree(_StaticPth):
         self,
         dist: Distribution,
         name: str,
-        auxiliary_dir: _Path,
-        build_lib: _Path,
+        auxiliary_dir: StrPath,
+        build_lib: StrPath,
     ):
         self.auxiliary_dir = Path(auxiliary_dir)
         self.build_lib = Path(build_lib).resolve()
-        self._file = dist.get_command_obj("build_py").copy_file
+        # TODO: Update typeshed distutils stubs to overload non-None return type by default
+        self._file = dist.get_command_obj("build_py").copy_file  # type: ignore[union-attr]
         super().__init__(dist, name, [self.auxiliary_dir])
 
     def __call__(self, wheel: "WheelFile", files: List[str], mapping: Dict[str, str]):
@@ -447,7 +466,9 @@ class _LinkTree(_StaticPth):
         dest = self.auxiliary_dir / relative_output
         if not dest.parent.is_dir():
             dest.parent.mkdir(parents=True)
-        self._file(src_file, dest, link=link)
+        # TODO: Update typeshed distutils stubs so distutils.cmd.Command.copy_file, accepts PathLike
+        # same with methods used by copy_file
+        self._file(src_file, dest, link=link)  # type: ignore[arg-type]
 
     def _create_links(self, outputs, output_mapping):
         self.auxiliary_dir.mkdir(parents=True, exist_ok=True)
@@ -484,7 +505,7 @@ class _TopLevelFinder:
         self.dist = dist
         self.name = name
 
-    def __call__(self, wheel: "WheelFile", files: List[str], mapping: Dict[str, str]):
+    def template_vars(self) -> Tuple[str, str, Dict[str, str], Dict[str, List[str]]]:
         src_root = self.dist.src_root or os.curdir
         top_level = chain(_find_packages(self.dist), _find_top_level_modules(self.dist))
         package_dir = self.dist.package_dir or {}
@@ -498,7 +519,7 @@ class _TopLevelFinder:
         )
 
         legacy_namespaces = {
-            pkg: find_package_path(pkg, roots, self.dist.src_root or "")
+            cast(str, pkg): find_package_path(pkg, roots, self.dist.src_root or "")
             for pkg in self.dist.namespace_packages or []
         }
 
@@ -509,11 +530,20 @@ class _TopLevelFinder:
 
         name = f"__editable__.{self.name}.finder"
         finder = _normalization.safe_identifier(name)
+        return finder, name, mapping, namespaces_
+
+    def get_implementation(self) -> Iterator[Tuple[str, bytes]]:
+        finder, name, mapping, namespaces_ = self.template_vars()
+
         content = bytes(_finder_template(name, mapping, namespaces_), "utf-8")
-        wheel.writestr(f"{finder}.py", content)
+        yield (f"{finder}.py", content)
 
         content = _encode_pth(f"import {finder}; {finder}.install()")
-        wheel.writestr(f"__editable__.{self.name}.pth", content)
+        yield (f"__editable__.{self.name}.pth", content)
+
+    def __call__(self, wheel: "WheelFile", files: List[str], mapping: Dict[str, str]):
+        for file, content in self.get_implementation():
+            wheel.writestr(file, content)
 
     def __enter__(self):
         msg = "Editable install will be performed using a meta path finder.\n"
@@ -535,11 +565,11 @@ def _encode_pth(content: str) -> bytes:
     This function tries to simulate this behaviour without having to create an
     actual file, in a way that supports a range of active Python versions.
     (There seems to be some variety in the way different version of Python handle
-    ``encoding=None``, not all of them use ``locale.getpreferredencoding(False)``).
+    ``encoding=None``, not all of them use ``locale.getpreferredencoding(False)``
+    or ``locale.getencoding()``).
     """
-    encoding = "locale" if sys.version_info >= (3, 10) else None
     with io.BytesIO() as buffer:
-        wrapper = io.TextIOWrapper(buffer, encoding)
+        wrapper = io.TextIOWrapper(buffer, encoding=py39.LOCALE_ENCODING)
         wrapper.write(content)
         wrapper.flush()
         buffer.seek(0)
@@ -567,7 +597,7 @@ def _can_symlink_files(base_dir: Path) -> bool:
 
 
 def _simple_layout(
-    packages: Iterable[str], package_dir: Dict[str, str], project_dir: Path
+    packages: Iterable[str], package_dir: Dict[str, str], project_dir: StrPath
 ) -> bool:
     """Return ``True`` if:
     - all packages are contained by the same parent directory, **and**
@@ -649,7 +679,7 @@ def _find_top_level_modules(dist: Distribution) -> Iterator[str]:
 def _find_package_roots(
     packages: Iterable[str],
     package_dir: Mapping[str, str],
-    src_root: _Path,
+    src_root: StrPath,
 ) -> Dict[str, str]:
     pkg_roots: Dict[str, str] = {
         pkg: _absolute_root(find_package_path(pkg, package_dir, src_root))
@@ -659,7 +689,7 @@ def _find_package_roots(
     return _remove_nested(pkg_roots)
 
 
-def _absolute_root(path: _Path) -> str:
+def _absolute_root(path: StrPath) -> str:
     """Works for packages and top-level modules"""
     path_ = Path(path)
     parent = path_.parent
@@ -764,6 +794,7 @@ class _NamespaceInstaller(namespaces.Installer):
 
 
 _FINDER_TEMPLATE = """\
+from __future__ import annotations
 import sys
 from importlib.machinery import ModuleSpec, PathFinder
 from importlib.machinery import all_suffixes as module_suffixes
@@ -771,16 +802,14 @@ from importlib.util import spec_from_file_location
 from itertools import chain
 from pathlib import Path
 
-MAPPING = {mapping!r}
-NAMESPACES = {namespaces!r}
+MAPPING: dict[str, str] = {mapping!r}
+NAMESPACES: dict[str, list[str]] = {namespaces!r}
 PATH_PLACEHOLDER = {name!r} + ".__path_hook__"
 
 
 class _EditableFinder:  # MetaPathFinder
     @classmethod
-    def find_spec(cls, fullname, path=None, target=None):
-        extra_path = []
-
+    def find_spec(cls, fullname: str, _path=None, _target=None) -> ModuleSpec | None:
         # Top-level packages and modules (we know these exist in the FS)
         if fullname in MAPPING:
             pkg_path = MAPPING[fullname]
@@ -791,35 +820,42 @@ class _EditableFinder:  # MetaPathFinder
         # to the importlib.machinery implementation.
         parent, _, child = fullname.rpartition(".")
         if parent and parent in MAPPING:
-            return PathFinder.find_spec(fullname, path=[MAPPING[parent], *extra_path])
+            return PathFinder.find_spec(fullname, path=[MAPPING[parent]])
 
         # Other levels of nesting should be handled automatically by importlib
         # using the parent path.
         return None
 
     @classmethod
-    def _find_spec(cls, fullname, candidate_path):
+    def _find_spec(cls, fullname: str, candidate_path: Path) -> ModuleSpec | None:
         init = candidate_path / "__init__.py"
         candidates = (candidate_path.with_suffix(x) for x in module_suffixes())
         for candidate in chain([init], candidates):
             if candidate.exists():
                 return spec_from_file_location(fullname, candidate)
+        return None
 
 
 class _EditableNamespaceFinder:  # PathEntryFinder
     @classmethod
-    def _path_hook(cls, path):
+    def _path_hook(cls, path) -> type[_EditableNamespaceFinder]:
         if path == PATH_PLACEHOLDER:
             return cls
         raise ImportError
 
     @classmethod
-    def _paths(cls, fullname):
-        # Ensure __path__ is not empty for the spec to be considered a namespace.
-        return NAMESPACES[fullname] or MAPPING.get(fullname) or [PATH_PLACEHOLDER]
+    def _paths(cls, fullname: str) -> list[str]:
+        paths = NAMESPACES[fullname]
+        if not paths and fullname in MAPPING:
+            paths = [MAPPING[fullname]]
+        # Always add placeholder, for 2 reasons:
+        # 1. __path__ cannot be empty for the spec to be considered namespace.
+        # 2. In the case of nested namespaces, we need to force
+        #    import machinery to query _EditableNamespaceFinder again.
+        return [*paths, PATH_PLACEHOLDER]
 
     @classmethod
-    def find_spec(cls, fullname, target=None):
+    def find_spec(cls, fullname: str, _target=None) -> ModuleSpec | None:
         if fullname in NAMESPACES:
             spec = ModuleSpec(fullname, None, is_package=True)
             spec.submodule_search_locations = cls._paths(fullname)
@@ -827,7 +863,7 @@ class _EditableNamespaceFinder:  # PathEntryFinder
         return None
 
     @classmethod
-    def find_module(cls, fullname):
+    def find_module(cls, _fullname) -> None:
         return None
 
 

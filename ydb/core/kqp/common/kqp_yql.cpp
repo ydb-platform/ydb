@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NYql {
 
@@ -280,6 +282,12 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsUpdate = true; 
+        } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.AllowInconsistentWrites = true;
+        } else if (name == TKqpUpsertRowsSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.Mode = tuple.Value().template Cast<TCoAtom>().Value();
         } else {
             YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'");
         }
@@ -306,6 +314,20 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(IsUpdateSettingName)
+                .Done());
+    }
+    if (AllowInconsistentWrites) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(AllowInconsistentWritesSettingName)
+                .Done());
+    }
+
+    if (!Mode.empty()) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(ModeSettingName)
+                .Value<TCoAtom>().Build(Mode)
                 .Done());
     }
 
@@ -452,6 +474,14 @@ TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
 
     auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces);
     return KqpExprToPrettyString(TExprBase(newStage), ctx);
+}
+
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx) {
+    TTransformationPipeline dqIntegrationPeepholePipeline(typesCtx);
+    for (auto* dqIntegration : GetUniqueIntegrations(*typesCtx)) {
+        dqIntegration->ConfigurePeepholePipeline(beforeDqTransforms, {}, &dqIntegrationPeepholePipeline);
+    }
+    return dqIntegrationPeepholePipeline.Build();
 }
 
 } // namespace NYql

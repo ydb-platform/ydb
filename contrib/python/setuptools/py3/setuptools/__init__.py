@@ -3,11 +3,11 @@
 import functools
 import os
 import re
+from typing import TYPE_CHECKING
 
 import _distutils_hack.override  # noqa: F401
 import distutils.core
 from distutils.errors import DistutilsOptionError
-from distutils.util import convert_path as _convert_path
 
 from . import logging, monkey
 from . import version as _version_module
@@ -105,8 +105,11 @@ def setup(**attrs):
 
 setup.__doc__ = distutils.core.setup.__doc__
 
-
-_Command = monkey.get_unpatched(distutils.core.Command)
+if TYPE_CHECKING:
+    # Work around a mypy issue where type[T] can't be used as a base: https://github.com/python/mypy/issues/10962
+    _Command = distutils.core.Command
+else:
+    _Command = monkey.get_unpatched(distutils.core.Command)
 
 
 class Command(_Command):
@@ -165,8 +168,9 @@ class Command(_Command):
     """
 
     command_consumes_arguments = False
+    distribution: Distribution  # override distutils.dist.Distribution with setuptools.dist.Distribution
 
-    def __init__(self, dist, **kw):
+    def __init__(self, dist: Distribution, **kw):
         """
         Construct the command for dist, updating
         vars(self) with any keyword parameters.
@@ -240,22 +244,6 @@ def findall(dir=os.curdir):
         make_rel = functools.partial(os.path.relpath, start=dir)
         files = map(make_rel, files)
     return list(files)
-
-
-@functools.wraps(_convert_path)
-def convert_path(pathname):
-    SetuptoolsDeprecationWarning.emit(
-        "Access to implementation detail",
-        """
-        The function `convert_path` is not provided by setuptools itself,
-        and therefore not part of the public API.
-
-        Its direct usage by 3rd-party packages is considered improper and the function
-        may be removed in the future.
-        """,
-        due_date=(2023, 12, 13),  # initial deprecation 2022-03-25, see #3201
-    )
-    return _convert_path(pathname)
 
 
 class sic(str):

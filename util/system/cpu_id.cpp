@@ -173,7 +173,7 @@ bool NX86::HaveAVX512F() noexcept {
            && (_xgetbv(0) & 6u) == 6u              // XMM state and YMM state are enabled by OS
            && ((_xgetbv(0) >> 5) & 7u) == 7u       // ZMM state is enabled by OS
            && TX86CpuInfo(0x0).EAX >= 0x7          // leaf 7 is present
-           && ((TX86CpuInfo(0x7).EBX >> 16) & 1u); // AVX512F bit
+           && ((TX86CpuInfo(0x7, 0x0).EBX >> 16) & 1u); // AVX512F bit
 #else
     return false;
 #endif

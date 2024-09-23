@@ -203,12 +203,11 @@ class TCreateExternalDataSource : public TSubOperation {
 
         context.SS->ExternalDataSources[externalDataSourcePathId] = externalDataSourceInfo;
         context.SS->IncrementPathDbRefCount(externalDataSourcePathId);
-        context.SS->PersistPath(db, externalDataSourcePathId);
 
         if (!acl.empty()) {
             externalDataSourcePath->ApplyACL(acl);
-            context.SS->PersistACL(db, externalDataSourcePath);
         }
+        context.SS->PersistPath(db, externalDataSourcePathId);
 
         context.SS->PersistExternalDataSource(db,
                                               externalDataSourcePathId,
@@ -241,7 +240,8 @@ public:
                                                    static_cast<ui64>(ssId));
 
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(result, parentPath));
+        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
+            result, parentPath, Transaction, /* isCreate */ true));
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
@@ -323,7 +323,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
     const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
 
     {
-        const auto checks = NExternalDataSource::IsParentPathValid(parentPath);
+        const auto checks = NExternalDataSource::IsParentPathValid(parentPath, tx, /* isCreate */ true);
         if (!checks) {
             return errorResult(checks.GetStatus(), checks.GetError());
         }

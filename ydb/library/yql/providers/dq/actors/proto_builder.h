@@ -20,7 +20,10 @@ public:
 
     bool CanBuildResultSet() const;
     Ydb::ResultSet BuildResultSet(TVector<NYql::NDq::TDqSerializedBatch>&& data);
-    TString BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& data, ui64 maxBytesLimit = std::numeric_limits<ui64>::max());
+    TString BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& data, 
+        ui64 maxBytesLimit = std::numeric_limits<ui64>::max(),
+        ui64 maxRowsLimit = std::numeric_limits<ui64>::max(),
+        bool* truncated = nullptr);
     bool WriteYsonData(NYql::NDq::TDqSerializedBatch&& data, const std::function<bool(const TString& rawYson)>& func);
     bool WriteData(NYql::NDq::TDqSerializedBatch&& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func);
     bool WriteData(TVector<NYql::NDq::TDqSerializedBatch>&& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func);

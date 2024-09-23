@@ -25,7 +25,7 @@ struct TCrossClusterReference
     static TCrossClusterReference FromRichYPath(const NYPath::TRichYPath& path);
 };
 
-TString ToString(const TCrossClusterReference& queueRef);
+void FormatValue(TStringBuilderBase* builder, const TCrossClusterReference& queueRef, TStringBuf spec);
 
 void Serialize(const TCrossClusterReference& queueRef, NYson::IYsonConsumer* consumer);
 
@@ -36,6 +36,7 @@ struct TProfilingTags
     TString Cluster;
     TString LeadingStatus;
     TString QueueAgentStage;
+    TString ObjectType;
 
     bool operator==(const TProfilingTags& other) const = default;
     bool operator<(const TProfilingTags& other) const = default;

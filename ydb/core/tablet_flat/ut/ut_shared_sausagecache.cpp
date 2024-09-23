@@ -106,6 +106,9 @@ Y_UNIT_TEST(PageCacheLimits) {
     TMyEnvBase env;
     auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
 
+    bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
+    ui32 passiveBytes = bTreeIndex ? 131 : 7772;
+
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
@@ -125,34 +128,33 @@ Y_UNIT_TEST(PageCacheLimits) {
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB/ 3); // 2 full layers (fresh & staging)
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB / 3); // 2 full layers (fresh & staging)
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 0);
 
     env->GetMemObserver()->NotifyStat({95*MB, 110*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB / 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 5*MB + counters->ActiveBytes->Val() + counters->PassiveBytes->Val());
-
 
     env->GetMemObserver()->NotifyStat({101*MB, 110*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB/ 3); // 1mb evicted
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2 - MB, MB/ 3);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB / 3); // 1mb evicted
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2 - MB, MB / 3);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), counters->ActiveLimitBytes->Val());
 
     env->GetMemObserver()->NotifyStat({95*MB, 110*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB / 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 5*MB + counters->ActiveBytes->Val() + counters->PassiveBytes->Val()); // +5mb
 
     env->GetMemObserver()->NotifyStat({200*MB, 110*MB, 100*MB});
@@ -160,7 +162,7 @@ Y_UNIT_TEST(PageCacheLimits) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 1); // zero limit
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 1); // zero limit
 }
 
@@ -232,26 +234,26 @@ Y_UNIT_TEST(MemTableLimits) {
         }
     }
 
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 5*MB, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 5*MB, MB / 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemTableCompactingBytes->Val(), 0);
 
     env->GetMemObserver()->NotifyStat({95*MB, 110*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB / 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
     UNIT_ASSERT_GE(counters->MemLimitBytes->Val(), 8*MB); // bigger than config value
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 5*MB, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 5*MB, MB / 3);
 
     env->GetMemObserver()->NotifyStat({100*MB + 1, 110*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2, MB/ 3); // 1 page evicted
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemLimitBytes->Val(), 8*MB / 3 * 2, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2, MB / 3); // 1 page evicted
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemLimitBytes->Val(), 8*MB / 3 * 2, MB / 3);
     
     // we want to get ~2.7MB back, it's 6 Mem Tables
     env.WaitFor<NFake::TEvCompacted>(6);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 2*MB, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 2*MB, MB / 3);
 
     env->GetMemObserver()->NotifyStat({200*MB, 110*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
@@ -261,7 +263,7 @@ Y_UNIT_TEST(MemTableLimits) {
     
     // compacted all except reservation, it's all except 20% of 8MB = 1.6MB = 3 Mem Tables
     env.WaitFor<NFake::TEvCompacted>(1); // so 1 more Mem Table compacted
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 1.5*MB, MB/ 3);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 1.5*MB, MB / 3);
 }
 
 } // Y_UNIT_TEST_SUITE(TSharedPageCache)

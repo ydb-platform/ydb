@@ -288,18 +288,27 @@ struct TStrContainsOp {
     }
 };
 
+Y_NO_INLINE void AddCompareStringKernelImpl(TKernelFamilyBase& kernelFamily, NUdf::TDataTypeId type1, NUdf::TDataTypeId type2,
+    const arrow::compute::ArrayKernelExec& exec, arrow::compute::InputType&& inputType1, arrow::compute::InputType&& inputType2,
+    arrow::compute::OutputType&& outputType) {
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+    NUdf::TDataTypeId returnType = NUdf::TDataType<bool>::Id;
+
+    auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
+        inputType1, inputType2
+    }, outputType, exec);
+    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, std::move(k), TKernel::ENullMode::Default));
+}
+
 template<typename TInput1, typename TInput2, typename TOp>
 void AddCompareStringKernel(TKernelFamilyBase& kernelFamily) {
     // ui8 type is used as bool replacement
     using TOutput = ui8;
     using TExecs = TBinaryStringExecs<TInput1, TInput2, TOutput, TOp>;
-
-    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id });
-    NUdf::TDataTypeId returnType = NUdf::TDataType<bool>::Id;
-
-    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
-    k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, k, TKernel::ENullMode::Default));
+    AddCompareStringKernelImpl(kernelFamily, NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id, &TExecs::Exec,
+        GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>(), GetPrimitiveOutputArrowType<TOutput>()
+    );
 }
 
 template<typename TOp>
@@ -322,18 +331,24 @@ struct TStrSizeOp {
 };
 
 
+Y_NO_INLINE void AddSizeStringKernelImpl(TKernelFamilyBase& kernelFamily, NUdf::TDataTypeId type1, NUdf::TDataTypeId returnType,
+    const arrow::compute::ArrayKernelExec& exec, arrow::compute::InputType&& inputType1, arrow::compute::OutputType&& outputType) {
+    std::vector<NUdf::TDataTypeId> argTypes({ type1 });
+
+    auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
+         inputType1
+    }, outputType, exec);
+    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, std::move(k), TKernel::ENullMode::Default));
+}
+
 template<typename TInput>
 void AddSizeStringKernel(TKernelFamilyBase& kernelFamily) {
     using TOutput = ui32;
     using TOp = TStrSizeOp<TOutput>;
     using TExecs = TUnaryStringExecs<TInput, TOutput, TOp>;
-
-    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput>::Id });
-    NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
-
-    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
-    k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, k, TKernel::ENullMode::Default));
+    AddSizeStringKernelImpl(kernelFamily, NUdf::TDataType<TInput>::Id, NUdf::TDataType<TOutput>::Id, &TExecs::Exec,
+        GetPrimitiveInputArrowType<TInput>(), GetPrimitiveOutputArrowType<TOutput>());
 }
 
 } // namespace

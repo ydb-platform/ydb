@@ -22,12 +22,12 @@ struct IUnversionedRowsetWriter
     /*!
      *  Writes given rows.
      *
-     *  The returned value is |true| iff one can write next rowset immediately,
+     *  The returned value is |true| if one can write next rowset immediately,
      *  otherwise one should wait for |GetReadyEvent()| future.
      *
      *  Every row must contain exactly one value for each column in schema, in the same order.
      */
-    virtual bool Write(TRange<TUnversionedRow> rows) = 0;
+    [[nodiscard]] virtual bool Write(TRange<TUnversionedRow> rows) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedRowsetWriter)

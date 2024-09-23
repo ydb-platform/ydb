@@ -64,12 +64,12 @@ table attribute drop | Удаление атрибута таблицы
 [table ttl set](../table-ttl-set.md) | Установка параметров TTL
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL
 [tools copy](../tools-copy.md) | Копирование таблиц
-[tools dump](../export_import/tools_dump.md) | Выгрузка директории или таблицы в файловую систему
+[tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблицы в файловую систему
 {% if ydb-cli == "ydb" %}
 [tools pg-convert](../../../postgresql/pg-dump.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}
 [tools rename](../commands/tools/rename.md) | Переименование таблиц
-[tools restore](../export_import/tools_restore.md) | Восстановление из файловой системы
+[tools restore](../export-import/tools-restore.md) | Восстановление из файловой системы
 [topic create](../topic-create.md) | Создание топика
 [topic alter](../topic-alter.md) | Модификация параметров топика и перечня читателей
 [topic drop](../topic-drop.md) | Удаление топика

@@ -472,6 +472,14 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.ChangeChildren(*node, std::move(newChildren));
 }
 
+TExprNode::TPtr OptimizeMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->GetTypeAnn()->IsOptionalOrNull()) {
+        return node;
+    }
+
+    return OptimizeDups(node, ctx);
+}
+
 TExprNode::TPtr CheckIfWorldWithSame(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Child(3U) == node->Child(2U)) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches";
@@ -589,7 +597,7 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     map["And"] = std::bind(&OptimizeAnd, _1, _2);
     map["Or"] = std::bind(OptimizeDups, _1, _2);
 
-    map["Min"] = map["Max"] = std::bind(&OptimizeDups, _1, _2);
+    map["Min"] = map["Max"] = std::bind(&OptimizeMinMax, _1, _2);
 
     map["AggrMin"] = map["AggrMax"] = map["Coalesce"] = std::bind(&DropAggrOverSame, _1);
 

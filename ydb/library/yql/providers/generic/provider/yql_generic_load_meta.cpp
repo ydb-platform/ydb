@@ -313,6 +313,20 @@ namespace NYql {
             *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
         }
 
+        template <typename T>
+        void SetSchema(T& request, const TGenericClusterConfig& clusterConfig) {
+            TString schema;
+            const auto it = clusterConfig.GetDataSourceOptions().find("schema");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                schema = it->second;
+            }
+            if (!schema) {
+                schema = "public";
+            }
+
+            request.set_schema(schema);
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
@@ -320,19 +334,17 @@ namespace NYql {
                     break;
                 case NYql::NConnector::NApi::YDB:
                     break;
+                case NYql::NConnector::NApi::MYSQL:
+                    break;
+                case NYql::NConnector::NApi::GREENPLUM: {
+                    auto* options = request.mutable_data_source_instance()->mutable_gp_options();
+                    SetSchema(*options, clusterConfig);
+                } break;
+                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                    break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
-                    // for backward compability set schema "public" by default
-                    // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                    TString schema;
-                    const auto it = clusterConfig.GetDataSourceOptions().find("schema");
-                    if (it != clusterConfig.GetDataSourceOptions().end()) {
-                        schema = it->second;
-                    }
-                    if (!schema) {
-                        schema = "public";
-                    }
-
-                    request.mutable_data_source_instance()->mutable_pg_options()->set_schema(schema);
+                    auto* options = request.mutable_data_source_instance()->mutable_pg_options();
+                    SetSchema(*options, clusterConfig);
                 } break;
 
                 default:
@@ -375,6 +387,9 @@ namespace NYql {
                         break;
                     case NYql::NConnector::NApi::POSTGRESQL:
                         dbNameTarget = "postgres";
+                        break;
+                    case NYql::NConnector::NApi::MS_SQL_SERVER:
+                        dbNameTarget = "mssqlserver";
                         break;
                     default:
                         ythrow yexception() << "You must provide database name explicitly for data source kind: '"

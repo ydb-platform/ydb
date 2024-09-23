@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "google/protobuf/empty.proto";
+import "ydb/public/api/client/yc_private/quota/quota.proto";
+
+service QuotaService {
+
+  rpc Get (quota.GetQuotaRequest) returns (quota.Quota);
+
+  rpc UpdateMetric (quota.UpdateQuotaMetricRequest) returns (google.protobuf.Empty);
+
+  rpc BatchUpdateMetric (quota.BatchUpdateQuotaMetricsRequest) returns (google.protobuf.Empty);
+
+  rpc GetDefault (quota.GetQuotaDefaultRequest) returns (quota.GetQuotaDefaultResponse);
+
+  rpc DoubleUpdateMetric(quota.DoubleUpdateQuotaMetricRequest) returns (google.protobuf.Empty);
+
+}

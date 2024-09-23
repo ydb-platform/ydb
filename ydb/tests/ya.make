@@ -3,6 +3,7 @@ RECURSE(
     functional
     library
     library/sqs
+    olap
     oss
     perf
     supp

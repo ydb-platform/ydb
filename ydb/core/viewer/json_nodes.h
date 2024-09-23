@@ -37,6 +37,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TGroup*> BaseConfigGroupIndex;
     std::unordered_map<TNodeId, ui64> DisconnectTime;
+    std::unordered_map<TNodeId, TString> NodeName;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
@@ -92,6 +93,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     TNodeId MaxAllowedNodeId = std::numeric_limits<TNodeId>::max();
     ui32 RequestsBeforeNodeList = 0;
     ui64 HiveId = 0;
+    std::optional<ui64> MaximumDisksPerNode;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -371,6 +373,18 @@ public:
                 for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
                     BaseConfigGroupIndex[group.GetGroupId()] = &group;
                 }
+                std::unordered_map<TNodeId, int> disksPerNode;
+                disksPerNode.reserve(pbConfig.NodeSize());
+                for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk : pbConfig.GetPDisk()) {
+                    disksPerNode[pdisk.GetNodeId()]++;
+                }
+                int maximumDisksPerNode = 0;
+                for (const auto& [nodeId, disks] : disksPerNode) {
+                    if (disks > maximumDisksPerNode) {
+                        maximumDisksPerNode = disks;
+                    }
+                }
+                MaximumDisksPerNode = maximumDisksPerNode;
             }
         }
         if (ResolveGroupsToNodes) {
@@ -391,7 +405,7 @@ public:
             case TSchemeCacheNavigate::EKind::KindExtSubdomain:
                 return true;
             case TSchemeCacheNavigate::EKind::KindPath:
-                return entry.CreateStep == 0;
+                return entry.Self->Info.GetPathId() == NSchemeShard::RootPathId;
             default:
                 return false;
         }
@@ -415,7 +429,7 @@ public:
                 if (FilterTenant.empty()) {
                     RequestForTenant(path);
                 }
-                
+
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
@@ -481,6 +495,9 @@ public:
             BLOG_TRACE("HiveNodeStats filter node by " << nodeId);
             FilterNodeIds.insert(nodeId);
             DisconnectTime[nodeId] = nodeStats.GetLastAliveTimestamp();
+            if (nodeStats.HasNodeName()) {
+                NodeName[nodeId] = nodeStats.GetNodeName();
+            }
         }
         if (--RequestsBeforeNodeList == 0) {
             ProcessNodeIds();
@@ -677,8 +694,8 @@ public:
     }
 
     static double GetLoadAverage(const NKikimrWhiteboard::TSystemStateInfo& sysInfo) {
-        if (sysInfo.LoadAverageSize() > 0) {
-            return sysInfo.GetLoadAverage(0);
+        if (sysInfo.LoadAverageSize() > 0 && sysInfo.GetNumberOfCpus() > 0) {
+            return sysInfo.GetLoadAverage(0) * 100 / sysInfo.GetNumberOfCpus();
         }
         return 0;
     }
@@ -732,6 +749,9 @@ public:
             }
         }
 
+        bool noDC = true;
+        bool noRack = true;
+
         for (TNodeId nodeId : NodeIds) {
             if (!CheckNodeFilters(nodeId)) {
                 continue;
@@ -751,6 +771,10 @@ public:
                 auto itDisconnectTime = DisconnectTime.find(nodeId);
                 if (itDisconnectTime != DisconnectTime.end()) {
                     nodeInfo.MutableSystemState()->SetDisconnectTime(itDisconnectTime->second);
+                }
+                auto itNodeName = NodeName.find(nodeId);
+                if (itNodeName != NodeName.end()) {
+                    nodeInfo.MutableSystemState()->SetNodeName(itNodeName->second);
                 }
             }
             if (Storage) {
@@ -777,6 +801,19 @@ public:
                         tabletInfo = std::move(viewerTabletInfo);
                     }
                 }
+            }
+
+            if (!nodeInfo.GetSystemState().GetLocation().GetDataCenter().empty()) {
+                noDC = false;
+            }
+            if (nodeInfo.GetSystemState().GetSystemLocation().GetDataCenter() != 0) {
+                noDC = false;
+            }
+            if (!nodeInfo.GetSystemState().GetLocation().GetRack().empty()) {
+                noRack = false;
+            }
+            if (nodeInfo.GetSystemState().GetSystemLocation().GetRack() != 0) {
+                noRack = false;
             }
         }
 
@@ -859,6 +896,16 @@ public:
             }
         }
 
+        if (MaximumDisksPerNode.has_value()) {
+            result.SetMaximumDisksPerNode(MaximumDisksPerNode.value());
+        }
+        if (noDC) {
+            result.SetNoDC(true);
+        }
+        if (noRack) {
+            result.SetNoRack(true);
+        }
+
         TStringStream json;
         TProtoToJson::ProtoToJson(json, result, JsonSettings);
         Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -872,44 +919,100 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonNodes> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TNodesInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonNodes> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as numbers","required":false,"type":"boolean"},
-                      {"name":"path","in":"query","description":"path to schema object","required":false,"type":"string"},
-                      {"name":"with","in":"query","description":"filter nodes by missing disks or space","required":false,"type":"string"},
-                      {"name":"type","in":"query","description":"nodes type to get (static,dynamic,any)","required":false,"type":"string"},
-                      {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
-                      {"name":"tablets","in":"query","description":"return tablets info","required":false,"type":"boolean"},
-                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage,Missing)","required":false,"type":"string"},
-                      {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
-                      {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"uptime","in":"query","description":"return only nodes with less uptime in sec.","required":false,"type":"integer"},
-                      {"name":"problems_only","in":"query","description":"return only problem nodes","required":false,"type":"boolean"},
-                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: enums
+                in: query
+                description: convert enums to strings
+                required: false
+                type: boolean
+              - name: ui64
+                in: query
+                description: return ui64 as numbers
+                required: false
+                type: boolean
+              - name: path
+                in: query
+                description: path to schema object
+                required: false
+                type: string
+              - name: with
+                in: query
+                description: filter nodes by missing disks or space
+                required: false
+                type: string
+              - name: type
+                in: query
+                description: nodes type to get (static,dynamic,any)
+                required: false
+                type: string
+              - name: storage
+                in: query
+                description: return storage info
+                required: false
+                type: boolean
+              - name: tablets
+                in: query
+                description: return tablets info
+                required: false
+                type: boolean
+              - name: sort
+                in: query
+                description: sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage,Missing)
+                required: false
+                type: string
+              - name: offset
+                in: query
+                description: skip N nodes
+                required: false
+                type: integer
+              - name: limit
+                in: query
+                description: limit to N nodes
+                required: false
+                type: integer
+              - name: timeout
+                in: query
+                description: timeout in ms
+                required: false
+                type: integer
+              - name: uptime
+                in: query
+                description: return only nodes with less uptime in sec.
+                required: false
+                type: integer
+              - name: problems_only
+                in: query
+                description: return only problem nodes
+                required: false
+                type: boolean
+              - name: filter
+                in: query
+                description: filter nodes by id or host
+                required: false
+                type: string
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonNodes> {
     static TString GetSummary() {
-        return "\"Nodes info\"";
+        return "Nodes info";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodes> {
     static TString GetDescription() {
-        return "\"Information about nodes\"";
+        return "Information about nodes";
     }
 };
 

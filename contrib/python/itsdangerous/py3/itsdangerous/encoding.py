@@ -1,15 +1,15 @@
+from __future__ import annotations
+
 import base64
 import string
 import struct
-import typing as _t
+import typing as t
 
 from .exc import BadData
 
-_t_str_bytes = _t.Union[str, bytes]
-
 
 def want_bytes(
-    s: _t_str_bytes, encoding: str = "utf-8", errors: str = "strict"
+    s: str | bytes, encoding: str = "utf-8", errors: str = "strict"
 ) -> bytes:
     if isinstance(s, str):
         s = s.encode(encoding, errors)
@@ -17,7 +17,7 @@ def want_bytes(
     return s
 
 
-def base64_encode(string: _t_str_bytes) -> bytes:
+def base64_encode(string: str | bytes) -> bytes:
     """Base64 encode a string of bytes or text. The resulting bytes are
     safe to use in URLs.
     """
@@ -25,7 +25,7 @@ def base64_encode(string: _t_str_bytes) -> bytes:
     return base64.urlsafe_b64encode(string).rstrip(b"=")
 
 
-def base64_decode(string: _t_str_bytes) -> bytes:
+def base64_decode(string: str | bytes) -> bytes:
     """Base64 decode a URL-safe string of bytes or text. The result is
     bytes.
     """
@@ -43,7 +43,7 @@ _base64_alphabet = f"{string.ascii_letters}{string.digits}-_=".encode("ascii")
 
 _int64_struct = struct.Struct(">Q")
 _int_to_bytes = _int64_struct.pack
-_bytes_to_int = _t.cast("_t.Callable[[bytes], _t.Tuple[int]]", _int64_struct.unpack)
+_bytes_to_int = t.cast("t.Callable[[bytes], tuple[int]]", _int64_struct.unpack)
 
 
 def int_to_bytes(num: int) -> bytes:

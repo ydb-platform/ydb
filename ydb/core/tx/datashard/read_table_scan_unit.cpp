@@ -210,7 +210,7 @@ void TReadTableScanUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &ev,
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TReadTableScanUnit::ProcessEvent unhandled event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString());
-        Y_DEBUG_ABORT_UNLESS(false, "unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
+        Y_DEBUG_ABORT("unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
     }
 }
 

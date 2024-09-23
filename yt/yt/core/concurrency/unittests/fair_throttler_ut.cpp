@@ -71,7 +71,7 @@ struct TFairThrottlerTest
     {
         Config->TotalLimit = 100;
 
-        auto logger = Logger.WithTag("Test: %v", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        auto logger = Logger().WithTag("Test: %v", ::testing::UnitTest::GetInstance()->current_test_info()->name());
         FairThrottler = New<TFairThrottler>(Config, logger, NProfiling::TProfiler{});
     }
 };
@@ -289,7 +289,7 @@ struct TFairThrottlerIPCTest
         Config->IPCPath = GetOutputPath() / (testName + ".throttler");
         Config->TotalLimit = 100;
 
-        auto logger = Logger.WithTag("Test: %v", testName);
+        auto logger = Logger().WithTag("Test: %v", testName);
 
         DatNode = New<TFairThrottler>(Config, logger.WithTag("Node: dat"), NProfiling::TProfiler{});
         ExeNode = New<TFairThrottler>(Config, logger.WithTag("Node: exe"), NProfiling::TProfiler{});

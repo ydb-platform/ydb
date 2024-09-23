@@ -57,13 +57,47 @@ SELECT ARRAY[1,NULL,3];
 SELECT NOT ARRAY[1.1,1.2,1.3] = ARRAY[1.1,1.2,1.3] AS "FALSE";
 -- array casts
 SELECT ARRAY[1,2,3]::text[]::int[]::float8[] AS "{1,2,3}";
+SELECT pg_typeof(ARRAY[1,2,3]::text[]::int[]::float8[]) AS "double precision[]";
 SELECT ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[] AS "{{a,bc},{def,hijk}}";
+SELECT pg_typeof(ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[]) AS "character varying[]";
 SELECT CAST(ARRAY[[[[[['a','bb','ccc']]]]]] as text[]) as "{{{{{{a,bb,ccc}}}}}}";
 SELECT NULL::text[]::int[] AS "NULL";
+-- scalar op any/all (array)
+select 33 = any ('{1,2,3}');
+select 33 = any ('{1,2,33}');
+select 33 = all ('{1,2,33}');
+select 33 >= all ('{1,2,33}');
+-- boundary cases
+select null::int >= all ('{1,2,33}');
+select null::int >= all ('{}');
+select null::int >= any ('{}');
+-- cross-datatype
+select 33.4 = any (array[1,2,3]);
+select 33.4 > all (array[1,2,3]);
+-- nulls
+select 33 = any (null::int[]);
+select null::int = any ('{1,2,3}');
+select 33 = any ('{1,null,3}');
+select 33 = any ('{1,null,33}');
+select 33 = all (null::int[]);
+select null::int = all ('{1,2,3}');
+select 33 = all ('{1,null,3}');
+select 33 = all ('{33,null,33}');
+-- nulls later in the bitmap
+SELECT -1 != ALL(ARRAY(SELECT NULLIF(g.i, 900) FROM generate_series(1,1000) g(i)));
 -- test indexes on arrays
 create temp table arr_tbl (f1 int[] unique);
 -- test ON CONFLICT DO UPDATE with arrays
 create temp table arr_pk_tbl (pk int4 primary key, f1 int[]);
+-- test [not] (like|ilike) (any|all) (...)
+select 'foo' like any (array['%a', '%o']); -- t
+select 'foo' like any (array['%a', '%b']); -- f
+select 'foo' like all (array['f%', '%o']); -- t
+select 'foo' like all (array['f%', '%b']); -- f
+select 'foo' not like any (array['%a', '%b']); -- t
+select 'foo' not like all (array['%a', '%o']); -- f
+select 'foo' ilike any (array['%A', '%O']); -- t
+select 'foo' ilike all (array['F%', '%O']); -- t
 --
 -- General array parser tests
 --
@@ -142,11 +176,13 @@ select array_agg(ar)
         from generate_series(1,2) a(i)) b(ar);
 select array_agg(array[i+1.2, i+1.3, i+1.4]) from generate_series(1,3) g(i);
 select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
+select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
 -- errors
 select array_agg('{}'::int[]) from generate_series(1,2);
 select array_agg(null::int[]) from generate_series(1,2);
 select array_agg(ar)
   from (values ('{1,2}'::int[]), ('{3}'::int[])) v(ar);
+select * from unnest(array[1,2,3]);
 -- array(select array-value ...)
 select array(select array[i,i/2] from generate_series(1,5) i);
 select array(select array['Hello', i::text] from generate_series(9,11) i);

@@ -2377,7 +2377,8 @@ Y_UNIT_TEST(TestWriteReadWhileWriteWorks) {
             write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         }
-        CmdRead({"key2"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value2"}, {}, tc);
+
+        ExecuteRead<>(tc, "key2", "value2", 0, 0, 0);
     });
 }
 

@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
             tablet.Weight = RandomNumber<double>();
-            bootQueue.AddToBootQueue(tablet);
+            bootQueue.EmplaceToBootQueue(tablet);
         }
 
         double passed = timer.Get().SecondsFloat();
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto record = bootQueue.PopFromBootQueue();
             UNIT_ASSERT(record.Priority <= maxP);
             maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId.first);
+            auto itTablet = tablets.find(record.TabletId);
             if (itTablet != tablets.end()) {
                 bootQueue.AddToWaitQueue(itTablet->second);
             }
@@ -198,5 +198,23 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         // This asserts we don't have different tablet types with same short name
         // In a world with constexpr maps this could have been a static_assert...
         UNIT_ASSERT_VALUES_EQUAL(TABLET_TYPE_SHORT_NAMES.size(), TABLET_TYPE_BY_SHORT_NAME.size());
+    }
+
+    Y_UNIT_TEST(TestStDev) {
+        using TSingleResource = std::tuple<double>;
+
+        TVector<TSingleResource> values(100, 50.0 / 1'000'000);
+        values.front() = 51.0 / 1'000'000;
+
+        double stDev1 = std::get<0>(GetStDev(values));
+
+        std::swap(values.front(), values.back());
+
+        double stDev2 = std::get<0>(GetStDev(values));
+
+        double expectedStDev = sqrt(0.9703) / 1'000'000;
+
+        UNIT_ASSERT_DOUBLES_EQUAL(expectedStDev, stDev1, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(stDev1, stDev2);
     }
 }

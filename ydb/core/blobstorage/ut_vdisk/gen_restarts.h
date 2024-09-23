@@ -79,10 +79,24 @@ struct TMultiPutWriteRestartReadSettings {
 };
 
 struct TChaoticWriteRestartWriteSettings : public TWriteRestartReadSettings {
-    // number of parallel writes/reads (ignored if just single read/write)
+    // number of parallel writes/reads (ignored if just single read/write)]
+    const std::shared_ptr<IVDiskSetup> SecondWriteRunSetup;
     const ui32 Parallel;
     const TDuration WorkingTime;
     const TDuration RequestTimeout;
+
+    TChaoticWriteRestartWriteSettings(
+            const TWriteRestartReadSettings &baseSettings,
+            std::shared_ptr<IVDiskSetup> secondWriteRunSetup,
+            ui32 parallel,
+            TDuration workingTime,
+            TDuration requestTimeout)
+        : TWriteRestartReadSettings(baseSettings)
+        , SecondWriteRunSetup(secondWriteRunSetup)
+        , Parallel(parallel)
+        , WorkingTime(workingTime)
+        , RequestTimeout(requestTimeout)
+    {}
 
     TChaoticWriteRestartWriteSettings(
             const TWriteRestartReadSettings &baseSettings,
@@ -90,10 +104,12 @@ struct TChaoticWriteRestartWriteSettings : public TWriteRestartReadSettings {
             TDuration workingTime,
             TDuration requestTimeout)
         : TWriteRestartReadSettings(baseSettings)
+        , SecondWriteRunSetup(baseSettings.WriteRunSetup)
         , Parallel(parallel)
         , WorkingTime(workingTime)
         , RequestTimeout(requestTimeout)
     {}
+
 };
 
 

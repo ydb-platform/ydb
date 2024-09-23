@@ -1111,7 +1111,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         TCoFlatMapBase self(node);
         if (optCtx.IsSingleUsage(self.Input().Ref())) {
             if (self.Input().Ref().IsCallable("EquiJoin")) {
-                auto ret = FlatMapOverEquiJoin(self, ctx, *optCtx.ParentsMap, false);
+                auto ret = FlatMapOverEquiJoin(self, ctx, *optCtx.ParentsMap, false, optCtx.Types);
                 if (!ret.Raw()) {
                     return nullptr;
                 }
@@ -1758,22 +1758,32 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     };
 
     map["SessionWindowTraits"] = map["SortTraits"] = map["Lag"] = map["Lead"] = map["RowNumber"] = map["Rank"] = map["DenseRank"] =
+        map["CumeDist"] = map["PercentRank"] = map["NTile"] =
         [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx)
     {
         auto structType = node->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()
             ->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        if (node->IsCallable("RowNumber")) {
+        if (node->IsCallable({"RowNumber", "CumeDist", "NTile"})) {
             if (structType->GetSize() == 0) {
                 return node;
             }
 
             auto subsetType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>()));
             YQL_CLOG(DEBUG, Core) << "FieldSubset for " << node->Content();
-            return ctx.Builder(node->Pos())
-                .Callable(node->Content())
-                    .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
-                .Seal()
-                .Build();
+            if (node->IsCallable({"NTile","CumeDist"})) {
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
+                        .Add(1, node->TailPtr())
+                    .Seal()
+                    .Build();
+            } else {
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
+                    .Seal()
+                    .Build();
+            }
         }
 
         TSet<ui32> lambdaIndexes;

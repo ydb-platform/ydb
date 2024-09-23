@@ -1,8 +1,3 @@
-OWNER(
-    tsmax2004
-    g:yq
-)
-
 PY3_PROGRAM(recipe)
 
 STYLE_PYTHON()

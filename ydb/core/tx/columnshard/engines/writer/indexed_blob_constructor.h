@@ -5,6 +5,7 @@
 
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -51,14 +52,18 @@ public:
 class TWritingBlob {
 private:
     std::vector<TWideSerializedBatch*> Ranges;
-    YDB_READONLY_DEF(TString, BlobData);
+    std::vector<TString> BlobData;
+    ui64 BlobSize = 0;
+    bool Extracted = false;
 public:
     TWritingBlob() = default;
     bool AddData(TWideSerializedBatch& batch) {
-        if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
+        AFL_VERIFY(!Extracted);
+        if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
-            BlobData += batch.GetSplittedBlobs().GetData();
+            BlobSize += batch.GetSplittedBlobs().GetSize();
+            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobSize), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {
             AFL_VERIFY(BlobData.size());
@@ -72,8 +77,10 @@ public:
         }
     }
 
+    TString ExtractBlobData();
+
     ui64 GetSize() const {
-        return BlobData.size();
+        return BlobSize;
     }
 };
 
@@ -134,7 +141,7 @@ public:
                 for (auto&& s : Aggregations[i]->GetSplittedBlobs()) {
                     if (--linksCount[s.GetRange().BlobId] == 0) {
                         if (!DeclareRemoveAction) {
-                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
+                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction(NBlobOperations::EConsumer::WRITING_BUFFER);
                         }
                         DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }

@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Error: Pre type annotation
-
-    <tmp_path>/program.sql:<main>:2:18: Error: Detected evaluation cycle for file: f
-    	pragma file("f", $p);
-	                 ^

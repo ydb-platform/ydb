@@ -143,9 +143,9 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletPipePeNodeCachesInitializer : public IKikimrServicesInitializer {
+class TTabletPipePerNodeCachesInitializer : public IKikimrServicesInitializer {
 public:
-    TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig);
+    TTabletPipePerNodeCachesInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -391,6 +391,12 @@ private:
     IGlobalObjectStorage& GlobalObjects;
 };
 
+class TCompDiskLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TCompDiskLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TCompConveyorInitializer: public IKikimrServicesInitializer {
 public:
     TCompConveyorInitializer(const TKikimrRunConfig& runConfig);
@@ -418,12 +424,6 @@ public:
 class TMetadataProviderInitializer: public IKikimrServicesInitializer {
 public:
     TMetadataProviderInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
-class TBackgroundTasksInitializer: public IKikimrServicesInitializer {
-public:
-    TBackgroundTasksInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
@@ -478,10 +478,7 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 
 private:
-    TMap<TString, TString> Labels;
-    NKikimrConfig::TAppConfig InitialCmsConfig;
-    NKikimrConfig::TAppConfig InitialCmsYamlConfig;
-    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
+    NConfig::TConfigsDispatcherInitInfo ConfigsDispatcherInitInfo;
 };
 
 class TConfigsCacheInitializer : public IKikimrServicesInitializer {

@@ -81,14 +81,14 @@ using TJsonVDiskInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvVDiskStateReques
 template <>
 struct TJsonRequestSummary<TJsonVDiskInfo> {
     static TString GetSummary() {
-        return "\"VDisk information\"";
+        return "VDisk information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonVDiskInfo> {
     static TString GetDescription() {
-        return "\"VDisk information\"";
+        return "VDisk information";
     }
 };
 

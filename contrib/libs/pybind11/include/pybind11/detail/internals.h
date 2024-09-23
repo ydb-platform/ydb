@@ -36,8 +36,9 @@
 /// further ABI-incompatible changes may be made before the ABI is officially
 /// changed to the new version.
 #ifndef PYBIND11_INTERNALS_VERSION
-#    if PY_VERSION_HEX >= 0x030C0000
+#    if PY_VERSION_HEX >= 0x030C0000 || defined(_MSC_VER)
 // Version bump for Python 3.12+, before first 3.12 beta release.
+// Version bump for MSVC piggy-backed on PR #4779. See comments there.
 #        define PYBIND11_INTERNALS_VERSION 5
 #    else
 #        define PYBIND11_INTERNALS_VERSION 4
@@ -68,9 +69,14 @@ inline PyObject *make_object_base_type(PyTypeObject *metaclass);
 // `Py_LIMITED_API` anyway.
 #    if PYBIND11_INTERNALS_VERSION > 4
 #        define PYBIND11_TLS_KEY_REF Py_tss_t &
-#        if defined(__GNUC__) && !defined(__INTEL_COMPILER)
-// Clang on macOS warns due to `Py_tss_NEEDS_INIT` not specifying an initializer
-// for every field.
+#        if defined(__clang__)
+#            define PYBIND11_TLS_KEY_INIT(var)                                                    \
+                _Pragma("clang diagnostic push")                                         /**/     \
+                    _Pragma("clang diagnostic ignored \"-Wmissing-field-initializers\"") /**/     \
+                    Py_tss_t var                                                                  \
+                    = Py_tss_NEEDS_INIT;                                                          \
+                _Pragma("clang diagnostic pop")
+#        elif defined(__GNUC__) && !defined(__INTEL_COMPILER)
 #            define PYBIND11_TLS_KEY_INIT(var)                                                    \
                 _Pragma("GCC diagnostic push")                                         /**/       \
                     _Pragma("GCC diagnostic ignored \"-Wmissing-field-initializers\"") /**/       \
@@ -126,7 +132,8 @@ inline void tls_replace_value(PYBIND11_TLS_KEY_REF key, void *value) {
 // which works.  If not under a known-good stl, provide our own name-based hash and equality
 // functions that use the type name.
 #if (PYBIND11_INTERNALS_VERSION <= 4 && defined(__GLIBCXX__))                                     \
-    || (PYBIND11_INTERNALS_VERSION >= 5 && !defined(_LIBCPP_VERSION))
+    || (PYBIND11_INTERNALS_VERSION >= 5 && !defined(_LIBCPP_VERSION))                             \
+    || defined(PYBIND11_TYPEINFO_NATIVE_HASH)
 inline bool same_type(const std::type_info &lhs, const std::type_info &rhs) { return lhs == rhs; }
 using type_hash = std::hash<std::type_index>;
 using type_equal_to = std::equal_to<std::type_index>;
@@ -293,9 +300,12 @@ struct type_info {
 #endif
 
 /// On Linux/OSX, changes in __GXX_ABI_VERSION__ indicate ABI incompatibility.
+/// On MSVC, changes in _MSC_VER may indicate ABI incompatibility (#2898).
 #ifndef PYBIND11_BUILD_ABI
 #    if defined(__GXX_ABI_VERSION)
 #        define PYBIND11_BUILD_ABI "_cxxabi" PYBIND11_TOSTRING(__GXX_ABI_VERSION)
+#    elif defined(_MSC_VER)
+#        define PYBIND11_BUILD_ABI "_mscver" PYBIND11_TOSTRING(_MSC_VER)
 #    else
 #        define PYBIND11_BUILD_ABI ""
 #    endif
@@ -365,7 +375,7 @@ inline bool raise_err(PyObject *exc_type, const char *msg) {
         return true;
     }
 #endif
-    PyErr_SetString(exc_type, msg);
+    set_error(exc_type, msg);
     return false;
 }
 
@@ -462,6 +472,7 @@ inline object get_python_state_dict() {
     if (!state_dict) {
 #if PY_VERSION_HEX >= 0x03030000
         raise_from(PyExc_SystemError, "pybind11::detail::get_python_state_dict() FAILED");
+        throw error_already_set();
 #else
         PyErr_SetString(PyExc_SystemError, "pybind11::detail::get_python_state_dict() FAILED");
 #endif
@@ -478,6 +489,7 @@ inline internals **get_internals_pp_from_capsule(handle obj) {
     if (raw_ptr == nullptr) {
 #if PY_VERSION_HEX >= 0x03030000
         raise_from(PyExc_SystemError, "pybind11::detail::get_internals_pp_from_capsule() FAILED");
+        throw error_already_set();
 #else
         PyErr_SetString(PyExc_SystemError, "pybind11::detail::get_internals_pp_from_capsule() FAILED");
 #endif

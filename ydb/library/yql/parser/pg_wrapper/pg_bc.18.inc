@@ -49,6 +49,10 @@ LLVM_BC(
     arrow_fdw_handler_in
     arrow_fdw_handler_out
     arrow_ginhandler
+    arrow_hypothetical_cume_dist_final
+    arrow_hypothetical_dense_rank_final
+    arrow_hypothetical_percent_rank_final
+    arrow_hypothetical_rank_final
     arrow_index_am_handler_in
     arrow_index_am_handler_out
     arrow_internal_in
@@ -58,6 +62,7 @@ LLVM_BC(
     arrow_mode_final
     arrow_multirangesel
     arrow_ordered_set_transition
+    arrow_ordered_set_transition_multi
     arrow_percentile_cont_float8_final
     arrow_percentile_cont_float8_multi_final
     arrow_percentile_cont_interval_final

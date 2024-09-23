@@ -225,22 +225,14 @@ const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& ta
 TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
 
-    compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName()},
+    compiler->AddCallable({TDqSourceWideWrap::CallableName(), TDqSourceWideBlockWrap::CallableName(), TDqReadWideWrap::CallableName(), TDqReadBlockWideWrap::CallableName()},
         [](const TExprNode& node, NCommon::TMkqlBuildContext&) {
             YQL_ENSURE(false, "Unsupported reader: " << node.Head().Content());
             return TRuntimeNode();
         });
 
-    for (const auto& provider : typesCtx.DataSources) {
-        if (auto* dqIntegration = provider->GetDqIntegration()) {
-            dqIntegration->RegisterMkqlCompiler(*compiler);
-        }
-    }
-
-    for (const auto& provider : typesCtx.DataSinks) {
-        if (auto* dqIntegration = provider->GetDqIntegration()) {
-            dqIntegration->RegisterMkqlCompiler(*compiler);
-        }
+    for (auto* dqIntegration : GetUniqueIntegrations(typesCtx)) {
+        dqIntegration->RegisterMkqlCompiler(*compiler);
     }
 
     compiler->AddCallable(TKqpWideReadTable::CallableName(),

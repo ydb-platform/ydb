@@ -235,7 +235,7 @@ class DateTime64(ChSqlaType, SqlaDateTime):
     def __init__(self, precision: int = None, tz: str = None, type_def: TypeDef = None):
         """
         Date time constructor with precision and timezone parameters if not constructed with TypeDef
-        :param precision:   Usually 3/6/9 for mill/micro/nansecond precision on ClickHouse side
+        :param precision:   Usually 3/6/9 for mill/micro/nanosecond precision on ClickHouse side
         :param tz: Timezone string as defined in pytz
         :param type_def: TypeDef from parse_name function
         """

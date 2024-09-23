@@ -537,7 +537,11 @@ class WriterAsyncIOReconnector:
                 m = await self._new_messages.get()  # type: InternalMessage
                 if m.seq_no > last_seq_no:
                     writer.write([m])
-        except Exception as e:
+        except asyncio.CancelledError:
+            # the loop task cancelled be parent code, for example for reconnection
+            # no need to stop all work.
+            raise
+        except BaseException as e:
             self._stop(e)
             raise
 

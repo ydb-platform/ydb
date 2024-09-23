@@ -76,11 +76,11 @@ class TopicReaderSync:
 
     def async_wait_message(self) -> concurrent.futures.Future:
         """
-        Return future, which will completed when the reader has least one message in queue.
-        If reader already has message - future will return completed.
+        Returns a future, which will complete when the reader has at least one message in queue.
+        If the reader already has a message - the future will complete immediately.
 
-        Possible situation when receive signal about message available, but no messages when try to receive a message.
-        If message expired between send event and try to retrieve message (for example connection broken).
+        A message may expire before it gets read so that the attempt to receive the massage will fail
+        despite the future has signaled about its availability.
         """
         self._check_closed()
 

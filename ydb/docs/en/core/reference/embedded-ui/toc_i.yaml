@@ -1,0 +1,17 @@
+items:
+- name: Overview
+  href: overview.md
+  hidden: true
+- name: Viewer
+  href: viewer.md
+  when: false
+- name: YDB Monitoring
+  href: ydb-monitoring.md
+- name: Hive web-viewer
+  href: hive.md
+- name: Connections overview
+  href: interconnect-overview.md
+- name: Logs
+  href: logs.md
+- name: Charts
+  href: charts.md

@@ -151,6 +151,12 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
     if (!tableInfo)
         return 0;
 
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TCompactionLogic PrepareForceCompaction for " << Backend->OwnerTabletId()
+            << " table " << table << ", mode " << mode << ", forced state " << tableInfo->ForcedCompactionState
+            << ", forced mode " << tableInfo->ForcedCompactionMode;
+    }
+
     if (mode == EForceCompaction::Borrowed) {
         // Note: we also schedule mem table compaction below, because tx status may have borrowed data
         tableInfo->Strategy->ScheduleBorrowedCompaction();
@@ -331,12 +337,10 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
         NKikimrSchemeOp::ECompactionStrategy strategy)
 {
-    Y_UNUSED(Logger);
-
     switch (strategy) {
         case NKikimrSchemeOp::CompactionStrategyGenerational:
             return NTable::CreateGenCompactionStrategy(
-                    tableId, Backend, Broker, Time, TaskNameSuffix);
+                    tableId, Backend, Broker, Time, Logger, TaskNameSuffix);
 
         default:
             Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());

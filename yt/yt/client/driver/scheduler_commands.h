@@ -250,6 +250,24 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDumpJobProxyLogCommand
+    : public TTypedCommand<NApi::TDumpJobProxyLogOptions>
+{
+private:
+    NJobTrackerClient::TJobId JobId;
+    NJobTrackerClient::TOperationId OperationId;
+    NYPath::TYPath Path;
+
+public:
+    REGISTER_YSON_STRUCT_LITE(TDumpJobProxyLogCommand);
+
+    static void Register(TRegistrar registrar);
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TStartOperationCommandBase
     : public TTypedCommand<NApi::TStartOperationOptions>
 {

@@ -4,24 +4,22 @@
 namespace NKikimr::NSchemeShard {
 
 void TOlapStatisticsSchema::SerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const {
-    proto.SetName(Name);
     Operator.SerializeToProto(proto);
 }
 
 bool TOlapStatisticsSchema::DeserializeFromProto(const NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) {
-    Name = proto.GetName();
     AFL_VERIFY(Operator.DeserializeFromProto(proto))("incorrect_proto", proto.DebugString());
     return true;
 }
 
 bool TOlapStatisticsSchema::ApplyUpdate(const TOlapSchema& /*currentSchema*/, const TOlapStatisticsUpsert& upsert, IErrorCollector& errors) {
-    AFL_VERIFY(upsert.GetName() == GetName());
+    AFL_VERIFY(upsert.GetName() == Operator.GetName());
     AFL_VERIFY(!!upsert.GetConstructor());
     if (upsert.GetConstructor().GetClassName() != Operator.GetClassName()) {
         errors.AddError("different index classes: " + upsert.GetConstructor().GetClassName() + " vs " + Operator.GetClassName());
         return false;
     }
-    errors.AddError("cannot modify statistics calculation for " + GetName() + ". not implemented currently.");
+    errors.AddError("cannot modify statistics calculation for " + Operator.GetName() + ". not implemented currently.");
     return false;
 }
 
@@ -33,12 +31,12 @@ bool TOlapStatisticsDescription::ApplyUpdate(const TOlapSchema& currentSchema, c
                 return false;
             }
         } else {
-            auto meta = stat.GetConstructor()->CreateOperator(currentSchema);
+            auto meta = stat.GetConstructor()->CreateOperator(stat.GetName(), currentSchema);
             if (!meta) {
                 errors.AddError(meta.GetErrorMessage());
                 return false;
             }
-            TOlapStatisticsSchema object(stat.GetName(), meta.DetachResult());
+            TOlapStatisticsSchema object(meta.DetachResult());
             Y_ABORT_UNLESS(ObjectsByName.emplace(stat.GetName(), std::move(object)).second);
         }
     }

@@ -35,31 +35,29 @@ public:
         config.MutableNameserviceConfig()->ClearAcceptUUID();
         config.ClearAuthConfig();
         TProtoToJson::ProtoToJson(json, config);
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 };
 
 template <>
 struct TJsonRequestSchema<TJsonConfig> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrConfig::TAppConfig>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrConfig::TAppConfig>();
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonConfig> {
     static TString GetSummary() {
-        return "\"Configuration\"";
+        return "Configuration";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonConfig> {
     static TString GetDescription() {
-        return "\"Returns configuration\"";
+        return "Returns configuration";
     }
 };
 

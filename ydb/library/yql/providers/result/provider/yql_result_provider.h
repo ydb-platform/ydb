@@ -11,7 +11,7 @@ namespace NYql {
 
 class IResultWriter : public TThrRefBase {
 public:
-    virtual void Init(bool discard, const TString& label, TMaybe<TPosition> pos) = 0;
+    virtual void Init(bool discard, const TString& label, TMaybe<TPosition> pos, bool unordered) = 0;
     virtual void Write(const TStringBuf& resultData) = 0;
     virtual void Commit(bool overflow) = 0;
     virtual bool IsDiscard() const = 0;

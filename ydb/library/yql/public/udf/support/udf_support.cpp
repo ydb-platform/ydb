@@ -39,6 +39,20 @@ extern "C" void UdfFreeWithSize(const void* mem, ui64 size) {
 }
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+extern "C" void* UdfArrowAllocate(ui64 size) { 
+    return Symbols.UdfArrowAllocateFunc(size);
+}
+
+extern "C" void* UdfArrowReallocate(const void* mem, ui64 prevSize, ui64 size) { 
+    return Symbols.UdfArrowReallocateFunc(mem, prevSize, size);
+}
+
+extern "C" void UdfArrowFree(const void* mem, ui64 size) {
+    return Symbols.UdfArrowFreeFunc(mem, size);
+}
+#endif
+
 extern "C" void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols) {
     Symbols = symbols;
 }

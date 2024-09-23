@@ -73,7 +73,7 @@ void FromProto(
 
 EMessageType GetMessageType(const TSharedRefArray& message);
 
-bool ParseRequestHeader(
+[[nodiscard]] bool ParseRequestHeader(
     const TSharedRefArray& message,
     NProto::TRequestHeader* header);
 
@@ -105,6 +105,7 @@ bool ParseStreamingFeedbackHeader(
     const TSharedRefArray& message,
     NProto::TStreamingFeedbackHeader* header);
 
+i64 GetMessageHeaderSize(const TSharedRefArray& message);
 i64 GetMessageBodySize(const TSharedRefArray& message);
 int GetMessageAttachmentCount(const TSharedRefArray& message);
 i64 GetTotalMessageAttachmentSize(const TSharedRefArray& message);

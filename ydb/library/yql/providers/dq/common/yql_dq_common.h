@@ -12,7 +12,7 @@ namespace NCommon {
 
 TMaybe<TString> SqlToSExpr(const TString& query);
 
-TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn);
 TString GetSerializedResultType(const TString& program);
 
 bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TString* name, const TString& counterName);

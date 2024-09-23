@@ -726,7 +726,7 @@ protected:
             }
         }
 
-        return ExpandCalcOverWindow(node.Ptr(), ctx);
+        return ExpandCalcOverWindow(node.Ptr(), ctx, *State_->Types);
     }
 
     template<bool IsTop>

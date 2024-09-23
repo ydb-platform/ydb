@@ -30,14 +30,26 @@ VERSION(6.5.9)
 
 ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.5.9.tar.xz)
 
+IF (OPENSOURCE_REPLACE_LINUX_HEADERS AND EXPORT_CMAKE)
+
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE linux-headers-generic
+        CMAKE_TARGET linux-headers-generic::linux-headers-generic
+        CONAN linux-headers-generic/${OPENSOURCE_REPLACE_LINUX_HEADERS} "&& conan-requires" linux-headers-generic/${OPENSOURCE_REPLACE_LINUX_HEADERS}
+    )
+
+ELSE()
+
+    ADDINCL(
+        GLOBAL contrib/libs/linux-headers
+        GLOBAL contrib/libs/linux-headers/_nf
+    )
+
+ENDIF()
+
 DISABLE(NEED_PLATFORM_PEERDIRS)
 
 DISABLE(WITH_VALGRIND)
-
-ADDINCL(
-    GLOBAL contrib/libs/linux-headers
-    GLOBAL contrib/libs/linux-headers/_nf
-)
 
 NO_PLATFORM()
 

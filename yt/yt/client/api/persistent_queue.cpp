@@ -83,7 +83,7 @@ public:
         , StateTablePath_(stateTablePath)
         , TabletIndexes_(PrepareTabletIndexes(tabletIndexes))
         , PollerId_(TGuid::Create())
-        , Logger(ApiLogger.WithTag("PollerId: %v", PollerId_))
+        , Logger(ApiLogger().WithTag("PollerId: %v", PollerId_))
         , Invoker_(Client_->GetConnection()->GetInvoker())
     {
         YT_VERIFY(Config_);
@@ -424,12 +424,12 @@ private:
         i64 batchBeginRowIndex = -1;
 
 
-        auto beginBatch = [&] () {
+        auto beginBatch = [&] {
             YT_VERIFY(batchBeginRowIndex < 0);
             batchBeginRowIndex = currentRowIndex;
         };
 
-        auto endBatch = [&] () {
+        auto endBatch = [&] {
             if (batchBeginRowIndex < 0) {
                 return;
             }

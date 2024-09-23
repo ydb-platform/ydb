@@ -2,7 +2,9 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -23,6 +25,96 @@
 namespace NYql {
 
 using namespace NThreading;
+
+class TPlanPrinter {
+public:
+    TStringBuilder b;
+
+    void DescribeChannel(const auto& ch, bool spilling) {
+        if (spilling) {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\", color=\"red\"];";
+        } else {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\"];";
+        }
+    }
+
+    void PrintInputChannel(const auto& ch, const auto& type) {
+        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintOutputChannel(const auto& ch, const auto& type) {
+        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " -> T" << taskId << " [label=" << "\"S" << sourceIndex << "\"];\n";
+    }
+
+    void DescribeSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " ";
+        b << "[shape=square, label=\"" << taskId << "/" << sourceIndex << "\"];\n";
+    }
+
+    void PrintTask(const auto& task) {
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            TString inputName = "Unknown";
+            bool isSource = false;
+            if (input.HasUnionAll()) { inputName = "UnionAll"; }
+            else if (input.HasMerge()) { inputName = "Merge"; }
+            else if (input.HasSource()) { inputName = "Source"; isSource = true; }
+            if (isSource) {
+                PrintSource(task.GetId(), index);
+            } else {
+                for (const auto& ch : input.GetChannels()) {
+                    PrintInputChannel(ch, inputName);
+                }
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            TString outputName = "Unknown";
+            if (output.HasMap()) { outputName = "Map"; }
+            else if (output.HasRangePartition()) { outputName = "Range"; }
+            else if (output.HasHashPartition()) { outputName = "Hash"; }
+            else if (output.HasBroadcast()) { outputName = "Broadcast"; }
+            // TODO: effects, sink
+            for (const auto& ch : output.GetChannels()) {
+                PrintOutputChannel(ch, outputName);
+            }
+        }
+    }
+
+    void DescribeTask(const auto& task) {
+        b << "T" << task.GetId() << " [shape=circle, label=\"" << task.GetId() << "/" << task.GetStageId() << "\"];\n";
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            if (input.HasSource()) {
+                DescribeSource(task.GetId(), index);
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            for (const auto& ch : output.GetChannels()) {
+                DescribeChannel(ch, task.GetEnableSpilling());
+            }
+        }
+    }
+ 
+    TString Print(const NDqs::TPlan& plan) {
+        b.clear();
+        b << "digraph G {\n";
+        for (const auto& task : plan.Tasks) {
+            DescribeTask(task);
+        }
+        b << "\n";
+        for (const auto& task : plan.Tasks) {
+            PrintTask(task);
+        }
+        b << "}\n";
+        return b;
+    }
+};
 
 class TDqTaskScheduler : public TTaskScheduler {
 private:
@@ -206,7 +298,7 @@ public:
 
         Service.DoRequest<TRequest, TResponse>(queryPB, callback, stub);
 
-        ScheduleQueryStatusRequest(progressWriter);
+        ScheduleQueryStatusRequest(progressWriter, queryPB.GetQuerySeqNo());
 
         return promise.GetFuture().Apply([=](const TFuture<TResult>& result) {
             if (result.HasException()) {
@@ -241,7 +333,7 @@ public:
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard)
+                bool discard, ui64 executionTimeout)
     {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(SessionId);
 
@@ -257,6 +349,7 @@ public:
                 YQL_ENSURE(!file.GetObjectId().empty());
             }
         }
+        queryPB.SetExecutionTimeout(executionTimeout);
         queryPB.SetSession(SessionId);
         queryPB.SetResultType(plan.ResultType);
         queryPB.SetSourceId(plan.SourceID.NodeId()-1);
@@ -264,6 +357,8 @@ public:
             *queryPB.AddColumns() = column;
         }
         settings->Save(queryPB);
+
+        YQL_CLOG(TRACE, ProviderDq) << TPlanPrinter().Print(plan);
 
         {
             auto& secParams = *queryPB.MutableSecureParams();
@@ -280,6 +375,7 @@ public:
         }
 
         queryPB.SetDiscard(discard);
+        queryPB.SetQuerySeqNo(QuerySeqNo++);
 
         int retry = settings->MaxRetries.Get().GetOrElse(5);
 
@@ -326,42 +422,80 @@ public:
         return promise.GetFuture();
     }
 
-    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, bool ok) {
+    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, IDqGateway::TProgressWriterState state, bool ok, uint64_t querySeqNo) {
         if (ok) {
-            ScheduleQueryStatusRequest(progressWriter);
-            if (!status.empty()) {
-                progressWriter(status);
+            ScheduleQueryStatusRequest(progressWriter, querySeqNo);
+            if (!state.empty()) {
+                progressWriter(std::move(state));
             }
         }
     }
 
-    void RequestQueryStatus(const TDqProgressWriter& progressWriter) {
+    static std::unordered_map<ui64, IDqGateway::TStageStats> ExtractStats(const Yql::DqsProto::QueryStatusResponse& resp) {
+        std::unordered_map<ui64, IDqGateway::TStageStats> ret;
+        for (const auto& metric : resp.GetMetric()) {
+            auto longName = metric.GetName();
+            TString prefix;
+            TString name;
+            std::map<TString, TString> labels;
+            if (!NYql::NCommon::ParseCounterName(&prefix, &labels, &name, longName)) {
+                continue;
+            }
+
+            auto maybeStage = labels.find("Stage");
+            if (maybeStage == labels.end()) {
+                continue;
+            }
+            auto stageId = atoi(maybeStage->second.data());
+            if (!stageId) {
+                continue;
+            }
+            auto& stage = ret[stageId];
+
+            if (name == "OutputRows") {
+                stage.OutputRows += metric.GetSum();
+            }
+            if (name == "InputRows") {
+                stage.InputRows += metric.GetSum();
+            }
+            if (name == "OutputBytes") {
+                stage.OutputBytes += metric.GetSum();
+            }
+            if (name == "InputBytes") {
+                stage.InputBytes += metric.GetSum();
+            }
+        }
+        return ret;
+    }
+
+    void RequestQueryStatus(const TDqProgressWriter& progressWriter, uint64_t querySeqNo) {
         Yql::DqsProto::QueryStatusRequest request;
         request.SetSession(SessionId);
+        request.SetQuerySeqNo(querySeqNo);
         auto self = weak_from_this();
-        auto callback = [self, progressWriter](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
+        auto callback = [self, progressWriter, querySeqNo](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
             }
 
-            this_->OnRequestQueryStatus(progressWriter, resp.GetStatus(), status.Ok());
+            this_->OnRequestQueryStatus(progressWriter, std::move(IDqGateway::TProgressWriterState{resp.GetStatus(), std::move(ExtractStats(resp))}), status.Ok(), querySeqNo);
         };
 
         Service.DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>(
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncQueryStatus, {}, nullptr);
     }
 
-    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter) {
+    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter, uint64_t querySeqNo) {
         auto self = weak_from_this();
-        TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter](const TFuture<void>& f) {
+        TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter, querySeqNo](const TFuture<void>& f) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
             }
 
             if (!f.HasException()) {
-                this_->RequestQueryStatus(progressWriter);
+                this_->RequestQueryStatus(progressWriter, querySeqNo);
             }
         });
     }
@@ -376,6 +510,7 @@ private:
     std::optional<TDqProgressWriter> ProgressWriter;
     TString Status;
     TFuture<void> OpenSessionFuture;
+    std::atomic<ui64> QuerySeqNo = 1;
 };
 
 class TDqGatewayImpl: public std::enable_shared_from_this<TDqGatewayImpl> {
@@ -413,7 +548,7 @@ public:
         sessions.clear(); // Destroy session objects explicitly before stopping grpc
         TaskScheduler.Stop();
         try {
-            GrpcClient.Stop();
+            GrpcClient.Stop(/* wait = */ true);
         } catch (...) {
             YQL_CLOG(ERROR, ProviderDq) << "Error while stopping GRPC client: " << CurrentExceptionMessage();
         }
@@ -479,7 +614,7 @@ public:
                 return;
             }
 
-            if (status.GRpcStatusCode == grpc::INVALID_ARGUMENT) {
+            if (status.GRpcStatusCode == grpc::INVALID_ARGUMENT || status.GRpcStatusCode == grpc::CANCELLED) {
                 YQL_CLOG(INFO, ProviderDq) << "Session closed " << sessionId;
                 this_->DropSession(sessionId);
             } else {
@@ -521,7 +656,7 @@ public:
         const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
         const TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-        bool discard)
+        bool discard, ui64 executionTimeout)
     {
         std::shared_ptr<TDqGatewaySession> session;
         with_lock(Mutex) {
@@ -530,11 +665,15 @@ public:
                 session = it->second;
             }
         }
+        TFailureInjector::Reach("dq_session_was_closed", [&] { session = nullptr; });
         if (!session) {
             YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
-            return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
+            auto res = NCommon::ResultFromException<TResult>(yexception() << "Session was closed");
+            res.Fallback = true;
+            res.SetSuccess();
+            return MakeFuture(res);
         }
-        return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard)
+        return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout)
             .Apply([](const TFuture<TResult>& f) {
                 try {
                     f.TryRethrow();
@@ -586,9 +725,9 @@ public:
         const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
         const TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-        bool discard) override
+        bool discard, ui64 executionTimeout) override
     {
-        return Impl->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard);
+        return Impl->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout);
     }
 
     TString GetVanillaJobPath() override {

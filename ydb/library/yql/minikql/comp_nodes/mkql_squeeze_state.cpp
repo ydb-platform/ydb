@@ -8,6 +8,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+constexpr ui32 StateVersion = 1;
+
 TSqueezeState::TSqueezeState(
     IComputationExternalNode* item,
     IComputationExternalNode* state,
@@ -45,21 +47,27 @@ TSqueezeState::TSqueezeState(const TSqueezeState& state)
     , StateType(state.StateType)
 {}
 
-NUdf::TUnboxedValuePod TSqueezeState::Save(TComputationContext& ctx) const {
-    TString out;
-    WriteByte(out, static_cast<ui8>(Stage));
+NUdf::TUnboxedValue TSqueezeState::Save(TComputationContext& ctx) const {
+    TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, ctx);
+    out.Write(static_cast<ui8>(Stage));
     if (ESqueezeState::Work == Stage) {
         InSave->SetValue(ctx, State->GetValue(ctx));
-        WriteUnboxedValue(out, GetPacker(), OutSave->GetValue(ctx));
+        out.WriteUnboxedValue(GetPacker(), OutSave->GetValue(ctx));
     }
-    return MakeString(out);
+    return out.MakeState();
 }
 
 void TSqueezeState::Load(TComputationContext& ctx, const NUdf::TStringRef& state) {
-    TStringBuf in(state.Data(), state.Size());
-    Stage = static_cast<ESqueezeState>(ReadByte(in));
+    TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+
+    const auto loadStateVersion = in.GetStateVersion();
+    if (loadStateVersion != StateVersion) {
+        THROW yexception() << "Invalid state version " << loadStateVersion;
+    }
+
+    Stage = static_cast<ESqueezeState>(in.Read<ui8>());
     if (ESqueezeState::Work == Stage) {
-        InLoad->SetValue(ctx, ReadUnboxedValue(in, GetPacker(), ctx));
+        InLoad->SetValue(ctx, in.ReadUnboxedValue(GetPacker(), ctx));
         State->SetValue(ctx, OutLoad->GetValue(ctx));
     }
 }

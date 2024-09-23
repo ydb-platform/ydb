@@ -46,13 +46,13 @@
 
 ```yql
 CREATE TABLE `kv_test`(
-    c0 Uint64 NOT NULL,
-    c1 Uint64 NOT NULL,
+    c0 Uint64,
+    c1 Uint64,
     ...
-    cI Uint64 NOT NULL,
-    cI+1 String NOT NULL,
+    cI Uint64,
+    cI+1 String,
     ...
-    cN String NOT NULL,
+    cN String,
     PRIMARY KEY(c0, c1, ... cK)) WITH (
         AUTO_PARTITIONING_BY_LOAD = ENABLED,
         AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = partsNum,
@@ -120,9 +120,9 @@ DROP TABLE `kv_test`
 `--rate <значение>` | - | Суммарная частота запросов всех потоков, в транзакциях в секунду Значение по умолчанию: 0 (не ограничена).
 `--quiet` | - | Выводит только итоговый результат теста.
 `--print-timestamp` | - | Печатать время вместе со статистикой каждого временного окна.
-`--client-timeout` | - | [Транспортный таймаут в миллисекундах](../../best_practices/timeouts.md).
-`--operation-timeout` | - | [Таймаут на операцию в миллисекундах](../../best_practices/timeouts.md).
-`--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../best_practices/timeouts.md).
+`--client-timeout` | - | [Транспортный таймаут в миллисекундах](../../dev/timeouts.md).
+`--operation-timeout` | - | [Таймаут на операцию в миллисекундах](../../dev/timeouts.md).
+`--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../dev/timeouts.md).
 `--window` | - | Длительность окна сбора статистики в секундах. Значение по умолчанию: 1.
 `--max-first-key` | - | Максимальное значение primary ключа таблицы. Значение по умолчанию: $2^{64} - 1$.
 `--cols` | - | Количество колонок в таблице. Значение по умолчанию: 2, считая Key.

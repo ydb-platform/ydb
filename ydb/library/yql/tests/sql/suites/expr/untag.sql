@@ -1,6 +1,7 @@
 /* postgres can not */
-$energy = ($m,$v)->{
-    return AsTagged(Untag($m,"G") * Untag($v,"V") * Untag($v,"V") / 2, "E");
-};
+select 
+    Untag(AsTagged(1,'a'),'a'),
+    Untag(Just(AsTagged(1,'a')),'a'),
+    Untag(Nothing(Tagged<Int32,'a'>?),'a'),
+    Untag(NULL,'a');
 
-select $energy(AsTagged(5.0,"G"), AsTagged(10.0,"V"));

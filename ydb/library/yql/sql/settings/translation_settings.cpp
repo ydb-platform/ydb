@@ -40,6 +40,10 @@ namespace NSQLTranslation {
         return new TAlwaysAllowPolicy;
     }
 
+    ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::Make(bool allow) {
+        return allow ? MakeAlwaysAllow() : MakeAlwaysDisallow();
+    }
+
     TTranslationSettings::TTranslationSettings()
         : ModuleMapping({{"core", "/lib/yql/core.yql"}})
         , BindingsMode(EBindingsMode::ENABLED)

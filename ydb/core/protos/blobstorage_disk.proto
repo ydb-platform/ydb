@@ -39,6 +39,11 @@ message TVDiskID {
     optional uint32 VDisk = 5;
 }
 
+message TPDiskId {
+    optional uint32 NodeId = 1;
+    optional uint32 PDiskId = 2;
+}
+
 message TVSlotId {
     optional uint32 NodeId = 1;
     optional uint32 PDiskId = 2;

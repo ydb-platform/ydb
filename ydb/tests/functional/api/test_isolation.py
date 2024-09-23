@@ -55,7 +55,8 @@ class TestTransactionIsolation(object):
         t1.execute('{} upsert into {} (id, value) values (2, 21)'.format(prefix, table_name))
         t1.commit()
 
-        result_rows = t1.execute("{} select id, value from {} order by id;".format(prefix, table_name), commit_tx=True)
+        t3 = session.transaction()
+        result_rows = t3.execute("{} select id, value from {} order by id;".format(prefix, table_name), commit_tx=True)
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -78,17 +79,17 @@ class TestTransactionIsolation(object):
             )
         )
 
-        for e_thread in (t1, ):
-            result_rows = e_thread.execute("{} select id, value from {} order by id;".format(prefix, table_name))
-            assert_that(
-                result_rows[0].rows,
-                equal_to(
-                    [
-                        {'id': 1, 'value': 11},
-                        {'id': 2, 'value': 21},
-                    ]
-                )
+        t4 = session.transaction()
+        result_rows = t4.execute("{} select id, value from {} order by id;".format(prefix, table_name))
+        assert_that(
+            result_rows[0].rows,
+            equal_to(
+                [
+                    {'id': 1, 'value': 11},
+                    {'id': 2, 'value': 21},
+                ]
             )
+        )
 
     def test_prevents_aborted_reads_g1a(self):
         table_name, session = self._prepare("test_prevents_aborted_reads_g1a")
@@ -148,7 +149,8 @@ class TestTransactionIsolation(object):
         t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name))
         t1.commit()
 
-        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name), commit_tx=True)
+        t3 = session.transaction()
+        result_rows = t3.execute('{} select id, value from {} order by id;'.format(prefix, table_name), commit_tx=True)
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -158,7 +160,6 @@ class TestTransactionIsolation(object):
                 ]
             )
         )
-        t2.commit()
 
     def test_prevents_circular_information_flow_g1c(self):
         table_name, session = self._prepare("test_prevents_circular_information_flow_g1c")
@@ -205,10 +206,11 @@ class TestTransactionIsolation(object):
 
         t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 3);'.format(prefix, table_name)), commit_tx=True)
 
-        t1.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name)))
+        t3 = session.transaction()
+        t3.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name)))
         t2.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name)))
-        t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 4);'.format(prefix, table_name)))
-        t1.commit()
+        t3.execute(session.prepare('{} upsert into {} (id, value) values (1, 4);'.format(prefix, table_name)))
+        t3.commit()
 
         def callee():
             t2.execute(session.prepare('{} upsert into {} (id, value) values (1, 5);'.format(prefix, table_name)))
@@ -222,14 +224,14 @@ class TestTransactionIsolation(object):
             )
         )
 
-        for thr in (t1, ):
-            result_rows = thr.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name), commit_tx=True)
-            assert_that(
-                result_rows[0].rows[0].value,
-                equal_to(
-                    4
-                )
+        t4 = session.transaction()
+        result_rows = t4.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name), commit_tx=True)
+        assert_that(
+            result_rows[0].rows[0].value,
+            equal_to(
+                4
             )
+        )
 
     def test_prevents_observed_transaction_vanishes_otv(self):
         table_name, session = self._prepare("test_prevents_observed_transaction_vanishes_otv")

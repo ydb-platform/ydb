@@ -1194,6 +1194,26 @@ public:
         return GetProto().int64_value();
     }
 
+    i32 GetDate32() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Date32);
+        return GetProto().int32_value();
+    }
+
+    i64 GetDatetime64() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Datetime64);
+        return GetProto().int64_value();
+    }
+
+    i64 GetTimestamp64() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Timestamp64);
+        return GetProto().int64_value();
+    }
+
+    i64 GetInterval64() const {
+        CheckPrimitive(NYdb::EPrimitiveType::Interval64);
+        return GetProto().int64_value();
+    }
+
     const TString& GetTzDate() const {
         CheckPrimitive(NYdb::EPrimitiveType::TzDate);
         return GetProto().text_value();
@@ -1576,9 +1596,14 @@ private:
             case NYdb::EPrimitiveType::Date:
             case NYdb::EPrimitiveType::Datetime:
                 return Ydb::Value::kUint32Value;
+            case NYdb::EPrimitiveType::Date32:
+                return Ydb::Value::kInt32Value;
             case NYdb::EPrimitiveType::Timestamp:
                 return Ydb::Value::kUint64Value;
             case NYdb::EPrimitiveType::Interval:
+            case NYdb::EPrimitiveType::Interval64:
+            case NYdb::EPrimitiveType::Timestamp64:
+            case NYdb::EPrimitiveType::Datetime64:
                 return Ydb::Value::kInt64Value;
             case NYdb::EPrimitiveType::TzDate:
             case NYdb::EPrimitiveType::TzDatetime:
@@ -1697,6 +1722,22 @@ i64 TValueParser::GetInterval() const {
     return Impl_->GetInterval();
 }
 
+i32 TValueParser::GetDate32() const {
+    return Impl_->GetDate32();
+}
+
+i64 TValueParser::GetDatetime64() const {
+    return Impl_->GetDatetime64();
+}
+
+i64 TValueParser::GetTimestamp64() const {
+    return Impl_->GetTimestamp64();
+}
+
+i64 TValueParser::GetInterval64() const {
+    return Impl_->GetInterval64();
+}
+
 const TString& TValueParser::GetTzDate() const {
     return Impl_->GetTzDate();
 }
@@ -1811,6 +1852,22 @@ TMaybe<TInstant> TValueParser::GetOptionalTimestamp() const {
 
 TMaybe<i64> TValueParser::GetOptionalInterval() const {
     RET_OPT_VALUE(i64, Interval);
+}
+
+TMaybe<i32> TValueParser::GetOptionalDate32() const {
+    RET_OPT_VALUE(i64, Date32);
+}
+
+TMaybe<i64> TValueParser::GetOptionalDatetime64() const {
+    RET_OPT_VALUE(i64, Datetime64);
+}
+
+TMaybe<i64> TValueParser::GetOptionalTimestamp64() const {
+    RET_OPT_VALUE(i64, Timestamp64);
+}
+
+TMaybe<i64> TValueParser::GetOptionalInterval64() const {
+    RET_OPT_VALUE(i64, Interval64);
 }
 
 TMaybe<TString> TValueParser::GetOptionalTzDate() const {
@@ -2083,6 +2140,26 @@ public:
 
     void Interval(i64 value) {
         FillPrimitiveType(EPrimitiveType::Interval);
+        GetValue().set_int64_value(value);
+    }
+
+    void Date32(const i32 value) {
+        FillPrimitiveType(EPrimitiveType::Date32);
+        GetValue().set_int32_value(value);
+    }
+
+    void Datetime64(const i64 value) {
+        FillPrimitiveType(EPrimitiveType::Datetime64);
+        GetValue().set_int64_value(value);
+    }
+
+    void Timestamp64(const i64 value) {
+        FillPrimitiveType(EPrimitiveType::Timestamp64);
+        GetValue().set_int64_value(value);
+    }
+
+    void Interval64(const i64 value) {
+        FillPrimitiveType(EPrimitiveType::Interval64);
         GetValue().set_int64_value(value);
     }
 
@@ -2824,6 +2901,30 @@ TDerived& TValueBuilderBase<TDerived>::Interval(i64 value) {
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Date32(const i32 value) {
+    Impl_->Date32(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Datetime64(const i64 value) {
+    Impl_->Datetime64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Timestamp64(const i64 value) {
+    Impl_->Timestamp64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Interval64(const i64 value) {
+    Impl_->Interval64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::TzDate(const TString& value) {
     Impl_->TzDate(value);
     return static_cast<TDerived&>(*this);
@@ -2984,6 +3085,26 @@ TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp(const TMaybe<TInstant>&
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const TMaybe<i64>& value) {
     SET_OPT_VALUE_MAYBE(Interval);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const TMaybe<i32>& value) {
+    SET_OPT_VALUE_MAYBE(Date32);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const TMaybe<i64>& value) {
+    SET_OPT_VALUE_MAYBE(Datetime64);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const TMaybe<i64>& value) {
+    SET_OPT_VALUE_MAYBE(Timestamp64);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const TMaybe<i64>& value) {
+    SET_OPT_VALUE_MAYBE(Interval64);
 }
 
 template<typename TDerived>

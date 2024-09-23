@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/minikql/computation/mkql_vector_spiller_adapter.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
@@ -8,6 +9,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
+
+class TTableBucketSpiller;
         
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
@@ -52,7 +55,6 @@ struct KeysHashTable {
 };
 
 struct TTableBucket {
-    ui64 TuplesNum = 0;  // Total number of tuples in bucket
     std::vector<ui64, TMKQLAllocator<ui64>> KeyIntVals;  // Vector to store table key values
     std::vector<ui64, TMKQLAllocator<ui64>> DataIntVals; // Vector to store data values in bucket
     std::vector<char, TMKQLAllocator<char>> StringsValues; // Vector to store data strings values
@@ -70,6 +72,11 @@ struct TTableBucket {
 
  };
 
+ struct TTableBucketStats {
+    ui64 TuplesNum = 0;             // Total number of tuples in bucket
+    ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
+    ui64 KeyIntValsTotalSize = 0;   // Total size of KeyIntVals. Used to correctly calculate StringsOffsets.
+ };
 
 struct TupleData {
     ui64 * IntColumns = nullptr; // Array of packed int  data of the table. Caller should allocate array of NumberOfIntColumns size
@@ -86,6 +93,80 @@ struct TColTypeInterface {
     NYql::NUdf::IEquate::TPtr EquateI = nullptr; // Interface to compare two column values
     std::shared_ptr<TValuePacker> Packer; // Class to pack and unpack column values
     const THolderFactory& HolderFactory; // To use during unpacking 
+};
+
+// Class that spills bucket data.
+// If, after saving, data has accumulated in the bucket again, you can spill it again.
+// After restoring the entire bucket, it will contain all the data saved over different iterations.
+class TTableBucketSpiller {
+public:
+    TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit);
+
+    // Takes the bucket and immediately starts spilling. Spilling continues until an async operation occurs.
+    void SpillBucket(TTableBucket&& bucket);
+    // Starts bucket restoration after spilling. Restores and unites all the buckets from different iterations. Will pause in case of async operation.
+    void StartBucketRestoration();
+    // Extracts bucket restored from spilling. This bucket will contain all the data from different iterations of spilling.
+    TTableBucket&& ExtractBucket();
+
+    // Updates the states of spillers. This update should be called after async operation completion to resume spilling/resoration.
+    void Update();
+    // Flushes all the data from inner spillers. Should be called when no more data is expected for spilling.
+    void Finalize();
+    // Is bucket in memory. False if spilled.
+    bool IsInMemory() const;
+    // Is bucket loaded to memory but still owned by spilled.
+    // ExtractBucket must be called if true.
+    bool IsExtractionRequired() const;
+    // Is there any bucket that is being spilled right now.
+    bool IsProcessingSpilling() const;
+    // Is spiller ready to start loading new bucket.
+    bool IsAcceptingDataRequests() const;
+    // Is there any bucket that is being restored right now.
+    bool IsRestoring() const;
+
+private:
+    void ProcessBucketSpilling();
+    template <class T>
+    void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) const;
+    void ProcessBucketRestoration();
+    void ProcessFinalizing();
+
+private:
+
+    enum class EState {
+        InMemory,
+        Spilling,
+        AcceptingData,
+        Finalizing,
+        AcceptingDataRequests,
+        Restoring,
+        WaitingForExtraction
+    };
+
+    enum class ENextVectorToProcess {
+        KeyAndVals,
+        DataIntVals,
+        StringsValues,
+        StringsOffsets,
+        InterfaceValues,
+        InterfaceOffsets,
+
+        None
+    };
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
+    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
+    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
+
+    EState State = EState::InMemory;
+    ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
+
+    ui64 SpilledBucketsCount = 0;
+
+    bool IsFinalizingRequested = false;
+
+    TTableBucket CurrentBucket;
 };
 
 
@@ -118,6 +199,10 @@ class TTable {
     
     // Table data is partitioned in buckets based on key value
     std::vector<TTableBucket> TableBuckets;
+    // Statistics for buckets. Total number of tuples inside a single bucket and offsets.
+    std::vector<TTableBucketStats> TableBucketsStats;
+
+    std::vector<TTableBucketSpiller> TableBucketsSpillers;
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;
@@ -187,11 +272,56 @@ public:
     // Joins two tables and stores join result in table data. Tuples of joined table could be received by
     // joined table iterator.  Life time of t1, t2 should be greater than lifetime of joined table
     // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false
-    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false );
-
+    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false, ui32 fromBucket = 0, ui32 toBucket = NumberOfBuckets);
 
     // Returns next jointed tuple data. Returs true if there are more tuples
-    bool NextJoinedData(TupleData& td1, TupleData& td2);
+    bool NextJoinedData(TupleData& td1, TupleData& td2, ui64 bucketLimit);
+
+    bool NextJoinedData(TupleData& td1, TupleData& td2) {
+        return NextJoinedData(td1, td2, JoinTable1->TableBucketsStats.size());
+    }
+
+    // Creates buckets that support spilling.
+    void InitializeBucketSpillers(ISpiller::TPtr spiller);
+
+    // Calculates approximate size of a bucket. Used for spilling to determine the largest bucket.
+    ui64 GetSizeOfBucket(ui64 bucket) const;
+
+    // This functions wind the largest bucket and spills it to the disk.
+    bool TryToReduceMemoryAndWait();
+
+    // Update state of spilling. Must be called during each DoCalculate.
+    void UpdateSpilling();
+
+    // Flushes all the spillers.
+    void FinalizeSpilling();
+
+    // Checks if spilling has any running save operation
+    bool IsSpillingFinished() const;
+
+    // Checks if spilling ready for requesting buckets for restoration.
+    bool IsSpillingAcceptingDataRequests() const;
+
+    // Checks is spilling has any running load operation
+    bool IsRestoringSpilledBuckets() const;
+
+    // Checks if bucket fully loaded to memory and may be joined.
+    bool IsBucketInMemory(ui32 bucket) const;
+
+    // Checks if extraction of bucket is required
+    bool IsSpilledBucketWaitingForExtraction(ui32 bucket) const;
+
+    // Starts loading spilled bucket to memory.
+    void StartLoadingBucket(ui32 bucket);
+
+    // Prepares bucket for joining after spilling and restoring back.
+    void PrepareBucket(ui64 bucket);
+
+    // Clears all the data related to a single bucket
+    void ClearBucket(ui64 bucket);
+
+    // Forces bucket to release the space used for underlying containers.
+    void ShrinkBucket(ui64 bucket);
 
     // Clears table content
     void Clear();
@@ -205,6 +335,8 @@ public:
     ~TTable();
 
 };
+
+
 
 
 

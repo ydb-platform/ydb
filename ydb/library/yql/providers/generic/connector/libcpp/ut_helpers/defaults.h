@@ -26,7 +26,6 @@ namespace NYql::NConnector::NTest {
     extern const TString DEFAULT_CH_SERVICE_ACCOUNT_ID;
     extern const TString DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE;
 
-    extern const TString DEFAULT_YDB_DATABASE;
     extern const TString DEFAULT_YDB_HOST;
     constexpr int DEFAULT_YDB_PORT = 2136;
     extern const TString DEFAULT_YDB_ENDPOINT;

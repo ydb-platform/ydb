@@ -53,13 +53,6 @@
 
 #endif
 
-// Define a compiler generic null pointer value
-#if defined(BOOST_NO_CXX11_NULLPTR)
-#define BOOST_VARIANT_NULL 0
-#else
-#define BOOST_VARIANT_NULL nullptr
-#endif
-
 namespace boost {
 namespace detail { namespace variant {
 
@@ -179,7 +172,7 @@ inline typename Visitor::result_type
 visitation_impl(
       int, int, Visitor&, VPCV
     , mpl::true_ // is_apply_visitor_unrolled
-    , NBF, W* = BOOST_VARIANT_NULL, S* = BOOST_VARIANT_NULL
+    , NBF, W* = nullptr, S* = nullptr
     )
 {
     // should never be here at runtime!
@@ -198,7 +191,7 @@ visitation_impl(
     , Visitor& visitor, VoidPtrCV storage
     , mpl::false_ // is_apply_visitor_unrolled
     , NoBackupFlag no_backup_flag
-    , Which* = BOOST_VARIANT_NULL, step0* = BOOST_VARIANT_NULL
+    , Which* = nullptr, step0* = nullptr
     )
 {
     // Typedef apply_visitor_unrolled steps and associated types...

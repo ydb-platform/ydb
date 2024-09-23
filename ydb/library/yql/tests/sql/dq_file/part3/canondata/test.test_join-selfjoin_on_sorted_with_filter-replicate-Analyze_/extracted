@@ -1,0 +1,7 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Optimization
+    
+        <tmp_path>/program.sql:<main>:7:22: Info: Cannot execute self join in DQ
+        	select * from $in as a inner join $in as b on a.key = b.key;
+	                     ^

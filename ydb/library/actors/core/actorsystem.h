@@ -161,6 +161,7 @@ namespace NActors {
         TIntrusivePtr<NLog::TSettings> LoggerSettings0;
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
+        mutable std::vector<TActorId> DynamicProxies;
 
         bool StartExecuted;
         bool StopExecuted;
@@ -286,6 +287,7 @@ namespace NActors {
         }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
+        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStats) const;
 
         THarmonizerStats GetHarmonizerStats() const;
 

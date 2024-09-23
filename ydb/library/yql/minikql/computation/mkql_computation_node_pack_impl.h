@@ -3,6 +3,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/pack_num.h>
+#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/packedtypes/zigzag.h>
@@ -56,6 +57,14 @@ template <typename T, typename TBuf>
 void PutRawData(T val, TBuf& buf) {
     buf.Advance(sizeof(T));
     std::memcpy(buf.Pos() - sizeof(T), &val, sizeof(T));
+}
+
+constexpr size_t MAX_PACKED_DECIMAL_SIZE = sizeof(NYql::NDecimal::TInt128);
+template<typename TBuf>
+void PackDecimal(NYql::NDecimal::TInt128 val, TBuf& buf) {
+    buf.Advance(MAX_PACKED_DECIMAL_SIZE);
+    char* dst = buf.Pos() - MAX_PACKED_DECIMAL_SIZE;
+    buf.EraseBack(MAX_PACKED_DECIMAL_SIZE - NYql::NDecimal::Serialize(val, dst));
 }
 
 class TChunkedInputBuffer : private TNonCopyable {
@@ -162,13 +171,16 @@ T GetRawData(TChunkedInputBuffer& buf) {
 }
 
 template<typename T>
-T UnpackUInt(TChunkedInputBuffer& buf) {
+T UnpackInteger(TChunkedInputBuffer& buf) {
     T res;
     size_t read;
-    if constexpr (std::is_same_v<T, ui64>) {
+    if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
+        std::tie(res, read) = NYql::NDecimal::Deserialize(buf.data(), buf.size());
+        Y_DEBUG_ABORT_UNLESS((read != 0) xor (NYql::NDecimal::IsError(res)));
+    } else if constexpr (std::is_same_v<T, ui64>) {
         read = Unpack64(buf.data(), buf.size(), res);
     } else {
-        static_assert(std::is_same_v<T, ui32>, "Only ui32/ui64 are supported");
+        static_assert(std::is_same_v<T, ui32>, "Only ui32/ui64/TInt128 are supported");
         read = Unpack32(buf.data(), buf.size(), res);
     }
 
@@ -177,8 +189,9 @@ T UnpackUInt(TChunkedInputBuffer& buf) {
         return res;
     }
 
-    char tmpBuf[MAX_PACKED64_SIZE];
-    Y_DEBUG_ABORT_UNLESS(buf.size() < MAX_PACKED64_SIZE);
+    static_assert(MAX_PACKED_DECIMAL_SIZE > MAX_PACKED64_SIZE);
+    char tmpBuf[MAX_PACKED_DECIMAL_SIZE];
+    Y_DEBUG_ABORT_UNLESS(buf.size() < MAX_PACKED_DECIMAL_SIZE);
     std::memcpy(tmpBuf, buf.data(), buf.size());
     size_t pos = buf.size();
     buf.Skip(buf.size());
@@ -186,12 +199,15 @@ T UnpackUInt(TChunkedInputBuffer& buf) {
     for (;;) {
         if (buf.size() == 0) {
             buf.Next();
-            MKQL_ENSURE(buf.size() > 0, "Bad uint packed data");
+            MKQL_ENSURE(buf.size() > 0, (std::is_same_v<T, NYql::NDecimal::TInt128> ? "Bad decimal packed data" : "Bad uint packed data"));
         }
-        Y_DEBUG_ABORT_UNLESS(pos < MAX_PACKED64_SIZE);
+        Y_DEBUG_ABORT_UNLESS(pos < MAX_PACKED_DECIMAL_SIZE);
         tmpBuf[pos++] = *buf.data();
         buf.Skip(1);
-        if constexpr (std::is_same_v<T, ui64>) {
+        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
+            std::tie(res, read) = NYql::NDecimal::Deserialize(tmpBuf, pos);
+            Y_DEBUG_ABORT_UNLESS((read != 0) xor (NYql::NDecimal::IsError(res)));
+        } else if constexpr (std::is_same_v<T, ui64>) {
             read = Unpack64(tmpBuf, pos, res);
         } else {
             read = Unpack32(tmpBuf, pos, res);
@@ -203,8 +219,12 @@ T UnpackUInt(TChunkedInputBuffer& buf) {
     return res;
 }
 
+inline NYql::NDecimal::TInt128 UnpackDecimal(TChunkedInputBuffer& buf) {
+    return UnpackInteger<NYql::NDecimal::TInt128>(buf);
+}
+
 inline ui64 UnpackUInt64(TChunkedInputBuffer& buf) {
-    return UnpackUInt<ui64>(buf);
+    return UnpackInteger<ui64>(buf);
 }
 
 inline i64 UnpackInt64(TChunkedInputBuffer& buf) {
@@ -212,7 +232,7 @@ inline i64 UnpackInt64(TChunkedInputBuffer& buf) {
 }
 
 inline ui32 UnpackUInt32(TChunkedInputBuffer& buf) {
-    return UnpackUInt<ui32>(buf);
+    return UnpackInteger<ui32>(buf);
 }
 
 inline i32 UnpackInt32(TChunkedInputBuffer& buf) {

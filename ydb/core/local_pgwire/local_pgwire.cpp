@@ -114,6 +114,11 @@ public:
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId sender = ev->Sender;
         TString database = clientParams["database"];
+        if (database == "/postgres") {
+            auto authResponse = std::make_unique<NPG::TEvPGEvents::TEvAuthResponse>();
+            authResponse->Error = Ydb::StatusIds_StatusCode_Name(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_BAD_REQUEST);
+            actorSystem->Send(sender, authResponse.release());
+        }
         TString peerName = TStringBuilder() << ev->Get()->Address;
 
         using TRpcEv = NGRpcService::TGRpcRequestWrapperNoAuth<NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;

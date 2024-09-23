@@ -7,6 +7,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/apps/version
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/base

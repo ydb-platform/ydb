@@ -492,6 +492,15 @@ message PostgreSQLCluster {
     bool secure = 7;
 }
 
+message GreenplumCluster {
+    string database_id = 1 [(Ydb.length).le = 1024];
+    string database_name = 2 [(Ydb.length).le = 1024];
+    string login = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    string password = 4 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    string schema = 5 [(Ydb.length).le = 1024];
+    IamAuth auth = 6;
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -501,6 +510,7 @@ message ConnectionSetting {
         OBJECT_STORAGE = 4;
         MONITORING = 5;
         POSTGRESQL_CLUSTER = 6;
+        GREENPLUM_CLUSTER = 7;
     }
 
     oneof connection {
@@ -510,6 +520,7 @@ message ConnectionSetting {
         ObjectStorageConnection object_storage = 4;
         Monitoring monitoring = 5;
         PostgreSQLCluster postgresql_cluster = 6;
+        GreenplumCluster greenplum_cluster = 7;
     }
 }
 

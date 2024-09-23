@@ -1,0 +1,243 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Table info",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "table",
+            "in": "query",
+            "description": "RTMR table",
+            "required": true,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title" : "Table",
+                    "required": [],
+                    "properties": {
+                        "stats": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "timestamp": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "last": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "min": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "key": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "tops": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "top": {
+                                                    "type": "string"
+                                                },
+                                                "last": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "size": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "histogram": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "1": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "2": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "5": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "10": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "20": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "50": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "100": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "200": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "500": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "1000": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            },
+                                                            "4294967295": {
+                                                                "type": "integer",
+                                                                "format": "int64"
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "top": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "subKey": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "max": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "min": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "storage": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "private": {
+                            "type": "boolean"
+                        },
+                        "unique": {
+                            "type": "boolean"
+                        },
+                        "keys": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "entries": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "type": {
+                            "type": "string"
+                        },
+                        "id": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "input": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                }
+                            }
+                        },
+                        "lifetime": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "writtenBy": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "type": {
+                                        "type": "string"
+                                    },
+                                    "id": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        },
+                        "readBy": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "type": {
+                                        "type": "string"
+                                    },
+                                    "id": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        },
+                        "task": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

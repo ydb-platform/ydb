@@ -27,6 +27,7 @@ Visit the PEAK home page at http://peak.telecommunity.com for more information.
 
 from types import FunctionType
 
+
 __all__ = [
     'determineMetaclass',
     'getFrameInfo',
@@ -35,6 +36,7 @@ __all__ = [
 ]
 
 import sys
+
 
 def getFrameInfo(frame):
     """Return (kind,module,locals,globals) for a frame

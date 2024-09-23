@@ -35,6 +35,33 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
@@ -187,6 +214,7 @@
                                                                                     "x1 (-\u221e, +\u221e)",
                                                                                     "x2 (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join2.test_plan/x"
                                                                             }
                                                                         ],
@@ -262,6 +290,7 @@
                                                     "x1 (-\u221e, +\u221e)",
                                                     "x2 (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join2.test_plan/x"
                                             }
                                         ],

@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/ytree/ypath_client.h>
+
 namespace NYT::NRpc {
 
 using namespace NConcurrency;
@@ -27,10 +29,14 @@ using NYT::FromProto;
 TServiceContextBase::TServiceContextBase(
     std::unique_ptr<TRequestHeader> header,
     TSharedRefArray requestMessage,
+    TMemoryUsageTrackerGuard memoryGuard,
+    IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
     : RequestHeader_(std::move(header))
     , RequestMessage_(std::move(requestMessage))
+    , RequestMemoryGuard_(std::move(memoryGuard))
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
@@ -39,10 +45,14 @@ TServiceContextBase::TServiceContextBase(
 
 TServiceContextBase::TServiceContextBase(
     TSharedRefArray requestMessage,
+    TMemoryUsageTrackerGuard memoryGuard,
+    IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
     : RequestHeader_(new TRequestHeader())
     , RequestMessage_(std::move(requestMessage))
+    , RequestMemoryGuard_(std::move(memoryGuard))
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
@@ -67,6 +77,10 @@ void TServiceContextBase::Initialize()
     RequestAttachments_ = std::vector<TSharedRef>(
         RequestMessage_.Begin() + 2,
         RequestMessage_.End());
+    TotalSize_ = TypicalRequestSize +
+        GetMessageHeaderSize(RequestMessage_) +
+        GetMessageBodySize(RequestMessage_) +
+        GetTotalMessageAttachmentSize(RequestMessage_);
 }
 
 void TServiceContextBase::Reply(const TError& error)
@@ -120,7 +134,7 @@ void TServiceContextBase::ReplyEpilogue()
         LoggingEnabled_ &&
         TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
     {
-        static const auto& Logger = RpcServerLogger;
+        static constexpr auto& Logger = RpcServerLogger;
         YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v)",
             RequestId_,
             RequestHeader_->service(),
@@ -299,6 +313,11 @@ TRequestId TServiceContextBase::GetRequestId() const
     return RequestId_;
 }
 
+i64 TServiceContextBase::GetTotalSize() const
+{
+    return TotalSize_;
+}
+
 TBusNetworkStatistics TServiceContextBase::GetBusNetworkStatistics() const
 {
     return {};
@@ -450,6 +469,11 @@ void TServiceContextBase::SetRawResponseInfo(TString info, bool incremental)
     }
 }
 
+const IMemoryUsageTrackerPtr& TServiceContextBase::GetMemoryUsageTracker() const
+{
+    return MemoryUsageTracker_;
+}
+
 const NLogging::TLogger& TServiceContextBase::GetLogger() const
 {
     return Logger;
@@ -591,6 +615,11 @@ TRealmId TServiceContextWrapper::GetRealmId() const
     return UnderlyingContext_->GetRealmId();
 }
 
+i64 TServiceContextWrapper::GetTotalSize() const
+{
+    return UnderlyingContext_->GetTotalSize();
+}
+
 const TAuthenticationIdentity& TServiceContextWrapper::GetAuthenticationIdentity() const
 {
     return UnderlyingContext_->GetAuthenticationIdentity();
@@ -722,6 +751,11 @@ void TServiceContextWrapper::SuppressMissingRequestInfoCheck()
 void TServiceContextWrapper::SetRawResponseInfo(TString info, bool incremental)
 {
     UnderlyingContext_->SetRawResponseInfo(std::move(info), incremental);
+}
+
+const IMemoryUsageTrackerPtr& TServiceContextWrapper::GetMemoryUsageTracker() const
+{
+    return UnderlyingContext_->GetMemoryUsageTracker();
 }
 
 const NLogging::TLogger& TServiceContextWrapper::GetLogger() const
@@ -886,7 +920,13 @@ void TServerBase::ApplyConfig()
     newAppliedConfig->Services = StaticConfig_->Services;
 
     for (const auto& [name, node] : DynamicConfig_->Services) {
-        newAppliedConfig->Services[name] = node;
+        auto it = newAppliedConfig->Services.find(name);
+        if (it != newAppliedConfig->Services.end()) {
+            const auto& [_, staticConfigNode] = *it;
+            newAppliedConfig->Services[name] = NYTree::PatchNode(staticConfigNode, node);
+        } else {
+            newAppliedConfig->Services[name] = node;
+        }
     }
 
     AppliedConfig_ = newAppliedConfig;
@@ -941,7 +981,7 @@ TFuture<void> TServerBase::Stop(bool graceful)
     YT_LOG_INFO("Stopping RPC server (Graceful: %v)",
         graceful);
 
-    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] () {
+    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] {
         YT_LOG_INFO("RPC server stopped");
     }));
 }

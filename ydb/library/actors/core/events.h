@@ -3,8 +3,12 @@
 #include "event.h"
 #include "event_pb.h"
 
-#include <ydb/library/actors/protos/actors.pb.h>
 #include <util/system/unaligned_mem.h>
+
+namespace NActorsProto {
+    class TCallbackException;
+    class TActorId;
+} // NActorsProto
 
 namespace NActors {
     struct TEvents {
@@ -190,21 +194,21 @@ namespace NActors {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvFlushLog, "System: TEvFlushLog")
         };
 
-        struct TEvCallbackException: public TEventPB<TEvCallbackException,
-                                                      NActorsProto::TCallbackException,
-                                                      TSystem::CallbackException> {
-            TEvCallbackException(const TActorId& id, const TString& msg) {
-                ActorIdToProto(id, Record.MutableActorId());
-                Record.SetExceptionMessage(msg);
-            }
+        struct TEvCallbackException : TEventBase<TEvCallbackException, TSystem::CallbackException> {
+            DEFINE_SIMPLE_LOCAL_EVENT(TEvCallbackException, "System: TEvCallbackException")
+
+            const TActorId Id;
+            TString Msg;
+
+            TEvCallbackException(const TActorId& id, const TString& msg) : Id(id), Msg(msg) {}
         };
 
-        struct TEvCallbackCompletion: public TEventPB<TEvCallbackCompletion,
-                                                       NActorsProto::TActorId,
-                                                       TSystem::CallbackCompletion> {
-            TEvCallbackCompletion(const TActorId& id) {
-                ActorIdToProto(id, &Record);
-            }
+        struct TEvCallbackCompletion : TEventBase<TEvCallbackCompletion, TSystem::CallbackCompletion> {
+            DEFINE_SIMPLE_LOCAL_EVENT(TEvCallbackException, "System: TEvCallbackCompletion")
+
+            const TActorId Id;
+
+            TEvCallbackCompletion(const TActorId& id) : Id(id) {}
         };
 
         struct TEvGone: public TEventBase<TEvGone, TSystem::Gone> {

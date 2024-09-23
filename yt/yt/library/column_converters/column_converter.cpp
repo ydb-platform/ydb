@@ -17,7 +17,7 @@ using namespace NTableClient;
 ////////////////////////////////////////////////////////////////////////////////
 
 IColumnConverterPtr CreateColumnConvert(
-    const NTableClient::TColumnSchema& columnSchema,
+    const TColumnSchema& columnSchema,
     int columnId,
     int columnOffset)
 {
@@ -30,7 +30,7 @@ IColumnConverterPtr CreateColumnConvert(
 
         case EValueType::Double:
             switch (columnSchema.CastToV1Type()) {
-                case NTableClient::ESimpleLogicalValueType::Float:
+                case ESimpleLogicalValueType::Float:
                     return CreateFloatingPoint32ColumnConverter(columnId, columnSchema, columnOffset);
                 default:
                     return CreateFloatingPoint64ColumnConverter(columnId, columnSchema, columnOffset);

@@ -380,6 +380,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"create async replication user for table1 AS table2 with (user='foo')",
              "CREATE ASYNC REPLICATION user FOR table1 AS table2 WITH (user = 'foo');\n"},
+            {"alter async replication user set (user='foo')",
+             "ALTER ASYNC REPLICATION user SET (user = 'foo');\n"},
             {"drop async replication user",
              "DROP ASYNC REPLICATION user;\n"},
             {"drop async replication user cascade",
@@ -452,6 +454,12 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tRESET (user, user);\n"},
             {"alter table user add index user local on (user)",
              "ALTER TABLE user\n\tADD INDEX user LOCAL ON (user);\n"},
+            {"alter table user alter index idx set setting 'foo'",
+             "ALTER TABLE user\n\tALTER INDEX idx SET setting 'foo';\n"},
+            {"alter table user alter index idx set (setting = 'foo', another_setting = 'bar')",
+             "ALTER TABLE user\n\tALTER INDEX idx SET (setting = 'foo', another_setting = 'bar');\n"},
+            {"alter table user alter index idx reset (setting, another_setting)",
+             "ALTER TABLE user\n\tALTER INDEX idx RESET (setting, another_setting);\n"},
             {"alter table user drop index user",
              "ALTER TABLE user\n\tDROP INDEX user;\n"},
             {"alter table user rename to user",
@@ -1568,6 +1576,24 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TCases cases = {
             {"dRop viEW theVIEW",
              "DROP VIEW theVIEW;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(ResourcePoolOperations) {
+        TCases cases = {
+            {"creAte reSourCe poOl naMe With (a = \"b\")",
+             "CREATE RESOURCE POOL naMe WITH (a = \"b\");\n"},
+             {"create resource pool eds with (a=\"a\",b=\"b\",c = true)",
+             "CREATE RESOURCE POOL eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
+             {"alTer reSOurcE poOl naMe sEt a tRue, resEt (b, c), seT (x=y, z=false)",
+             "ALTER RESOURCE POOL naMe\n\tSET a TRUE,\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alter resource pool eds reset (a), set (x=y)",
+             "ALTER RESOURCE POOL eds\n\tRESET (a),\n\tSET (x = y);\n"},
+            {"dRop reSourCe poOl naMe",
+             "DROP RESOURCE POOL naMe;\n"},
         };
 
         TSetup setup;

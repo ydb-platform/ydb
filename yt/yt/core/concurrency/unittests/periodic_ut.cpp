@@ -30,7 +30,7 @@ TEST_W(TPeriodicTest, Simple)
 {
     std::atomic<int> count = {0};
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
         ++count;
     });
@@ -66,7 +66,7 @@ TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
 {
     std::atomic<int> count = {0};
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         ++count;
     });
 
@@ -94,7 +94,7 @@ TEST_W(TPeriodicTest, ParallelStop)
 {
     std::atomic<int> count = {0};
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         ++count;
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
@@ -132,7 +132,7 @@ TEST_W(TPeriodicTest, ParallelOnExecuted1)
 {
     std::atomic<int> count = 0;
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
     });
@@ -169,7 +169,7 @@ TEST_W(TPeriodicTest, ParallelOnExecuted2)
 {
     std::atomic<int> count = 0;
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
         ++count;
     });
@@ -206,7 +206,7 @@ TEST_W(TPeriodicTest, OnExecutedEventCanceled)
 {
     std::atomic<int> count = 0;
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
         ++count;
     });

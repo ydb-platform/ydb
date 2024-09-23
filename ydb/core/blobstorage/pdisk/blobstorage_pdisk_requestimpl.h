@@ -185,7 +185,7 @@ public:
 
     TLogRead(const NPDisk::TEvReadLog::TPtr &ev, ui32 pdiskId, TAtomicBase reqIdx)
         : TRequestBase(ev->Sender, TReqId(TReqId::LogRead, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::LogRead,
-                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.LogRead"))
+                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.LogRead"))
         , Position(ev->Get()->Position)
         , SizeLimit(ev->Get()->SizeLimit)
     {
@@ -209,12 +209,12 @@ public:
     void *Data;
     ui32 Size;
     ui64 Offset;
-    TCompletionAction *CompletionAction;
+    std::weak_ptr<TCompletionAction> CompletionAction;
     TReqId ReqId;
 
     TLogReadContinue(const NPDisk::TEvReadLogContinue::TPtr &ev, ui32 pdiskId, TAtomicBase /*reqIdx*/)
         : TRequestBase(ev->Sender, ev->Get()->ReqId, 0, 0, NPriInternal::LogRead,
-                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.LogReadContinue"))
+                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.LogReadContinue"))
         , Data(ev->Get()->Data)
         , Size(ev->Get()->Size)
         , Offset(ev->Get()->Offset)
@@ -850,7 +850,7 @@ class TAskForCutLog : public TRequestBase {
 public:
     TAskForCutLog(const NPDisk::TEvAskForCutLog::TPtr &ev, ui32 pdiskId, TAtomicBase reqIdx)
         : TRequestBase(ev->Sender, TReqId(TReqId::AskForCutLog, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::Other,
-                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.AskForCutLog")
+                NWilson::TSpan(TWilson::PDiskTopLevel, std::move(ev->TraceId), "PDisk.AskForCutLog")
             )
     {
         if (auto span = SpanStack.PeekTop()) {

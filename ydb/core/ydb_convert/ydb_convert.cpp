@@ -15,6 +15,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NKikimr {
@@ -307,6 +308,14 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
         case NUdf::TDataType<NUdf::TInterval>::Id:
             res.set_int64_value(value.GetInt64());
             break;
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            res.set_int32_value(value.GetInt32());
+            break;
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            res.set_int64_value(value.GetInt64());
+            break;
         case NUdf::TDataType<NUdf::TDecimal>::Id:
         case NUdf::TDataType<NUdf::TUuid>::Id: {
             res.set_low_128(value.GetLow128());
@@ -443,6 +452,34 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
             if ((ui64)std::abs(value.int64_value()) >= NUdf::MAX_TIMESTAMP) {
                 throw yexception() << "Invalid Interval value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date");
+            if (value.int32_value() >= NUdf::MAX_DATE32) {
+                throw yexception() << "Invalid Date32 value";
+            }
+            res.SetInt32(value.int32_value());
+            break;
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime");
+            if (value.int64_value() >= NUdf::MAX_DATETIME64) {
+                throw yexception() << "Invalid Datetime64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp");
+            if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
+                throw yexception() << "Invalid Timestamp64 value";
+            }
+            res.SetInt64(value.int64_value());
+            break;
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
+            if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
+                throw yexception() << "Invalid Interval64 value";
             }
             res.SetInt64(value.int64_value());
             break;
@@ -1075,6 +1112,22 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         ok = (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
         break;
 
+    case NScheme::NTypeIds::Date32:
+        ok = cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        break;
+
+    case NScheme::NTypeIds::Datetime64:
+        ok = cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        break;
+
+    case NScheme::NTypeIds::Timestamp64:
+        ok = cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        break;
+
+    case NScheme::NTypeIds::Interval64:
+        ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        break;        
+
     case NScheme::NTypeIds::Utf8:
         ok = NYql::IsUtf8(cell.AsBuf());
         break;
@@ -1115,8 +1168,6 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-
-
 bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)
 {
@@ -1154,6 +1205,10 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
     EXTRACT_VAL(Datetime, uint32, ui32);
     EXTRACT_VAL(Timestamp, uint64, ui64);
     EXTRACT_VAL(Interval, int64, i64);
+    EXTRACT_VAL(Date32, int32, i32);
+    EXTRACT_VAL(Datetime64, int64, i64);
+    EXTRACT_VAL(Timestamp64, int64, i64);
+    EXTRACT_VAL(Interval64, int64, i64);
     case NScheme::NTypeIds::Json :
     case NScheme::NTypeIds::Utf8 : {
             TString v = val.Gettext_value();
@@ -1304,6 +1359,18 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Interval:
         vb.Interval(cell.AsValue<i64>());
         break;
+    case EPrimitiveType::Date32:
+        vb.Date32(cell.AsValue<i32>());
+        break;
+    case EPrimitiveType::Datetime64:
+        vb.Datetime64(cell.AsValue<i64>());
+        break;
+    case EPrimitiveType::Timestamp64:
+        vb.Timestamp64(cell.AsValue<i64>());
+        break;
+    case EPrimitiveType::Interval64:
+        vb.Interval64(cell.AsValue<i64>());
+        break;        
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());
         break;
@@ -1325,15 +1392,21 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Json:
         vb.Json(getString());
         break;
-    case EPrimitiveType::Uuid:
-        vb.Uuid(getString());
+    case EPrimitiveType::Uuid: {
+        ui64 hi;
+        ui64 lo;
+        NUuid::UuidBytesToHalfs(cell.AsBuf().Data(), 16, hi, lo);
+        vb.Uuid(TUuidValue(lo, hi));
         break;
+    }
     case EPrimitiveType::JsonDocument:
-        vb.JsonDocument(getString());
+        vb.JsonDocument(NBinaryJson::SerializeToJson(getString()));
         break;
     case EPrimitiveType::DyNumber:
         vb.DyNumber(getString());
         break;
+    default:
+        Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
     }
 }
 

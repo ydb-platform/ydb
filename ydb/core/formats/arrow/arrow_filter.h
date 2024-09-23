@@ -8,6 +8,8 @@
 
 namespace NKikimr::NArrow {
 
+class TGeneralContainer;
+
 enum class ECompareType {
     LESS = 1,
     LESS_OR_EQUAL,
@@ -60,6 +62,10 @@ public:
 
     ui64 GetDataSize() const {
         return Filter.capacity() * sizeof(ui32) + Count * sizeof(bool);
+    }
+
+    static ui64 GetPredictedMemorySize(const ui32 recordsCount) {
+        return 2 /* capacity */ * recordsCount * (sizeof(ui32) + sizeof(bool));
     }
 
     class TIterator {
@@ -148,6 +154,27 @@ public:
         Add(currentValue, sameValueCount);
     }
 
+    template <class TGetterLambda>
+    struct TAdapterLambda {
+    private:
+        TGetterLambda Getter;
+    public:
+        TAdapterLambda(const TGetterLambda& getter)
+            : Getter(getter)
+        {
+
+        }
+
+        bool operator[](const ui32 index) const {
+            return Getter(index);
+        }
+    };
+
+    template <class TGetterLambda>
+    void ResetWithLambda(const ui32 count, const TGetterLambda getter) {
+        return Reset(count, TAdapterLambda<TGetterLambda>(getter));
+    }
+
     ui32 Size() const {
         return Count;
     }
@@ -172,6 +199,7 @@ public:
     // It makes a filter using composite predicate
     static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
 
+    bool Apply(std::shared_ptr<TGeneralContainer>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
     bool Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
     bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
     void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;

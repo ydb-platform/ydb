@@ -2,8 +2,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/duration.pb.h>
-#include <grpc++/impl/codegen/proto_utils.h>
-#include <grpc++/impl/grpc_library.h>
+#include <grpcpp/impl/codegen/proto_utils.h>
+#include <grpcpp/impl/grpc_library.h>
 
 using namespace NYdbGrpc;
 

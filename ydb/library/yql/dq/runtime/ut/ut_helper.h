@@ -12,11 +12,11 @@ public:
     TMockChannelStorage(ui64 capacity)
         : Capacity(capacity) {}
 
-    bool IsEmpty() const override {
+    bool IsEmpty() override {
         return Blobs.empty();
     }
 
-    bool IsFull() const override {
+    bool IsFull() override {
         return Capacity <= UsedSpace;
     }
 

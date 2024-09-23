@@ -75,7 +75,7 @@ private:
 
     bool CanProcessFetchRequest; //any partitions answered that it has data or WaitMs timeout occured
     ui32 FetchRequestReadsDone;
-    ui64 FetchRequestCurrentReadTablet; 
+    ui64 FetchRequestCurrentReadTablet;
     ui64 CurrentCookie;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
@@ -145,10 +145,10 @@ public:
                 break;
 
             case EWakeupTag::RlNoResource:
-                // Re-requesting the quota. We do this until we get a quota. 
+                // Re-requesting the quota. We do this until we get a quota.
                 RequestDataQuota(PendingQuotaAmount, ctx);
                 break;
-            
+
             default:
                 Y_VERIFY_DEBUG_S(false, "Unsupported tag: " << static_cast<ui64>(tag));
         }
@@ -171,7 +171,7 @@ public:
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "SendSchemeCacheRequest");
-        
+
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeCacheRequest->DatabaseName = Settings.Database;
 
@@ -250,7 +250,7 @@ public:
                         ), ctx
                 );;
             }
-    
+
             auto& description = entry.PQGroupInfo->Description;
             auto& topicInfo = TopicInfo[path];
             topicInfo.BalancerTabletId = description.GetBalancerTabletID();
@@ -345,7 +345,7 @@ public:
             if (HandlePipeError(tabletId, ctx))
                 return;
 
-            auto reason = TStringBuilder() << "Client pipe to " << tabletId << " connection error, Status" 
+            auto reason = TStringBuilder() << "Client pipe to " << tabletId << " connection error, Status"
                                                            << NKikimrProto::EReplyStatus_Name(msg->Status).data()
                                                            << ", Marker# PQ6";
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::INTERNAL_ERROR, reason), ctx);
@@ -423,7 +423,7 @@ public:
         preq->Record.SetRequestId(reqId);
         auto partReq = preq->Record.MutablePartitionRequest();
         partReq->SetCookie(CurrentCookie);
-        
+
         partReq->SetTopic(topic);
         partReq->SetPartition(part);
         auto read = partReq->MutableCmdRead();
@@ -433,6 +433,7 @@ public:
         read->SetTimeoutMs(0);
         read->SetBytes(Min<ui32>(maxBytes, FetchRequestBytesLeft));
         read->SetReadTimestampMs(readTimestampMs);
+        read->SetExternalOperation(true);
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }
 
@@ -479,7 +480,8 @@ public:
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (IsQuotaRequired()) {
-            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record));
+            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
+            Settings.RuPerRequest = false;
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);

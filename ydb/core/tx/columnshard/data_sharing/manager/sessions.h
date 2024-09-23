@@ -12,8 +12,21 @@ class TSessionsManager {
 private:
     THashMap<TString, std::shared_ptr<TSourceSession>> SourceSessions;
     THashMap<TString, std::shared_ptr<TDestinationSession>> DestSessions;
+    TAtomicCounter SharingSessions;
 public:
     TSessionsManager() = default;
+
+    void StartSharingSession() {
+        SharingSessions.Inc();
+    }
+
+    void FinishSharingSession() {
+        AFL_VERIFY(SharingSessions.Dec() >= 0);
+    }
+
+    bool IsSharingInProgress() const {
+        return SharingSessions.Val();
+    }
 
     void Start(const NColumnShard::TColumnShard& shard) const;
 

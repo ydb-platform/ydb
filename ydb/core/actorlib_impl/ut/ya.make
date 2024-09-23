@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/getopt

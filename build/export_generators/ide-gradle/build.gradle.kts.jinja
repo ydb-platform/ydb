@@ -3,7 +3,21 @@
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
+{%- set errorprone_plugin_version = "4.0.0" -%}
 plugins {
+{# some plugins configuration #}
+{%- for library in target.consumer if library.classpath -%}
+{# error prone plugin configuration #}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
+    
+    id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
+
+{%-     endif -%}
+{%- endfor -%}
+{# lombok configuration #}
+{%- if "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors %}
+    id("io.freefair.lombok") version "8.6"
+{%- endif -%}
 {%- if mainClass %}
     `application`
 {%- else %}
@@ -44,7 +58,7 @@ kotlin {
 {%- if publish %}
 
 group = "{{ target.publish_group }}"
-version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
+version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]!!{%- endif %}
 {%  endif %}
 
 {% if target.enable_preview %}
@@ -88,7 +102,7 @@ repositories {
 
 }
 
-val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}/.hic_sunt_dracones{%- endif -%}"
 
 {%  if mainClass -%}
 application {
@@ -113,7 +127,7 @@ configurations.testImplementation {
     isTransitive = false
 }
 
-{%  if hasTest -%}
+{%  if has_test -%}
 val testsJar by tasks.registering(Jar::class) {
     dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
     archiveClassifier.set("tests")
@@ -162,17 +176,31 @@ sourceSets {
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
+{# error prone plugin configuration #}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations" in library.jar -%}
+{%          set errorprone_version = library.jar -%}
+{%          set errorprone_parts = errorprone_version|replace("contrib/java/com/google/errorprone/error_prone_annotations/") -%}
+{%          set errorprone_parts = split(errorprone_parts, '/') -%}
+
+    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
+
+{%-     endif -%}
+
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif -%}
 {%-         if library.type != "contrib" %}
 {%-             if library.testdep %}
     implementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
 {%-             else %}
-    implementation({{ library.classpath }})
+    implementation({{ classpath }})
 {%-             endif -%}
 {%-         else %}
-    api({{ library.classpath }})
+    api({{ classpath }})
 {%-         endif -%}
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer if exclude.classpath -%}
@@ -190,10 +218,14 @@ dependencies {
 {%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     testImplementation(files("$project_root/{{ library.jar }}"))
 {%-         else -%}
+{%-             set classpath = library.classpath -%}
+{%-             if classpath|replace('"','') == classpath -%}
+{%-                 set classpath = '"' + classpath + '"' -%}
+{%-             endif %}
 {%-             if library.type != "contrib" and library.testdep %}
     testImplementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
 {%-             else %}
-    testImplementation({{ library.classpath }})
+    testImplementation({{ classpath }})
 {%-             endif -%}
 {%-             if library.excludes.consumer is defined %} {
 {%                  for exclude in library.excludes.consumer if exclude.classpath -%}
@@ -265,5 +297,9 @@ tasks.build.dependsOn(
 {% if publish -%}
 {% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
+{# To disable redundant javadoc (it may fail the build) #}
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

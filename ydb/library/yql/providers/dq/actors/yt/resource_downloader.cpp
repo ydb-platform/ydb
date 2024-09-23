@@ -72,7 +72,7 @@ private:
         remotePath += file.GetRemoteFileName(); /* md5 */
         TString localFileName = Options.TmpDir + "/" + file.GetRemoteFileName();
 
-        YQL_CLOG(DEBUG, ProviderDq) << "Downloading file " << remotePath << "->" << localFileName;
+        YQL_CLOG(DEBUG, ProviderDq) << "Downloading file " << CurrentFileId+1 << "/" << Options.Files.size() << " " << remotePath << "->" << localFileName;
         auto message = MakeHolder<TEvReadFile>(NYT::NYPath::TYPath(remotePath), localFileName, options);
         Send(YtWrapper, message.Release());
     }
@@ -95,6 +95,7 @@ private:
 
             Retry = 0;
             CurrentFileId++;
+            YQL_CLOG(DEBUG, ProviderDq) << "File downloaded " << CurrentFileId << "/" << Options.Files.size() << " " << Options.Files[CurrentFileId-1].GetRemoteFileName();
             if (CurrentFileId == Options.Files.size()) {
                 // save to cache
                 YQL_CLOG(DEBUG, ProviderDq) << "Download complete";

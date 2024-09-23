@@ -1,11 +1,11 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
-#include <ydb/core/mind/bscontroller/vdisk_status_tracker.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -102,10 +102,18 @@ struct TEnvironmentSetup {
 
     void RegisterNode() {
         for (ui32 i = 1; i <= NodeCount; ++i) {
-            const TActorId self = Runtime->AllocateEdgeActor();
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
-            Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
-            auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
+            ui32 nodeIndex;
+            for (nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
+                if (Runtime->GetNodeId(nodeIndex) == i) {
+                    break;
+                }
+            }
+            if (nodeIndex != Runtime->GetNodeCount()) {
+                const TActorId self = Runtime->AllocateEdgeActor(nodeIndex);
+                auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
+                Runtime->SendToPipe(TabletId, self, ev.Release(), nodeIndex, GetPipeConfigWithRetries());
+                auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
+            }
         }
     }
 
@@ -226,7 +234,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
-        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId), NodeId);
+        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(GroupId)), NodeId), NodeId);
 
         class TMock : public TActor<TMock> {
         public:
@@ -1096,29 +1104,5 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 }
             }
         }
-    }
-
-    Y_UNIT_TEST(VDiskStatusTracker) {
-        using E = NKikimrBlobStorage::EVDiskStatus;
-        TInstant base = TInstant::Zero();
-        TVDiskStatusTracker tracker(TDuration::Seconds(60));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(0)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        tracker.Update(E::INIT_PENDING, base + TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(15)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), E::INIT_PENDING);
-        tracker.Update(E::REPLICATING, base + TDuration::Seconds(20));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(15)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(85)), E::REPLICATING);
-        tracker.Update(E::READY, base + TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(15)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(85)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(95)), E::READY);
-        tracker.Update(E::ERROR, base + TDuration::Seconds(40));
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(75)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(85)), std::nullopt);
-        UNIT_ASSERT_VALUES_EQUAL(tracker.GetStatus(base + TDuration::Seconds(95)), std::nullopt);
     }
 }

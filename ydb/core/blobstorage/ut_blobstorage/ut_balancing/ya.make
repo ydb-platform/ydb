@@ -1,7 +1,8 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
-    SKIP_TEST(VDisks balancing is not implemented yet)
 
     SIZE(MEDIUM)
+
+    FORK_SUBTESTS()
 
     TIMEOUT(600)
 

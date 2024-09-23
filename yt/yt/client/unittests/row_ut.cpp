@@ -1,8 +1,9 @@
-#include <yt/yt/core/test_framework/framework.h>
-
+#include <yt/yt/client/table_client/public.h>
+#include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/versioned_row.h>
-#include <yt/yt/client/table_client/row_buffer.h>
+
+#include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -94,6 +95,57 @@ TEST(TUnversionedValueTest, CompareComposite)
 
     EXPECT_TRUE(CompareRowValues(compositeValue, nullValue) > 0);
     EXPECT_TRUE(CompareRowValues(nullValue, compositeValue) < 0);
+}
+
+TEST(TUnversionedValueTest, CompareAny)
+{
+    auto intListValue = MakeUnversionedAnyValue("[123]");
+    auto stringListValue = MakeUnversionedAnyValue("[\"0\"]");
+    auto emptyListValue = MakeUnversionedAnyValue("[]");
+    auto listListValue = MakeUnversionedAnyValue("[[abc]]");
+    auto stringValue = MakeUnversionedStringValue("foo");
+    auto intValue = MakeUnversionedInt64Value(123);
+    auto nullValue = MakeUnversionedSentinelValue(EValueType::Null);
+
+    // Any vs just value
+    EXPECT_TRUE(CompareRowValues(stringValue, intListValue) < 0);
+    EXPECT_TRUE(CompareRowValues(intListValue, stringValue) > 0);
+
+    // String vs int as any & just value
+    EXPECT_TRUE(CompareRowValues(stringValue, intValue) > 0);
+    EXPECT_TRUE(CompareRowValues(intValue, stringValue) < 0);
+
+    EXPECT_TRUE(CompareRowValues(stringListValue, intListValue) > 0);
+    EXPECT_TRUE(CompareRowValues(intListValue, stringListValue) < 0);
+
+    // Null, empty list
+    EXPECT_TRUE(CompareRowValues(emptyListValue, intListValue) < 0);
+    EXPECT_TRUE(CompareRowValues(intListValue, emptyListValue) > 0);
+
+    EXPECT_TRUE(CompareRowValues(intListValue, nullValue) > 0);
+    EXPECT_TRUE(CompareRowValues(nullValue, intListValue) < 0);
+
+    EXPECT_TRUE(CompareRowValues(emptyListValue, nullValue) > 0);
+    EXPECT_TRUE(CompareRowValues(nullValue, emptyListValue) < 0);
+
+    // List vs int as any & just value
+    EXPECT_TRUE(CompareRowValues(intValue, intListValue) < 0);
+    EXPECT_TRUE(CompareRowValues(intListValue, intValue) > 0);
+
+    EXPECT_TRUE(CompareRowValues(intListValue, listListValue) < 0);
+    EXPECT_TRUE(CompareRowValues(listListValue, intListValue) > 0);
+
+    // Any map & attrs
+    auto mapValue = MakeUnversionedAnyValue("{a=123}");
+    EXPECT_THROW_WITH_ERROR_CODE(CompareRowValues(intListValue, mapValue), EErrorCode::IncomparableComplexValues);
+
+    auto annotatedValue = MakeUnversionedAnyValue("[<a=10>123]");
+    EXPECT_THROW_WITH_ERROR_CODE(CompareRowValues(intListValue, annotatedValue), EErrorCode::IncomparableComplexValues);
+
+    // Lazy comparison: we assume that such values are filtered before write to sorted column
+    auto listWithMapValue = MakeUnversionedAnyValue("[122, {a=123}]");
+    EXPECT_TRUE(CompareRowValues(intListValue, listWithMapValue) > 0);
+    EXPECT_TRUE(CompareRowValues(listWithMapValue, intListValue) < 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

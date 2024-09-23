@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_key.h>
 
@@ -20,9 +22,9 @@ BuildFolderItemStructType(TExprContext& ctx, NYql::TPositionHandle pos);
 class TWalkFoldersImpl {
 public:
     TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config, 
-                     TPosition pos, TYtKey::TWalkFoldersArgs&& args, const IYtGateway::TPtr gateway);
+                     TPosition pos, const TYtKey::TWalkFoldersArgs& args, const IYtGateway::TPtr gateway);
 
-    TExprNode::TPtr GetNextStateExpr(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args);
+    IGraphTransformer::TStatus GetNextStateExpr(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state);
 
     enum EProcessingState {
         WaitingListFolderOp,
@@ -100,27 +102,27 @@ private:
 
     void DoFolderListOperation(TVector<IYtGateway::TBatchFolderOptions::TFolderPrefixAttrs>&& folders);
 
-    TExprNode::TPtr EvaluateNextUserStateExpr(TExprContext& ctx, const TExprNode::TPtr& userStateType, const TExprNode::TPtr userStateExpr, std::function<TExprNode::TPtr(const NNodes::TExprBase&)> nextStateFunc);
-    
-    TExprNode::TPtr AfterListFolderOp(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args);
+    IGraphTransformer::TStatus EvaluateNextUserStateExpr(TExprContext& ctx, const TExprNode::TPtr& userStateType, const TExprNode::TPtr userStateExpr, std::function<TExprNode::TPtr(const NNodes::TExprBase&)> nextStateFunc, TExprNode::TPtr& state);
 
-    TExprNode::TPtr PreHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder);
-    
-    TExprNode::TPtr ResolveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args,  TFolderQueueItem& folder);
+    IGraphTransformer::TStatus AfterListFolderOp(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state);
 
-    TExprNode::TPtr BuildDiveOrResolveHandlerEval(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& handler,
-                                                  const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& res, const TVector<TString>& attributes, ui64 level);
+    IGraphTransformer::TStatus PreHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state);
 
-    TExprNode::TPtr AfterResolveHandle(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder);
+    IGraphTransformer::TStatus ResolveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args,  TFolderQueueItem& folder, TExprNode::TPtr& state);
 
-    TExprNode::TPtr HandleAfterResolveFuture(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder);
+    IGraphTransformer::TStatus BuildDiveOrResolveHandlerEval(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& handler,
+                                                  const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& res, const TVector<TString>& attributes, ui64 level, TExprNode::TPtr& state);
 
-    TExprNode::TPtr DiveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args,  TFolderQueueItem& folder);
+    IGraphTransformer::TStatus AfterResolveHandle(TExprContext& ctx, TYtKey::TWalkFoldersImplArgs args, TFolderQueueItem& folder, TExprNode::TPtr& state);
 
-    TExprNode::TPtr AfterDiveHandle(TExprContext& ctx, TYtKey::TWalkFoldersImplArgs args, TFolderQueueItem& folder);
+    IGraphTransformer::TStatus HandleAfterResolveFuture(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state);
 
-    TExprNode::TPtr PostHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder);
+    IGraphTransformer::TStatus DiveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args,  TFolderQueueItem& folder, TExprNode::TPtr& state);
 
-    TExprNode::TPtr BuildFinishedState(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args); 
+    IGraphTransformer::TStatus AfterDiveHandle(TExprContext& ctx, TYtKey::TWalkFoldersImplArgs args, TFolderQueueItem& folder, TExprNode::TPtr& state);
+
+    IGraphTransformer::TStatus PostHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state);
+
+    IGraphTransformer::TStatus BuildFinishedState(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state);
 };
 } // namespace NYql

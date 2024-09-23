@@ -11,6 +11,7 @@ TExecFunc arrow_pg_dependencies_send() { return MakeIndirectExec<true, false>(&p
 TExecFunc arrow_query_to_xml() { return MakeIndirectExec<true, false>(&query_to_xml); }
 TExecFunc arrow_query_to_xml_and_xmlschema() { return MakeIndirectExec<true, false>(&query_to_xml_and_xmlschema); }
 TExecFunc arrow_query_to_xmlschema() { return MakeIndirectExec<true, false>(&query_to_xmlschema); }
+TExecFunc arrow_satisfies_hash_partition() { return MakeIndirectExec<false, true>(&satisfies_hash_partition); }
 TExecFunc arrow_schema_to_xml() { return MakeIndirectExec<true, false>(&schema_to_xml); }
 TExecFunc arrow_schema_to_xml_and_xmlschema() { return MakeIndirectExec<true, false>(&schema_to_xml_and_xmlschema); }
 TExecFunc arrow_schema_to_xmlschema() { return MakeIndirectExec<true, false>(&schema_to_xmlschema); }

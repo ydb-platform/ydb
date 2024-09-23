@@ -71,7 +71,7 @@ struct TDescribeTopicActorSettings {
     TVector<ui32> Partitions;
     bool RequireStats = false;
     bool RequireLocation = false;
-    
+
     TDescribeTopicActorSettings()
         : Mode(EMode::DescribeTopic)
     {}
@@ -85,7 +85,7 @@ struct TDescribeTopicActorSettings {
         , RequireStats(requireStats)
         , RequireLocation(requireLocation)
     {}
-    
+
     static TDescribeTopicActorSettings DescribeTopic(bool requireStats, bool requireLocation, const TVector<ui32>& partitions = {}) {
         TDescribeTopicActorSettings res{EMode::DescribeTopic, requireStats, requireLocation};
         res.Partitions = partitions;
@@ -104,7 +104,7 @@ struct TDescribeTopicActorSettings {
         res.Partitions = partitions;
         return res;
     }
-    
+
     static TDescribeTopicActorSettings DescribePartitionSettings(ui32 partition, bool stats, bool location) {
         TDescribeTopicActorSettings res{EMode::DescribePartitions, stats, location};
         res.Partitions = {partition};
@@ -261,8 +261,12 @@ public:
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
     bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
-    
+
     virtual void Reply(const TActorContext& ctx) override;
+
+private:
+
+    bool NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev);
 
 private:
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;

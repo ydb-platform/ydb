@@ -389,6 +389,23 @@ namespace NKikimr {
                 return res;
             }
 
+            TVectorType DeletedPartsVector() const {
+                Y_DEBUG_ABORT_UNLESS(End - Beg <= 2 * 8);
+                ui8 vec = 0;
+                TIterator it = Begin();
+                while (!it.IsEnd()) {
+                    bool firstBit = it.Get();
+                    vec <<= 1;
+                    vec |= ui8(firstBit);
+
+                    it.Next();
+                    Y_DEBUG_ABORT_UNLESS(!it.IsEnd());
+                    it.Next();
+                }
+                vec <<= 8 - ((End - Beg) >> 1);
+                return TVectorType(vec, (End - Beg) >> 1);
+            }
+
             TVectorType ToVector() const {
                 Y_DEBUG_ABORT_UNLESS(End - Beg <= 2 * 8);
                 ui8 vec = 0;

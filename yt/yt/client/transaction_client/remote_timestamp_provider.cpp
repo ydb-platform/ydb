@@ -22,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = TransactionClientLogger;
+static constexpr auto& Logger = TransactionClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -79,13 +79,30 @@ private:
 
     TTimestampServiceProxy Proxy_;
 
-    TFuture<TTimestamp> DoGenerateTimestamps(int count) override
+    TFuture<TTimestamp> DoGenerateTimestamps(int count, TCellTag clockClusterTag) override
     {
         auto req = Proxy_.GenerateTimestamps();
         req->SetResponseHeavy(true);
         req->set_count(count);
-        return req->Invoke().Apply(BIND([] (const TTimestampServiceProxy::TRspGenerateTimestampsPtr& rsp) {
-            return static_cast<TTimestamp>(rsp->timestamp());
+        if (clockClusterTag != InvalidCellTag) {
+            req->set_clock_cluster_tag(ToProto<int>(clockClusterTag));
+        }
+        return req->Invoke().Apply(
+            BIND([clockClusterTag] (const TTimestampServiceProxy::TRspGenerateTimestampsPtr& rsp) {
+            auto responseClockClusterTag = rsp->has_clock_cluster_tag()
+                ? FromProto<TCellTag>(rsp->clock_cluster_tag())
+                : InvalidCellTag;
+            auto responseTimestamp = FromProto<TTimestamp>(rsp->timestamp());
+
+            if (clockClusterTag != InvalidCellTag && responseClockClusterTag != InvalidCellTag &&
+                clockClusterTag != responseClockClusterTag)
+            {
+                THROW_ERROR_EXCEPTION(EErrorCode::ClockClusterTagMismatch, "Clock cluster tag mismatch")
+                    << TErrorAttribute("request_clock_cluster_tag", clockClusterTag)
+                    << TErrorAttribute("response_clock_cluster_tag", responseClockClusterTag);
+            }
+
+            return responseTimestamp;
         }));
     }
 };
@@ -138,8 +155,8 @@ TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
     for (const auto& foreignProviderConfig : configs) {
         auto alienClockCellTag = foreignProviderConfig->ClockClusterTag;
 
-        if(alienProvidersMap.contains(alienClockCellTag)) {
-            YT_LOG_ALERT("Duplicate entry for alien clock clusters %d",
+        if (alienProvidersMap.contains(alienClockCellTag)) {
+            YT_LOG_ALERT("Duplicate entry for alien clock clusters (ClockClusterTag: %v)",
                 alienClockCellTag);
             continue;
         }

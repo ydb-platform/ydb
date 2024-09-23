@@ -77,6 +77,11 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
                 return;
             }
 
+            if (type.GetData().GetScheme() == NYql::NProto::TypeIds::Yson) {
+                writer.OnRaw(value.GetBytes(), NYT::NYson::EYsonType::Node);
+                return;
+            }
+
             if (value.HasBool()) {
                 writer.OnBooleanScalar(value.GetBool());
             }
@@ -286,6 +291,14 @@ TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue
     } else if (slot == EDataSlot::Timestamp) {
         return ctx.NewAtom(pos, ToString(value.GetUint64()));
     } else if (slot == EDataSlot::Interval) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Date32) {
+        return ctx.NewAtom(pos, ToString(value.GetInt32()));
+    } else if (slot == EDataSlot::Datetime64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Timestamp64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Interval64) {
         return ctx.NewAtom(pos, ToString(value.GetInt64()));
     } else {
        return nullptr;

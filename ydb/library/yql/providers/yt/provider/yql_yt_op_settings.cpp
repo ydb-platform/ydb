@@ -809,6 +809,66 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                 return false;
             }
             break;
+        case EYtSettingType::ColumnGroups: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            if (!EnsureAtom(setting->Tail(), ctx)) {
+                return false;
+            }
+            NYT::TNode mapNode;
+            try {
+                mapNode = NYT::NodeFromYsonString(setting->Tail().Content());
+            } catch (const std::exception& e) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Failed to parse Yson: " << e.what()));
+                return false;
+            }
+            if (!mapNode.IsMap()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Expected Yson map, got: " << mapNode.GetType()));
+                return false;
+            }
+            bool hasDef = false;
+            std::unordered_set<TString> uniqColumns;
+            const auto& map = mapNode.AsMap();
+            for (auto it = map.cbegin(); it != map.cend(); ++it) {
+                if (it->second.IsEntity()) {
+                    if (hasDef) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                            << "Not more than one group should have # value: "
+                            << it->first.Quote()));
+                        return false;
+                    }
+                    hasDef = true;
+                } else if (!it->second.IsList()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Expected list value, group: "
+                        << it->first.Quote()));
+                    return false;
+                } else if (it->second.AsList().size() < 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Expected list with at least two columns, group: "
+                        << it->first.Quote()));
+                    return false;
+                } else {
+                    for (const auto& item: it->second.AsList()) {
+                        if (!item.IsString()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                                << "Expected string value in list, found "
+                                << item.GetType() << ", group: " << it->first.Quote()));
+                            return false;
+                        }
+                        if (!uniqColumns.insert(item.AsString()).second) {
+                            ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                                << "Duplicate column " << item.AsString().Quote()));
+                            return false;
+                        }
+                    }
+                }
+            }
+            break;
+        }
         }
     }
 
@@ -860,6 +920,46 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
     return true;
 }
 
+bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx) {
+    const auto columnGroups = NYT::NodeFromYsonString(setting.Tail().Content());
+    TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+        return MakeIntrusive<TIssue>(ctx.GetPosition(setting.Pos()), TStringBuilder() << "Setting " << setting.Head().Content());
+    });
+
+    for (const auto& grp: columnGroups.AsMap()) {
+        if (!grp.second.IsEntity()) {
+            for (const auto& col: grp.second.AsList()) {
+                if (!rowType.FindItem(col.AsString())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                        << "Column group " << grp.first.Quote() << " refers to unknown column " << col.AsString().Quote()));
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+TString NormalizeColumnGroupSpec(const TStringBuf spec) {
+    try {
+        auto columnGroups = NYT::NodeFromYsonString(spec);
+        for (auto& grp: columnGroups.AsMap()) {
+            if (!grp.second.IsEntity()) {
+                std::stable_sort(grp.second.AsList().begin(), grp.second.AsList().end(), [](const auto& l, const auto& r) { return l.AsString() < r.AsString(); });
+            }
+        }
+        return NYT::NodeToCanonicalYsonString(columnGroups);
+    } catch (...) {
+        // Keep as is. Type annotation will add user friendly error later
+        return TString{spec};
+    }
+}
+
+const TString& GetSingleColumnGroupSpec() {
+    static TString GROUP = NYT::NodeToCanonicalYsonString(NYT::TNode::CreateMap()("default", NYT::TNode::CreateEntity()), NYson::EYsonFormat::Text);
+    return GROUP;
+}
+
 TExprNode::TPtr GetSetting(const TExprNode& settings, EYtSettingType type) {
     for (auto& setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && FromString<EYtSettingType>(setting->Child(0)->Content()) == type) {
@@ -879,6 +979,18 @@ TExprNode::TPtr UpdateSettingValue(const TExprNode& settings, EYtSettingType typ
         }
     }
     return {};
+}
+
+TExprNode::TPtr AddOrUpdateSettingValue(const TExprNode& settings, EYtSettingType type, TExprNode::TPtr&& value, TExprContext& ctx) {
+    for (ui32 index = 0U; index < settings.ChildrenSize(); ++index) {
+        if (settings.Child(index)->ChildrenSize() != 0 && FromString<EYtSettingType>(settings.Child(index)->Head().Content()) == type) {
+            const auto setting = settings.Child(index);
+
+            auto newSetting = ctx.ChangeChildren(*setting, value ? TExprNode::TListType{setting->HeadPtr(), std::move(value)} : TExprNode::TListType{setting->HeadPtr()});
+            return ctx.ChangeChild(settings, index, std::move(newSetting));
+        }
+    }
+    return AddSetting(settings, type, value, ctx);
 }
 
 TExprNode::TListType GetAllSettingValues(const TExprNode& settings, EYtSettingType type) {

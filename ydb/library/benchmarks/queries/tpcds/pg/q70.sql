@@ -34,7 +34,7 @@ select
 ) as sub
  order by
    lochierarchy desc
-  ,case when lochierarchy = 0 then s_state end
+  ,case when lochierarchy = 0 then s_state else null end nulls first
   ,rank_within_parent
  limit 100;
 

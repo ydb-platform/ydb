@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <ydb/library/yql/providers/yt/actors/yql_yt_provider_factories.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.h>
@@ -21,10 +22,11 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
-#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
@@ -36,9 +38,9 @@
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
 #include <ydb/library/yql/providers/function/gateway/dq_function_gateway.h>
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
@@ -69,6 +71,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
+#include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -82,6 +85,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/digest/md5/md5.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/generic/string.h>
@@ -105,6 +109,7 @@ using namespace NYql;
 
 struct TRunOptions {
     bool Sql = false;
+    bool Pg = false;
     TString User;
     TMaybe<TString> BindingsFile;
     NYson::EYsonFormat ResultsFormat;
@@ -117,11 +122,13 @@ struct TRunOptions {
     IOutputStream* StatisticsStream = nullptr;
     bool PrintPlan = false;
     bool AnalyzeQuery = false;
+    bool NoForceDq = false;
     bool AnsiLexer = false;
     IOutputStream* ExprOut = nullptr;
     IOutputStream* ResultOut = &Cout;
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
+    bool UseMetaFromGraph = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -147,13 +154,39 @@ private:
     char Delim;
 };
 
-void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config) {
+void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THashSet<TString>& sqlFlags) {
     auto configData = TFileInput(configFile ? configFile : "../../../../../yql/cfg/local/gateways.conf").ReadAll();
 
     using ::google::protobuf::TextFormat;
     if (!TextFormat::ParseFromString(configData, config)) {
         ythrow yexception() << "Bad format of gateways configuration";
     }
+
+    if (config->HasSqlCore()) {
+        sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
+    }
+}
+
+void PatchGatewaysConfig(TGatewaysConfig* config, const TString& mrJobBin, const TString& mrJobUdfsDir,
+    size_t numThreads, bool keepTemp)
+{
+    auto ytConfig = config->MutableYt();
+    ytConfig->SetGatewayThreads(numThreads);
+    if (mrJobBin.empty()) {
+        ytConfig->ClearMrJobBin();
+    } else {
+        ytConfig->SetMrJobBin(mrJobBin);
+        ytConfig->SetMrJobBinMd5(MD5::File(mrJobBin));
+    }
+
+    if (mrJobUdfsDir.empty()) {
+        ytConfig->ClearMrJobUdfsDir();
+    } else {
+        ytConfig->SetMrJobUdfsDir(mrJobUdfsDir);
+    }
+    auto attr = ytConfig->MutableDefaultSettings()->Add();
+    attr->SetName("KeepTempTables");
+    attr->SetValue(keepTemp ? "yes" : "no");
 }
 
 TFileStoragePtr CreateFS(const TString& paramsFile, const TString& defYtServer) {
@@ -231,19 +264,27 @@ private:
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     const NYdb::TDriver& driver,
     IHTTPGateway::TPtr httpGateway,
+    NFile::TYtFileServices::TPtr ytFileServices,
     NYql::NConnector::IClient::TPtr genericClient,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     size_t HTTPmaxTimeSeconds, 
     size_t maxRetriesCount) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+    RegisterDqInputTransformLookupActorFactory(*factory);
+    if (ytFileServices) {
+        RegisterYtLookupActorFactory(*factory, ytFileServices, functionRegistry);
+    }
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
-    RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
-    RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
+    RegisterDQSolomonReadActorFactory(*factory, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterGenericReadActorFactory(*factory, credentialsFactory, genericClient);
-
+    RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+
+    auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+    s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy());
+    s3ActorsFactory->RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount));
 
     return factory;
 }
@@ -275,7 +316,8 @@ struct TActorIds {
 std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
-    NYql::NLog::ELevel loggingLevel
+    NYql::NLog::ELevel loggingLevel,
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -296,24 +338,27 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         auto httpProxy = NHttp::CreateHttpProxy();
         actorIds.HttpProxy = actorSystemManager->GetActorSystem()->Register(httpProxy);
 
-        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, nullptr);
+        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, credentialsFactory);
         actorIds.DatabaseResolver = actorSystemManager->GetActorSystem()->Register(databaseResolver);
     }
 
     return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
 }
 
-int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters) {
+int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
+    program->SetUseTableMetaFromGraph(options.UseMetaFromGraph);
     bool fail = true;
-    if (options.Sql) {
+    if (options.Sql || options.Pg) {
         Cout << "Parse SQL..." << Endl;
         NSQLTranslation::TTranslationSettings sqlSettings;
+        sqlSettings.PgParser = options.Pg;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
+        sqlSettings.Flags = sqlFlags;
         sqlSettings.AnsiLexer = options.AnsiLexer;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert("DqEngineEnable");
-        if (!options.AnalyzeQuery) {
+        if (!options.AnalyzeQuery && !options.NoForceDq) {
             sqlSettings.Flags.insert("DqEngineForce");
         }
 
@@ -442,6 +487,9 @@ int RunMain(int argc, const char* argv[])
     int verbosity = 3;
     bool showLog = false;
     bool emulateYt = false;
+    TString mrJobBin;
+    TString mrJobUdfsDir;
+    size_t numYtThreads = 1;
     TString token = GetEnv("YQL_TOKEN");
     if (!token) {
         TString home = GetEnv("HOME");
@@ -455,16 +503,21 @@ int RunMain(int argc, const char* argv[])
     TString folderId;
 
     TRunOptions runOptions;
+    TString qStorageDir;
+    TString opId;
+    IQStoragePtr qStorage;
+    TQContext qContext;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
-        .Required()
+        .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&progFile);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
         .NoArgument()
         .SetFlag(&runOptions.Sql);
+    opts.AddLongOption("pg", "Program has PG syntax").NoArgument().SetFlag(&runOptions.Pg);
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption('u', "user", "MR user")
@@ -534,6 +587,16 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .NoArgument()
         .SetFlag(&udfResolverFilterSyscalls);
+    opts.AddLongOption("mrjob-bin", "Path to mrjob binary")
+        .Optional()
+        .StoreResult(&mrJobBin);
+    opts.AddLongOption("mrjob-udfsdir", "Path to udfs for mr jobs")
+        .Optional()
+        .StoreResult(&mrJobUdfsDir);
+    opts.AddLongOption("yt-threads", "YT gateway threads")
+        .Optional()
+        .RequiredArgument("COUNT")
+        .StoreResult(&numYtThreads);
     opts.AddLongOption('v', "verbosity", "Log verbosity level")
         .Optional()
         .RequiredArgument("LEVEL")
@@ -557,6 +620,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("VALUE")
         .StoreResult(&folderId);
+    opts.AddLongOption("use-graph-meta", "Use tables metadata from graph")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.UseMetaFromGraph);
     opts.AddLongOption("stat", "Print execution statistics")
         .Optional()
         .OptionalArgument("FILE")
@@ -571,8 +638,13 @@ int RunMain(int argc, const char* argv[])
         .SetFlag(&runOptions.PrintPlan);
     opts.AddLongOption("keep-temp", "keep temporary tables").NoArgument();
     opts.AddLongOption("analyze-query", "enable analyze query").Optional().NoArgument().SetFlag(&runOptions.AnalyzeQuery);
+    opts.AddLongOption("no-force-dq", "don't set force dq mode").Optional().NoArgument().SetFlag(&runOptions.NoForceDq);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").Optional().NoArgument().SetFlag(&runOptions.AnsiLexer);
     opts.AddLongOption('E', "emulate-yt", "Emulate YT tables").Optional().NoArgument().SetFlag(&emulateYt);
+    opts.AddLongOption("qstorage-dir", "directory for QStorage").StoreResult(&qStorageDir).DefaultValue(".");
+    opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&opId).DefaultValue("dummy_op");
+    opts.AddLongOption("capture", "write query metadata to QStorage").NoArgument();
+    opts.AddLongOption("replay", "read query metadata from QStorage").NoArgument();
 
     opts.AddLongOption("dq-host", "Dq Host");
     opts.AddLongOption("dq-port", "Dq Port");
@@ -604,9 +676,22 @@ int RunMain(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
+    if (!res.Has("program") && !res.Has("replay")) {
+        YQL_LOG(ERROR) << "Either program or replay option should be specified";
+        return 1;
+    }
+
     if (runOptions.PeepholeOnly) {
         Cerr << "Peephole optimization is not supported yet" << Endl;
         return 1;
+    }
+
+    if (res.Has("replay")) {
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeReader(opId, {}));
+    } else if (res.Has("capture")) {
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeWriter(opId, {}));
     }
 
     if (res.Has("dq-host")) {
@@ -698,7 +783,8 @@ int RunMain(int argc, const char* argv[])
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
 
     TGatewaysConfig gatewaysConfig;
-    ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig);
+    ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
+    PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
@@ -736,8 +822,10 @@ int RunMain(int argc, const char* argv[])
         GetPgFactory()
     };
 
+    NFile::TYtFileServices::TPtr ytFileServices;
+
     if (emulateYt) {
-        auto ytFileServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, storage, tmpDir, res.Has("keep-temp"));
+        ytFileServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, storage, tmpDir, res.Has("keep-temp"));
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
@@ -758,12 +846,21 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
     }
 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+    if (tokenAccessorEndpoint) {
+        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
+        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
+
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
+    }
+
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {
@@ -786,16 +883,6 @@ int RunMain(int argc, const char* argv[])
             NFq::MakeMdbEndpointGeneratorGeneric(false)
         );
     }
-
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
-    if (tokenAccessorEndpoint) {
-        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
-        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
-
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
-    }
-
 
     NConnector::IClient::TPtr genericClient;
     if (gatewaysConfig.HasGeneric()) {
@@ -873,7 +960,7 @@ int RunMain(int argc, const char* argv[])
 
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
-                CreateAsyncIoFactory(driver, httpGateway, genericClient, credentialsFactory, requestTimeout, maxRetries), threads,
+                CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries), threads,
                 metricsRegistry, metricsPusherFactory);
         }
 
@@ -908,12 +995,15 @@ int RunMain(int argc, const char* argv[])
     TProgramFactory progFactory(emulateYt, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, "dqrun");
     progFactory.AddUserDataTable(std::move(dataTable));
     progFactory.SetModules(moduleResolver);
+    IUdfResolver::TPtr udfResolverImpl;
     if (udfResolver) {
-        progFactory.SetUdfResolver(NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
-            udfResolver, {}, {}, udfResolverFilterSyscalls, {}));
+        udfResolverImpl = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
+            udfResolver, {}, {}, udfResolverFilterSyscalls, {});
     } else {
-        progFactory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true));
+        udfResolverImpl = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true);
     }
+
+    progFactory.SetUdfResolver(udfResolverImpl);
     progFactory.SetFileStorage(storage);
     progFactory.SetUrlPreprocessing(new TUrlPreprocessing(gatewaysConfig));
     progFactory.SetGatewaysConfig(&gatewaysConfig);
@@ -942,12 +1032,20 @@ int RunMain(int argc, const char* argv[])
     );
 
     TProgramPtr program;
-    if (progFile == TStringBuf("-")) {
-        program = progFactory.Create("-stdin-", Cin.ReadAll());
+    if (res.Has("replay") && res.Has("capture")) {
+        YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
+        return 1;
+    }
+
+    if (res.Has("replay")) {
+        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext);
+    } else if (progFile == TStringBuf("-")) {
+        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {
-        program = progFactory.Create(TFile(progFile, RdOnly));
+        program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
         program->SetQueryName(progFile);
     }
+
     if (paramsFile) {
         TString parameters = TFileInput(paramsFile).ReadAll();
         program->SetParametersYson(parameters);
@@ -971,13 +1069,17 @@ int RunMain(int argc, const char* argv[])
         runOptions.LineageStream = &Cout;
     }
 
-    int result = RunProgram(std::move(program), runOptions, clusters);
+    int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);
     if (res.Has("metrics")) {
         NProto::TMetricsRegistrySnapshot snapshot;
         snapshot.SetDontIncrement(true);
         metricsRegistry->TakeSnapshot(&snapshot);
         auto output = MakeHolder<TFileOutput>(metricsFile);
         SerializeToTextFormat(snapshot, *output.Get());
+    }
+
+    if (result == 0 && res.Has("capture")) {
+        qContext.GetWriter()->Commit().GetValueSync();
     }
 
     return result;

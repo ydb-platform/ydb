@@ -373,6 +373,8 @@ message TKqpPhyStage {
     repeated TKqpSource Sources = 9;
     bool IsSinglePartition = 10;
     repeated TKqpSink Sinks = 11;
+    map<string, string> SecureParams = 12;
+    bool AllowWithSpilling = 13;
 }
 
 message TKqpPhyResult {
@@ -438,6 +440,15 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTableStore = 29;
         NKikimrSchemeOp.TModifyScheme DropTableStore = 30;
         NKikimrSchemeOp.TModifyScheme AlterTableStore = 31;
+        NKikimrSchemeOp.TModifyScheme CreateSequence = 32;
+        NKikimrSchemeOp.TModifyScheme DropSequence = 33;
+        NKikimrSchemeOp.TModifyScheme CreateReplication = 34;
+        NKikimrSchemeOp.TModifyScheme AlterReplication = 35;
+        NKikimrSchemeOp.TModifyScheme DropReplication = 36;
+        NKikimrSchemeOp.TModifyScheme AlterSequence = 37;
+        NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
+        NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
+        NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
     }
 }
 

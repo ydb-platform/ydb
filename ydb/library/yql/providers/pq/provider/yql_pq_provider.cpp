@@ -22,13 +22,16 @@ TDataProviderInitializer GetPqDataProviderInitializer(
                TIntrusivePtr<TTypeAnnotationContext> typeCtx,
                const TOperationProgressWriter& progressWriter,
                const TYqlOperationOptions& operationOptions,
-               THiddenQueryAborter)
+               THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext)
         {
             Y_UNUSED(userName);
             Y_UNUSED(functionRegistry);
             Y_UNUSED(randomProvider);
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
+            Y_UNUSED(hiddenAborter);
+            Y_UNUSED(qContext);
 
             auto state = MakeIntrusive<TPqState>(sessionId);
             state->SupportRtmrMode = supportRtmrMode;

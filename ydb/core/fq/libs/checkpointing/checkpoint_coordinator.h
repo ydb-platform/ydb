@@ -103,7 +103,7 @@ public:
 
 private:
     void InitCheckpoint();
-    void InjectCheckpoint(const TCheckpointId& checkpointId);
+    void InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::ECheckpointType type);
     void ScheduleNextCheckpoint();
     void UpdateInProgressMetric();
     void PassAway() override;
@@ -127,6 +127,7 @@ private:
             Aborted = subgroup->GetCounter("AbortedCheckpoints", true);
             StorageError = subgroup->GetCounter("StorageError", true);
             FailedToCreate = subgroup->GetCounter("FailedToCreate", true);
+            RestoringError = subgroup->GetCounter("RestoringError", true);
             Total = subgroup->GetCounter("TotalCheckpoints", true);
             LastCheckpointBarrierDeliveryTimeMillis = subgroup->GetCounter("LastCheckpointBarrierDeliveryTimeMillis");
             LastCheckpointDurationMillis = subgroup->GetCounter("LastSuccessfulCheckpointDurationMillis");
@@ -147,6 +148,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr Aborted;
         ::NMonitoring::TDynamicCounters::TCounterPtr StorageError;
         ::NMonitoring::TDynamicCounters::TCounterPtr FailedToCreate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RestoringError;
         ::NMonitoring::TDynamicCounters::TCounterPtr Total;
         ::NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointBarrierDeliveryTimeMillis;
         ::NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointDurationMillis;
@@ -172,6 +174,8 @@ private:
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
     TCheckpointCoordinatorConfig Settings;
     const TDuration CheckpointingPeriod;
+    ui64 CheckpointingSnapshotRotationPeriod = 0;
+    ui64 CheckpointingSnapshotRotationIndex = 0;
     const NProto::TGraphParams GraphParams;
     TString GraphDescId;
 

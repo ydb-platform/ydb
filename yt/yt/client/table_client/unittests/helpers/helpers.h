@@ -8,6 +8,8 @@
 #include <yt/yt/client/table_client/public.h>
 #include <yt/yt/client/table_client/row_batch.h>
 
+#include <yt_proto/yt/client/table_chunk_format/proto/column_meta.pb.h>
+
 #include <iostream>
 
 namespace NYT::NTableClient {
@@ -225,6 +227,8 @@ std::vector<TUnversionedRow> CreateFilteredRangedRows(
     int keyColumnCount);
 
 void PrintTo(const TColumnarStatistics& statistics, std::ostream* os);
+
+NTableChunkFormat::NProto::TSegmentMeta CreateSimpleSegmentMeta();
 
 ////////////////////////////////////////////////////////////////////////////////
 

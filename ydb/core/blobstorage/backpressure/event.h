@@ -67,7 +67,7 @@ public:
             const auto& record = ev->Get()->Record;
             TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-            LWTRACK(DSQueueVPutIsQueued, Orbit, vDiskId.GroupID, blob.ToString(), blob.Channel(), blob.PartId(),
+            LWTRACK(DSQueueVPutIsQueued, Orbit, vDiskId.GroupID.GetRawId(), blob.ToString(), blob.Channel(), blob.PartId(),
                     blob.BlobSize());
         }
 

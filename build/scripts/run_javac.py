@@ -42,48 +42,6 @@ def remove_notes(err):
     return '\n'.join([line for line in err.split('\n') if not line.startswith('Note:')])
 
 
-def find_javac(cmd):
-    if not cmd:
-        return None
-    if cmd[0].endswith('javac') or cmd[0].endswith('javac.exe'):
-        return cmd[0]
-    if len(cmd) > 2 and cmd[1].endswith('build_java_with_error_prone.py'):
-        for javas in ('java', 'javac'):
-            if cmd[2].endswith(javas) or cmd[2].endswith(javas + '.exe'):
-                return cmd[2]
-    return None
-
-
-# temporary, for jdk8/jdk9+ compatibility
-def fix_cmd(cmd):
-    if not cmd:
-        return cmd
-    javac = find_javac(cmd)
-    if not javac:
-        return cmd
-    p = subprocess.Popen([javac, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out, err = p.communicate()
-    out, err = out.strip(), err.strip()
-    for prefix in ('javac 1.8', 'java version "1.8'):
-        for raw_out in ((out or ''), (err or '')):
-            for line in raw_out.split('\n'):
-                if line.startswith(prefix):
-                    res = []
-                    i = 0
-                    while i < len(cmd):
-                        for option in ('--add-exports', '--add-modules'):
-                            if cmd[i] == option:
-                                i += 1
-                                break
-                            elif cmd[i].startswith(option + '='):
-                                break
-                        else:
-                            res.append(cmd[i])
-                        i += 1
-                    return res
-    return cmd
-
-
 def main():
     opts, cmd = parse_args()
 
@@ -98,7 +56,7 @@ def main():
             sys.stderr.write('No files to compile, javac is not launched.\n')
 
     else:
-        p = subprocess.Popen(fix_cmd(cmd), stderr=subprocess.PIPE)
+        p = subprocess.Popen(cmd, stderr=subprocess.PIPE)
         _, err = p.communicate()
         rc = p.wait()
 

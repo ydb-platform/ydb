@@ -34,20 +34,21 @@ namespace NKikimr::NEvWrite {
     }
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const IShardInfo::TPtr& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx)
+        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
         , DedupId(dedupId)
         , DataForShard(data)
         , ExternalController(externalController)
-        , LeaderPipeCache(MakePipePeNodeCacheID(false))
+        , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
+        , ModificationType(mType)
     {
     }
 
     void TShardWriter::Bootstrap() {
-        auto ev = MakeHolder<TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx);
+        auto ev = MakeHolder<TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
         DataForShard->Serialize(*ev);
         SendToTablet(std::move(ev));
         Become(&TShardWriter::StateMain);
@@ -106,7 +107,7 @@ namespace NKikimr::NEvWrite {
             Schedule(OverloadTimeout(), new TEvents::TEvWakeup());
         } else {
             ++NumRetries;
-            auto ev = MakeHolder<TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx);
+            auto ev = MakeHolder<TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
             DataForShard->Serialize(*ev);
             SendToTablet(std::move(ev));
         }

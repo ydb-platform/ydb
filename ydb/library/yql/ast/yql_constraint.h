@@ -436,46 +436,6 @@ constexpr std::string_view TPartOfDistinctConstraintNode::Name() {
     return "PartOfDistinct";
 }
 
-class TPassthroughConstraintNode final: public TPartOfConstraintBaseT<TPassthroughConstraintNode> {
-public:
-    using TPartType = NSorted::TSimpleMap<TPartOfConstraintBase::TPathType, std::string_view>;
-    using TMapType = std::unordered_map<const TPassthroughConstraintNode*, TPartType>;
-    using TReverseMapType = NSorted::TSimpleMap<std::string_view, std::string_view>;
-private:
-    friend struct TExprContext;
-
-    TPassthroughConstraintNode(TExprContext& ctx, const TStructExprType& itemType);
-    TPassthroughConstraintNode(TExprContext& ctx, const ui32 width);
-    TPassthroughConstraintNode(TPassthroughConstraintNode&& constr);
-    TPassthroughConstraintNode(TExprContext& ctx, TMapType&& mapping);
-public:
-    static constexpr std::string_view Name() {
-        return "Passthrough";
-    }
-
-    const TMapType& GetColumnMapping() const;
-    TMapType GetColumnMapping(const std::string_view& asField) const;
-    TMapType GetColumnMapping(TExprContext& ctx, const std::string_view& prefix) const;
-
-    TReverseMapType GetReverseMapping() const;
-
-    bool Equals(const TConstraintNode& node) const override;
-    bool Includes(const TConstraintNode& node) const override;
-    void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override;
-
-    static void UniqueMerge(TMapType& output, TMapType&& input);
-    const TPassthroughConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
-
-    static const TPassthroughConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
-    const TPassthroughConstraintNode* MakeCommon(const TPassthroughConstraintNode* other, TExprContext& ctx) const;
-private:
-    const TPartOfConstraintBase* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const final;
-    const TPartOfConstraintBase* DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const final;
-
-    TMapType Mapping_;
-};
-
 class TEmptyConstraintNode final: public TConstraintNode {
 protected:
     friend struct TExprContext;

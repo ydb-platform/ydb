@@ -358,10 +358,12 @@ struct TEvConsole {
             const NKikimrConfig::TAppConfig &config,
             const THashSet<ui32> &affectedKinds,
             const TString &yamlConfig = {},
-            const TMap<ui64, TString> &volatileYamlConfigs = {})
+            const TMap<ui64, TString> &volatileYamlConfigs = {},
+            const NKikimrConfig::TAppConfig &rawConfig = {})
         {
             Record.SetGeneration(generation);
             Record.MutableConfig()->CopyFrom(config);
+            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
             for (ui32 kind : affectedKinds)
                 Record.AddAffectedKinds(kind);
 

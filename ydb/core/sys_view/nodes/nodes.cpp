@@ -80,13 +80,21 @@ private:
     }
 
     void StartScan() {
-        if (IsEmptyRange) {
+        if (IsEmptyRange || TenantNodes.empty()) {
             ReplyEmptyAndDie();
             return;
         }
 
         const NActors::TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+
+        for (const auto& nodeId : TenantNodes) {
+            TActorId whiteboardId = MakeNodeWhiteboardServiceId(nodeId);
+            auto request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
+
+            Send(whiteboardId, request.Release(),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+        }
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
@@ -103,12 +111,6 @@ private:
                 nodeId >= NodeIdFrom &&
                 nodeId <= NodeIdTo)
             {
-                TActorId whiteboardId = MakeNodeWhiteboardServiceId(nodeId);
-                auto request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
-
-                Send(whiteboardId, request.Release(),
-                    IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-
                 NodesInfo.emplace(nodeId, info);
             }
         }
@@ -116,6 +118,7 @@ private:
         if (NodesInfo.empty()) {
             ReplyEmptyAndDie();
         }
+        RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
@@ -142,7 +145,7 @@ private:
     }
 
     void RequestDone() {
-        if (NodesInfo.size() != WBSystemInfo.size()) {
+        if (NodesInfo.empty() || TenantNodes.size() != WBSystemInfo.size()) {
             return;
         }
 
@@ -187,6 +190,44 @@ private:
                     }
                     auto interval = TInstant::Now().MicroSeconds() - *time * 1000;
                     return TCell::Make<i64>(interval > 0 ? interval : 0);
+                }});
+                insert({TSchema::CpuThreads::ColumnId, [] (const TNodeInfo&, const TWBInfo* wbInfo) {
+                    ui32 threads = 0;
+                    if (wbInfo && wbInfo->Record.SystemStateInfoSize() == 1) {
+                        const auto& systemState = wbInfo->Record.GetSystemStateInfo(0);
+                        for (const auto& poolStat : systemState.GetPoolStats()) {
+                            if (poolStat.GetName() != "IO") {
+                                threads += poolStat.GetThreads();
+                            }
+                        }
+                    }
+                    return TCell::Make<ui32>(threads);
+                }});
+                insert({TSchema::CpuUsage::ColumnId, [] (const TNodeInfo&, const TWBInfo* wbInfo) {
+                    ui32 threads = 0;
+                    double usage = 0.0;
+                    if (wbInfo && wbInfo->Record.SystemStateInfoSize() == 1) {
+                        const auto& systemState = wbInfo->Record.GetSystemStateInfo(0);
+                        for (const auto& poolStat : systemState.GetPoolStats()) {
+                            if (poolStat.GetName() != "IO") {
+                                threads += poolStat.GetThreads();
+                                usage += poolStat.GetUsage() * poolStat.GetThreads();
+                            }
+                        }
+                    }
+                    return threads ? TCell::Make<double>(usage / threads) : TCell();
+                }});
+                insert({TSchema::CpuIdle::ColumnId, [] (const TNodeInfo&, const TWBInfo* wbInfo) {
+                    double idle = 1.0;
+                    if (wbInfo && wbInfo->Record.SystemStateInfoSize() == 1) {
+                        const auto& systemState = wbInfo->Record.GetSystemStateInfo(0);
+                        for (const auto& poolStat : systemState.GetPoolStats()) {
+                            if (poolStat.GetName() != "IO") {
+                                idle = std::min(idle, 1.0 - poolStat.GetUsage());
+                            }
+                        }
+                    }
+                    return TCell::Make<double>(std::max(idle, 0.0));
                 }});
             }
         };

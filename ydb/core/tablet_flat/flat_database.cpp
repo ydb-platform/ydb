@@ -13,13 +13,30 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <util/generic/cast.h>
-
-
-#define MAX_REDO_BYTES_PER_COMMIT 268435456U // 256MB
-
+#include <util/stream/output.h>
 
 namespace NKikimr {
 namespace NTable {
+
+bool TDatabase::TChangeCounter::operator<(const TChangeCounter& rhs) const {
+    if (Serial && rhs.Serial) {
+        // When both counters have serial they can be compared directly
+        return Serial < rhs.Serial;
+    }
+
+    if (Epoch == rhs.Epoch) {
+        // When this counter is (0, epoch) but rhs is (non-zero, epoch), it
+        // indicates rhs may have more changes. When serial is zero it means
+        // the current memtable is empty, but rhs epoch is the same, so it
+        // cannot have fewer changes.
+        return Serial < rhs.Serial;
+    }
+
+    // The one with the smaller epoch must have fewer changes. In the worst
+    // case that change may have been a flush (incrementing epoch and serial)
+    // and then compact (possibly resetting serial to zero).
+    return Epoch < rhs.Epoch;
+}
 
 TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
@@ -40,7 +57,7 @@ TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcep
     return Require(table)->GetScheme();
 }
 
-TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const noexcept
+TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const noexcept
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -67,19 +84,15 @@ TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, E
         Y_ABORT("Don't know how to convert ELookup to ESeek mode");
     };
 
-    IteratedTables.insert(table);
-
     return Require(table)->Iterate(key, tags, Env, seekBy(key, mode), TRowVersion::Max());
 }
 
-TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags,
+TAutoPtr<TTableIter> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
-
-    IteratedTables.insert(table);
 
     auto iter = Require(table)->Iterate(key, tags, Env, ESeek::Exact, snapshot, visible, observer);
 
@@ -126,7 +139,7 @@ namespace {
     }
 }
 
-TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
+TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -135,8 +148,6 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
 
     Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
-
-    IteratedTables.insert(table);
 
     ESeek seek = !range.MinKey || range.MinInclusive ? ESeek::Lower : ESeek::Upper;
 
@@ -155,7 +166,7 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
     return iter;
 }
 
-TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
+TAutoPtr<TTableReverseIter> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -164,8 +175,6 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 
     Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
-
-    IteratedTables.insert(table);
 
     ESeek seek = !range.MaxKey || range.MaxInclusive ? ESeek::Lower : ESeek::Upper;
 
@@ -185,7 +194,7 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 }
 
 template<>
-TAutoPtr<TTableIt> TDatabase::IterateRangeGeneric<TTableIt>(ui32 table, const TKeyRange& range, TTagsRef tags,
+TAutoPtr<TTableIter> TDatabase::IterateRangeGeneric<TTableIter>(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -194,7 +203,7 @@ TAutoPtr<TTableIt> TDatabase::IterateRangeGeneric<TTableIt>(ui32 table, const TK
 }
 
 template<>
-TAutoPtr<TTableReverseIt> TDatabase::IterateRangeGeneric<TTableReverseIt>(ui32 table, const TKeyRange& range, TTagsRef tags,
+TAutoPtr<TTableReverseIter> TDatabase::IterateRangeGeneric<TTableReverseIter>(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -248,6 +257,12 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
 {
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
+
+TSizeEnv TDatabase::CreateSizeEnv()
+{
+    return TSizeEnv(Env);
+}
+
 
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
@@ -500,7 +515,7 @@ void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) 
     Require(table)->SetTableObserver(std::move(ptr));
 }
 
-TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
+TDatabase::TChangeCounter TDatabase::Head(ui32 table) const noexcept
 {
     if (table == Max<ui32>()) {
         return { DatabaseImpl->Serial(), TEpoch::Max() };
@@ -645,18 +660,6 @@ size_t TDatabase::GetCommitRedoBytes() const
     return Redo->Bytes();
 }
 
-bool TDatabase::ValidateCommit(TString &err)
-{
-    if (*Redo && Redo->Bytes() > MAX_REDO_BYTES_PER_COMMIT) {
-        err = TStringBuilder()
-            << "Redo commit of " << Redo->Bytes()
-            << " bytes is more than the allowed limit";
-        return false;
-    }
-
-    return true;
-}
-
 bool TDatabase::HasChanges() const
 {
     Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
@@ -687,18 +690,6 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     OnPersistent_.clear();
 
     TempIterators.clear();
-
-    if (IteratedTables) {
-        for (ui32 table : IteratedTables) {
-            if (auto& wrap = DatabaseImpl->Get(table, false)) {
-                if (auto* cache = wrap->GetErasedKeysCache()) {
-                    cache->CollectGarbage();
-                }
-            }
-        }
-
-        IteratedTables.clear();
-    }
 
     if (commit && HasChanges()) {
         Y_ABORT_UNLESS(stamp >= Change->Stamp);
@@ -783,6 +774,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         DatabaseImpl->RollbackTransaction();
     }
 
+    DatabaseImpl->RunGC();
+
     Redo = nullptr;
     Annex = nullptr;
     Alter_ = nullptr;
@@ -844,3 +837,11 @@ void DebugDumpDb(const TDatabase &db) {
 }
 
 }}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NTable::TDatabase::TChangeCounter, stream, value) {
+    stream << "TChangeCounter{serial=";
+    stream << value.Serial;
+    stream << ", epoch=";
+    stream << value.Epoch;
+    stream << "}";
+}

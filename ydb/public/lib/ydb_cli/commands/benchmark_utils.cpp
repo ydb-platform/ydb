@@ -6,6 +6,7 @@
 #include <util/folder/path.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/csv/csv.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -69,6 +70,7 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
     RttMean = totalDiff / static_cast<double>(ServerTimings.size());
 
     auto serverTimingsCopy = ServerTimings;
+    Sort(serverTimingsCopy);
     auto centerElement = serverTimingsCopy.begin() + ServerTimings.size() / 2;
     std::nth_element(serverTimingsCopy.begin(), centerElement, serverTimingsCopy.end());
 
@@ -78,6 +80,36 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
     } else {
         Median = centerElement->MilliSeconds();
     }
+    const auto ubCount = std::max<size_t>(1, serverTimingsCopy.size() * 2 / 3);
+    double ub = 1;
+    for (ui32 i = 0; i < ubCount; ++i) {
+        ub *= serverTimingsCopy[i].MillisecondsFloat();
+    }
+    UnixBench = TDuration::MilliSeconds(pow(ub, 1. / ubCount));
+}
+
+void TTestInfo::operator /=(const ui32 count) {
+    ColdTime /= count;
+    Min /= count;
+    Max /= count;
+    RttMin /= count;
+    RttMax /= count;
+    RttMean /= count;
+    Mean /= count;
+    Median /= count;
+    UnixBench /= count;
+}
+
+void TTestInfo::operator +=(const TTestInfo& other) {
+    ColdTime += other.ColdTime;
+    Min += other.Min;
+    Max += other.Max;
+    RttMin += other.RttMin;
+    RttMax += other.RttMax;
+    RttMean += other.RttMean;
+    Mean += other.Mean;
+    Median += other.Median;
+    UnixBench += other.UnixBench;
 }
 
 TString FullTablePath(const TString& database, const TString& table) {
@@ -105,8 +137,11 @@ bool HasCharsInString(const TString& str) {
 
 class IQueryResultScanner {
 private:
-    TString ErrorInfo;
-    TDuration ServerTiming;
+    YDB_READONLY_DEF(TString, ErrorInfo);
+    YDB_READONLY_DEF(TDuration, ServerTiming);
+    YDB_READONLY_DEF(TString, QueryPlan);
+    YDB_READONLY_DEF(TString, PlanAst);
+
 public:
     virtual ~IQueryResultScanner() = default;
     virtual void OnStart(const TVector<NYdb::TColumn>& columns) = 0;
@@ -116,12 +151,6 @@ public:
     virtual void OnFinish() = 0;
     void OnError(const TString& info) {
         ErrorInfo = info;
-    }
-    const TString& GetErrorInfo() const {
-        return ErrorInfo;
-    }
-    TDuration GetServerTiming() const {
-        return ServerTiming;
     }
 
     template <typename TIterator>
@@ -138,12 +167,16 @@ public:
 
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
-                    ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
+                    ServerTiming += streamPart.GetQueryStats().GetTotalDuration();
+                    QueryPlan = streamPart.GetQueryStats().GetPlan().GetOrElse("");
+                    PlanAst = streamPart.GetQueryStats().GetAst().GetOrElse("");
                 }
             } else {
                 const auto& stats = streamPart.GetStats();
                 if (stats) {
-                    ServerTiming = stats->GetTotalDuration();
+                    ServerTiming += stats->GetTotalDuration();
+                    QueryPlan = stats->GetPlan().GetOrElse("");
+                    PlanAst = stats->GetAst().GetOrElse("");
                 }
             }
 
@@ -254,7 +287,7 @@ public:
 
 TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
     TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
 
@@ -266,13 +299,19 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
     } else {
-        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
+        return TQueryBenchmarkResult::Result(
+            scannerYson->GetResult(),
+            *scannerCSV,
+            composite.GetServerTiming(),
+            composite.GetQueryPlan(),
+            composite.GetPlanAst()
+            );
     }
 }
 
 TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
     NQuery::TExecuteQuerySettings settings;
-    settings.StatsMode(NQuery::EStatsMode::Basic);
+    settings.StatsMode(NQuery::EStatsMode::Full);
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
@@ -287,7 +326,13 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
     } else {
-        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
+        return TQueryBenchmarkResult::Result(
+            scannerYson->GetResult(),
+            *scannerCSV,
+            composite.GetServerTiming(),
+            composite.GetQueryPlan(),
+            composite.GetPlanAst()
+            );
     }
 }
 
@@ -311,6 +356,112 @@ NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId) 
     sensorValue.InsertValue("value", value);
     sensorValue.InsertValue("labels", GetQueryLabels(queryId));
     return sensorValue;
+}
+
+template <class T>
+bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
+    T valExpected;
+    if (!TryFromString<T>(vExpected, valExpected)) {
+        Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+        return false;
+    }
+    return valResult == valExpected;
+}
+
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
+    const auto& vp = v.GetProto();
+    if (vp.has_bool_value()) {
+        return CompareValueImpl<bool>(vp.bool_value(), vExpected);
+    }
+    if (vp.has_int32_value()) {
+        return CompareValueImpl<i32>(vp.int32_value(), vExpected);
+    }
+    if (vp.has_uint32_value()) {
+        return CompareValueImpl<ui32>(vp.uint32_value(), vExpected);
+    }
+    if (vp.has_int64_value()) {
+        return CompareValueImpl<i64>(vp.int64_value(), vExpected);
+    }
+    if (vp.has_uint64_value()) {
+        return CompareValueImpl<ui64>(vp.uint64_value(), vExpected);
+    }
+    if (vp.has_float_value()) {
+        return CompareValueImpl<float>(vp.float_value(), vExpected);
+    }
+    if (vp.has_double_value()) {
+        return CompareValueImpl<double>(vp.double_value(), vExpected);
+    }
+    if (vp.has_text_value()) {
+        return CompareValueImpl<TString>(TString(vp.text_value().data(), vp.text_value().size()), vExpected);
+    }
+    if (vp.has_null_flag_value()) {
+        return vExpected == "";
+    }
+    Cerr << "unexpected type for comparision: " << vp.DebugString() << Endl;
+    return false;
+}
+
+
+bool TQueryResultInfo::IsExpected(std::string_view expected) const {
+    if (expected.empty()) {
+        return true;
+    }
+    const auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
+    if (Result.size() + 1 != expectedLines.size()) {
+        Cerr << "has diff: incorrect lines count (" << Result.size() << " in result, but " << expectedLines.size() << " expected with header)" << Endl;
+        return false;
+    }
+
+    std::vector<ui32> columnIndexes;
+    {
+        const std::map<TString, ui32> columns = GetColumnsRemap();
+        auto copy = expectedLines.front();
+        NCsvFormat::CsvSplitter splitter(copy);
+        while (true) {
+            auto cName = splitter.Consume();
+            auto it = columns.find(TString(cName.data(), cName.size()));
+            if (it == columns.end()) {
+                columnIndexes.clear();
+                for (ui32 i = 0; i < columns.size(); ++i) {
+                    columnIndexes.emplace_back(i);
+                }
+                break;
+            }
+            columnIndexes.emplace_back(it->second);
+
+            if (!splitter.Step()) {
+                break;
+            }
+        }
+        if (columnIndexes.size() != columns.size()) {
+            Cerr << "there are unexpected columns in result" << Endl;
+            return false;
+        }
+    }
+
+    for (ui32 i = 0; i < Result.size(); ++i) {
+        TString copy = expectedLines[i + 1];
+        NCsvFormat::CsvSplitter splitter(copy);
+        bool isCorrectCurrent = true;
+        for (ui32 cIdx = 0; cIdx < columnIndexes.size(); ++cIdx) {
+            const NYdb::TValue& resultValue = Result[i][columnIndexes[cIdx]];
+            if (!isCorrectCurrent) {
+                Cerr << "has diff: no element in expectation" << Endl;
+                return false;
+            }
+            TStringBuf cItem = splitter.Consume();
+            if (!CompareValue(resultValue, cItem)) {
+                Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
+                return false;
+            }
+            isCorrectCurrent = splitter.Step();
+        }
+        if (isCorrectCurrent) {
+            Cerr << "expected more items than have in result" << Endl;
+            return false;
+        }
+    }
+    return true;
 }
 
 } // NYdb::NConsoleClient::BenchmarkUtils

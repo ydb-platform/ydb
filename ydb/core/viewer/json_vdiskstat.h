@@ -15,14 +15,14 @@ using TJsonVDiskStat = TJsonVDiskRequest<TEvVDiskStatRequest, TEvVDiskStatRespon
 template <>
 struct TJsonRequestSummary<TJsonVDiskStat> {
     static TString GetSummary() {
-        return "\"VDisk statistic\"";
+        return "VDisk statistic";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonVDiskStat> {
     static TString GetDescription() {
-        return "\"VDisk statistic\"";
+        return "VDisk statistic";
     }
 };
 

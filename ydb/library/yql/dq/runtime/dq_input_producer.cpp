@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 #include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
@@ -363,7 +364,7 @@ TVector<std::unique_ptr<IArrayBuilder>> MakeBuilders(ui64 blockLen, const TVecto
             // TODO: pass memory pool
             // TODO: IPgBuilder
             YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-            result.emplace_back(MakeArrayBuilder(helper, itemType, *arrow::default_memory_pool(), blockLen, nullptr));
+            result.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), blockLen, nullptr));
         } else {
             result.emplace_back();
         }

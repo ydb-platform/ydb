@@ -441,9 +441,9 @@ public:
         Services.SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeSchemeCacheID(), Services.SchemeCache);
 
-        // PipePeNodeCaches are an external dependency
-        Services.LeaderPipeCache = MakePipePeNodeCacheID(false);
-        Services.FollowerPipeCache = MakePipePeNodeCacheID(true);
+        // PipePerNodeCaches are an external dependency
+        Services.LeaderPipeCache = MakePipePerNodeCacheID(false);
+        Services.FollowerPipeCache = MakePipePerNodeCacheID(true);
 
         TxAllocatorClient.Bootstrap(ctx);
 

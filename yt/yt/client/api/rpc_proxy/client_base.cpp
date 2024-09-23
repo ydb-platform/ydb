@@ -141,6 +141,13 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
         ToProto(req->mutable_parent_id(), options.ParentId);
     }
     ToProto(req->mutable_prerequisite_transaction_ids(), options.PrerequisiteTransactionIds);
+
+    if (options.ReplicateToMasterCellTags) {
+        ToProto(
+            req->mutable_replicate_to_master_cell_tags()->mutable_cell_tags(),
+            *options.ReplicateToMasterCellTags);
+    }
+
     // XXX(sandello): Better? Remove these fields from the protocol at all?
     // COMPAT(kiselyovp): remove auto_abort from the protocol
     req->set_auto_abort(false);
@@ -1008,6 +1015,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
+    req->set_versioned_read_options(ConvertToYsonString(options.VersionedReadOptions).ToString());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

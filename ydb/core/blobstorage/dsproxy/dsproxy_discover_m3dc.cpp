@@ -463,8 +463,9 @@ public:
             ui64 cookie, NWilson::TTraceId traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(std::move(info), std::move(state), std::move(mon), source, cookie,
-                std::move(traceId), NKikimrServices::BS_PROXY_DISCOVER, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Discover(mirror-3-dc)", std::move(ev->ExecutionRelay))
+                NKikimrServices::BS_PROXY_DISCOVER, false, {}, now, storagePoolCounters, ev->RestartCounter,
+                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Discover(mirror-3-dc)"),
+                std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
         , StartTime(now)
@@ -661,7 +662,7 @@ public:
             Y_ABORT_UNLESS(!Responded);
             const TDuration duration = TActivationContext::Now() - StartTime;
             LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
-                    TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", true);
+                    TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", true);
             SendResponseAndDie(std::move(response));
             Responded = true;
         }
@@ -674,7 +675,7 @@ public:
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
         const TDuration duration = TActivationContext::Now() - StartTime;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
-                TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", false);
+                TabletId, Info->GroupID.GetRawId(), TLogoBlobID::MaxChannel, "", false);
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> response(new TEvBlobStorage::TEvDiscoverResult(
                     status, MinGeneration, 0U));
         response->ErrorReason = ErrorReason;

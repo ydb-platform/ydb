@@ -12,6 +12,7 @@ YT_DEFINE_ERROR_ENUM(
     ((IncarnationMismatch)  (3900))
     ((QueryNotFound)        (3901))
     ((QueryResultNotFound)  (3902))
+    ((TooManyAcos)          (3903))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

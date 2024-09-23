@@ -4,7 +4,6 @@
 #include "errors.h"
 
 #include <google/protobuf/descriptor.h>
-#include <google/protobuf/messagext.h>
 
 namespace NYT {
 

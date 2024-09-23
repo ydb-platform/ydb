@@ -42,17 +42,16 @@ public:
 };
 
 TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs)
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        const TCostMetricsParameters& costMetricsParameters)
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
-    , UserDiskCost(CostCounters->GetCounter("UserDiskCost", true))
-    , CompactionDiskCost(CostCounters->GetCounter("CompactionDiskCost", true))
-    , ScrubDiskCost(CostCounters->GetCounter("ScrubDiskCost", true))
-    , DefragDiskCost(CostCounters->GetCounter("DefragDiskCost", true))
-    , InternalDiskCost(CostCounters->GetCounter("InternalDiskCost", true))
-    , BucketCapacity(burstThresholdNs / GroupType.BlobSubgroupSize())
-    , Bucket(&DiskTimeAvailableNs, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
+    , MonGroup(std::make_shared<NMonGroup::TCostTrackerGroup>(CostCounters))
+    , Bucket(&DiskTimeAvailable, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
+    , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
+    , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
 {
+    AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs);
     BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:

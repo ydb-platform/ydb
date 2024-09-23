@@ -318,7 +318,10 @@ public:
                 if (i != selfTabletId) {
                     TStorageTabletTask task(StorageId, i);
                     task.AddRemapOwner(BlobId, selfTabletId, toTabletId);
-                    AFL_VERIFY(result.emplace(i, std::move(task)).second);
+                    auto info = result.emplace(i, task);
+                    if (!info.second) {
+                        info.first->second.Merge(task);
+                    }
                 }
 
                 {

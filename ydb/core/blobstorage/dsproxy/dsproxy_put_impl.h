@@ -26,7 +26,6 @@ private:
     TBlobStorageGroupInfo::TServiceIds VDisksSvc;
     TBlobStorageGroupInfo::TVDiskIds VDisksId;
 
-    TInstant Deadline;
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
 
     TBlackboard Blackboard;
@@ -43,8 +42,6 @@ private:
     bool AtLeastOneResponseWasNotOk = false;
     bool EnableRequestMod3x3ForMinLatecy = false;
 
-    ui64 DoneBlobs = 0;
-
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
     struct TBlobInfo {
@@ -58,10 +55,11 @@ private:
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         NWilson::TSpan Span;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
+        TInstant Deadline;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
                 NLWTrace::TOrbit&& orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single,
-                std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
+                std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
             : BlobId(id)
             , Buffer(std::move(buffer))
             , BufferSize(Buffer.size())
@@ -71,6 +69,7 @@ private:
             , ExtraBlockChecks(std::move(extraBlockChecks))
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
             , ExecutionRelay(std::move(executionRelay))
+            , Deadline(deadline)
         {}
 
         void Output(IOutputStream& s) const {
@@ -99,17 +98,14 @@ private:
 
     friend class TBlobStorageGroupPutRequest;
 
-    bool IsInitialized = false;
-
     friend void ::Out<TBlobInfo>(IOutputStream&, const TBlobInfo&);
 
 public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId)
-        : Deadline(ev->Deadline)
-        , Info(info)
-        , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)
+        : Info(info)
+        , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
         , WrittenBeyondBarrier(1)
         , StatusFlags(0)
@@ -120,10 +116,10 @@ public:
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay));
+            std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay), ev->Deadline);
 
         auto& blob = Blobs.back();
-        LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID, blob.BlobId.ToString(), Tactic,
+        LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
             NKikimrBlobStorage::EPutHandleClass_Name(GetPutHandleClass()));
     }
 
@@ -131,9 +127,8 @@ public:
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
             bool enableRequestMod3x3ForMinLatecy)
-        : Deadline(TInstant::Zero())
-        , Info(info)
-        , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)
+        : Info(info)
+        , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
         , WrittenBeyondBarrier(events.size())
         , StatusFlags(0)
@@ -150,11 +145,11 @@ public:
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
             Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay));
-            Deadline = Max(Deadline, msg.Deadline);
+                std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay),
+                msg.Deadline);
 
             auto& blob = Blobs.back();
-            LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID, blob.BlobId.ToString(), Tactic,
+            LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
                 NKikimrBlobStorage::EPutHandleClass_Name(GetPutHandleClass()));
         }
 
@@ -175,46 +170,25 @@ public:
         Y_VERIFY_S(partSets.size() == Blobs.size(), "partSets.size# " << partSets.size()
                 << " Blobs.size# " << Blobs.size());
         const ui32 totalParts = Info->Type.TotalPartCount();
-        for (ui64 blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
+        for (size_t blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
             TBlobInfo& blob = Blobs[blobIdx];
-            Blackboard.RegisterBlobForPut(blob.BlobId);
+            Blackboard.RegisterBlobForPut(blob.BlobId, blobIdx);
             for (ui32 i = 0; i < totalParts; ++i) {
                 if (Info->Type.PartSize(TLogoBlobID(blob.BlobId, i + 1))) {
                     Blackboard.AddPartToPut(blob.BlobId, i, TRope(partSets[blobIdx][i]));
                 }
             }
-            Blackboard.MarkBlobReadyToPut(blob.BlobId, blobIdx);
         }
-        IsInitialized = true;
     }
 
     void PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
             TPutResultVec &outPutResults);
-    void PrepareReply(TLogContext &logCtx, TString errorReason, TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished,
-            TPutResultVec &outPutResults);
-    void PrepareOneReply(NKikimrProto::EReplyStatus status, TLogoBlobID blobId, ui64 blobIdx, TLogContext &logCtx,
+    void PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
             TString errorReason, TPutResultVec &outPutResults);
 
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
-
-    void Accelerate(TLogContext &logCtx) {
-        Blackboard.ChangeAll();
-        switch (Info->Type.GetErasure()) {
-            case TBlobStorageGroupType::ErasureMirror3dc:
-                Blackboard.RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy));
-                break;
-            case TBlobStorageGroupType::ErasureMirror3of4:
-                Blackboard.RunStrategy(logCtx, TPut3of4Strategy(Tactic, true));
-                break;
-            default:
-                Blackboard.RunStrategy(logCtx, TAcceleratePutStrategy());
-                break;
-        }
-    }
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst);
 
     TString DumpFullState() const;
-
-    bool MarkBlobAsSent(ui64 blobIdx);
 
     TString ToString() const;
 
@@ -226,13 +200,12 @@ public:
         Blackboard.ChangeAll();
     }
 
-    void Step(TLogContext &logCtx, TPutResultVec& putResults, const TBlobStorageGroupInfo::TGroupVDisks& expired) {
-        RunStrategies(logCtx, putResults, expired);
+    void Step(TLogContext &logCtx, TPutResultVec& putResults, const TBlobStorageGroupInfo::TGroupVDisks& expired, bool accelerate) {
+        RunStrategies(logCtx, putResults, expired, accelerate);
     }
 
     TDeque<TPutEvent> GeneratePutRequests() {
         TDeque<TPutEvent> events;
-
         // Group put requests together by VDiskID.
         std::unordered_multimap<ui32, TDiskPutRequest*> puts;
         for (auto& put : Blackboard.GroupDiskRequests.PutsPending) {
@@ -247,7 +220,7 @@ public:
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, Info->GetVDiskId(orderNumber),
-                    false, nullptr, Deadline, Blackboard.PutHandleClass);
+                    false, nullptr, Blobs[ptr->BlobIdx].Deadline, Blackboard.PutHandleClass);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : Blobs[ptr->BlobIdx].ExtraBlockChecks) {
@@ -260,7 +233,12 @@ public:
                 HandoffPartsSent += ptr->IsHandoff;
                 ++VPutRequests;
             } else { // TEvVMultiPut
-                auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(Info->GetVDiskId(it->first), Deadline,
+                TInstant deadline;
+                for (auto temp = it; temp != end; ++temp) {
+                    auto [orderNumber, ptr] = *temp;
+                    deadline = Max(deadline, Blobs[ptr->BlobIdx].Deadline);
+                }
+                auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(Info->GetVDiskId(it->first), deadline,
                     Blackboard.PutHandleClass, false);
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
@@ -299,7 +277,8 @@ public:
     }
 
 protected:
-    void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired);
+    void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired,
+        bool accelerate);
     void RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults,
         const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
@@ -339,7 +318,7 @@ protected:
     void ProcessResponseCommonPart(TProtobuf& record) {
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_ABORT_UNLESS(status != NKikimrProto::BLOCKED && status != NKikimrProto::RACE && status != NKikimrProto::DEADLINE);
+        Y_ABORT_UNLESS(status != NKikimrProto::RACE);
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
         }

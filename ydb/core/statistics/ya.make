@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    monster
-    g:kikimr
-)
-
 SRCS(
     events.h
     stat_service.h
@@ -17,6 +12,7 @@ PEERDIR(
     util
     ydb/library/actors/core
     ydb/library/query_actor
+    ydb/library/minsketch
     ydb/core/protos
     ydb/core/scheme
 )

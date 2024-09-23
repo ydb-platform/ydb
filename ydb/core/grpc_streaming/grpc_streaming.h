@@ -11,7 +11,6 @@
 
 #include <contrib/libs/grpc/include/grpcpp/support/async_stream.h>
 #include <contrib/libs/grpc/include/grpcpp/support/async_unary_call.h>
-#include <google/protobuf/text_format.h>
 
 #include <atomic>
 
@@ -340,29 +339,17 @@ private:
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
-            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
         }
 
         return true;
     }
 
     void OnReadDone(NYdbGrpc::EQueueEventStatus status) {
-        auto dumpResultText = [&] {
-            TString text;
-            if (status == NYdbGrpc::EQueueEventStatus::OK) {
-                google::protobuf::TextFormat::Printer printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(ReadInProgress->Record, &text);
-            } else {
-                text = "<not ok>";
-            }
-            return text;
-        };
-
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
             this, Name,
             status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            dumpResultText().c_str(),
+            NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
             this->GetPeerName().c_str());
 
         // Take current in-progress read first
@@ -393,32 +380,24 @@ private:
             }
         } else {
             // We need to perform another read (likely unsafe)
-            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         }
     }
 
     bool Write(TOut&& message, const grpc::WriteOptions& options = { }, const grpc::Status* status = nullptr) {
-        auto dumpMessageText = [&] {
-            TString text;
-            google::protobuf::TextFormat::Printer printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(message, &text);
-            return text;
-        };
-
         if (status) {
             LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s grpc status# (%d) message# %s",
                 this, Name,
-                dumpMessageText().c_str(),
+                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
                 this->GetPeerName().c_str(),
                 static_cast<int>(status->error_code()),
                 status->error_message().c_str());
         } else {
             LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s",
                 this, Name,
-                dumpMessageText().c_str(),
+                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
                 this->GetPeerName().c_str());
         }
 

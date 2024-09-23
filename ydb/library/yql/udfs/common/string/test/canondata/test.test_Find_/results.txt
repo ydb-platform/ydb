@@ -128,6 +128,17 @@
                         "-1";
                         "-1";
                         "2"
+                    ];
+                    [
+                        "`\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82, \xD0\xBC\xD0\xB8\xD1\x80!`";
+                        %false;
+                        %false;
+                        %false;
+                        %false;
+                        %false;
+                        "-1";
+                        "-1";
+                        "23"
                     ]
                 ]
             }

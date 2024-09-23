@@ -6,6 +6,48 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+inline bool CheckStoragePoolsInQuotas(
+    const Ydb::Cms::DatabaseQuotas& quotas,
+    const TVector<TStoragePool>& pools,
+    const TString& path,
+    TString& error
+) {
+    TVector<TString> quotedKinds;
+    quotedKinds.reserve(quotas.storage_quotas_size());
+    for (const auto& storageQuota : quotas.storage_quotas()) {
+        quotedKinds.emplace_back(storageQuota.unit_kind());
+    }
+    Sort(quotedKinds);
+    if (const auto equalKinds = AdjacentFind(quotedKinds);
+        equalKinds != quotedKinds.end()
+    ) {
+        error = TStringBuilder()
+            << "Malformed subdomain request: storage kinds in DatabaseQuotas must be unique, but "
+            << *equalKinds << " appears twice in the quotas definition of the " << path << " subdomain.";
+        return false;
+    }
+
+    TVector<TString> existingKinds;
+    existingKinds.reserve(pools.size());
+    for (const auto& pool : pools) {
+        existingKinds.emplace_back(pool.GetKind());
+    }
+    Sort(existingKinds);
+    TVector<TString> unknownKinds;
+    SetDifference(quotedKinds.begin(), quotedKinds.end(),
+                  existingKinds.begin(), existingKinds.end(),
+                  std::back_inserter(unknownKinds)
+    );
+    if (!unknownKinds.empty()) {
+        error = TStringBuilder()
+            << "Malformed subdomain request: cannot set storage quotas of the following kinds: " << JoinSeq(", ", unknownKinds)
+            << ", because no storage pool in the subdomain " << path << " has the specified kinds. "
+            << "Existing storage kinds are: " << JoinSeq(", ", existingKinds);
+        return false;
+    }
+    return true;
+}
+
 namespace NSubDomainState {
 
 class TConfigureParts: public TSubOperationState {
@@ -261,6 +303,16 @@ public:
             case ETabletType::GraphShard: {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Send configure request to graph shard: " << tabletID <<
+                    " opId: " << OperationId <<
+                    " schemeshard: " << ssId);
+                shard.Operation = TTxState::ConfigureParts;
+                auto event = new TEvSubDomain::TEvConfigure(processing);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            case ETabletType::BackupController: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Send configure request to backup controller tablet: " << tabletID <<
                     " opId: " << OperationId <<
                     " schemeshard: " << ssId);
                 shard.Operation = TTxState::ConfigureParts;

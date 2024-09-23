@@ -33,6 +33,8 @@
 
 namespace NYql {
 
+class TYtClusterConfig;
+
 namespace NCommon {
     class TMkqlCallableCompilerBase;
 }
@@ -104,6 +106,7 @@ public:
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
+        OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
     };
 
     //////////////////////////////////////////////////////////////
@@ -140,6 +143,7 @@ public:
 
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD_DEFAULT(bool, Abort, false)
+        OPTION_FIELD_DEFAULT(bool, DetachSnapshotTxs, false)
     };
 
     struct TFinalizeResult : public NCommon::TOperationResult {
@@ -171,6 +175,7 @@ public:
         TString Path;
         TMaybe<TVector<TString>> Columns;
         TMaybe<TVector<NYT::TReadRange>> Ranges;
+        TMaybe<TString> AdditionalAttributes;
     };
 
     struct TCanonizePathsResult: public NCommon::TOperationResult {
@@ -612,6 +617,8 @@ public:
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
 
     virtual TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) = 0;
+
+    virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 };
 
 }

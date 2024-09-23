@@ -56,7 +56,7 @@ struct TLoggingAnchor
 
     struct TCounter
     {
-        std::atomic<i64> Current = 0;
+        i64 Current = 0;
         i64 Previous = 0;
     };
 
@@ -100,6 +100,8 @@ struct TLogEvent
 
     TStringBuf SourceFile;
     int SourceLine = -1;
+
+    TLoggingAnchor* Anchor = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -180,6 +182,10 @@ public:
     explicit TLogger(TStringBuf categoryName);
 
     explicit operator bool() const;
+
+    //! Enables using |Logger| in YT_LOG_* macros as both data members and functions
+    //! (e.g. those introduced by YT_DEFINE_GLOBAL).
+    const TLogger& operator()() const;
 
     const TLoggingCategory* GetCategory() const;
 
@@ -292,7 +298,7 @@ void LogStructuredEvent(
 
 #define YT_LOG_EVENT_WITH_ANCHOR(logger, level, anchor, ...) \
     do { \
-        const auto& logger__ = (logger); \
+        const auto& logger__ = (logger)(); \
         auto level__ = (level); \
         \
         if (!logger__.IsLevelEnabled(level__)) { \
@@ -324,21 +330,12 @@ void LogStructuredEvent(
             break; \
         } \
         \
-        static YT_THREAD_LOCAL(i64) localByteCounter__; \
-        static YT_THREAD_LOCAL(ui8) localMessageCounter__; \
-        \
-        localByteCounter__ += message__.MessageRef.Size(); \
-        if (Y_UNLIKELY(++localMessageCounter__ == 0)) { \
-            anchor__->MessageCounter.Current += 256; \
-            anchor__->ByteCounter.Current += localByteCounter__; \
-            localByteCounter__ = 0; \
-        } \
-        \
         ::NYT::NLogging::NDetail::LogEventImpl( \
             loggingContext__, \
             logger__, \
             level__, \
             location__, \
+            anchor__, \
             std::move(message__.MessageRef)); \
     } while (false)
 

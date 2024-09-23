@@ -39,7 +39,7 @@ protected:
         return NNet::CreateDialer(
             New<TDialerConfig>(),
             Poller_,
-            NetLogger);
+            NetLogger());
     }
 };
 
@@ -219,8 +219,7 @@ INSTANTIATE_TEST_SUITE_P(
     TContinueReadInCaseOfWriteErrorsTest,
     testing::Values(
         false,
-        true
-    )
+        true)
 );
 
 TEST_F(TNetTest, StressConcurrentClose)

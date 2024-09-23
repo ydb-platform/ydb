@@ -460,6 +460,23 @@ select
 	DateTime::Format("%Y-%m-%d %Z")(AddTimezone($x, "Europe/Moscow")), -- 2019-10-22 Europe/Moscow
 ```
 
+It's worth mentioning that several `TzDatetime` or `TzTimestamp` values with a positive timezone offset cannot be cast to `TzDate`. Consider the example below:
+
+```yql
+SELECT CAST(TzDatetime("1970-01-01T23:59:59,Europe/Moscow") as TzDate);
+/* Fatal: Timestamp 1970-01-01T23:59:59.000000,Europe/Moscow cannot be casted to TzDate */
+```
+
+Starting from the Unix epoch, there is no valid value representing midnight on 01/01/1970 for the Europe/Moscow timezone. As a result, such a cast is impossible and fails at runtime.
+
+At the same time, values with a negative timezone offset are converted correctly:
+
+```yql
+SELECT CAST(TzDatetime("1970-01-01T23:59:59,America/Los_Angeles") as TzDate);
+/* 1970-01-01,America/Los_Angeles */
+
+```
+
 **Daylight saving time**
 
 Please note that daylight saving time depends on the year:

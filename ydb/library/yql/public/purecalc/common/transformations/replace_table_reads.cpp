@@ -52,12 +52,31 @@ namespace {
                         return nullptr;
                     }
 
+                    if (node->Child(0)->IsCallable(NNodes::TCoCons::CallableName())) {
+                        return node;
+                    }
+
                     if (!node->Child(0)->IsCallable(NNodes::TCoRead::CallableName())) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), TStringBuilder() << "Expected Read!"));
                         return nullptr;
                     }
 
                     return BuildInputFromRead(node->Pos(), node->ChildPtr(0), ctx);
+                } else if (node->IsCallable(NNodes::TCoLeft::CallableName())) {
+                    TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                        return new TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
+                    });
+
+                    if (!EnsureMinArgsCount(*node, 1, ctx)) {
+                        return nullptr;
+                    }
+
+                    if (!node->Child(0)->IsCallable(NNodes::TCoRead::CallableName())) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), TStringBuilder() << "Expected Read!"));
+                        return nullptr;
+                    }
+
+                    return node->Child(0)->HeadPtr();
                 }
 
                 return node;

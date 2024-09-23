@@ -190,6 +190,9 @@ LLVM_BC(
     arrow_split_part
     arrow_string_agg_finalfn
     arrow_string_agg_transfn
+    arrow_text_concat
+    arrow_text_concat_ws
+    arrow_text_format
     arrow_text_format_nv
     arrow_text_ge
     arrow_text_gt

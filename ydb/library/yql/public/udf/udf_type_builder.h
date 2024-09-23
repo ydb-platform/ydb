@@ -311,6 +311,14 @@ public:
     virtual ICallableTypeBuilder& Arg(const ITypeBuilder& typeBuilder) = 0;
 
     virtual ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) = 0;
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 38)
+    // sets name for the last added argument
+    virtual ICallableTypeBuilder& Name(const TStringRef& name) = 0;
+
+    // sets flags for the last added argument, see ICallablePayload::TArgumentFlags
+    virtual ICallableTypeBuilder& Flags(ui64 flags) = 0;
+#endif
 };
 
 UDF_ASSERT_TYPE_SIZE(ICallableTypeBuilder, 8);
@@ -646,8 +654,8 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
 class IFunctionTypeInfoBuilder15: public IFunctionTypeInfoBuilder14 {
 public:
-    virtual IFunctionTypeInfoBuilder15& SupportsBlocks() = 0;
-    virtual IFunctionTypeInfoBuilder15& IsStrict() = 0;
+    virtual IFunctionTypeInfoBuilder15& SupportsBlocksImpl() = 0;
+    virtual IFunctionTypeInfoBuilder15& IsStrictImpl() = 0;
 };
 #endif
 
@@ -709,6 +717,18 @@ public:
         return *this;
     }
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
+    IFunctionTypeInfoBuilder& SupportsBlocks() {
+        SupportsBlocksImpl();
+        return *this;
+    }
+
+    IFunctionTypeInfoBuilder& IsStrict() {
+        IsStrictImpl();
+        return *this;
+    }
+#endif
+
     IFunctionTypeInfoBuilder& Returns(TDataTypeId type) {
         ReturnsImpl(type);
         return *this;
@@ -738,8 +758,8 @@ public:
     }
 
     template <typename T>
-    TType* SimpleSignatureType() const {
-        return NImpl::TSimpleSignatureTypeHelper<T>::Build(*this);
+    TType* SimpleSignatureType(ui32 optionalArgs = 0) const {
+        return NImpl::TSimpleSignatureTypeHelper<T>::Build(*this, optionalArgs);
     }
 
     IFunctionTypeInfoBuilder& RunConfig(TDataTypeId type) {
@@ -1066,10 +1086,11 @@ struct TSimpleSignatureHelper<TReturn(TArgs...)> {
 
 template <typename TReturn, typename... TArgs>
 struct TSimpleSignatureTypeHelper<TReturn(TArgs...)> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder, ui32 optionalArgc) {
         auto callableBuilder = builder.Callable(sizeof...(TArgs));
         callableBuilder->Returns(TTypeBuilderHelper<TReturn>::Build(builder));
         TCallableArgsHelper<TArgs...>::Arg(*callableBuilder, builder);
+        callableBuilder->OptionalArgs(optionalArgc);
         return callableBuilder->Build();
     }
 };

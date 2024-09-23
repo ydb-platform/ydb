@@ -2,6 +2,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
@@ -132,6 +133,21 @@ namespace {
         return true;
     }
 
+    struct TUuidHolder {
+        union {
+            ui16 Array[8];
+            char Str[16];
+        } Buf;
+    };
+
+    template <>
+    bool TryParse(TStringBuf value, TUuidHolder& result) {
+        if (!NUuid::ParseUuidToArray(value, result.Buf.Array, false)) {
+            return false;
+        }
+        return true;
+    }
+
     template <typename T, typename U>
     using TConverter = std::function<U(const T&)>;
 
@@ -169,6 +185,10 @@ namespace {
     TStringBuf PgToStringBuf(const NPg::TConvertResult& v) {
         Y_ABORT_UNLESS(!v.Error);
         return v.Str;
+    }
+
+    TStringBuf UuidToStringBuf(const TUuidHolder& uuid) {
+        return TStringBuf(uuid.Buf.Str, 16);
     }
 
     template <typename T, typename U = T>
@@ -282,6 +302,12 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
         return TCellMaker<TInstant, ui64>::Make(cell, value, pool, err, &MicroSeconds);
     case NScheme::NTypeIds::Interval:
         return TCellMaker<i64>::Make(cell, value, pool, err);
+    case NScheme::NTypeIds::Date32:
+        return TCellMaker<i32>::Make(cell, value, pool, err);
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return TCellMaker<i64>::Make(cell, value, pool, err);
     case NScheme::NTypeIds::String:
     case NScheme::NTypeIds::String4k:
     case NScheme::NTypeIds::String2m:
@@ -297,6 +323,8 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
         return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair);
     case NScheme::NTypeIds::Pg:
         return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, type.GetTypeDesc());
+    case NScheme::NTypeIds::Uuid:
+        return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value, pool, err, &UuidToStringBuf);
     default:
         return false;
     }
@@ -339,6 +367,12 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo ty
             return TCellMaker<TInstant, ui64>::Make(cell, value.GetStringSafe(), pool, err, &MicroSeconds);
         case NScheme::NTypeIds::Interval:
             return TCellMaker<i64>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Date32:
+            return TCellMaker<i32>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            return TCellMaker<i64>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
         case NScheme::NTypeIds::String:
         case NScheme::NTypeIds::String4k:
         case NScheme::NTypeIds::String2m:
@@ -359,6 +393,8 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo ty
             return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
         case NScheme::NTypeIds::Decimal:
             return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair);
+        case NScheme::NTypeIds::Uuid:
+            return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &UuidToStringBuf);
         default:
             return false;
         }
@@ -390,6 +426,7 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     case NScheme::NTypeIds::JsonDocument: // checked at parsing time
     case NScheme::NTypeIds::DyNumber: // checked at parsing time
     case NScheme::NTypeIds::Pg:       // checked at parsing time
+    case NScheme::NTypeIds::Uuid:       // checked at parsing time
         return true;
     case NScheme::NTypeIds::Date:
         return cell.AsValue<ui16>() < NUdf::MAX_DATE;
@@ -399,6 +436,14 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         return cell.AsValue<ui64>() < NUdf::MAX_TIMESTAMP;
     case NScheme::NTypeIds::Interval:
         return (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
+    case NScheme::NTypeIds::Date32:
+        return cell.AsValue<i32>() < NUdf::MAX_DATE32;
+    case NScheme::NTypeIds::Datetime64:
+        return cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+    case NScheme::NTypeIds::Timestamp64:
+        return cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+    case NScheme::NTypeIds::Interval64:
+        return std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
     case NScheme::NTypeIds::Utf8:
         return NYql::IsUtf8(cell.AsBuf());
     case NScheme::NTypeIds::Yson:

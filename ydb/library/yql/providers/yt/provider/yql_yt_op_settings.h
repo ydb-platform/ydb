@@ -3,6 +3,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <util/generic/flags.h>
+#include <util/generic/strbuf.h>
 #include <util/system/types.h>
 #include <util/string/cast.h>
 #include <util/str_stl.h>
@@ -100,7 +101,7 @@ enum class EYtSettingType: ui64 {
     MapOutputType               = 1ull << 49 /* "mapOutputType" */,            // hybrid supported
     ReduceInputType             = 1ull << 50 /* "reduceInputType" */,          // hybrid supported
     NoDq                        = 1ull << 51 /* "noDq" */,
-    // Read 
+    // Read
     Split                       = 1ull << 52 /* "split" */,
     // Write hints
     CompressionCodec            = 1ull << 53 /* "compression_codec" "compressioncodec"*/,
@@ -113,16 +114,17 @@ enum class EYtSettingType: ui64 {
     KeepMeta                    = 1ull << 60 /* "keep_meta", "keepmeta" */,
     MonotonicKeys               = 1ull << 61 /* "monotonic_keys", "monotonickeys" */,
     MutationId                  = 1ull << 62 /* "mutationid", "mutation_id" */,
+    ColumnGroups                = 1ull << 63 /* "column_groups", "columngroups" */,
 };
 
 Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);
 Y_DECLARE_OPERATORS_FOR_FLAGS(EYtSettingTypes);
 
-constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique;
+constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 constexpr auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
                                        EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
-                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType;
+                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -138,10 +140,15 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
     return ctx.NewList(pos, std::move(children));
 }
 
+bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
+TString NormalizeColumnGroupSpec(const TStringBuf spec);
+const TString& GetSingleColumnGroupSpec();
+
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, EYtSettingType type);
 TExprNode::TPtr UpdateSettingValue(const TExprNode& settings, EYtSettingType type, TExprNode::TPtr&& value, TExprContext& ctx);
+TExprNode::TPtr AddOrUpdateSettingValue(const TExprNode& settings, EYtSettingType type, TExprNode::TPtr&& value, TExprContext& ctx);
 
 TExprNode::TListType GetAllSettingValues(const TExprNode& settings, EYtSettingType type);
 TVector<TString> GetSettingAsColumnList(const TExprNode& settings, EYtSettingType type);

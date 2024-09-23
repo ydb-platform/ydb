@@ -97,10 +97,22 @@ SELECT ARRAY[1,2,3]::text[]::int[]::float8[] AS "{1,2,3}";
  {1,2,3}
 (1 row)
 
+SELECT pg_typeof(ARRAY[1,2,3]::text[]::int[]::float8[]) AS "double precision[]";
+ double precision[] 
+--------------------
+ double precision[]
+(1 row)
+
 SELECT ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[] AS "{{a,bc},{def,hijk}}";
  {{a,bc},{def,hijk}} 
 ---------------------
  {{a,bc},{def,hijk}}
+(1 row)
+
+SELECT pg_typeof(ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[]) AS "character varying[]";
+ character varying[] 
+---------------------
+ character varying[]
 (1 row)
 
 SELECT CAST(ARRAY[[[[[['a','bb','ccc']]]]]] as text[]) as "{{{{{{a,bb,ccc}}}}}}";
@@ -115,10 +127,172 @@ SELECT NULL::text[]::int[] AS "NULL";
  
 (1 row)
 
+-- scalar op any/all (array)
+select 33 = any ('{1,2,3}');
+ ?column? 
+----------
+ f
+(1 row)
+
+select 33 = any ('{1,2,33}');
+ ?column? 
+----------
+ t
+(1 row)
+
+select 33 = all ('{1,2,33}');
+ ?column? 
+----------
+ f
+(1 row)
+
+select 33 >= all ('{1,2,33}');
+ ?column? 
+----------
+ t
+(1 row)
+
+-- boundary cases
+select null::int >= all ('{1,2,33}');
+ ?column? 
+----------
+ 
+(1 row)
+
+select null::int >= all ('{}');
+ ?column? 
+----------
+ t
+(1 row)
+
+select null::int >= any ('{}');
+ ?column? 
+----------
+ f
+(1 row)
+
+-- cross-datatype
+select 33.4 = any (array[1,2,3]);
+ ?column? 
+----------
+ f
+(1 row)
+
+select 33.4 > all (array[1,2,3]);
+ ?column? 
+----------
+ t
+(1 row)
+
+-- nulls
+select 33 = any (null::int[]);
+ ?column? 
+----------
+ 
+(1 row)
+
+select null::int = any ('{1,2,3}');
+ ?column? 
+----------
+ 
+(1 row)
+
+select 33 = any ('{1,null,3}');
+ ?column? 
+----------
+ 
+(1 row)
+
+select 33 = any ('{1,null,33}');
+ ?column? 
+----------
+ t
+(1 row)
+
+select 33 = all (null::int[]);
+ ?column? 
+----------
+ 
+(1 row)
+
+select null::int = all ('{1,2,3}');
+ ?column? 
+----------
+ 
+(1 row)
+
+select 33 = all ('{1,null,3}');
+ ?column? 
+----------
+ f
+(1 row)
+
+select 33 = all ('{33,null,33}');
+ ?column? 
+----------
+ 
+(1 row)
+
+-- nulls later in the bitmap
+SELECT -1 != ALL(ARRAY(SELECT NULLIF(g.i, 900) FROM generate_series(1,1000) g(i)));
+ ?column? 
+----------
+ 
+(1 row)
+
 -- test indexes on arrays
 create temp table arr_tbl (f1 int[] unique);
 -- test ON CONFLICT DO UPDATE with arrays
 create temp table arr_pk_tbl (pk int4 primary key, f1 int[]);
+-- test [not] (like|ilike) (any|all) (...)
+select 'foo' like any (array['%a', '%o']); -- t
+ ?column? 
+----------
+ t
+(1 row)
+
+select 'foo' like any (array['%a', '%b']); -- f
+ ?column? 
+----------
+ f
+(1 row)
+
+select 'foo' like all (array['f%', '%o']); -- t
+ ?column? 
+----------
+ t
+(1 row)
+
+select 'foo' like all (array['f%', '%b']); -- f
+ ?column? 
+----------
+ f
+(1 row)
+
+select 'foo' not like any (array['%a', '%b']); -- t
+ ?column? 
+----------
+ t
+(1 row)
+
+select 'foo' not like all (array['%a', '%o']); -- f
+ ?column? 
+----------
+ f
+(1 row)
+
+select 'foo' ilike any (array['%A', '%O']); -- t
+ ?column? 
+----------
+ t
+(1 row)
+
+select 'foo' ilike all (array['F%', '%O']); -- t
+ ?column? 
+----------
+ t
+(1 row)
+
 --
 -- General array parser tests
 --
@@ -530,6 +704,12 @@ select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
  {{Hello,9},{Hello,10},{Hello,11}}
 (1 row)
 
+select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
+              array_agg               
+--------------------------------------
+ {{1,1,2},{2,2,3},{3,NULL,4},{4,4,5}}
+(1 row)
+
 -- errors
 select array_agg('{}'::int[]) from generate_series(1,2);
 ERROR:  cannot accumulate empty arrays
@@ -538,6 +718,14 @@ ERROR:  cannot accumulate null arrays
 select array_agg(ar)
   from (values ('{1,2}'::int[]), ('{3}'::int[])) v(ar);
 ERROR:  cannot accumulate arrays of different dimensionality
+select * from unnest(array[1,2,3]);
+ unnest 
+--------
+      1
+      2
+      3
+(3 rows)
+
 -- array(select array-value ...)
 select array(select array[i,i/2] from generate_series(1,5) i);
               array              

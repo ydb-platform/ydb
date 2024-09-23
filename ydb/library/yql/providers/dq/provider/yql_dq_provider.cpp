@@ -33,9 +33,11 @@ TDataProviderInitializer GetDqDataProviderInitializer(
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
         const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter
+        THiddenQueryAborter hiddenAborter,
+        const TQContext& qContext
     ) {
         Y_UNUSED(userName);
+        Y_UNUSED(qContext);
 
         auto dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
             NYql::CreateCommonDqTaskTransformFactory()

@@ -16,7 +16,7 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/sql/v1/sql.h>
+#include <ydb/library/yql/sql/sql.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
         settings.Arena = &arena;
         settings.ClusterMapping["plato"] = YtProviderName;
 
-        TAstParseResult astRes = NSQLTranslationV1::SqlToYql(program, settings);
+        TAstParseResult astRes = NSQLTranslation::SqlToYql(program, settings);
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
         auto ytState = MakeIntrusive<TYtState>();
         ytState->Gateway = ytGateway;
         ytState->Types = typeAnnotationContext.Get();
-        ytState->Configuration->Dispatch(NCommon::ALL_CLUSTERS, "_EnableWriteReorder", "true", NCommon::TSettingDispatcher::EStage::CONFIG);
+        ytState->Configuration->Dispatch(NCommon::ALL_CLUSTERS, "_EnableWriteReorder", "true", NCommon::TSettingDispatcher::EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
 
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
@@ -76,6 +76,25 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
                         settings.VisitChanges = true;
                         return OptimizeExpr(input, output,
                             [&](const TExprNode::TPtr& node, TExprContext& /*ctx*/) -> TExprNode::TPtr {
+                                if (node->IsCallable("PgSelect")) {
+                                    TExprNode::TListType sources;
+                                    for (auto child: node->Head().Children()) {
+                                        if (child->Head().Content() == "set_items") {
+                                            for (auto setItem: child->Tail().Children()) {
+                                                for (auto subChild: setItem->Children()) {
+                                                    if (subChild->Head().Content() == "from") {
+                                                        for (auto from: subChild->Tail().Children()) {
+                                                            sources.push_back(from->HeadPtr());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (sources.size()) {
+                                        return ctx.NewList(node->Pos(), std::move(sources));
+                                    }
+                                }
                                 if (!node->IsWorld() && !node->Content().EndsWith('!') && node->Content() != "YtTable") {
                                     if (node->ChildrenSize() > 0) {
                                         return node->HeadPtr();
@@ -493,6 +512,32 @@ R"((
 (let $8 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $9 (Write! (Sync! $1 $5) '"yt" $8 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $7 $9) '"yt" '('('"epoch" '"1"))))
+)
+)"
+        },
+        {
+"PgWithSelfJoin",
+R"(
+--!syntax_pg
+set yt.Pool = "1";
+
+select 1;
+
+with inp as
+(
+    select key from plato."Input"
+)
+select i1.key as k1, i2.key as k2
+from inp i1, inp i2;
+
+)",
+R"((
+(let $1 (YtConfigure! world 'yt 'Attr '"pool" '"1"))
+(let $2 (Configure! world 'config 'OrderedColumns))
+(let $3 (Write! (Sync! $1 $2) 'result (Key) '('('set_items '('('('result '('"column0"))))) '('set_ops '('push))) '('('type) '('autoref))))
+(let $4 (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '()))
+(let $5 (Write! (Sync! $1 (Commit! $3 'result)) 'result (Key) '('((Right! $4)) '((Right! $4))) '('('type) '('autoref))))
+(return (Commit! (Commit! $5 'result) '"yt" '('('"epoch" '"1"))))
 )
 )"
         },

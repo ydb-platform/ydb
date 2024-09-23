@@ -1,0 +1,37 @@
+{%- macro RenderPackages(target) -%}
+{%-     set packages = [] -%}
+{%-     if (target.packages is defined) and (target.packages|length) -%}
+{%-         set packages = packages + target.packages -%}
+{%-     endif -%}
+{%-     if (target.mpackages is defined) and (target.mpackages|length) -%}
+{%-         if packages|length -%}
+{#-             Skip duplicating packages -#}
+{%-             set mpackages = target.mpackages|rejectattr('name', 'in', packages|map(attribute='name')) -%}
+{%-             if mpackages|length -%}
+{%-                 set packages = packages + mpackages -%}
+{%-             endif -%}
+{%-         else -%}
+{%-             set packages = packages + target.mpackages -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if packages|length -%}
+{%-         for package in packages -%}
+find_package({{ package.name }} REQUIRED
+{%-             if package.components|length %} COMPONENTS
+{%-                 for component in package.components %}
+  {{ component }}
+{%                  endfor -%}
+{%-             endif -%}
+)
+{%          endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- if target is defined -%}
+{{ RenderPackages(target) }}
+{%- endif -%}
+{%- if extra_targets is defined -%}
+{%-     for extra_target in extra_targets -%}
+{{ RenderPackages(extra_target) }}
+{%-     endfor -%}
+{%- endif -%}

@@ -1,5 +1,5 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -12,6 +12,7 @@ using namespace NFederatedTopic;
 using TCommitOffsetAcknowledgementEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>;
 using TStartPartitionSessionEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>;
 using TStopPartitionSessionEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>;
+using TEndPartitionSessionEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>;
 using TPartitionSessionStatusEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>;
 using TPartitionSessionClosedEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>;
 using TMessage = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>;
@@ -79,6 +80,20 @@ void TPrintable<TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bo
         << " }";
 }
 
+void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids);
+
+template<>
+void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool) const {
+    const auto* self = static_cast<const TEndPartitionSessionEvent*>(this);
+    ret << "EndPartitionSession {";
+    self->GetFederatedPartitionSession()->DebugString(ret);
+    ret << " AdjacentPartitionIds: ";
+    JoinIds(ret, self->GetAdjacentPartitionIds());
+    ret << " ChildPartitionIds: ";
+    JoinIds(ret, self->GetChildPartitionIds());
+    ret << " }";
+}
+
 template<>
 void TPrintable<TPartitionSessionStatusEvent>::DebugString(TStringBuilder& ret, bool) const {
     const auto* self = static_cast<const TPartitionSessionStatusEvent*>(this);
@@ -143,7 +158,7 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<NTopic::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 

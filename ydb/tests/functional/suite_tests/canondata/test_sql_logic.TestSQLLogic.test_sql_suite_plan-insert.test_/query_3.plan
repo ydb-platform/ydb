@@ -54,6 +54,7 @@
                                                     "b (-\u221e, +\u221e)",
                                                     "c (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Sequential",
                                                 "Table": "sqllogictest_insert.test_plan/a2"
                                             }
                                         ],

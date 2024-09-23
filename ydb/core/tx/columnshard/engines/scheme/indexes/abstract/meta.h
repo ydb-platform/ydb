@@ -30,7 +30,7 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
@@ -60,7 +60,7 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    std::shared_ptr<IPortionDataChunk> BuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
         return DoBuildIndex(indexId, data, indexInfo);
     }
 
@@ -94,64 +94,6 @@ public:
     {
         AFL_VERIFY(Object);
     }
-};
-
-class TPortionIndexChunk: public IPortionDataChunk {
-private:
-    using TBase = IPortionDataChunk;
-    const ui32 RecordsCount;
-    const ui64 RawBytes;
-    const TString Data;
-protected:
-    virtual const TString& DoGetData() const override {
-        return Data;
-    }
-    virtual TString DoDebugString() const override {
-        return "";
-    }
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
-        return {};
-    }
-    virtual bool DoIsSplittable() const override {
-        return false;
-    }
-    virtual std::optional<ui32> DoGetRecordsCount() const override {
-        return RecordsCount;
-    }
-    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
-        return nullptr;
-    }
-    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
-        return nullptr;
-    }
-    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
-public:
-    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
-        : TBase(entityId, 0)
-        , RecordsCount(recordsCount)
-        , RawBytes(rawBytes)
-        , Data(data)
-    {
-    }
-
-};
-
-class TIndexByColumns: public IIndexMeta {
-private:
-    using TBase = IIndexMeta;
-    std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
-protected:
-    std::set<ui32> ColumnIds;
-    virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
-
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
-    virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) override;
-
-    TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;
-
-public:
-    TIndexByColumns() = default;
-    TIndexByColumns(const ui32 indexId, const TString& indexName, const std::set<ui32>& columnIds);
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

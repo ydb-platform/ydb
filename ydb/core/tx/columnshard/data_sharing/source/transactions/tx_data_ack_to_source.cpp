@@ -34,7 +34,7 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
 }
 
 void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
-    Session->ActualizeDestination(Self->GetDataLocksManager());
+    Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }
 
 }

@@ -11,6 +11,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TNaiveFragmentWriter
         ////////////////////////////////////////////////////////////////////////////
+        void TNaiveFragmentWriter::Clear() {
+            Chain = {{64 << 10}}; // 64 KiB initial storage
+            DataSize = 0;
+        }
+
         void TNaiveFragmentWriter::Finish(TString *respData) {
             respData->clear();
             respData->reserve(DataSize);

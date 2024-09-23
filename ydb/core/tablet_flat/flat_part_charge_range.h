@@ -11,10 +11,10 @@ namespace {
 
 bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-            ui64 items, ui64 bytes, bool includeHistory = false) noexcept;
+            ui64 items, ui64 bytes, bool includeHistory) noexcept;
 
 bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-            ui64 items, ui64 bytes, bool includeHistory = false) noexcept;
+            ui64 items, ui64 bytes, bool includeHistory) noexcept;
 
 }

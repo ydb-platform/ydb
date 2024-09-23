@@ -315,7 +315,7 @@ public:
         return FileName_;
     }
 
-    ui64 GetDataSize() const override
+    i64 GetDataSize() const override
     {
         return GetFileLength(FileName_);
     }
@@ -353,9 +353,9 @@ public:
         return Description_;
     }
 
-    ui64 GetDataSize() const override
+    i64 GetDataSize() const override
     {
-        return Data_.size();
+        return std::ssize(Data_);
     }
 
 private:
@@ -419,6 +419,7 @@ TJobPreparer::TJobPreparer(
     }
 
     if (auto commandJob = dynamic_cast<const ICommandJob*>(&job)) {
+        IsCommandJob_ = true;
         ClassName_ = TJobFactory::Get()->GetJobName(&job);
         Command_ = commandJob->GetCommand();
     } else {
@@ -463,6 +464,11 @@ bool TJobPreparer::ShouldMountSandbox() const
 ui64 TJobPreparer::GetTotalFileSize() const
 {
     return TotalFileSize_;
+}
+
+bool TJobPreparer::ShouldRedirectStdoutToStderr() const
+{
+    return !IsCommandJob_ && OperationPreparer_.GetContext().Config->RedirectStdoutToStderr;
 }
 
 TString TJobPreparer::GetFileStorage() const
@@ -569,7 +575,8 @@ TMaybe<TString> TJobPreparer::GetItemFromCypressCache(const TString& md5Signatur
         GetCachePath(),
         TGetFileFromCacheOptions());
     if (maybePath) {
-        YT_LOG_DEBUG("File is already in cache (FileName: %v)",
+        YT_LOG_DEBUG(
+            "File is already in cache (FileName: %v, FilePath: %v)",
             fileName,
             *maybePath);
     }
@@ -694,7 +701,10 @@ TString TJobPreparer::UploadToCacheUsingApi(const IItemToUpload& itemToUpload) c
         itemToUpload.GetDescription(),
         OperationPreparer_.GetPreparationId());
 
-    if (OperationPreparer_.GetContext().Config->CacheUploadDeduplicationMode != EUploadDeduplicationMode::Disabled) {
+    const auto& config = OperationPreparer_.GetContext().Config;
+
+    if (config->CacheUploadDeduplicationMode != EUploadDeduplicationMode::Disabled &&
+        itemToUpload.GetDataSize() > config->CacheUploadDeduplicationThreshold) {
         if (auto path = TryUploadWithDeduplication(itemToUpload)) {
             return *path;
         }

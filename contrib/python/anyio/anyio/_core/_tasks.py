@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Generator
+from contextlib import contextmanager
 from types import TracebackType
-from warnings import warn
 
 from ..abc._tasks import TaskGroup, TaskStatus
-from ._compat import (
-    DeprecatedAsyncContextManager,
-    DeprecatedAwaitable,
-    DeprecatedAwaitableFloat,
-)
-from ._eventloop import get_asynclib
+from ._eventloop import get_async_backend
 
 
 class _IgnoredTaskStatus(TaskStatus[object]):
@@ -21,7 +17,7 @@ class _IgnoredTaskStatus(TaskStatus[object]):
 TASK_STATUS_IGNORED = _IgnoredTaskStatus()
 
 
-class CancelScope(DeprecatedAsyncContextManager["CancelScope"]):
+class CancelScope:
     """
     Wraps a unit of work that can be made separately cancellable.
 
@@ -32,9 +28,9 @@ class CancelScope(DeprecatedAsyncContextManager["CancelScope"]):
     def __new__(
         cls, *, deadline: float = math.inf, shield: bool = False
     ) -> CancelScope:
-        return get_asynclib().CancelScope(shield=shield, deadline=deadline)
+        return get_async_backend().create_cancel_scope(shield=shield, deadline=deadline)
 
-    def cancel(self) -> DeprecatedAwaitable:
+    def cancel(self) -> None:
         """Cancel this scope immediately."""
         raise NotImplementedError
 
@@ -55,6 +51,19 @@ class CancelScope(DeprecatedAsyncContextManager["CancelScope"]):
     @property
     def cancel_called(self) -> bool:
         """``True`` if :meth:`cancel` has been called."""
+        raise NotImplementedError
+
+    @property
+    def cancelled_caught(self) -> bool:
+        """
+        ``True`` if this scope suppressed a cancellation exception it itself raised.
+
+        This is typically used to check if any work was interrupted, or to see if the
+        scope was cancelled due to its deadline being reached. The value will, however,
+        only be ``True`` if the cancellation was triggered by the scope itself (and not
+        an outer scope).
+
+        """
         raise NotImplementedError
 
     @property
@@ -83,81 +92,52 @@ class CancelScope(DeprecatedAsyncContextManager["CancelScope"]):
         raise NotImplementedError
 
 
-def open_cancel_scope(*, shield: bool = False) -> CancelScope:
+@contextmanager
+def fail_after(
+    delay: float | None, shield: bool = False
+) -> Generator[CancelScope, None, None]:
     """
-    Open a cancel scope.
+    Create a context manager which raises a :class:`TimeoutError` if does not finish in
+    time.
 
-    :param shield: ``True`` to shield the cancel scope from external cancellation
-    :return: a cancel scope
-
-    .. deprecated:: 3.0
-       Use :class:`~CancelScope` directly.
-
-    """
-    warn(
-        "open_cancel_scope() is deprecated -- use CancelScope() directly",
-        DeprecationWarning,
-    )
-    return get_asynclib().CancelScope(shield=shield)
-
-
-class FailAfterContextManager(DeprecatedAsyncContextManager[CancelScope]):
-    def __init__(self, cancel_scope: CancelScope):
-        self._cancel_scope = cancel_scope
-
-    def __enter__(self) -> CancelScope:
-        return self._cancel_scope.__enter__()
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> bool | None:
-        retval = self._cancel_scope.__exit__(exc_type, exc_val, exc_tb)
-        if self._cancel_scope.cancel_called:
-            raise TimeoutError
-
-        return retval
-
-
-def fail_after(delay: float | None, shield: bool = False) -> FailAfterContextManager:
-    """
-    Create a context manager which raises a :class:`TimeoutError` if does not finish in time.
-
-    :param delay: maximum allowed time (in seconds) before raising the exception, or ``None`` to
-        disable the timeout
+    :param delay: maximum allowed time (in seconds) before raising the exception, or
+        ``None`` to disable the timeout
     :param shield: ``True`` to shield the cancel scope from external cancellation
     :return: a context manager that yields a cancel scope
     :rtype: :class:`~typing.ContextManager`\\[:class:`~anyio.CancelScope`\\]
 
     """
-    deadline = (
-        (get_asynclib().current_time() + delay) if delay is not None else math.inf
-    )
-    cancel_scope = get_asynclib().CancelScope(deadline=deadline, shield=shield)
-    return FailAfterContextManager(cancel_scope)
+    current_time = get_async_backend().current_time
+    deadline = (current_time() + delay) if delay is not None else math.inf
+    with get_async_backend().create_cancel_scope(
+        deadline=deadline, shield=shield
+    ) as cancel_scope:
+        yield cancel_scope
+
+    if cancel_scope.cancelled_caught and current_time() >= cancel_scope.deadline:
+        raise TimeoutError
 
 
 def move_on_after(delay: float | None, shield: bool = False) -> CancelScope:
     """
     Create a cancel scope with a deadline that expires after the given delay.
 
-    :param delay: maximum allowed time (in seconds) before exiting the context block, or ``None``
-        to disable the timeout
+    :param delay: maximum allowed time (in seconds) before exiting the context block, or
+        ``None`` to disable the timeout
     :param shield: ``True`` to shield the cancel scope from external cancellation
     :return: a cancel scope
 
     """
     deadline = (
-        (get_asynclib().current_time() + delay) if delay is not None else math.inf
+        (get_async_backend().current_time() + delay) if delay is not None else math.inf
     )
-    return get_asynclib().CancelScope(deadline=deadline, shield=shield)
+    return get_async_backend().create_cancel_scope(deadline=deadline, shield=shield)
 
 
-def current_effective_deadline() -> DeprecatedAwaitableFloat:
+def current_effective_deadline() -> float:
     """
-    Return the nearest deadline among all the cancel scopes effective for the current task.
+    Return the nearest deadline among all the cancel scopes effective for the current
+    task.
 
     :return: a clock value from the event loop's internal clock (or ``float('inf')`` if
         there is no deadline in effect, or ``float('-inf')`` if the current scope has
@@ -165,9 +145,7 @@ def current_effective_deadline() -> DeprecatedAwaitableFloat:
     :rtype: float
 
     """
-    return DeprecatedAwaitableFloat(
-        get_asynclib().current_effective_deadline(), current_effective_deadline
-    )
+    return get_async_backend().current_effective_deadline()
 
 
 def create_task_group() -> TaskGroup:
@@ -177,4 +155,4 @@ def create_task_group() -> TaskGroup:
     :return: a task group
 
     """
-    return get_asynclib().TaskGroup()
+    return get_async_backend().create_task_group()

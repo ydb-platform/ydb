@@ -10,7 +10,9 @@ host=:
                 database_id=database_id:
 
                     topic=topic:
+                        name=topic.partition.active_count: 1
                         name=topic.partition.alive_count: 1
+                        name=topic.partition.inactive_count: 0
                         name=topic.partition.init_duration_milliseconds_max: 0
                         name=topic.partition.producers_count_max: 3
                         name=topic.partition.read.inflight_throttled_microseconds_max: 0

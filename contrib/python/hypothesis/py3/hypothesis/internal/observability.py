@@ -36,14 +36,17 @@ def make_testcase(
     start_timestamp: float,
     test_name_or_nodeid: str,
     data: ConjectureData,
-    how_generated: str = "unknown",
+    how_generated: str,
     string_repr: str = "<unknown>",
     arguments: Optional[dict] = None,
     timing: Dict[str, float],
     coverage: Optional[Dict[str, List[int]]] = None,
+    phase: Optional[str] = None,
 ) -> dict:
     if data.interesting_origin:
         status_reason = str(data.interesting_origin)
+    elif phase == "shrink" and data.status == Status.OVERRUN:
+        status_reason = "exceeded size of current best example"
     else:
         status_reason = str(data.events.pop("invalid because", ""))
 

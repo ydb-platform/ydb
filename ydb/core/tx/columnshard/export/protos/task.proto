@@ -1,0 +1,29 @@
+import "ydb/core/tx/columnshard/export/protos/selector.proto";
+import "ydb/core/tx/columnshard/export/protos/storage.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+
+package NKikimrColumnShardExportProto;
+
+message TIdentifier {
+    optional uint64 PathId = 1;
+}
+
+message TExportTask {
+    optional TIdentifier Identifier = 1;
+    optional TSelectorContainer Selector = 2;
+    optional TStorageInitializerContainer StorageInitializer = 3;
+    optional NKikimrSchemeOp.TOlapColumn.TSerializer Serializer = 4;
+    optional uint64 TxId = 5;
+}
+
+message TSessionControlContainer {
+    optional string ClassName = 1;
+}
+
+message TExportSessionLogic {
+    optional TExportTask Task = 1;
+}
+
+message TExportSessionState {
+    optional string Status = 1;
+}

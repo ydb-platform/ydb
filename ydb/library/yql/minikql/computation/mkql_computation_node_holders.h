@@ -434,6 +434,8 @@ struct TValueHasher {
     const NUdf::IHash* Hash;
 };
 
+
+
 template<typename T>
 struct TFloatHash : private std::hash<T> {
     std::size_t operator()(T value) const {
@@ -1030,7 +1032,50 @@ inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initM
     return currentMemUsage * UsageAdjustor >= initMemUsage + memLimit;
 }
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
+void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
+
+template<bool SupportEqual, bool SupportHash, bool SupportLess>
+class TKeyTypeContanerHelper {
+public:
+    TKeyTypeContanerHelper() = default;
+    TKeyTypeContanerHelper(const TType* type) {
+        bool encoded;
+        bool useIHash;
+        GetDictionaryKeyTypes(type, KeyTypes, IsTuple, encoded, useIHash);
+        if (useIHash || encoded) {
+            if constexpr(SupportEqual) {
+                Equate = MakeEquateImpl(type);
+            }
+            if constexpr(SupportHash) {
+                Hash = MakeHashImpl(type);
+            }
+            if constexpr(SupportLess) {
+                Compare = MakeCompareImpl(type);
+            }
+        }
+    }
+public: //unavailable getters may be eliminated at compile time, but it'd make code much less readable
+    TValueEqual GetValueEqual() const{
+        Y_ABORT_UNLESS(SupportEqual);
+        return TValueEqual(KeyTypes, IsTuple, Equate.Get());
+    }
+    TValueHasher GetValueHash() const{
+        Y_ABORT_UNLESS(SupportHash);
+        return TValueHasher(KeyTypes, IsTuple, Hash.Get());
+    }
+    TValueLess GetValueLess() const{
+        Y_ABORT_UNLESS(SupportLess);
+        return TValueLess(KeyTypes, IsTuple , Compare.Get());
+    }
+private:
+    TKeyTypes KeyTypes;
+    bool IsTuple = false;
+    
+    //unsused pointers may be eliminated at compile time, but it'd make code much less readable
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
+    NUdf::ICompare::TPtr Compare;
+};
 
 class TPlainContainerCache {
 public:

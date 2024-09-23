@@ -69,6 +69,13 @@ void TStartQueryCommand::Register(TRegistrar registrar)
             return command->Options.AccessControlObject;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+        "access_control_objects",
+        [] (TThis* command) -> auto& {
+            return command->Options.AccessControlObjects;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TStartQueryCommand::DoExecute(ICommandContextPtr context)
@@ -182,7 +189,7 @@ void TReadQueryResultCommand::DoExecute(ICommandContextPtr context)
         New<TControlAttributesConfig>(),
         /*keyColumnCount*/ 0);
 
-    writer->Write(rowset->GetRows());
+    Y_UNUSED(writer->Write(rowset->GetRows()));
     WaitFor(writer->Close())
         .ThrowOnError();
 }
@@ -328,6 +335,13 @@ void TAlterQueryCommand::Register(TRegistrar registrar)
         "access_control_object",
         [] (TThis* command) -> auto& {
             return command->Options.AccessControlObject;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+        "access_control_objects",
+        [] (TThis* command) -> auto& {
+            return command->Options.AccessControlObjects;
         })
         .Optional(/*init*/ false);
 

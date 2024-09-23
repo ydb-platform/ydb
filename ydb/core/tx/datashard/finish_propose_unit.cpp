@@ -51,13 +51,13 @@ TDataShard::TPromotePostExecuteEdges TFinishProposeUnit::PromoteImmediatePostExe
         TTransactionContext& txc)
 {
     if (op->IsMvccSnapshotRead()) {
-        if (op->IsMvccSnapshotRepeatable()) {
+        if (op->IsMvccSnapshotRepeatable() && op->GetPerformedUserReads()) {
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc);
         } else {
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         }
     } else if (op->MvccReadWriteVersion) {
-        if (op->IsReadOnly()) {
+        if (op->IsReadOnly() || op->LockTxId()) {
             return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         } else {
             return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
@@ -99,8 +99,11 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
         op->SetFinishProposeTs(DataShard.ConfirmReadOnlyLease());
     }
 
-    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op)))
+    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op))) {
+        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
+        op->SetProposeResultSentEarly();
         CompleteRequest(op, ctx);
+    }
 
     if (!DataShard.IsFollower())
         DataShard.PlanCleanup(ctx);
@@ -128,7 +131,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
 void TFinishProposeUnit::Complete(TOperation::TPtr op,
                                   const TActorContext &ctx)
 {
-    if (!op->HasResultSentFlag()) {
+    if (!op->HasResultSentFlag() && !op->IsProposeResultSentEarly()) {
         DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
 
         if (op->Result())
@@ -192,14 +195,14 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
             res->Orbit = std::move(op->Orbit);
         }
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
-            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie());
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {
             // TODO: we should actually measure a read timestamp and use it here
-            DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie());
+            DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
-            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.Release(), op->GetCookie());
+            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.Release(), op->GetCookie(), {}, op->GetTraceId());
         } else {
-            ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie());
+            ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie(), op->GetTraceId());
         }
     }
 }

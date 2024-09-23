@@ -1,0 +1,359 @@
+{
+    "post": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "summary": "Creates, updates or deletes objects",
+        "parameters": [
+        {
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        },
+        {
+            "name": "request",
+            "in": "body",
+            "description": "",
+            "required": true,
+            "schema": {
+                "title": "ExecuteModifyCommandsRequest",
+                "type": "object",
+                "required": ["actions"],
+                "properties": {
+                    "comment": {
+                        "description": "Changes description",
+                        "type": "stirng"
+                    },
+                    "actions": {
+                        "description": "Create, update or delete actions",
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "title": "SingleModifyRequest",
+                            "required": ["requestType"],
+                            "properties": {
+                                "requestType": {
+                                    "type": "string",
+                                    "enum": [
+                                        "createAccount",
+                                        "createDirectory",
+                                        "createTopic",
+                                        "createConsumer",
+                                        "createReadRule",
+
+                                        "updateAccount",
+                                        "updateDirectory",
+                                        "updateTopic",
+                                        "updateConsumer",
+
+                                        "removeDirectory",
+                                        "removeTopic",
+                                        "removeConsumer",
+                                        "removeReadRule",
+
+                                        "grantPermissions",
+                                        "revokePermissions",
+                                        "setPermissions",
+                                        "changeOwner",
+
+                                        "addTopicToYtDelivery",
+                                        "removeTopicFromYtDelivery"
+                                    ]
+                                },
+                                "createAccount" : {
+                                    "title": "CreateAccountRequest",
+                                    "type": "object",
+                                    "required": ["name", "responsible", "abcService"],
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "responsible": {
+                                            "type": "array",
+                                            "description": "Staff users responsible for the object in format user@",
+                                            "items": {
+                                                "title": "Responsible",
+                                                "type": "string"
+                                            }
+                                        },
+                                        "abcService": {
+                                            "description": "ABC service related to the account. It must be not used in any other account",
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "updateAccount" : {
+                                    "title": "UpdateAccountRequest",
+                                    "type": "object",
+                                    "required": ["name", "responsible", "abcService"],
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "responsible": {
+                                            "type": "array",
+                                            "description": "Staff users responsible for the object in format user@",
+                                            "items": {
+                                                "title": "Responsible",
+                                                "type": "string"
+                                            }
+                                        },
+                                        "abcService": {
+                                            "description": "ABC service related to the account. It must be not used in any other account",
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "createDirectory": {
+                                    "title": "CreateDirectoryRequest",
+                                    "type": "object",
+                                    "required": ["path", "properties"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "properties": {
+                                            "$ref": "#/definitions/DirectoryProperties"
+                                        }
+                                    }
+                                },
+                                "updateDirectory": {
+                                    "title": "UpdateDirectoryRequest",
+                                    "type": "object",
+                                    "required": ["path", "properties"],
+                                    "properties": {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "properties": {
+                                            "$ref": "#/definitions/DirectoryProperties"
+                                        }
+                                    }
+                                },
+                                "removeDirectory": {
+                                    "title": "RemoveDirectoryRequest",
+                                    "type": "object",
+                                    "required": ["path"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "force": {
+                                            "description": "NOT_IMPLEMENTED Force remove even if directory is not empty TODO: Do we really want this?",
+                                            "type": "boolean",
+                                            "default": false
+                                        }
+                                    }
+                                },
+                                "createTopic": {
+                                    "title": "CreateTopicRequest",
+                                    "type": "object",
+                                    "required": ["path", "properties"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "properties": {
+                                            "$ref": "#/definitions/TopicProperties"
+                                        }
+                                    }
+                                },
+                                "updateTopic": {
+                                    "title": "UpdateTopicRequest",
+                                    "type": "object",
+                                    "required": ["path", "properties"],
+                                    "properties": {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "properties": {
+                                            "$ref": "#/definitions/TopicProperties"
+                                        }
+                                    }
+                                },
+                                "removeTopic": {
+                                    "title": "RemoveTopicRequest",
+                                    "type": "object",
+                                    "required": ["path"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        }
+                                    }
+                                },
+                                "createConsumer": {
+                                    "title": "CreateConsumerRequest",
+                                    "type": "object",
+                                    "required": ["path", "properties"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "properties": {
+                                            "$ref": "#/definitions/ConsumerProperties"
+                                        }
+                                    }
+                                },
+                                "updateConsumer": {
+                                    "title": "UpdateConsumerRequest",
+                                    "type": "object",
+                                    "required": ["path", "properties"],
+                                    "properties": {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "properties": {
+                                            "$ref": "#/definitions/ConsumerProperties"
+                                        }
+                                    }
+                                },
+                                "removeConsumer": {
+                                    "title": "RemoveConsumerRequest",
+                                    "type": "object",
+                                    "required": ["path"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        }                                    }
+                                },
+                                "createReadRule": {
+                                    "title": "CreateReadRuleRequest",
+                                    "type": "object",
+                                    "required": ["readRule"],
+                                    "properties" : {
+                                        "readRule": {
+                                            "$ref": "#/definitions/ReadRuleKey"
+                                        }
+                                    }
+                                },
+                                "removeReadRule": {
+                                    "title": "RemoveReadRuleRequest",
+                                    "type": "object",
+                                    "required": ["readRule"],
+                                    "properties" : {
+                                        "readRule": {
+                                            "$ref": "#/definitions/ReadRuleKey"
+                                        }
+                                    }
+                                },
+                                "grantPermissions": {
+                                    "title": "GrantPermissionsRequest",
+                                    "type": "object",
+                                    "required": ["path", "permissions"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "permissions": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/Permissions"
+                                            }
+                                        }
+                                    }
+                                },
+                                "setPermissions": {
+                                    "title": "SetPermissionsRequest",
+                                    "type": "object",
+                                    "required": ["path", "permissions"],
+                                    "properties" : {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "permissions": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/Permissions"
+                                            }
+                                        }
+                                    }
+                                },
+                                "revokePermissions": {
+                                    "title": "RevokePermissionsRequest",
+                                    "type": "object",
+                                    "required": ["path", "permissions"],
+                                    "properties": {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "permissions": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/Permissions"
+                                            }
+                                        }
+                                    }
+                                },
+                                "changeOwner": {
+                                    "title": "ChangeOwnerRequest",
+                                    "type": "object",
+                                    "required": ["path", "owner"],
+                                    "properties": {
+                                        "path": {
+                                            "$ref": "#/definitions/Path"
+                                        },
+                                        "owner": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "addTopicToYtDelivery": {
+                                    "title": "AddTopicToYtDelivery",
+                                    "type": "object",
+                                    "required": ["topic", "delivery"],
+                                    "properties": {
+                                        "topic": {
+                                            "type": "string",
+                                            "description": "Topic path"
+                                        },
+                                        "delivery": {
+                                            "type": "string",
+                                            "description": "YT delivery path"
+                                        }
+                                    }
+                                },
+                                "removeTopicFromYtDelivery": {
+                                    "title": "RemoveTopicFromYtDelivery",
+                                    "type": "object",
+                                    "required": ["topic", "delivery"],
+                                    "properties": {
+                                        "topic": {
+                                            "type": "string",
+                                            "description": "Topic path"
+                                        },
+                                        "delivery": {
+                                            "type": "string",
+                                            "description": "YT delivery path"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }],
+        "responses": {
+            "202": {
+                "description": "OK",
+                "schema": {
+                    "$ref": "#/definitions/TOperation"
+                }
+            },
+            "default": {
+                "description": "Error",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/TError"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -473,6 +473,32 @@ SELECT FormatType(OptionalTypeHandle(
 )); -- Bool?
 ```
 
+## PgTypeName
+
+**Сигнатура**
+```
+PgTypeName(PgTypeHandle)->String
+```
+Получение имени PostgreSQL типа из хендла типа, переданного в аргумент. Обратная функция - [PgTypeHandle](#pgtypehandle).
+
+**Примеры:**
+``` yql
+SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
+```
+
+## PgTypeHandle
+
+**Сигнатура**
+```
+PgTypeHandle(String)->хендл типа
+```
+Построение хендла типа по имени PostgreSQL типа, переданного в аргумент. Обратная функция - [PgTypeName](#pgtypename).
+
+**Примеры:**
+``` yql
+SELECT FormatType(PgTypeHandle("int4")); -- pgint4
+```
+
 ## ListTypeHandle и StreamTypeHandle {#list-stream-typehandle}
 
 **Сигнатура**

@@ -24,11 +24,6 @@ void FormatValue(TStringBuilderBase* builder, TReachableState state, TStringBuf 
     builder->AppendFormat("%v:%v", state.SegmentId, state.SequenceNumber);
 }
 
-TString ToString(TReachableState state)
-{
-    return ToStringViaBuilder(state);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TElectionPriority::TElectionPriority(int lastMutationTerm, int segmentId, i64 sequenceNumber) noexcept
@@ -54,11 +49,6 @@ void FormatValue(TStringBuilderBase* builder, TElectionPriority priority, TStrin
     builder->AppendFormat("{MutationTerm: %v, State: %v}",
         priority.LastMutationTerm,
         priority.ReachableState);
-}
-
-TString ToString(TElectionPriority state)
-{
-    return ToStringViaBuilder(state);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,11 +90,6 @@ TVersion TVersion::Rotate() const
 void FormatValue(TStringBuilderBase* builder, TVersion version, TStringBuf /* spec */)
 {
     builder->AppendFormat("%v:%v", version.SegmentId, version.RecordId);
-}
-
-TString ToString(TVersion version)
-{
-    return ToStringViaBuilder(version);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

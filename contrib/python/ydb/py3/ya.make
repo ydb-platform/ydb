@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.8.0)
+VERSION(3.12.3)
 
 LICENSE(Apache-2.0)
 
@@ -53,6 +53,7 @@ PY_SRCS(
     ydb/aio/credentials.py
     ydb/aio/driver.py
     ydb/aio/iam.py
+    ydb/aio/oauth2_token_exchange.py
     ydb/aio/pool.py
     ydb/aio/resolver.py
     ydb/aio/scheme.py
@@ -76,6 +77,9 @@ PY_SRCS(
     ydb/import_client.py
     ydb/interceptor.py
     ydb/issues.py
+    ydb/oauth2_token_exchange/__init__.py
+    ydb/oauth2_token_exchange/token_exchange.py
+    ydb/oauth2_token_exchange/token_source.py
     ydb/operation.py
     ydb/pool.py
     ydb/resolver.py

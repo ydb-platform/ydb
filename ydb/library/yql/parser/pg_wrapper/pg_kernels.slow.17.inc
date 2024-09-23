@@ -174,6 +174,9 @@ TExecFunc arrow_replace_text() { return MakeIndirectExec<true, false>(&replace_t
 TExecFunc arrow_split_part() { return MakeIndirectExec<true, false>(&split_part); }
 TExecFunc arrow_string_agg_finalfn() { return MakeIndirectExec<false, false>(&string_agg_finalfn); }
 TExecFunc arrow_string_agg_transfn() { return MakeIndirectExec<false, true>(&string_agg_transfn); }
+TExecFunc arrow_text_concat() { return MakeIndirectExec<false, false>(&text_concat); }
+TExecFunc arrow_text_concat_ws() { return MakeIndirectExec<false, false>(&text_concat_ws); }
+TExecFunc arrow_text_format() { return MakeIndirectExec<false, false>(&text_format); }
 TExecFunc arrow_text_format_nv() { return MakeIndirectExec<false, false>(&text_format_nv); }
 TExecFunc arrow_text_ge() { return MakeIndirectExec<true, true>(&text_ge); }
 TExecFunc arrow_text_gt() { return MakeIndirectExec<true, true>(&text_gt); }

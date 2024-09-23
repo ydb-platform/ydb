@@ -18,7 +18,7 @@ namespace NKikimr {
             UNIT_ASSERT_EQUAL(state.GetGlobalColor(), TSpaceColor::GREEN);
 
             NPDisk::TStatusFlags flags = NKikimrBlobStorage::StatusIsValid;
-            state.UpdateLocal(flags);
+            state.UpdateLocalChunk(flags);
             UNIT_ASSERT_EQUAL(state.GetGlobalColor(), TSpaceColor::GREEN);
             UNIT_ASSERT_EQUAL(state.GetLocalStatusFlags(), flags);
             UNIT_ASSERT_EQUAL(state.GetGlobalStatusFlags().Flags, flags);

@@ -82,7 +82,7 @@ void TOperationTracker::Stop() {
 }
 
 TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
-    const TString& ytServer, const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter)
+    const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter)
 {
     auto future = operation->GetStartedFuture().Apply([operation](const auto& f) {
         f.GetValue();
@@ -98,7 +98,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     auto filter = NYT::TOperationAttributeFilter();
     filter.Add(NYT::EOperationAttribute::State);
 
-    auto checker = [future, operation, ytServer, progress, progressWriter, filter] () mutable {
+    auto checker = [future, operation, ytServer, progress, progressWriter, filter, ytClusterName] () mutable {
         bool done = future.Wait(TDuration::Zero());
 
         if (!done) {
@@ -108,6 +108,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                 if (!progress.RemoteId) {
                     progress.RemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
                 }
+                progress.RemoteData["cluster_name"] = ytClusterName;
                 if (auto briefProgress = operation->GetBriefProgress()) {
                     progress.Counters.ConstructInPlace();
                     progress.Counters->Completed = briefProgress->Completed;
@@ -147,7 +148,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     }
 
     // Make a final progress write
-    return future.Apply([operation, progress, progressWriter, statWriter, ytServer] (const TFuture<void>& f) mutable {
+    return future.Apply([operation, progress, progressWriter, statWriter, ytServer, ytClusterName] (const TFuture<void>& f) mutable {
         f.GetValue();
         if (auto briefProgress = operation->GetBriefProgress()) {
             progress.Counters.ConstructInPlace();
@@ -177,6 +178,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
         }
 
         statEntries.emplace_back("_cluster", ytServer);
+        statEntries.emplace_back("_cluster_name", ytClusterName);
         statEntries.emplace_back("_id", GetGuidAsString(operation->GetId()));
         statWriter(progress.Id, statEntries);
         progressWriter(progress);

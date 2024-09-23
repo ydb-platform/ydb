@@ -191,6 +191,7 @@
                                                 "ReadRanges": [
                                                     "x (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
                                             }
                                         ],

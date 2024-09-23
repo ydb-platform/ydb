@@ -20,7 +20,7 @@ class TPartition;
 
 
 /**
- * This class execute independent steps of parttition actor initialization. 
+ * This class execute independent steps of parttition actor initialization.
  * Each initialization step makes its own decision whether to perform it or not.
  */
 class TInitializer {
@@ -46,7 +46,7 @@ private:
 
     TVector<THolder<TInitializerStep>> Steps;
     std::vector<THolder<TInitializerStep>>::iterator CurrentStep;
-    
+
 };
 
 /**
@@ -57,7 +57,7 @@ class TInitializerStep {
 public:
     TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition);
     virtual ~TInitializerStep() = default;
-    
+
     virtual void Execute(const TActorContext& ctx) = 0;
     virtual bool Handle(STFUNC_SIG);
 
@@ -79,7 +79,7 @@ private:
 
 class TBaseKVStep: public TInitializerStep {
 public:
-    TBaseKVStep(TInitializer* initializer, TString name, bool skipNewPartition);    
+    TBaseKVStep(TInitializer* initializer, TString name, bool skipNewPartition);
 
     bool Handle(STFUNC_SIG) override;
     virtual void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) = 0;
@@ -91,7 +91,7 @@ public:
 //
 
 class TInitConfigStep: public TBaseKVStep {
-public:    
+public:
     TInitConfigStep(TInitializer* initializer);
 
     void Execute(const TActorContext& ctx) override;
@@ -114,11 +114,14 @@ public:
 };
 
 class TInitMetaStep: public TBaseKVStep {
+    friend class TPartitionTestWrapper;
 public:
     TInitMetaStep(TInitializer* initializer);
 
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+private:
+    void LoadMeta(const NKikimrClient::TResponse& kvResponse, const TMaybe<TActorContext>& mbCtx);
 };
 
 class TInitInfoRangeStep: public TBaseKVStep {

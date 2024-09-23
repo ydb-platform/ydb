@@ -17,6 +17,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/protos/stream.pb.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 

@@ -6,9 +6,9 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.84.0)
+VERSION(1.85.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/scope_exit/archive/boost-1.84.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/scope_exit/archive/boost-1.85.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/config

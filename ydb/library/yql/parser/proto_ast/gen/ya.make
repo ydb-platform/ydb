@@ -1,7 +1,7 @@
 RECURSE(
-    v0
-    v1
-    v0_proto_split
-    v1_proto_split
     jsonpath
+    v0
+    v0_proto_split
+    v1
+    v1_proto_split
 )

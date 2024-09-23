@@ -86,6 +86,7 @@ public:
         const TChecker& ShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& PathShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& NotChildren(EStatus status = EStatus::StatusInvalidParameter) const;
+        const TChecker& CanBackupTable(EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& IsValidACL(const TString& acl, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& PQPartitionsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& PQReservedStorageLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
@@ -96,6 +97,8 @@ public:
         // Check there are no uncles or cousins with same name
         const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
+        const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

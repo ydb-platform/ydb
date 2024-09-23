@@ -519,6 +519,8 @@ struct TStateStorageInfo : public TThrRefBase {
         , Hash(Max<ui64>())
     {}
 
+    TString ToString() const;
+
 private:
     mutable ui64 Hash;
 };
@@ -543,8 +545,6 @@ void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& 
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo);
-
-IActor* CreateStateStorageWarden(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
 
 IActor* CreateStateStorageProxy(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
 IActor* CreateStateStorageProxyStub();

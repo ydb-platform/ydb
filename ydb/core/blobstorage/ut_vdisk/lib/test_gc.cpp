@@ -7,14 +7,14 @@ using namespace NKikimr;
 // Put Keep flags into empty db, than VGet data
 SYNC_TEST_BEGIN(TGCPutKeepIntoEmptyDB, TSyncTestBase)
 virtual void Scenario(const TActorContext &ctx) {
-    TLogoBlobID generic(0, 1, 2, 0, 0, 0);
+    TLogoBlobID generic(DefaultTestTabletId, 1, 2, 0, 0, 0);
     TLogoBlobID part0(generic, 1);
     TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
 
     // prepare gc command
     TAutoPtr<TVector<TLogoBlobID>> Keep(new TVector<TLogoBlobID>);
     Keep->push_back(generic);
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 1;
     ui32 channel = 0;
@@ -51,7 +51,7 @@ SYNC_TEST_END(TGCPutKeepIntoEmptyDB, TSyncTestBase)
 SYNC_TEST_BEGIN(TGCPutBarrierVDisk0, TSyncTestWithSmallCommonDataset)
 virtual void Scenario(const TActorContext &ctx) {
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 1;
     ui32 channel = 0;
@@ -81,8 +81,8 @@ virtual void Scenario(const TActorContext &ctx) {
     TAutoPtr<IActor> readCmd;
     auto sendFunc = [this](const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-        TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-        TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
+        TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),
@@ -96,8 +96,8 @@ virtual void Scenario(const TActorContext &ctx) {
 
         TString pppp("pppp");
         TString qqqqq("qqqqq");
-        ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {});
-        ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
+        ExpectedSet.Put(TLogoBlobID(DefaultTestTabletId, 1, 472, 0, pppp.size(), 0), NKikimrProto::OK, {});
+        ExpectedSet.Put(TLogoBlobID(DefaultTestTabletId, 1, 915, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
     };
     auto checkFunc = [this](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         CheckQueryResult(ev, ctx, EQR_OK_EXPECTED_SET, &ExpectedSet);
@@ -112,7 +112,7 @@ SYNC_TEST_END(TGCPutBarrierVDisk0, TSyncTestWithSmallCommonDataset)
 SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
     virtual void Scenario(const TActorContext &ctx) {
         // prepare gc command
-        ui64 tabletID = 0;
+        ui64 tabletID = DefaultTestTabletId;
         ui32 recGen = 1;
         ui32 recGenCounter = 1;
         ui32 channel = 0;
@@ -149,8 +149,8 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
         TAutoPtr<IActor> readCmd;
         auto sendFunc = [this](const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-            TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
+            TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+            TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
@@ -164,8 +164,8 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
 
             TString pppp("pppp");
             TString qqqqq("qqqqq");
-            ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {});
-            ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
+            ExpectedSet.Put(TLogoBlobID(DefaultTestTabletId, 1, 472, 0, pppp.size(), 0), NKikimrProto::OK, {});
+            ExpectedSet.Put(TLogoBlobID(DefaultTestTabletId, 1, 915, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
         };
         auto checkFunc = [this](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
             CheckQueryResult(ev, ctx, EQR_OK_EXPECTED_SET, &ExpectedSet);
@@ -180,7 +180,7 @@ SYNC_TEST_END(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
 SYNC_TEST_BEGIN(TGCPutKeepBarrier, TSyncTestWithSmallCommonDataset)
 virtual void Scenario(const TActorContext &ctx) {
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 2;
     ui32 channel = 0;
@@ -189,7 +189,7 @@ virtual void Scenario(const TActorContext &ctx) {
     ui32 collectStep = 1000;
     TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
     TString qqqqq("qqqqq");
-    keep->push_back(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0));
+    keep->push_back(TLogoBlobID(DefaultTestTabletId, 1, 915, 0, qqqqq.size(), 0));
     TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
@@ -219,8 +219,8 @@ virtual void Scenario(const TActorContext &ctx) {
     TAutoPtr<IActor> readCmd;
     auto sendFunc = [this, qqqqq](const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-        TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-        TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
+        TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),
@@ -232,7 +232,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                                                   10);
         ctx.Send(instance.ActorID, req.release());
 
-        ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
+        ExpectedSet.Put(TLogoBlobID(DefaultTestTabletId, 1, 915, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
     };
     auto checkFunc = [this](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         CheckQueryResult(ev, ctx, EQR_OK_EXPECTED_SET, &ExpectedSet);
@@ -261,7 +261,7 @@ virtual void Scenario(const TActorContext &ctx) {
     LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
 
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 2;
     ui32 channel = 0;
@@ -280,8 +280,8 @@ virtual void Scenario(const TActorContext &ctx) {
         TAutoPtr<IActor> readCmd;
         auto sendFunc = [this](const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-            TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
-            TLogoBlobID to  (0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+            TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
+            TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
@@ -327,7 +327,7 @@ virtual void Scenario(const TActorContext &ctx) {
     LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
 
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = Max<ui32>();
     ui32 recGenCounter = Max<ui32>();
     ui32 channel = 0;
@@ -346,8 +346,8 @@ virtual void Scenario(const TActorContext &ctx) {
         TAutoPtr<IActor> readCmd;
         auto sendFunc = [this](const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-            TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
-            TLogoBlobID to  (0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+            TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
+            TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),

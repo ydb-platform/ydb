@@ -57,6 +57,7 @@
                                                         "ReadRanges": [
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Sequential",
                                                         "Table": "base_write_multi_usage_script_script/Temp"
                                                     }
                                                 ],
@@ -125,6 +126,7 @@
                                                             "Group (-\u221e, +\u221e)",
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Sequential",
                                                         "Table": "base_write_multi_usage_script_script/Input1"
                                                     }
                                                 ],
@@ -289,6 +291,7 @@
                                                             "Group (2)",
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_write_multi_usage_script_script/Input1"
                                                     }
                                                 ],

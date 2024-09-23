@@ -88,6 +88,8 @@ public:
     //! Starts the instance.
     void Start();
 
+    bool IsStarted() const;
+
     //! Stops the instance, cancels all subsequent invocations.
     //! Returns a future that becomes set when all outstanding callback
     //! invocations are finished and no more invocations are expected to happen.

@@ -87,6 +87,7 @@ namespace NYql::NDqs {
 
             STRICT_STFUNC(Handler, {
                 HFunc(TEvQueryResponse, OnReturnResult);
+                HFunc(TEvQueryStatus, OnQueryStatus);
                 cFunc(TEvents::TEvPoison::EventType, OnPoison);
                 SFunc(TEvents::TEvBootstrap, DoBootstrap);
                 hFunc(TEvDqStats, Handle);
@@ -191,6 +192,18 @@ namespace NYql::NDqs {
                 *RetryCounter +=1 ;
             }
 
+            void OnQueryStatus(TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+                Y_UNUSED(ev); Y_UNUSED(ctx);
+                if (!ExecuterActorId) {
+                    auto response = MakeHolder<TEvQueryStatusResponse>();
+                    auto* r = response->Record.MutableResponse();
+                    r->SetStatus("Awaiting");
+                    this->Send(ev->Sender, response.Release());
+                } else {
+                    ctx.Send(ev->Forward(ExecuterActorId)); 
+                }
+            }
+
             void OnReturnResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
                 auto& result = ev->Get()->Record;
                 Y_UNUSED(ctx);
@@ -251,6 +264,7 @@ namespace NYql::NDqs {
             const TString Username;
             TPromise<void> Promise;
             const TInstant RequestStartTime = TInstant::Now();
+            TActorId ExecuterActorId;
 
             TDqConfiguration::TPtr Settings = MakeIntrusive<TDqConfiguration>();
 
@@ -276,6 +290,7 @@ namespace NYql::NDqs {
                 : TServiceProxyActor(ctx, counters, traceId, username)
                 , GraphExecutionEventsActorId(graphExecutionEventsActorId)
             {
+                ExecutionTimeout = Request->GetExecutionTimeout();
             }
 
             void DoRetry() override {
@@ -378,7 +393,7 @@ namespace NYql::NDqs {
                 YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
                 MergeTaskMetas(params);
 
-                auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime));
+                ExecuterActorId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime, false, ExecutionTimeout));
 
                 TVector<TString> columns;
                 columns.reserve(Request->GetColumns().size());
@@ -396,7 +411,7 @@ namespace NYql::NDqs {
                 }
                 auto resultId = RegisterChild(NExecutionHelpers::MakeResultAggregator(
                     columns,
-                    executerId,
+                    ExecuterActorId,
                     TraceId,
                     secureParams,
                     Settings,
@@ -404,8 +419,8 @@ namespace NYql::NDqs {
                     Request->GetDiscard(),
                     GraphExecutionEventsActorId).Release());
                 auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId
-                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, ""), TDuration::Seconds(5)).Release());
-                Send(executerId, MakeHolder<TEvGraphRequest>(
+                    :  RegisterChild(NYql::MakeTaskController(TraceId, ExecuterActorId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, ""), TDuration::Seconds(5)).Release());
+                Send(ExecuterActorId, MakeHolder<TEvGraphRequest>(
                     *Request,
                     controlId,
                     resultId));
@@ -427,6 +442,7 @@ namespace NYql::NDqs {
             }
 
             NActors::TActorId GraphExecutionEventsActorId;
+            ui64 ExecutionTimeout;
         };
 
         TString GetVersionString() {
@@ -484,6 +500,7 @@ namespace NYql::NDqs {
             }
             auto* request = dynamic_cast<const Yql::DqsProto::ExecuteGraphRequest*>(ctx->GetRequest());
             auto session = Sessions.GetSession(request->GetSession());
+            uint64_t querySeqNo = request->GetQuerySeqNo();
             if (!session) {
                 TString message = TStringBuilder()
                                 << "Bad session: "
@@ -512,7 +529,7 @@ namespace NYql::NDqs {
 
                     session->DeleteRequest(actorId);
                 });
-            session->AddRequest(actorId);
+            session->AddRequest(actorId, querySeqNo);
         });
 
         ADD_REQUEST(SvnRevision, SvnRevisionRequest, SvnRevisionResponse, {
@@ -661,9 +678,29 @@ namespace NYql::NDqs {
                 },
                 TDuration::MilliSeconds(2000));
 
-            TActorId callbackId = ActorSystem.Register(callback.Release());
-
-            ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
+            uint64_t querySeqNo = request->GetQuerySeqNo();
+            if (querySeqNo) {
+                auto session = Sessions.GetSession(request->GetSession());
+                if (!session) {
+                    TString message = TStringBuilder()
+                                    << "Bad session: "
+                                    << request->GetSession();
+                    YQL_CLOG(DEBUG, ProviderDq) << message;
+                    ctx->ReplyError(grpc::INVALID_ARGUMENT, message);
+                } else {
+                    auto actorId = session->FindActorId(querySeqNo);
+                    if (!actorId) {
+                        auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::QueryStatusResponse>(ctx->GetArena());
+                        ctx->Reply(result, Ydb::StatusIds::SUCCESS);
+                    } else {
+                        TActorId callbackId = ActorSystem.Register(callback.Release());
+                        ActorSystem.Send(new IEventHandle(actorId, callbackId, ev.Release()));
+                    }
+                }
+            } else {
+                TActorId callbackId = ActorSystem.Register(callback.Release());
+                ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
+            }
         });
 
         ADD_REQUEST(RegisterNode, RegisterNodeRequest, RegisterNodeResponse, {

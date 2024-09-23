@@ -34,6 +34,7 @@ enum EDataSourceKind {
     YDB = 4;
     MYSQL = 5;
     MS_SQL_SERVER = 6;
+    GREENPLUM = 7;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.
@@ -61,6 +62,12 @@ message TS3DataSourceOptions {
     string bucket = 2;
 }
 
+// TGreenplumDataSourceOptions represents settings specific to Greenplum
+message TGreenplumDataSourceOptions {
+    // Greenplum schema
+    string schema = 1;
+}
+
 // TDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TDataSourceInstance {
     // Data source kind
@@ -82,5 +89,6 @@ message TDataSourceInstance {
         TPostgreSQLDataSourceOptions pg_options = 7;
         TClickhouseDataSourceOptions ch_options = 8;
         TS3DataSourceOptions s3_options = 9;
+        TGreenplumDataSourceOptions gp_options = 10;
     }
 }

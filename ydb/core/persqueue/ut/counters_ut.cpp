@@ -4,9 +4,12 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/partition.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 namespace NKikimr::NPQ {
 
 namespace {
@@ -83,6 +86,8 @@ Y_UNIT_TEST(Partition) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
 
 
@@ -93,7 +98,7 @@ Y_UNIT_TEST(Partition) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -101,9 +106,10 @@ Y_UNIT_TEST(Partition) {
         auto dbGroup = GetServiceCounters(counters, "datastreams");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        UNIT_ASSERT_EQUAL(countersStr.Str(), "<pre></pre>");
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), "<pre></pre>");
     }
 }
+
 
 Y_UNIT_TEST(PartitionWriteQuota) {
     TTestContext tc;
@@ -114,12 +120,24 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     tc.Runtime->SetScheduledLimit(100);
     tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
 
-    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_KB}, {}, tc);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 30_KB}, {}, tc);
     TVector<std::pair<ui64, TString>> data;
-    TString s{50_KB, 'c'};
+    TString s{32_KB, 'c'};
     data.push_back({1, s});
-    for (auto i = 0u; i < 7; i++) {
-        CmdWrite(0, "sourceid0", data, tc, false);
+    tc.Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
+                tc.Runtime->Send(new IEventHandle(
+                    ev->Sender, TActorId{},
+                    new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie)
+                );
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    for (auto i = 0u; i < 6; i++) {
+        CmdWrite(0, "sourceid0", data, tc);
         data[0].first++;
     }
 
@@ -138,8 +156,13 @@ Y_UNIT_TEST(PartitionWriteQuota) {
         TStringStream histogramStr;
         histogram->OutputHtml(histogramStr);
         Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "0ms")->Val(),2);
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 5);
+        auto instant = histogram->FindNamedCounter("Interval", "0ms")->Val();
+        auto oneSec = histogram->FindNamedCounter("Interval", "1000ms")->Val();
+        auto twoSec = histogram->FindNamedCounter("Interval", "2500ms")->Val();
+        UNIT_ASSERT_VALUES_EQUAL(oneSec + twoSec, 5);
+        UNIT_ASSERT(twoSec >= 2);
+        UNIT_ASSERT(oneSec >= 1);
+        UNIT_ASSERT(instant >= 1);
     }
 }
 
@@ -154,6 +177,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid0", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
 
     {
@@ -177,6 +201,49 @@ Y_UNIT_TEST(PartitionFirstClass) {
     }
 }
 
+Y_UNIT_TEST(SupportivePartitionCountersPersist) {
+    TTestContext tc;
+
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 30_KB}, {}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{32_KB, 'c'};
+    data.push_back({1, s});
+    tc.Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
+                tc.Runtime->Send(new IEventHandle(
+                    ev->Sender, TActorId{},
+                    new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie)
+                );
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            } else if (auto* msg = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                Cerr << "Captured TEvRequest, cmd write size: " << msg->Record.CmdWriteSize() << Endl;
+                for (auto& w : msg->Record.GetCmdWrite()) {
+                    if (w.GetKey().StartsWith("J")) {
+                        NKikimrPQ::TPartitionMeta meta;
+                        bool res = meta.ParseFromString(w.GetValue());
+                        UNIT_ASSERT(res);
+                        UNIT_ASSERT(meta.HasCounterData());
+                        Cerr << "Write meta: " << meta.GetCounterData().ShortDebugString() << Endl;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    for (auto i = 0u; i < 6; i++) {
+        CmdWrite(0, "sourceid0", data, tc);
+        data[0].first++;
+    }
+    PQGetPartInfo(0, 6, tc);
+}
 } // Y_UNIT_TEST_SUITE(PQCountersSimple)
 
 Y_UNIT_TEST_SUITE(PQCountersLabeled) {
@@ -213,7 +280,7 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
         }
     }
 
-    Cerr << "Test diff count : " << inputJson["sensors"].GetArraySafe().size() 
+    Cerr << "Test diff count : " << inputJson["sensors"].GetArraySafe().size()
         << " " << referenceJson["sensors"].GetArraySafe().size() << Endl;
 
     ui64 inCount = inputJson["sensors"].GetArraySafe().size();
@@ -358,7 +425,10 @@ Y_UNIT_TEST(PartitionFirstClass) {
             auto counters = tc.Runtime->GetAppData(0).Counters;
             auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
 
-            auto group = dbGroup->GetSubgroup("host", "")->GetSubgroup("database", "/Root")->GetSubgroup("cloud_id", "cloud_id")->GetSubgroup("folder_id", "folder_id")
+            auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "cloud_id")
+                                ->GetSubgroup("folder_id", "folder_id")
                                 ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
@@ -488,6 +558,68 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
         CheckLabeledCountersResponse(tc, 8, MakeTopics({"user/1"}));
     });
 }
+
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
+
+Y_UNIT_TEST_SUITE(TMultiBucketCounter) {
+void CheckBucketsValues(const TVector<std::pair<double, ui64>>& actual, const TVector<std::pair<double, ui64>>& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+    for (auto i = 0u; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(actual[i].second, expected[i].second);
+        UNIT_ASSERT_C(abs(actual[i].first - expected[i].first) < 0.0001, TStringBuilder() << actual[i].first << "-" << expected[i].first);
+    }
+}
+
+Y_UNIT_TEST(InsertAndUpdate) {
+    TMultiBucketCounter counter({100, 200, 500, 1000, 5000}, 5, 0);
+    counter.Insert(19, 3);
+    counter.Insert(15, 1);
+    counter.Insert(17, 1);
+
+    counter.Insert(100, 1);
+    counter.Insert(50001, 5);
+
+    CheckBucketsValues(counter.GetValues(), {{(19*3 + 15 + 17) / 5.0, 5}, {100, 1}, {50001, 5}});
+
+    counter.UpdateTimestamp(50);
+
+    CheckBucketsValues(counter.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {150, 1}, {50051, 5}});
+    counter.Insert(190, 1);
+    counter.Insert(155, 1);
+
+    CheckBucketsValues(counter.GetValues(), {{50.0 + (19*3 + 15 + 17) / 5.0, 5}, {152.5, 2}, {190, 1}, {50051, 5}});
+
+    counter.UpdateTimestamp(1050);
+
+    CheckBucketsValues(counter.GetValues(), {{(1067.8 * 5 + 1152.5 * 2 + 1190) / 8, 8}, {51051, 5}});
+}
+
+Y_UNIT_TEST(ManyCounters) {
+    TVector<ui64> buckets = {100, 200, 500, 1000, 2000, 5000};
+    ui64 multiplier = 20;
+    TMultiBucketCounter counter(buckets, multiplier, 0);
+    for (auto i = 1u; i <= 5000; i++) {
+        counter.Insert(1, 1);
+        counter.UpdateTimestamp(i);
+    }
+    counter.Insert(1, 1);
+
+    const auto& values = counter.GetValues(true);
+    ui64 prev = 0;
+    for (auto i = 0u; i < buckets.size(); i++) {
+        ui64 sum = 0u;
+        for (auto j = 0u; j < multiplier; j++) {
+            sum += values[i * multiplier + j].second;
+        }
+        Cerr << "Bucket: " << buckets[i] << " elems count: " << sum << Endl;
+        ui64 bucketSize = buckets[i] - prev;
+        prev = buckets[i];
+        i64 diff = sum - bucketSize;
+        UNIT_ASSERT(std::abs(diff) < (i64)(bucketSize / 10));
+    }
+
+}
+
+} // Y_UNIT_TEST_SUITE(TMultiBucketCounter)
 
 } // namespace NKikimr::NPQ

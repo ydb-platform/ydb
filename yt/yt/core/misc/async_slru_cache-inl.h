@@ -109,6 +109,15 @@ void TAsyncSlruCacheListManager<TItem, TDerived>::UpdateWeight(TItem* item, i64 
 }
 
 template <class TItem, class TDerived>
+void TAsyncSlruCacheListManager<TItem, TDerived>::UpdateCookie(TItem* item, i64 countDelta, i64 weightDelta)
+{
+    YT_VERIFY(item->Empty());
+    CookieWeightCounter += weightDelta;
+    item->CachedWeight += weightDelta;
+    AsDerived()->OnCookieUpdated(countDelta, weightDelta);
+}
+
+template <class TItem, class TDerived>
 TIntrusiveListWithAutoDelete<TItem, TDelete> TAsyncSlruCacheListManager<TItem, TDerived>::TrimNoDelete()
 {
     // Move from older to younger.
@@ -121,7 +130,7 @@ TIntrusiveListWithAutoDelete<TItem, TDelete> TAsyncSlruCacheListManager<TItem, T
 
     // Evict from younger.
     TIntrusiveListWithAutoDelete<TItem, TDelete> evictedItems;
-    while (!YoungerLruList.Empty() && static_cast<i64>(YoungerWeightCounter + OlderWeightCounter) > capacity) {
+    while (!YoungerLruList.Empty() && static_cast<i64>(YoungerWeightCounter + OlderWeightCounter + CookieWeightCounter) > capacity) {
         auto* item = &*(--YoungerLruList.End());
         PopFromLists(item);
         evictedItems.PushBack(item);
@@ -179,6 +188,10 @@ void TAsyncSlruCacheListManager<TItem, TDerived>::OnYoungerUpdated(i64 /*deltaCo
 
 template <class TItem, class TDerived>
 void TAsyncSlruCacheListManager<TItem, TDerived>::OnOlderUpdated(i64 /*deltaCount*/, i64 /*deltaWeight*/)
+{ }
+
+template <class TItem, class TDerived>
+void TAsyncSlruCacheListManager<TItem, TDerived>::OnCookieUpdated(i64 /*deltaCount*/, i64 /*deltaWeight*/)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -258,6 +271,14 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TAsyncSlruCacheBase(
     });
     olderSegmentProfiler.AddFuncGauge("/size", MakeStrong(this), [this] {
         return OlderSizeCounter_.load();
+    });
+
+    auto cookieSegmentProfiler = profiler.WithTag("segment", "cookie");
+    cookieSegmentProfiler.AddFuncGauge("/size", MakeStrong(this), [this] {
+        return CookieSizeCounter_.load();
+    });
+    cookieSegmentProfiler.AddFuncGauge("/weight", MakeStrong(this), [this] {
+        return CookieWeightCounter_.load();
     });
 
     GhostCachesEnabled_.store(Config_->EnableGhostCaches);
@@ -535,15 +556,15 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const TKey& ke
 }
 
 template <class TKey, class TValue, class THash>
-auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key) -> TInsertCookie
+auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 cookieWeight) -> TInsertCookie
 {
     auto* shard = GetShardByKey(key);
 
     if (auto valueFuture = DoLookup(shard, key)) {
         if (GhostCachesEnabled_.load()) {
             if (valueFuture.IsSet() && valueFuture.Get().IsOK()) {
-                bool smallInserted = shard->SmallGhost.BeginInsert(key);
-                bool largeInserted = shard->LargeGhost.BeginInsert(key);
+                bool smallInserted = shard->SmallGhost.BeginInsert(key, cookieWeight);
+                bool largeInserted = shard->LargeGhost.BeginInsert(key, cookieWeight);
                 if (smallInserted || largeInserted) {
                     const auto& value = valueFuture.Get().Value();
                     i64 weight = GetWeight(value);
@@ -596,10 +617,10 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key) -> T
 
             if (GhostCachesEnabled_.load()) {
                 if (value) {
-                    if (shard->SmallGhost.BeginInsert(key)) {
+                    if (shard->SmallGhost.BeginInsert(key, cookieWeight)) {
                         shard->SmallGhost.EndInsert(value, weight);
                     }
-                    if (shard->LargeGhost.BeginInsert(key)) {
+                    if (shard->LargeGhost.BeginInsert(key, cookieWeight)) {
                         shard->LargeGhost.EndInsert(value, weight);
                     }
                 } else {
@@ -625,6 +646,12 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key) -> T
 
             Counters_.MissedCounter.Increment();
 
+            shard->UpdateCookie(item, /*countDelta*/ 1, cookieWeight);
+            if (cookieWeight > 0) {
+                // NB: Releases the lock.
+                NotifyOnTrim(shard->Trim(guard), nullptr, cookieWeight);
+            }
+
             guard.Release();
 
             auto insertCookie = TInsertCookie(
@@ -634,8 +661,8 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key) -> T
                 true);
 
             if (GhostCachesEnabled_.load()) {
-                insertCookie.InsertedIntoSmallGhost_ = shard->SmallGhost.BeginInsert(key);
-                insertCookie.InsertedIntoLargeGhost_ = shard->LargeGhost.BeginInsert(key);
+                insertCookie.InsertedIntoSmallGhost_ = shard->SmallGhost.BeginInsert(key, cookieWeight);
+                insertCookie.InsertedIntoLargeGhost_ = shard->LargeGhost.BeginInsert(key, cookieWeight);
             }
 
             return insertCookie;
@@ -679,6 +706,44 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key) -> T
 }
 
 template <class TKey, class TValue, class THash>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::UpdateCookieWeight(const TInsertCookie& insertCookie, i64 newWeight)
+{
+    YT_VERIFY(newWeight >= 0);
+    auto key = insertCookie.GetKey();
+
+    auto* shard = GetShardByKey(key);
+
+    auto guard = WriterGuard(shard->SpinLock);
+
+    auto itemIt = shard->ItemMap.find(key);
+    if (itemIt == shard->ItemMap.end()) {
+        // Insert cookie canceled.
+        YT_VERIFY(!insertCookie.IsActive());
+        return;
+    }
+    auto* item = itemIt->second;
+
+    i64 weightDelta = newWeight - item->CachedWeight;
+    shard->UpdateCookie(item, /*countDelta*/ 0, weightDelta);
+    if (weightDelta > 0) {
+        shard->DrainTouchBuffer();
+
+        // NB: Releases the lock.
+        NotifyOnTrim(shard->Trim(guard), nullptr, weightDelta);
+    } else {
+        guard.Release();
+        OnWeightUpdated(weightDelta);
+    }
+
+    if (insertCookie.InsertedIntoSmallGhost_) {
+        shard->SmallGhost.UpdateCookieWeight(key, newWeight);
+    }
+    if (insertCookie.InsertedIntoLargeGhost_) {
+        shard->LargeGhost.UpdateCookieWeight(key, newWeight);
+    }
+}
+
+template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& insertCookie, TValuePtr value)
 {
     YT_VERIFY(value);
@@ -699,6 +764,9 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& in
 
     YT_VERIFY(shard->ValueMap.emplace(key, value.Get()).second);
 
+    auto cookieWeight = item->CachedWeight;
+    shard->UpdateCookie(item, /*countDelta*/ -1, -cookieWeight);
+
     i64 weight = GetWeight(item->Value);
     shard->PushToYounger(item, weight);
     // MissedCounter and AsyncHitCounter have already been incremented in BeginInsert.
@@ -706,7 +774,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& in
     Counters_.AsyncHitWeightCounter.Increment(weight * item->AsyncHitCount.load());
 
     // NB: Releases the lock.
-    NotifyOnTrim(shard->Trim(guard), value);
+    NotifyOnTrim(shard->Trim(guard), value, -cookieWeight);
 
     // We do not want to break the ghost cache invariants, according to which either EndInsert
     // or CancelInsert must be called for each item in Inserting state. So we end the insertion
@@ -753,9 +821,16 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::CancelInsert(const TInsertCookie&
 
     YT_VERIFY(!item->Value);
 
+    auto cookieWeight = item->CachedWeight;
+    shard->UpdateCookie(item, /*countDelta*/ -1, -cookieWeight);
+
     delete item;
 
     guard.Release();
+
+    if (cookieWeight > 0) {
+        OnWeightUpdated(-cookieWeight);
+    }
 
     promise.Set(error);
 }
@@ -875,9 +950,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
         Counters_.MissedWeightCounter.Increment(weightDelta);
     }
 
-    NotifyOnTrim(shard->Trim(guard), nullptr);
-
-    OnWeightUpdated(weightDelta);
+    NotifyOnTrim(shard->Trim(guard), nullptr, weightDelta);
 
     if (GhostCachesEnabled_.load()) {
         shard->SmallGhost.UpdateWeight(key, newWeight);
@@ -1012,7 +1085,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Touch(const TValuePt
 }
 
 template <class TKey, class TValue, class THash>
-bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::BeginInsert(const TKey& key)
+bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::BeginInsert(const TKey& key, i64 cookieWeight)
 {
     if (DoLookup(key, true)) {
         return false;
@@ -1042,6 +1115,12 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::BeginInsert(const TK
     Counters_->MissedCounter.Increment();
     YT_VERIFY(ItemMap_.emplace(key, item).second);
 
+    this->UpdateCookie(item, /*countDelta*/ 1, cookieWeight);
+    if (cookieWeight > 0) {
+        // NB: Releases the lock.
+        Trim(guard);
+    }
+
     return true;
 }
 
@@ -1060,6 +1139,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::CancelInsert(const T
 
     ItemMap_.erase(itemIt);
 
+    this->UpdateCookie(item, /*countDelta*/ -1, -item->CachedWeight);
+
     delete item;
 }
 
@@ -1076,6 +1157,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::EndInsert(const TVal
     auto* item = GetOrCrash(ItemMap_, key);
 
     YT_VERIFY(!item->Inserted);
+    this->UpdateCookie(item, /*countDelta*/ -1, -item->CachedWeight);
 
     item->Value = value;
     item->Inserted = true;
@@ -1185,6 +1267,30 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::UpdateWeight(const T
 }
 
 template <class TKey, class TValue, class THash>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::UpdateCookieWeight(const TKey& key, i64 newWeight)
+{
+    auto guard = WriterGuard(SpinLock);
+
+    auto itemIt = ItemMap_.find(key);
+    if (itemIt == ItemMap_.end()) {
+        // Insert cookie canceled.
+        return;
+    }
+
+    auto* item = itemIt->second;
+    YT_VERIFY(!item->Inserted);
+
+    i64 weightDelta = newWeight - item->CachedWeight;
+    this->UpdateCookie(item, /*countDelta*/ 0, weightDelta);
+    if (weightDelta > 0) {
+        this->DrainTouchBuffer();
+
+        // NB: Releases the lock.
+        Trim(guard);
+    }
+}
+
+template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Reconfigure(i64 capacity, double youngerSizeFraction)
 {
     auto writerGuard = WriterGuard(SpinLock);
@@ -1253,10 +1359,21 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TShard::OnOlderUpdated(i64 deltaC
 }
 
 template <class TKey, class TValue, class THash>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TShard::OnCookieUpdated(i64 deltaCount, i64 deltaWeight)
+{
+    Parent->CookieSizeCounter_ += deltaCount;
+    Parent->CookieWeightCounter_ += deltaWeight;
+}
+
+template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::NotifyOnTrim(
     const std::vector<TValuePtr>& evictedValues,
-    const TValuePtr& insertedValue)
+    const TValuePtr& insertedValue,
+    i64 weightDelta)
 {
+    if (weightDelta != 0) {
+        OnWeightUpdated(weightDelta);
+    }
     if (insertedValue) {
         OnAdded(insertedValue);
     }
@@ -1321,6 +1438,14 @@ template <class TKey, class TValue, class THash>
 bool TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::IsActive() const
 {
     return Active_;
+}
+
+template <class TKey, class TValue, class THash>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::UpdateWeight(i64 newWeight)
+{
+    if (Active_) {
+        Cache_->UpdateCookieWeight(*this, newWeight);
+    }
 }
 
 template <class TKey, class TValue, class THash>

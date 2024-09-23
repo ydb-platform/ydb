@@ -11,29 +11,13 @@ namespace NKikimr {
             ForEach(Data, fblob, fblock, fbar, fblock2);
         }
 
-        void TNaiveFragmentReader::ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock,
-                                           TReadBarrierRec fbar, TReadBlockRecV2 fblock2) {
-            const TRecordHdr *begin = (const TRecordHdr *)(d.data());
-            const TRecordHdr *end = (const TRecordHdr *)(d.data() + d.size());
+        std::vector<const TRecordHdr*> TNaiveFragmentReader::ListRecords() {
+            std::vector<const TRecordHdr*> records = {};
+            TWriteRecordToList writeToList{records};
 
-            for (const TRecordHdr *it = begin; it < end; it = it->Next()) {
-                switch (it->RecType) {
-                    case TRecordHdr::RecLogoBlob:
-                        fblob(it->GetLogoBlob());
-                        break;
-                    case TRecordHdr::RecBlock:
-                        fblock(it->GetBlock());
-                        break;
-                    case TRecordHdr::RecBarrier:
-                        fbar(it->GetBarrier());
-                        break;
-                    case TRecordHdr::RecBlockV2:
-                        fblock2(it->GetBlockV2());
-                        break;
-                    default:
-                        Y_ABORT("Unknown RecType: %s", it->ToString().data());
-                }
-            }
+            ForEach(Data, writeToList, writeToList, writeToList, writeToList);
+
+            return std::move(records);
         }
 
         bool TNaiveFragmentReader::Check(TString &errorString) {
@@ -62,55 +46,30 @@ namespace NKikimr {
             }
         }
 
+        std::vector<const TRecordHdr*> TLz4FragmentReader::ListRecords() {
+            Decompress();
+            std::vector<const TRecordHdr*> records = {};
+            TWriteRecordToList writeToList{records};
+
+            TNaiveFragmentReader::ForEach(Uncompressed, writeToList, writeToList, writeToList, writeToList);
+
+            return std::move(records);
+        }
+
         ////////////////////////////////////////////////////////////////////////////
         // TBaseOrderedFragmentReader
         ////////////////////////////////////////////////////////////////////////////
+
         void TBaseOrderedFragmentReader::ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) {
-            Decompress();
+            return ForEachImpl(fblob, fblock, fbar, fblock2);
+        }
 
-            using THeapItem = std::tuple<TRecordHdr::ESyncLogRecType, const void*, ui32>;
-            auto comp = [](const THeapItem& x, const THeapItem& y) { return std::get<2>(y) < std::get<2>(x); };
+        std::vector<const TRecordHdr*> TBaseOrderedFragmentReader::ListRecords() {
+            std::vector<const TRecordHdr*> records;
+            TWriteRecordToList writeToList{records};
 
-            TStackVec<THeapItem, 4> heap;
-
-#define ADD_HEAP(NAME, TYPE) \
-            if (!Records.NAME.empty()) { \
-                heap.emplace_back(TRecordHdr::TYPE, &Records.NAME.front(), Records.NAME.front().Counter); \
-            }
-            ADD_HEAP(LogoBlobs, RecLogoBlob)
-            ADD_HEAP(Blocks, RecBlock)
-            ADD_HEAP(Barriers, RecBarrier)
-            ADD_HEAP(BlocksV2, RecBlockV2)
-
-            std::make_heap(heap.begin(), heap.end(), comp);
-
-            while (!heap.empty()) {
-                std::pop_heap(heap.begin(), heap.end(), comp);
-                auto& item = heap.back(); // say thanks to Microsoft compiler for not supporting tuple binding correctly
-                auto& type = std::get<0>(item);
-                auto& ptr = std::get<1>(item);
-                auto& counter = std::get<2>(item);
-                switch (type) {
-#define PROCESS(NAME, TYPE, FUNC) \
-                    case TRecordHdr::TYPE: { \
-                        using T = std::decay_t<decltype(Records.NAME)>::value_type; \
-                        const T *item = static_cast<const T*>(ptr); \
-                        FUNC(item); \
-                        if (++item != Records.NAME.data() + Records.NAME.size()) { \
-                            ptr = item; \
-                            counter = item->Counter; \
-                            std::push_heap(heap.begin(), heap.end(), comp); \
-                        } else { \
-                            heap.pop_back(); \
-                        } \
-                        break; \
-                    }
-                    PROCESS(LogoBlobs, RecLogoBlob, fblob)
-                    PROCESS(Blocks, RecBlock, fblock)
-                    PROCESS(Barriers, RecBarrier, fbar)
-                    PROCESS(BlocksV2, RecBlockV2, fblock2)
-                }
-            }
+            ForEachImpl(writeToList, writeToList, writeToList, writeToList);
+            return std::move(records);
         }
 
         ////////////////////////////////////////////////////////////////////////////

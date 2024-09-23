@@ -2,6 +2,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_cost_function.h>
 
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
@@ -142,6 +143,7 @@ struct TEquiJoinLinkSettings {
     TPositionHandle Pos;
     TSet<TString> LeftHints;
     TSet<TString> RightHints;
+    EJoinAlgoType JoinAlgo = EJoinAlgoType::Undefined;
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
 };

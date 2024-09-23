@@ -81,10 +81,20 @@ Y_UNIT_TEST(NonReordable) {
     joinConditions.insert({NDq::TJoinColumn{"a", "b"}, NDq::TJoinColumn{"a","c"}});
     auto root = std::make_shared<TJoinOptimizerNode>(
         left, right, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::GraceJoin, true);
-    TDummyProviderContext optCtx;
+    TBaseProviderContext optCtx;
     std::unique_ptr<IOptimizerNew> opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(optCtx, 1024));
     auto result = opt->JoinSearch(root);
-    UNIT_ASSERT(root == result);
+
+    // Join tree is built from scratch with DPhyp, check the structure by comapring with Stats 
+    UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
+    UNIT_ASSERT(
+        std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == left->Stats
+    );
+
+    UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
+    UNIT_ASSERT(
+        std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == right->Stats
+    );
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2Tables) {

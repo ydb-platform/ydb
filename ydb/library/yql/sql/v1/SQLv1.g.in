@@ -62,6 +62,10 @@ sql_stmt_core:
   | upsert_object_stmt
   | create_view_stmt
   | drop_view_stmt
+  | alter_replication_stmt
+  | create_resource_pool_stmt
+  | alter_resource_pool_stmt
+  | drop_resource_pool_stmt
 ;
 
 expr:
@@ -555,7 +559,9 @@ join_constraint:
   | USING pure_column_or_named_list
 ;
 
-into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source;
+returning_columns_list: RETURNING (ASTERISK | an_id (COMMA an_id)*);
+
+into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source returning_columns_list?;
 
 into_values_source:
     pure_column_list? values_source
@@ -662,6 +668,7 @@ alter_table_action:
   | alter_table_alter_changefeed
   | alter_table_drop_changefeed
   | alter_table_rename_index_to
+  | alter_table_alter_index
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -695,6 +702,7 @@ alter_table_rename_index_to: RENAME INDEX an_id TO an_id;
 alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
+alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 
 column_schema: an_id_schema type_name_or_bind family_relation? opt_column_constraints;
 family_relation: FAMILY an_id;
@@ -752,6 +760,12 @@ split_boundaries:
 
 literal_value_list: LPAREN literal_value (COMMA literal_value)* RPAREN;
 
+alter_table_alter_index_action:
+    alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
 create_user_stmt: CREATE USER role_name create_user_option?;
@@ -787,6 +801,21 @@ permission_name: permission_id | STRING_VALUE;
 
 permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
 
+create_resource_pool_stmt: CREATE RESOURCE POOL object_ref
+  with_table_settings
+;
+
+alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
+  alter_resource_pool_action (COMMA alter_resource_pool_action)*
+;
+alter_resource_pool_action:
+    alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
     WITH LPAREN replication_settings RPAREN
@@ -795,6 +824,13 @@ create_replication_stmt: CREATE ASYNC REPLICATION object_ref
 replication_target: object_ref AS object_ref;
 replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
 replication_settings_entry: an_id EQUALS STRING_VALUE;
+
+alter_replication_stmt: ALTER ASYNC REPLICATION object_ref alter_replication_action (COMMA alter_replication_action)*;
+alter_replication_action:
+    alter_replication_set_setting
+;
+
+alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 
@@ -822,8 +858,8 @@ simple_table_ref_core: object_ref | AT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
-delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
-update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
+delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
+update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
@@ -1094,6 +1130,7 @@ keyword_expr_uncompat:
   | PROCESS
   | REDUCE
   | RETURN
+  | RETURNING
   | ROLLUP
   | SELECT
   | SYMMETRIC
@@ -1142,18 +1179,108 @@ keyword_hint_uncompat:
 ;
 
 keyword_as_compat:
-    ATTRIBUTES
+    ABORT
+  | ACTION
+  | ADD
+  | AFTER
+  | ALTER
+  | ANALYZE
+  | AND
+  | ANSI
+  | ARRAY
+  | ASC
+  | ASYNC
+  | ATTACH
+  | ATTRIBUTES
+  | AUTOINCREMENT
+  | BEFORE
+  | BEGIN
+  | BERNOULLI
+  | BY
+  | CASCADE
+  | CHANGEFEED
+  | CHECK
+  // | COLLATE
+  | COMMIT
+  | CONDITIONAL
+  | CONFLICT
   | CONNECT
+  | CONSTRAINT
   | CONSUMER
+  | COVER
+  | CREATE
+  // | CROSS
+  | CURRENT
   | DATA
+  | DATABASE
+  | DECIMAL
+  | DECLARE
+  | DEFAULT
+  | DEFERRABLE
+  | DEFERRED
+  // | DEFINE
+  | DELETE
+  | DESC
   | DESCRIBE
+  | DETACH
   | DIRECTORY
+  | DISABLE
+  | DISCARD
+  // | DO
+  | DROP
+  | EACH
+  | ELSE
+  | EMPTY
+  | ENCRYPTED
+  | END
+  | ERROR
+  | ESCAPE
+  | EVALUATE
+  | EXCLUDE
+  // | EXCLUSION
+  | EXCLUSIVE
+  | EXPLAIN
+  | EXPORT
+  | EXTERNAL
+  | FAIL
+  | FAMILY
+  | FILTER
   | FIRST
+  | FLATTEN
+  | FOLLOWING
+  | FOR
+  | FOREIGN
+  | FUNCTION
+  | GLOB
   | GRANT
+  | GROUP
+  | GROUPING
+  | HASH
+  | IF
+  | IGNORE
+  | ILIKE
+  | IMMEDIATE
+  | IMPORT
+  | IN
+  | INDEX
+  | INDEXED
+  | INHERITS
   | INITIAL
+  | INITIALLY
+  // | INNER
+  | INSERT
+  | INSTEAD
+  | INTO
+  | IS
+  // | ISNULL
+  // | JOIN
+  // | KEY
   | LAST
+  // | LEFT
   | LEGACY
+  | LIKE
   | MANAGE
+  | MATCH
   | MATCHES
   | MATCH_RECOGNIZE
   | MEASURES
@@ -1161,33 +1288,105 @@ keyword_as_compat:
   | MILLISECONDS
   | MODIFY
   | NANOSECONDS
+  // | NATURAL
   | NEXT
+  | NO
+  // | NOTNULL
+  | NULLS
+  | OBJECT
+  | OF
+  | OFFSET
   | OMIT
+  // | ON
   | ONE
+  | ONLY
   | OPTION
+  | OR
+  | ORDER
+  | OTHERS
+  // | OUTER
+  // | OVER
   | PARALLEL
+  | PARTITION
+  | PASSING
+  | PASSWORD
   | PAST
   | PATTERN
   | PER
   | PERMUTE
+  | PLAN
+  | POOL
+  | PRAGMA
+  | PRECEDING
+  // | PRESORT
+  | PRIMARY
   | PRIVILEGES
+//  | QUERY
   | QUEUE
+  | RAISE
 //  | READ
+  | REFERENCES
+  | REGEXP
+  | REINDEX
+  | RELEASE
   | REMOVE
+  | RENAME
+  | REPLACE
   | REPLICATION
+  | RESET
+  | RESPECT
+  | RESTRICT
+  // | RESULT
+  | REVERT
   | REVOKE
+  // | RIGHT
+  | RLIKE
+  | ROLLBACK
+  | ROW
+  // | SAMPLE
+  | SAVEPOINT
   | SECONDS
   | SEEK
+  // | SEMI
+  | SETS
   | SHOW
   | SKIP
   | SOURCE
+  | SUBQUERY
   | SUBSET
+  | SYMBOLS
+  | SYNC
+  | SYSTEM
+  | TABLE
   | TABLES
+  | TABLESAMPLE
+  | TABLESTORE
+  | TEMP
+  | TEMPORARY
+  | THEN
+  | TIES
+  | TO
   | TOPIC
+  | TRANSACTION
+  | TRIGGER
   | TYPE
+  | UNCONDITIONAL
+  | UNIQUE
+  | UNKNOWN
   | UNMATCHED
+  | UPDATE
+  | UPSERT
+  | USE
+  | USER
+//  | USING
+  | VACUUM
+  | VALUES
+//  | VIEW
+  | VIRTUAL
+//  | WITH
+  | WRAPPER
 //  | WRITE
-
+  | XOR
 ;
 
 // insert new keyword into keyword_as_compat also
@@ -1328,6 +1527,7 @@ keyword_compat: (
   | PER
   | PERMUTE
   | PLAN
+  | POOL
   | PRAGMA
   | PRECEDING
   | PRESORT
@@ -1349,7 +1549,6 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
-  | RETURNING
   | REVERT
   | REVOKE
   | RIGHT
@@ -1677,6 +1876,7 @@ PATTERN: P A T T E R N;
 PER: P E R;
 PERMUTE: P E R M U T E;
 PLAN: P L A N;
+POOL: P O O L;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
 PRESORT: P R E S O R T;

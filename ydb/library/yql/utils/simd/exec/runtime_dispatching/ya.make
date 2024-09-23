@@ -1,5 +1,3 @@
-OWNER(g:yql)
-
 LIBRARY()
 
 PEERDIR(
@@ -12,7 +10,7 @@ END()
 
 RECURSE(
     AVX2_algo
-    SSE42_algo
     Fallback_algo
     main
+    SSE42_algo
 )

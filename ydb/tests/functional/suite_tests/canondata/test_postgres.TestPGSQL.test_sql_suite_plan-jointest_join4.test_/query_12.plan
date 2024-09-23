@@ -52,6 +52,7 @@
                                                     "x (-\u221e, +\u221e)",
                                                     "y (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Sequential",
                                                 "Table": "postgres_jointest/join4.test_plan/qrt3"
                                             }
                                         ],

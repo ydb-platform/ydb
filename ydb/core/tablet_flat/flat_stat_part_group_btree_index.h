@@ -6,7 +6,7 @@
 
 namespace NKikimr::NTable {
 
-class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
+class TStatsPartGroupBtreeIndexIter : public IStatsPartGroupIter {
     using TCells = NPage::TCells;
     using TBtreeIndexNode = NPage::TBtreeIndexNode;
     using TGroupId = NPage::TGroupId;
@@ -37,7 +37,7 @@ class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
     };
 
 public:
-    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId,
+    TStatsPartGroupBtreeIndexIter(const TPart* part, IPages* env, TGroupId groupId,
             ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints)
         : Part(part)
         , Env(env)
@@ -58,7 +58,7 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        Nodes.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, 0, Meta.DataSize);
+        Nodes.emplace_back(Meta.GetPageId(), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
 
         for (ui32 height = 0; height < Meta.LevelCount; height++) {
             bool hasChanges = false;
@@ -76,7 +76,7 @@ public:
                     continue; // don't go deeper
                 }
 
-                auto page = Env->TryGetPage(Part, nodeState.PageId);
+                auto page = Env->TryGetPage(Part, nodeState.PageId, {});
                 if (!page) {
                     ready = false;
                     continue; // continue requesting other nodes
@@ -86,13 +86,14 @@ public:
                 for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
                     auto& child = node.GetShortChild(pos);
 
-                    TRowId beginRowId = pos ? node.GetShortChild(pos - 1).RowCount : nodeState.BeginRowId;
-                    TRowId endRowId = child.RowCount;
+                    TPageId pageId = child.GetPageId();
+                    TRowId beginRowId = pos ? node.GetShortChild(pos - 1).GetRowCount() : nodeState.BeginRowId;
+                    TRowId endRowId = child.GetRowCount();
                     TCellsIterable beginKey = pos ? node.GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : nodeState.BeginKey;
-                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).DataSize : nodeState.BeginDataSize;
-                    ui64 endDataSize = child.DataSize;
+                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).GetDataSize() : nodeState.BeginDataSize;
+                    ui64 endDataSize = child.GetDataSize();
 
-                    nextNodes.emplace_back(child.PageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
+                    nextNodes.emplace_back(pageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
                     hasChanges = true;
                 }
             }
@@ -137,7 +138,7 @@ public:
     }
 
     TRowId GetEndRowId() const override {
-        return Meta.RowCount;
+        return Meta.GetRowCount();
     }
 
     TPageId GetPageId() const override {
@@ -154,6 +155,16 @@ public:
 
     TCell GetKeyCell(TPos index) const override {
         return GetCurrentNode().BeginKey.Iter().At(index);
+    }
+
+    void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
+        keyCells.clear();
+
+        auto iter = GetCurrentNode().BeginKey.Iter();
+        for (TPos pos : xrange(iter.Count())) {
+            Y_UNUSED(pos);
+            keyCells.push_back(iter.Next());
+        }
     }
 
 private:

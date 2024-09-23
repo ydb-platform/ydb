@@ -187,6 +187,7 @@
                                                 "ReadRanges": [
                                                     "i (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join4.test_plan/tqa"
                                             }
                                         ],

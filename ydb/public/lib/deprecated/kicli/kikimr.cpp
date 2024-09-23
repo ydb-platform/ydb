@@ -242,8 +242,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusPersQueue>(&NGRpcProxy::TGRpcClient::PersQueueRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_SCHEME_INITROOT:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSchemeInitRoot>(&NGRpcProxy::TGRpcClient::SchemeInitRoot, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_BSADM:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBSAdm>(&NGRpcProxy::TGRpcClient::BSAdm, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusBlobStorageConfigRequest>(&NGRpcProxy::TGRpcClient::BlobStorageConfig, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_HIVE_CREATE_TABLET:
@@ -260,16 +258,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletKillRequest>(&NGRpcProxy::TGRpcClient::TabletKillRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_TABLET_STATE_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletStateRequest>(&NGRpcProxy::TGRpcClient::TabletStateRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_LOAD_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBsTestLoadRequest>(&NGRpcProxy::TGRpcClient::BlobStorageLoadRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_GET_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBsGetRequest>(&NGRpcProxy::TGRpcClient::BlobStorageGetRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_DB_SCHEMA:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusDbSchema, NMsgBusProxy::TBusDbResponse>(&NGRpcProxy::TGRpcClient::DbSchema, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_DB_OPERATION:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusDbOperation, NMsgBusProxy::TBusDbResponse>(&NGRpcProxy::TGRpcClient::DbOperation, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_DB_BATCH:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusDbBatch, NMsgBusProxy::TBusDbResponse>(&NGRpcProxy::TGRpcClient::DbBatch, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusNodeRegistrationRequest, NMsgBusProxy::TBusNodeRegistrationResponse>(&NGRpcProxy::TGRpcClient::RegisterNode, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST:
@@ -282,8 +270,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusConsoleRequest, NMsgBusProxy::TBusConsoleResponse>(&NGRpcProxy::TGRpcClient::ConsoleRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_WHOAMI:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusWhoAmI, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::WhoAmI, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_RESOLVE_NODE:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusResolveNode, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::ResolveNode, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_DRAIN_NODE:

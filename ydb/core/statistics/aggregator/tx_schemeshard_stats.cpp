@@ -26,6 +26,48 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         Self->BaseStats[schemeShardId] = stats;
 
+        if (!Self->EnableColumnStatistics) {
+            return true;
+        }
+
+        NKikimrStat::TSchemeShardStats statRecord;
+        Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
+
+        auto& oldPathIds = Self->ScanTablesBySchemeShard[schemeShardId];
+        std::unordered_set<TPathId> newPathIds;
+
+        for (auto& entry : statRecord.GetEntries()) {
+            auto pathId = PathIdFromPathId(entry.GetPathId());
+            newPathIds.insert(pathId);
+            if (oldPathIds.find(pathId) == oldPathIds.end()) {
+                TStatisticsAggregator::TScanTable scanTable;
+                scanTable.PathId = pathId;
+                scanTable.SchemeShardId = schemeShardId;
+                scanTable.LastUpdateTime = TInstant::MicroSeconds(0);
+                auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
+                Self->ScanTablesByTime.Add(&it->second);
+
+                db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScanTables::SchemeShardId>(schemeShardId),
+                    NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(0));
+            }
+        }
+
+        for (auto& pathId : oldPathIds) {
+            if (newPathIds.find(pathId) == newPathIds.end()) {
+                auto it = Self->ScanTables.find(pathId);
+                if (it != Self->ScanTables.end()) {
+                    if (Self->ScanTablesByTime.Has(&it->second)) {
+                        Self->ScanTablesByTime.Remove(&it->second);
+                    }
+                    Self->ScanTables.erase(it);
+                }
+                db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+            }
+        }
+
+        oldPathIds.swap(newPathIds);
+
         return true;
     }
 

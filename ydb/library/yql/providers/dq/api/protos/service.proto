@@ -88,6 +88,8 @@ message ExecuteGraphRequest {
     string RateLimiterResource = 15;
     map<string, bytes> CommonTaskParams = 16; // to be merged into each task TTaskMeta.TaskParams
     NYql.NDqProto.EDqStatsMode StatsMode = 17;
+    uint64 ExecutionTimeout = 18; // in milliseconds
+    uint64 QuerySeqNo = 19;
 }
 
 message ExecuteGraphResponse {
@@ -127,10 +129,12 @@ message PingSessionResponse {
 
 message QueryStatusRequest {
   string Session = 1;
+  uint64 QuerySeqNo = 2;
 }
 
 message QueryStatusResponse {
   string Status = 1;
+  repeated ResponseMetric Metric = 2;
 }
 
 message TAttribute {

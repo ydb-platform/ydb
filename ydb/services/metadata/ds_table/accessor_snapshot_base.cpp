@@ -87,7 +87,7 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& 
         }
     }
     if (!hasExists) {
-        OnNewEnrichedSnapshot(SnapshotConstructor->CreateEmpty(RequestedActuality));
+        OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult(), SnapshotConstructor->CreateEmpty(RequestedActuality));
     } else {
         StartSnapshotsFetchingImpl();
     }

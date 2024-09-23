@@ -1,0 +1,20 @@
+services:
+  clickhouse:
+    container_name: fq-tests-ch-clickhouse
+    environment:
+      CLICKHOUSE_DB: db
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_USER: user
+    image: mirror.gcr.io/clickhouse/clickhouse-server:23-alpine@sha256:d75017307e76d1bca81a5ac7ada94620567782c0610541f525d1e443e23f76e3
+    ports:
+    - 9000
+    - 8123
+  fq-connector-go:
+    container_name: fq-tests-ch-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.4.9@sha256:3a1fe086be50c0edbae2c2b284aee5ce76bd056d7f46cb460919ec37a6f8ab5c
+    ports:
+    - 2130
+    volumes:
+    - ../../fq-connector-go/:/opt/ydb/cfg/
+version: "3.4"

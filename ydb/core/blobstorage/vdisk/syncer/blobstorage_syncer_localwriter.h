@@ -69,4 +69,10 @@ namespace NKikimr {
     IActor *CreateLocalSyncDataExtractor(const TIntrusivePtr<TVDiskContext> &vctx, const TActorId &skeletonId,
         const TActorId &parentId, std::unique_ptr<TEvLocalSyncData> ev);
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // CreateLocalSyncDataCutter
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    IActor* CreateLocalSyncDataCutter(const TIntrusivePtr<TVDiskConfig>& vconfig, const TIntrusivePtr<TVDiskContext>& vctx,
+        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev);
+
 } // NKikimr

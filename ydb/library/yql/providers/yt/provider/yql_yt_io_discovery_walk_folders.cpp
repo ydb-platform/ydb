@@ -101,7 +101,7 @@ BuildFolderListItemExpr(TExprContext &ctx, NYql::TPositionHandle pos,
 }
 
 TWalkFoldersImpl::TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config, 
-    TPosition pos, TYtKey::TWalkFoldersArgs&& args, const IYtGateway::TPtr gateway):
+    TPosition pos, const TYtKey::TWalkFoldersArgs& args, const IYtGateway::TPtr gateway):
     Pos_(pos), SessionId_(sessionId), Cluster_(cluster), Config_(config), Gateway_(gateway) {
     
     PreHandler_ = args.PreHandler->IsCallable("Void") ? Nothing() : MakeMaybe(args.PreHandler);
@@ -119,40 +119,41 @@ TWalkFoldersImpl::TWalkFoldersImpl(const TString& sessionId, const TString& clus
     DoFolderListOperation({folder});
 }
 
-TExprNode::TPtr TWalkFoldersImpl::GetNextStateExpr(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args) {
+IGraphTransformer::TStatus TWalkFoldersImpl::GetNextStateExpr(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state) {
     YQL_CLOG(INFO, ProviderYt) << "Current processing state: " << int(ProcessingState_);
     switch (ProcessingState_) {
         case WaitingListFolderOp: {
-            return AfterListFolderOp(ctx, args);
+            return AfterListFolderOp(ctx, args, state);
         }
         case PreHandling: {
-            return PreHandleVisitedInSingleFolder(ctx, args, ProcessFoldersQueue_.front());
+            return PreHandleVisitedInSingleFolder(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case ResolveHandling: {
-            return ResolveHandleInSingleFolder(ctx, args, ProcessFoldersQueue_.front());
+            return ResolveHandleInSingleFolder(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case AfterResolveHandling: {
-            return AfterResolveHandle(ctx, args, ProcessFoldersQueue_.front());
+            return AfterResolveHandle(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case WaitingResolveLinkOp: {
-            return HandleAfterResolveFuture(ctx, args, ProcessFoldersQueue_.front());
+            return HandleAfterResolveFuture(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case DiveHandling: {
-            return DiveHandleInSingleFolder(ctx, args, ProcessFoldersQueue_.front());
+            return DiveHandleInSingleFolder(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case AfterDiveHandling: {
-            return AfterDiveHandle(ctx, args, ProcessFoldersQueue_.front());
+            return AfterDiveHandle(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case PostHandling: {
-            return PostHandleVisitedInSingleFolder(ctx, args, ProcessFoldersQueue_.front());
+            return PostHandleVisitedInSingleFolder(ctx, args, ProcessFoldersQueue_.front(), state);
         }
         case FinishingHandling: {
-            return BuildFinishedState(ctx, args);
+            return BuildFinishedState(ctx, args, state);
         }
         case FinishedHandling: {
+            return IGraphTransformer::TStatus::Ok;
         }
     }
-    return args.UserStateExpr;
+    return IGraphTransformer::TStatus::Ok;
 }
 
 void TWalkFoldersImpl::DoFolderListOperation(TVector<IYtGateway::TBatchFolderOptions::TFolderPrefixAttrs>&& folders) {
@@ -165,8 +166,7 @@ void TWalkFoldersImpl::DoFolderListOperation(TVector<IYtGateway::TBatchFolderOpt
     BatchFolderListFuture_ = Gateway_->GetFolders(std::move(options));
 }
 
-TExprNode::TPtr TWalkFoldersImpl::EvaluateNextUserStateExpr(TExprContext& ctx, const TExprNode::TPtr& userStateType, const TExprNode::TPtr userStateExpr, std::function<TExprNode::TPtr(const NNodes::TExprBase&)> nextStateFunc) {
-
+IGraphTransformer::TStatus TWalkFoldersImpl::EvaluateNextUserStateExpr(TExprContext& ctx, const TExprNode::TPtr& userStateType, const TExprNode::TPtr userStateExpr, std::function<TExprNode::TPtr(const NNodes::TExprBase&)> nextStateFunc, TExprNode::TPtr& state) {
     const auto userStateUnpickled = Build<TCoUnpickle>(ctx, PosHandle_)
         .Type(userStateType)
         .Buffer(userStateExpr)
@@ -182,26 +182,27 @@ TExprNode::TPtr TWalkFoldersImpl::EvaluateNextUserStateExpr(TExprContext& ctx, c
 
     YQL_CLOG(TRACE, ProviderYt) << "WalkFolders - next evaluate ast: " << ConvertToAst(*nextUserStatePickled, ctx, {}).Root->ToString();
 
-    return ctx.Builder(PosHandle_)
+    state = ctx.Builder(PosHandle_)
         .Callable("EvaluateExpr")
             .Add(0, nextUserStatePickled)
         .Seal()
         .Build();
+    return IGraphTransformer::TStatus::Ok;
 }
 
-TExprNode::TPtr TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args) {
+IGraphTransformer::TStatus TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state) {
     if (!BatchFolderListFuture_) {
         YQL_CLOG(INFO, ProviderYt) << "Folder queue is empty, finishing WalkFolders with key: " << args.StateKey;
         ProcessingState_ = FinishingHandling;
-        return GetNextStateExpr(ctx, args);
+        return GetNextStateExpr(ctx, args, state);
     } else {
         if (!BatchFolderListFuture_->HasValue()) {
             YQL_CLOG(INFO, ProviderYt) << "Batch list future is not ready";
-            return args.UserStateExpr;
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         Y_ENSURE(!ProcessFoldersQueue_.empty(), "Got future result for Yt List but no folder in queue");
-        auto folderListVal = BatchFolderListFuture_->ExtractValue();
+        auto folderListVal = BatchFolderListFuture_->GetValueSync();
         if (folderListVal.Success()) {
             auto& folder = ProcessFoldersQueue_.front();
             YQL_CLOG(INFO, ProviderYt) << "Got " << folderListVal.Items.size() << " results for list op at `" << folder.Folder.Prefix << "`";
@@ -214,24 +215,24 @@ TExprNode::TPtr TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx, const TYt
 
         BatchFolderListFuture_ = Nothing();
     }
-    return PreHandleVisitedInSingleFolder(ctx, args, ProcessFoldersQueue_.front());
+    return PreHandleVisitedInSingleFolder(ctx, args, ProcessFoldersQueue_.front(), state);
 }
 
-TExprNode::TPtr TWalkFoldersImpl::PreHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::PreHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     YQL_CLOG(INFO, ProviderYt) << "Processing preHandler at " << folder.Folder.Prefix
                                << " for WalkFolders with key: " << args.StateKey;
 
     if (!folder.PreHandleItemsFetched) {
         YQL_CLOG(INFO, ProviderYt) << "Waiting for folder list: `" << folder.Folder.Prefix << "`";
         ProcessingState_ = WaitingListFolderOp;
-        return GetNextStateExpr(ctx, args);
+        return GetNextStateExpr(ctx, args, state);
     }
 
     if (folder.ItemsToPreHandle.empty()) {
         YQL_CLOG(INFO, ProviderYt) << "Items to preHandle are empty, skipping " << folder.Folder.Prefix;
         ProcessFoldersQueue_.pop_front();
         ProcessingState_ = WaitingListFolderOp;
-        return GetNextStateExpr(ctx, args);
+        return GetNextStateExpr(ctx, args, state);
     }
 
     TVector<TExprBase> folderListItems;
@@ -254,7 +255,7 @@ TExprNode::TPtr TWalkFoldersImpl::PreHandleVisitedInSingleFolder(TExprContext& c
     if (!PreHandler_) {
         YQL_CLOG(INFO, ProviderYt) << "No preHandler defined, skipping for WalkFolders with key: " << args.StateKey;
         ProcessingState_ = ResolveHandling;
-        return GetNextStateExpr(ctx, args);
+        return GetNextStateExpr(ctx, args, state);
     }
 
     const auto folderListExpr = BuildFolderListExpr(ctx, PosHandle_, folderListItems);
@@ -277,18 +278,18 @@ TExprNode::TPtr TWalkFoldersImpl::PreHandleVisitedInSingleFolder(TExprContext& c
     };
 
     ProcessingState_ = ResolveHandling;
-    return EvaluateNextUserStateExpr(ctx, args.UserStateType, args.UserStateExpr, makeNextUserState);
+    return EvaluateNextUserStateExpr(ctx, args.UserStateType, args.UserStateExpr, makeNextUserState, state);
 }
 
-TExprNode::TPtr TWalkFoldersImpl::ResolveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args,  TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::ResolveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     YQL_CLOG(INFO, ProviderYt) << "Processing resolveHandler at " << folder.Folder.Prefix
                                << "for WalkFolders with key: " << args.StateKey;
     ProcessingState_ = AfterResolveHandling;
-    return BuildDiveOrResolveHandlerEval(ctx, args, ResolveHandler_.GetRef(), folder.LinksToResolveHandle, folder.Folder.Attributes, folder.Level);
+    return BuildDiveOrResolveHandlerEval(ctx, args, ResolveHandler_.GetRef(), folder.LinksToResolveHandle, folder.Folder.Attributes, folder.Level, state);
 }
 
-TExprNode::TPtr TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& handler,
-                                              const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& res, const TVector<TString>& attributes, ui64 level) {
+IGraphTransformer::TStatus TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& handler, 
+    const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& res, const TVector<TString>& attributes, ui64 level, TExprNode::TPtr& state) {
     using namespace NNodes;
 
     TVector<TExprBase> items;
@@ -335,7 +336,7 @@ TExprNode::TPtr TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExprContext& ct
     .Value()
     .Ptr();
     
-    auto resolveHandlerResPickled = ctx.Builder(PosHandle_)
+    const auto resolveHandlerResPickled = ctx.Builder(PosHandle_)
         .Callable("StaticMap")
             .Add(0, handlerResult)
             .Lambda(1)
@@ -348,11 +349,12 @@ TExprNode::TPtr TWalkFoldersImpl::BuildDiveOrResolveHandlerEval(TExprContext& ct
         .Build();
 
     ctx.Step.Repeat(TExprStep::ExprEval);
-    return ctx.Builder(PosHandle_)
+    state = ctx.Builder(PosHandle_)
         .Callable("EvaluateExpr")
             .Add(0, resolveHandlerResPickled)
         .Seal()
         .Build();
+    return IGraphTransformer::TStatus::Ok;
 }
 
 void ParseNameAttributesPickledList(TStringBuf pickledTupleList, std::function<void(TString&&, TSet<TString>)> handleParsedNameAndAttrs) {
@@ -391,7 +393,7 @@ void ParseNameAttributesPickledList(TStringBuf pickledTupleList, std::function<v
     }
 }
 
-TExprNode::TPtr TWalkFoldersImpl::AfterResolveHandle(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::AfterResolveHandle(TExprContext& ctx, TYtKey::TWalkFoldersImplArgs args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     EnsureTupleSize(*args.UserStateExpr, 2, ctx);
     YQL_CLOG(INFO, ProviderYt) << "After resolveHandler EvaluateExpr";
 
@@ -419,8 +421,11 @@ TExprNode::TPtr TWalkFoldersImpl::AfterResolveHandle(TExprContext& ctx, const TY
 
     if (links.empty()) {
         YQL_CLOG(INFO, ProviderYt) << "Links to visit are empty";
+        args.UserStateExpr = args.UserStateExpr->Child(1);
+        state = args.UserStateExpr;
+
         ProcessingState_ = DiveHandling;
-        return GetNextStateExpr(ctx, {.UserStateExpr = args.UserStateExpr->Child(1), .UserStateType = args.UserStateType, .StateKey = args.StateKey});
+        return GetNextStateExpr(ctx, args, state);
     }
 
     ProcessingState_ = WaitingResolveLinkOp;
@@ -431,22 +436,23 @@ TExprNode::TPtr TWalkFoldersImpl::AfterResolveHandle(TExprContext& ctx, const TY
         .Items(links);
     BatchResolveFuture_ = Gateway_->ResolveLinks(std::move(options));
 
-    return args.UserStateExpr->Child(1);
+    state = args.UserStateExpr->Child(1);
+    return IGraphTransformer::TStatus::Repeat;
 }
 
-TExprNode::TPtr TWalkFoldersImpl::HandleAfterResolveFuture(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::HandleAfterResolveFuture(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     YQL_CLOG(INFO, ProviderYt) << "After resolve future result";
 
     if (!BatchResolveFuture_) {
-        YQL_CLOG(WARN, ProviderYt) << "Resolve future not set";
-        return nullptr;
+        ctx.AddError(TIssue(Pos_, TStringBuilder() << "Resolve future not set for WalkFolders in: " << folder.Folder.Prefix));
+        return IGraphTransformer::TStatus::Error;
     }
     if (!BatchResolveFuture_->HasValue() && !BatchResolveFuture_->HasException()) {
         YQL_CLOG(INFO, ProviderYt) << "Batch resolve future is not ready";
-        return args.UserStateExpr;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto res = BatchResolveFuture_->ExtractValue();
+    auto res = BatchResolveFuture_->GetValueSync();
     BatchResolveFuture_ = Nothing();
     YQL_CLOG(INFO, ProviderYt) << "Added items to handle after batch resolve future completion";
 
@@ -459,17 +465,17 @@ TExprNode::TPtr TWalkFoldersImpl::HandleAfterResolveFuture(TExprContext& ctx, co
     }
 
     ProcessingState_ = DiveHandling;
-    return GetNextStateExpr(ctx, args);
+    return GetNextStateExpr(ctx, args, state);
 }
 
-TExprNode::TPtr TWalkFoldersImpl::DiveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args,  TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::DiveHandleInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     YQL_CLOG(INFO, ProviderYt) << "Processing diveHandler at " << folder.Folder.Prefix
                                << " for WalkFolders with key: " << args.StateKey;
     ProcessingState_ = AfterDiveHandling;
-    return BuildDiveOrResolveHandlerEval(ctx, args, DiveHandler_.GetRef(), folder.ItemsToDiveHandle, folder.Folder.Attributes, folder.Level);
+    return BuildDiveOrResolveHandlerEval(ctx, args, DiveHandler_.GetRef(), folder.ItemsToDiveHandle, folder.Folder.Attributes, folder.Level, state);
 }
 
-TExprNode::TPtr TWalkFoldersImpl::AfterDiveHandle(TExprContext& ctx, TYtKey::TWalkFoldersImplArgs args, TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::AfterDiveHandle(TExprContext& ctx, TYtKey::TWalkFoldersImplArgs args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     using namespace NKikimr::NMiniKQL;
 
     EnsureTupleSize(*args.UserStateExpr, 2, ctx);
@@ -493,11 +499,12 @@ TExprNode::TPtr TWalkFoldersImpl::AfterDiveHandle(TExprContext& ctx, TYtKey::TWa
     folder.ItemsToDiveHandle.clear();
     
     args.UserStateExpr = args.UserStateExpr->Child(1);
+    state = args.UserStateExpr;
     ProcessingState_ = PostHandling;
 
     if (diveItems.empty()) {
         YQL_CLOG(INFO, ProviderYt) << "Nodes to dive are empty";
-        return GetNextStateExpr(ctx, args);
+        return GetNextStateExpr(ctx, args, state);
     }
 
     auto options = IYtGateway::TBatchFolderOptions(SessionId_)
@@ -508,14 +515,14 @@ TExprNode::TPtr TWalkFoldersImpl::AfterDiveHandle(TExprContext& ctx, TYtKey::TWa
     Y_ENSURE(!BatchFolderListFuture_, "Single inflight batch folder request allowed");
     BatchFolderListFuture_ = Gateway_->GetFolders(std::move(options));
 
-    return GetNextStateExpr(ctx, args);
+    return GetNextStateExpr(ctx, args, state);
 }
 
-TExprNode::TPtr TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder) {
+IGraphTransformer::TStatus TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TFolderQueueItem& folder, TExprNode::TPtr& state) {
     if (!PostHandler_) {
         YQL_CLOG(INFO, ProviderYt) << "No postHandler defined, skipping for WalkFolders with key: " << args.StateKey;
         ProcessingState_ = WaitingListFolderOp;
-        return args.UserStateExpr;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     YQL_CLOG(INFO, ProviderYt) << "Processing postHandler at " << folder.Folder.Prefix
@@ -554,11 +561,10 @@ TExprNode::TPtr TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TExprContext& 
     ProcessingState_ = WaitingListFolderOp;
 
     ProcessFoldersQueue_.pop_front();
-    return EvaluateNextUserStateExpr(ctx, args.UserStateType, args.UserStateExpr, makeNextUserState);
+    return EvaluateNextUserStateExpr(ctx, args.UserStateType, args.UserStateExpr, makeNextUserState, state);
 }
 
-
-TExprNode::TPtr TWalkFoldersImpl::BuildFinishedState(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args) {
+IGraphTransformer::TStatus TWalkFoldersImpl::BuildFinishedState(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state) {
     // TODO: Dump large user state to file
     // const auto dataLen = args.UserStateExpr->IsCallable("String") 
     //     ? TCoString(args.UserStateExpr).Literal().StringValue().Size()
@@ -573,10 +579,11 @@ TExprNode::TPtr TWalkFoldersImpl::BuildFinishedState(TExprContext& ctx, const TY
     ctx.Step.Repeat(TExprStep::ExprEval);
     ProcessingState_ = FinishedHandling;
 
-    return ctx.Builder(PosHandle_)
+    state = ctx.Builder(PosHandle_)
         .Callable("EvaluateExpr")
             .Add(0, userStateUnpickled)
         .Seal()
         .Build();
+    return IGraphTransformer::TStatus::Ok;
 }
 } // namespace NYql

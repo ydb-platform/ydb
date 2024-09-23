@@ -1,0 +1,61 @@
+import "ydb/public/api/protos/draft/ydb_backup.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+package NKikimrBackup;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvFetchBackupCollectionsRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional string UserSID = 3;
+}
+
+message TEvFetchBackupCollectionsResponse {
+}
+
+message TEvListBackupCollectionsRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional string UserSID = 3;
+}
+
+message TEvListBackupCollectionsResponse {
+}
+
+message TEvCreateBackupCollectionRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional string UserSID = 3;
+}
+
+message TEvCreateBackupCollectionResponse {
+}
+
+message TEvReadBackupCollectionRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional string UserSID = 3;
+}
+
+message TEvReadBackupCollectionResponse {
+}
+
+message TEvUpdateBackupCollectionRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional string UserSID = 3;
+}
+
+message TEvUpdateBackupCollectionResponse {
+}
+
+message TEvDeleteBackupCollectionRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional string UserSID = 3;
+}
+
+message TEvDeleteBackupCollectionResponse {
+}

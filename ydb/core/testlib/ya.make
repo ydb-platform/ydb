@@ -22,6 +22,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/grpc/client
@@ -53,6 +54,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/federated_query
     ydb/core/kqp/finalize_script_service
+    ydb/core/kqp/proxy_service
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -62,6 +64,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/protos
     ydb/core/security
+    ydb/core/security/ldap_auth_provider
     ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
@@ -82,11 +85,14 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/providers/s3/actors_factory
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/client/ydb_topic/codecs
     ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_table
     ydb/services/auth
@@ -100,10 +106,9 @@ PEERDIR(
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
+    ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
-    ydb/services/bg_tasks/ds_table
-    ydb/services/bg_tasks
     ydb/services/ydb
 
     ydb/core/http_proxy

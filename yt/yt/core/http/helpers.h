@@ -11,7 +11,56 @@
 
 #include <yt/yt/core/tracing/public.h>
 
+#include <util/generic/string.h>
+
 namespace NYT::NHttp {
+
+namespace NHeaders {
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline const TString AcceptHeaderName("Accept");
+inline const TString AccessControlAllowCredentialsHeaderName("Access-Control-Allow-Credentials");
+inline const TString AccessControlAllowHeadersHeaderName("Access-Control-Allow-Headers");
+inline const TString AccessControlAllowMethodsHeaderName("Access-Control-Allow-Methods");
+inline const TString AccessControlAllowOriginHeaderName("Access-Control-Allow-Origin");
+inline const TString AccessControlExposeHeadersHeaderName("Access-Control-Expose-Headers");
+inline const TString AccessControlMaxAgeHeaderName("Access-Control-Max-Age");
+inline const TString AuthorizationHeaderName("Authorization");
+inline const TString CacheControlHeaderName("Cache-Control");
+inline const TString ContentRangeHeaderName("Content-Range");
+inline const TString ContentTypeHeaderName("Content-Type");
+inline const TString CookieHeaderName("Cookie");
+inline const TString ExpiresHeaderName("Expires");
+inline const TString PragmaHeaderName("Pragma");
+inline const TString RangeHeaderName("Range");
+inline const TString RequestTimeoutHeaderName("Request-Timeout");
+inline const TString UserAgentHeaderName("User-Agent");
+inline const TString XContentTypeOptionsHeaderName("X-Content-Type-Options");
+inline const TString XRequestTimeoutHeaderName("X-Request-Timeout");
+
+inline const TString UserTicketHeaderName("X-Ya-User-Ticket");
+inline const TString XDnsPrefetchControlHeaderName("X-DNS-Prefetch-Control");
+inline const TString XForwardedForYHeaderName("X-Forwarded-For-Y");
+inline const TString XFrameOptionsHeaderName("X-Frame-Options");
+inline const TString XSourcePortYHeaderName("X-Source-Port-Y");
+
+inline const TString ProtocolVersionMajor("X-YT-Rpc-Protocol-Version-Major");
+inline const TString ProtocolVersionMinor("X-YT-Rpc-Protocol-Version-Minor");
+inline const TString RequestFormatOptionsHeaderName("X-YT-Request-Format-Options");
+inline const TString RequestIdHeaderName("X-YT-Request-Id");
+inline const TString ResponseFormatOptionsHeaderName("X-YT-Response-Format-Options");
+inline const TString UserNameHeaderName("X-YT-User-Name");
+inline const TString UserTagHeaderName("X-YT-User-Tag");
+inline const TString XYTErrorHeaderName("X-YT-Error");
+inline const TString XYTResponseCodeHeaderName("X-YT-Response-Code");
+inline const TString XYTResponseMessageHeaderName("X-YT-Response-Message");
+inline const TString XYTSpanIdHeaderName("X-YT-Span-Id");
+inline const TString XYTTraceIdHeaderName("X-YT-Trace-Id");
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace Headers
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -57,6 +106,8 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers);
 void SetBytesRange(const THeadersPtr& headers, std::pair<i64, i64> range);
 
 TString SanitizeUrl(const TString& url);
+
+std::vector<std::pair<TString, TString>> DumpUnknownHeaders(const THeadersPtr& headers);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -3,19 +3,19 @@ Usage: ydb [global options...] scripting yql [options...]
 Description: Execute YQL script
 
 Global options:
-  {-e|--endpoint}, {-d|--database}, {-v|--verbose}, {-p|--profile}, --ca-file, --iam-token-file, --yc-token-file, --use-metadata-credentials, --sa-key-file, --token-file, --user, --password-file, --no-password, --iam-endpoint, --profile-file
+  {-e|--endpoint}, {-d|--database}, {-v|--verbose}, {-p|--profile}, --ca-file, --iam-token-file, --yc-token-file, --use-metadata-credentials, --sa-key-file, --token-file, --user, --password-file, --no-password, --oauth2-key-file, --iam-endpoint, --profile-file
   To get full description of these options run 'ydb --help'.
 
 Options:
-  {-?|-h|--help}           Print usage
+  {-?|-h|--help}           Print usage, -hh for detailed help
   --help-ex                Print usage with examples
   --timeout ms             Operation timeout. Operation should be executed on server within this timeout. There could also be a delay up to 200ms to receive timeout error from server.
   --stats [String]         Collect statistics mode [none, basic, full]
   --flame-graph [Path]     Path for statistics flame graph image, works only with full stats
   {-s|--script} [String]   Text of script to execute
   {-f|--file} PATH         [Required] Script file
-  --explain                Explain query
-  --show-response-metadata Show response metadata for ydb call
+  --explain                Explain query (default: 0)
+  --show-response-metadata Show response metadata for ydb call (default: 0)
   --format STRING          Output format. Available options:
                              pretty
                                Human readable output
@@ -60,8 +60,9 @@ Options:
                              newline-delimited
                                Newline character delimits parameter sets on stdin and triggers processing in accordance to "batch" option
                            Default: "no-framing".
-  --columns STR            String with column names that replaces header. It is assumed that there is no header in the file
-  --skip-rows NUM          Number of header rows to skip (not including the row of column names, if any) (default: 0)
+  --columns STR            String with column names that replaces header. Relevant when passing parameters in CSV/TSV format only. It is assumed that there is no header in the file
+  --skip-rows NUM          Number of header rows to skip (not including the row of column names, if any). Relevant when passing parameters in CSV/TSV format only.
+                           Default: 0.
   --stdin-par STRING       Parameter name on stdin, required/applicable when stdin-format implies values only.
   --batch STRING           Batching mode for stdin parameters processing. Available options:
                              iterative

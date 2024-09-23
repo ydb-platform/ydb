@@ -227,15 +227,15 @@ std::pair<std::optional<TErrorCode>, TTabletInfoPtr> TTableMountCacheBase::Inval
                     InvalidateTablet(tabletInfo);
                 }
 
-                std::optional<TErrorCode> retryableErrorCode = code;
+                std::optional<TErrorCode> retriableErrorCode = code;
                 if (code == NTabletClient::EErrorCode::TabletNotMounted &&
                     isTabletUnmounted &&
                     !forceRetry)
                 {
-                    retryableErrorCode = std::nullopt;
+                    retriableErrorCode = std::nullopt;
                 }
 
-                return std::pair(retryableErrorCode, tabletInfo);
+                return std::pair(retriableErrorCode, tabletInfo);
             }
         }
     }

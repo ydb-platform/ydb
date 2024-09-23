@@ -109,15 +109,70 @@ TString AggrOpToStr(const TExprBase& aggr) {
             << JoinStrings(std::move(args), ",") << ")";
 }
 
+/* if lhs has lower priority than rhs */
+bool IsLowerPriority(const TString& lhs, const TString& rhs) {
+    const static THashMap<TString, i64> OP_PRIORITY = {
+        {">", 0},
+        {">=", 0},
+        {"<", 0},
+        {"<=", 0},
+        {"==", 0},
+        {"+", 1},
+        {"-", 1},
+        {"%", 2},
+        {"*", 3},
+        {"/", 3}
+    };
+
+    auto lhsIt = OP_PRIORITY.find(lhs);
+    auto rhsIt = OP_PRIORITY.find(rhs);
+
+    if (lhsIt == OP_PRIORITY.end() || rhsIt == OP_PRIORITY.end()) {
+        return true;
+    }
+
+    return lhsIt->second < rhsIt->second;
+}
+
 TString BinaryOpToStr(const TExprBase& op) {
-    auto left = PrettyExprStr(TExprBase(op.Ref().Child(0)));
-    auto right = PrettyExprStr(TExprBase(op.Ref().Child(1)));
+    TString curBinaryOp = ToString(op.Ref().Content());
+
+    TString left;
+    auto leftChild = TExprBase(op.Ref().Child(0));
+    if (leftChild.Maybe<TCoBinaryArithmetic>()) {
+        TString leftChildOp = ToString(leftChild.Ref().Content());
+
+        if (IsLowerPriority(leftChildOp, curBinaryOp)) {
+            left = "("  +  BinaryOpToStr(leftChild) + ")";
+        } else {
+            left = BinaryOpToStr(leftChild);
+        }
+    } else {
+        left = PrettyExprStr(leftChild);
+    }
+
+    TString right;
+    auto rightChild = TExprBase(op.Ref().Child(1));
+    if (rightChild.Maybe<TCoBinaryArithmetic>()) {
+        TString rightChildOp = ToString(rightChild.Ref().Content());
+
+        if (IsLowerPriority(rightChildOp, curBinaryOp)) {
+            right = "(" + BinaryOpToStr(rightChild) + ")";
+        } else {
+            right = BinaryOpToStr(rightChild);
+        }
+    } else {
+        right = PrettyExprStr(rightChild);
+    }
 
     TStringBuilder str;
+
     str << left;
+
     if (left && right) {
-        str << " " << op.Ref().Content() << " ";
+        str << " " << curBinaryOp << " ";
     }
+
     str << right;
 
     return str;

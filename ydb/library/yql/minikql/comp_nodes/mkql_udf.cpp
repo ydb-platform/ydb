@@ -179,7 +179,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     MKQL_ENSURE(funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true),
                 "Function '" << funcName << "' type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<
                 ", actual:" << PrintNode(funcInfo.FunctionType, true));
-    MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set");
+    MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << funcName);
 
     const auto runConfigType = funcInfo.RunConfigType;
     const bool typesMatch = runConfigType->IsSameType(*runCfgNode.GetStaticType());

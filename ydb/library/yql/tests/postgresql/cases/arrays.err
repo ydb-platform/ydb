@@ -1257,6 +1257,9 @@ SELECT
     -stdin-:<main>:6:6: Error: alternative is not implemented yet : 138
     	    (ARRAY[(0, 0), (1, 1)]),
 	     ^
+    -stdin-:<main>:2:5: Error: alternative is not implemented yet : 138
+    	    array_position(ids, (1, 1)),
+	    ^
 <sql-statement>
 -- operators
 SELECT a FROM arrtest WHERE b = ARRAY[[[113,142],[1,147]]];
@@ -1406,6 +1409,14 @@ SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+	^
 <sql-statement>
 SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
 </sql-statement>
@@ -1414,6 +1425,9 @@ SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
 	^
+    -stdin-:<main>:1:17: Error: alternative is not implemented yet : 138
+    	SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
+	                ^
 <sql-statement>
 SELECT * FROM array_op_test WHERE i @> '{32}' ORDER BY seqno;
 </sql-statement>
@@ -1619,168 +1633,90 @@ SELECT NULL::text[]::int[] AS "NULL";
 -- scalar op any/all (array)
 select 33 = any ('{1,2,3}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:11: Error: A_Expr_Kind unsupported value: 1
-    	select 33 = any ('{1,2,3}');
-	          ^
 <sql-statement>
 select 33 = any ('{1,2,33}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 1
-    	select 33 = any ('{1,2,33}');
-	          ^
 <sql-statement>
 select 33 = all ('{1,2,33}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 2
-    	select 33 = all ('{1,2,33}');
-	          ^
 <sql-statement>
 select 33 >= all ('{1,2,33}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 2
-    	select 33 >= all ('{1,2,33}');
-	          ^
 <sql-statement>
 -- boundary cases
 select null::int >= all ('{1,2,33}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:18: Error: A_Expr_Kind unsupported value: 2
-    	select null::int >= all ('{1,2,33}');
-	                 ^
 <sql-statement>
 select null::int >= all ('{}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 2
-    	select null::int >= all ('{}');
-	                 ^
 <sql-statement>
 select null::int >= any ('{}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 1
-    	select null::int >= any ('{}');
-	                 ^
 <sql-statement>
 -- cross-datatype
 select 33.4 = any (array[1,2,3]);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:13: Error: A_Expr_Kind unsupported value: 1
-    	select 33.4 = any (array[1,2,3]);
-	            ^
 <sql-statement>
 select 33.4 > all (array[1,2,3]);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:13: Error: A_Expr_Kind unsupported value: 2
-    	select 33.4 > all (array[1,2,3]);
-	            ^
 <sql-statement>
 -- errors
 select 33 * any ('{1,2,3}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:2:11: Error: A_Expr_Kind unsupported value: 1
-    	select 33 * any ('{1,2,3}');
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- errors
+	^
+        -stdin-:<main>:2:11: Error: At function: PgAnyResolvedOp
+        	select 33 * any ('{1,2,3}');
+	          ^
+            -stdin-:<main>:2:11: Error: Expected boolean operator result, but got: int4
+            	select 33 * any ('{1,2,3}');
 	          ^
 <sql-statement>
 select 33 * any (44);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 1
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select 33 * any (44);
+	^
+        -stdin-:<main>:1:11: Error: At function: PgAnyOp
+        	select 33 * any (44);
+	          ^
+            -stdin-:<main>:1:11: Error: ydb/library/yql/parser/pg_catalog/catalog.cpp:2143: Condition violated: `fromTypePtr'
+            	select 33 * any (44);
 	          ^
 <sql-statement>
 -- nulls
 select 33 = any (null::int[]);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:11: Error: A_Expr_Kind unsupported value: 1
-    	select 33 = any (null::int[]);
-	          ^
 <sql-statement>
 select null::int = any ('{1,2,3}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 1
-    	select null::int = any ('{1,2,3}');
-	                 ^
 <sql-statement>
 select 33 = any ('{1,null,3}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 1
-    	select 33 = any ('{1,null,3}');
-	          ^
 <sql-statement>
 select 33 = any ('{1,null,33}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 1
-    	select 33 = any ('{1,null,33}');
-	          ^
 <sql-statement>
 select 33 = all (null::int[]);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 2
-    	select 33 = all (null::int[]);
-	          ^
 <sql-statement>
 select null::int = all ('{1,2,3}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 2
-    	select null::int = all ('{1,2,3}');
-	                 ^
 <sql-statement>
 select 33 = all ('{1,null,3}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 2
-    	select 33 = all ('{1,null,3}');
-	          ^
 <sql-statement>
 select 33 = all ('{33,null,33}');
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:11: Error: A_Expr_Kind unsupported value: 2
-    	select 33 = all ('{33,null,33}');
-	          ^
 <sql-statement>
 -- nulls later in the bitmap
 SELECT -1 != ALL(ARRAY(SELECT NULLIF(g.i, 900) FROM generate_series(1,1000) g(i)));
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:11: Error: A_Expr_Kind unsupported value: 2
-    	SELECT -1 != ALL(ARRAY(SELECT NULLIF(g.i, 900) FROM generate_series(1,1000) g(i)));
-	          ^
 <sql-statement>
 -- test indexes on arrays
 create temp table arr_tbl (f1 int[] unique);
@@ -1940,67 +1876,27 @@ reset enable_bitmapscan;
 -- test [not] (like|ilike) (any|all) (...)
 select 'foo' like any (array['%a', '%o']); -- t
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:14: Error: A_Expr_Kind unsupported value: 1
-    	select 'foo' like any (array['%a', '%o']); -- t
-	             ^
 <sql-statement>
 select 'foo' like any (array['%a', '%b']); -- f
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 1
-    	select 'foo' like any (array['%a', '%b']); -- f
-	             ^
 <sql-statement>
 select 'foo' like all (array['f%', '%o']); -- t
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 2
-    	select 'foo' like all (array['f%', '%o']); -- t
-	             ^
 <sql-statement>
 select 'foo' like all (array['f%', '%b']); -- f
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 2
-    	select 'foo' like all (array['f%', '%b']); -- f
-	             ^
 <sql-statement>
 select 'foo' not like any (array['%a', '%b']); -- t
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 1
-    	select 'foo' not like any (array['%a', '%b']); -- t
-	             ^
 <sql-statement>
 select 'foo' not like all (array['%a', '%o']); -- f
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 2
-    	select 'foo' not like all (array['%a', '%o']); -- f
-	             ^
 <sql-statement>
 select 'foo' ilike any (array['%A', '%O']); -- t
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 1
-    	select 'foo' ilike any (array['%A', '%O']); -- t
-	             ^
 <sql-statement>
 select 'foo' ilike all (array['F%', '%O']); -- t
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:14: Error: A_Expr_Kind unsupported value: 2
-    	select 'foo' ilike all (array['F%', '%O']); -- t
-	             ^
 <sql-statement>
 --
 -- General array parser tests
@@ -2803,11 +2699,6 @@ select array_agg(ten) from (select ten from tenk1 where unique1 < 15 order by un
 <sql-statement>
 select array_agg(nullif(ten, 4)) from (select ten from tenk1 where unique1 < 15 order by unique1) ss;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 5
-    	select array_agg(nullif(ten, 4)) from (select ten from tenk1 where unique1 < 15 order by unique1) ss;
-	                 ^
 <sql-statement>
 select array_agg(unique1) from tenk1 where unique1 < -15;
 </sql-statement>
@@ -2839,11 +2730,6 @@ select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
 <sql-statement>
 select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:27: Error: A_Expr_Kind unsupported value: 5
-    	select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
-	                          ^
 <sql-statement>
 -- errors
 select array_agg('{}'::int[]) from generate_series(1,2);
@@ -2893,15 +2779,6 @@ select unnest(array[1,2,3]);
 <sql-statement>
 select * from unnest(array[1,2,3]);
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: Result
-    	select * from unnest(array[1,2,3]);
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  cannot display a value of type anyelement
-
-        	select * from unnest(array[1,2,3]);
-	^
 <sql-statement>
 select unnest(array[1,2,3,4.5]::float8[]);
 </sql-statement>

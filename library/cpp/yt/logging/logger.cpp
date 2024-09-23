@@ -34,15 +34,45 @@ TSharedRef TMessageStringBuilder::Flush()
     return Buffer_.Slice(0, GetLength());
 }
 
-void TMessageStringBuilder::DisablePerThreadCache()
-{
-    Cache_ = nullptr;
-    CacheDestroyed_ = true;
-}
-
 void TMessageStringBuilder::DoReset()
 {
     Buffer_.Reset();
+}
+
+struct TPerThreadCache;
+
+YT_DEFINE_THREAD_LOCAL(TPerThreadCache*, Cache);
+YT_DEFINE_THREAD_LOCAL(bool, CacheDestroyed);
+
+struct TPerThreadCache
+{
+    TSharedMutableRef Chunk;
+    size_t ChunkOffset = 0;
+
+    ~TPerThreadCache()
+    {
+        TMessageStringBuilder::DisablePerThreadCache();
+    }
+
+    static YT_PREVENT_TLS_CACHING TPerThreadCache* GetCache()
+    {
+        auto& cache = Cache();
+        if (Y_LIKELY(cache)) {
+            return cache;
+        }
+        if (CacheDestroyed()) {
+            return nullptr;
+        }
+        static thread_local TPerThreadCache CacheData;
+        cache = &CacheData;
+        return cache;
+    }
+};
+
+void TMessageStringBuilder::DisablePerThreadCache()
+{
+    Cache() = nullptr;
+    CacheDestroyed() = true;
 }
 
 void TMessageStringBuilder::DoReserve(size_t newCapacity)
@@ -53,7 +83,7 @@ void TMessageStringBuilder::DoReserve(size_t newCapacity)
     auto newChunkSize = std::max(ChunkSize, newCapacity);
     // Hold the old buffer until the data is copied.
     auto oldBuffer = std::move(Buffer_);
-    auto* cache = GetCache();
+    auto* cache = TPerThreadCache::GetCache();
     if (Y_LIKELY(cache)) {
         auto oldCapacity = End_ - Begin_;
         auto deltaCapacity = newCapacity - oldCapacity;
@@ -85,27 +115,6 @@ void TMessageStringBuilder::DoReserve(size_t newCapacity)
     End_ = Begin_ + newCapacity;
 }
 
-TMessageStringBuilder::TPerThreadCache* TMessageStringBuilder::GetCache()
-{
-    if (Y_LIKELY(Cache_)) {
-        return Cache_;
-    }
-    if (CacheDestroyed_) {
-        return nullptr;
-    }
-    static YT_THREAD_LOCAL(TPerThreadCache) Cache;
-    Cache_ = &GetTlsRef(Cache);
-    return Cache_;
-}
-
-TMessageStringBuilder::TPerThreadCache::~TPerThreadCache()
-{
-    TMessageStringBuilder::DisablePerThreadCache();
-}
-
-YT_THREAD_LOCAL(TMessageStringBuilder::TPerThreadCache*) TMessageStringBuilder::Cache_;
-YT_THREAD_LOCAL(bool) TMessageStringBuilder::CacheDestroyed_;
-
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -126,16 +135,16 @@ Y_WEAK ILogManager* GetDefaultLogManager()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_THREAD_LOCAL(ELogLevel) ThreadMinLogLevel = ELogLevel::Minimum;
+YT_DEFINE_THREAD_LOCAL(ELogLevel, ThreadMinLogLevel, ELogLevel::Minimum);
 
 void SetThreadMinLogLevel(ELogLevel minLogLevel)
 {
-    ThreadMinLogLevel = minLogLevel;
+    ThreadMinLogLevel() = minLogLevel;
 }
 
 ELogLevel GetThreadMinLogLevel()
 {
-    return ThreadMinLogLevel;
+    return ThreadMinLogLevel();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,7 +182,7 @@ bool TLogger::IsLevelEnabledHeavy(ELogLevel level) const
 
     return
         level >= Category_->MinPlainTextLevel &&
-        level >= ThreadMinLogLevel;
+        level >= ThreadMinLogLevel();
 }
 
 bool TLogger::GetAbortOnAlert() const

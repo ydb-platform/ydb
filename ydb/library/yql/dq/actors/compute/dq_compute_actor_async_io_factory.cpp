@@ -24,6 +24,22 @@ void TDqAsyncIoFactory::RegisterSource(const TString& type, TSourceCreatorFuncti
     Y_ABORT_UNLESS(registered);
 }
 
+std::pair<IDqAsyncLookupSource*, NActors::IActor*> TDqAsyncIoFactory::CreateDqLookupSource(TStringBuf type, TLookupSourceArguments&& args) const
+{
+    YQL_ENSURE(!type.empty(), "Attempt to create LookupSource of empty type");
+    const auto* creatorFunc = LookupSourceCreatorsByType.FindPtr(type);
+    YQL_ENSURE(creatorFunc, "Unknown type of source: \"" << type << "\"");
+    auto lookupSource = (*creatorFunc)(std::move(args));
+    Y_ABORT_UNLESS(lookupSource.first);
+    Y_ABORT_UNLESS(lookupSource.second);
+    return lookupSource;
+}
+
+void TDqAsyncIoFactory::RegisterLookupSource(const TString& type, TLookupSourceCreatorFunction creator) {
+    auto [_, registered] = LookupSourceCreatorsByType.emplace(type, std::move(creator));
+    Y_ABORT_UNLESS(registered);
+}
+
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqAsyncIoFactory::CreateDqSink(TSinkArguments&& args) const
 {
     const TString& type = args.OutputDesc.GetSink().GetType();

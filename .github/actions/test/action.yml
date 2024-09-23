@@ -48,7 +48,6 @@ runs:
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
       echo "TMPDIR=$(pwd)/tmp" >> $GITHUB_ENV
       echo "PYTESTREPDIR=$(pwd)/test_reports/pytest/" >> $GITHUB_ENV
-      echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "ARTIFACTS_DIR=$(pwd)/artifacts" >> $GITHUB_ENV
       echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
@@ -90,6 +89,7 @@ runs:
     shell: bash
     env:
       PR_NUMBER: ${{ github.event.number }}
+      TESTMO_TOKEN: ${{ inputs.testman_token }}
     run: |
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       BRANCH_TAG="$GITHUB_REF_NAME"
@@ -226,6 +226,8 @@ runs:
   - name: Unit test history upload results
     if: always() && inputs.run_unit_tests == 'true' && inputs.testman_token
     shell: bash
+    env:
+      TESTMO_TOKEN: ${{ inputs.testman_token }}
     run: |
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
@@ -300,6 +302,8 @@ runs:
   - name: Functional tests history upload results
     if: always() && inputs.run_functional_tests == 'true' && inputs.testman_token
     shell: bash
+    env:
+      TESTMO_TOKEN: ${{ inputs.testman_token }}
     run: |
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
@@ -309,6 +313,8 @@ runs:
   - name: Test history run complete
     if: always() && inputs.testman_token
     shell: bash
+    env:
+      TESTMO_TOKEN: ${{ inputs.testman_token }}
     run: |
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
 

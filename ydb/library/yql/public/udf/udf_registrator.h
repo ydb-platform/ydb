@@ -60,9 +60,16 @@ struct TStaticSymbols {
     void* (*UdfAllocateWithSizeFunc)(ui64 size);
     void (*UdfFreeWithSizeFunc)(const void* mem, ui64 size);
 #endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+    void* (*UdfArrowAllocateFunc)(ui64 size);
+    void* (*UdfArrowReallocateFunc)(const void* mem, ui64 prevSize, ui64 size);
+    void (*UdfArrowFreeFunc)(const void* mem, ui64 size);
+#endif
 };
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 80);
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
 UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 56);
 #else
 UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 40);
@@ -216,6 +223,9 @@ inline TStaticSymbols GetStaticSymbols() {
     return {&UdfAllocate, &UdfFree, &UdfTerminate, &UdfRegisterObject, &UdfUnregisterObject
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         ,&UdfAllocateWithSize, &UdfFreeWithSize
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+        ,&UdfArrowAllocate, &UdfArrowReallocate, &UdfArrowFree
 #endif
     };
 }

@@ -1,4 +1,0 @@
-items:
-- name: Обзор
-  href: index.md
-- include: { mode: link, path: toc_i.yaml }

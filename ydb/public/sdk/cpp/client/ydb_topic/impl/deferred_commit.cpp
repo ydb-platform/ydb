@@ -1,6 +1,6 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include "read_session_impl.ipp"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -122,10 +122,10 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
 void TDeferredCommit::TImpl::Commit() {
     for (auto&& [partitionStream, offsetRanges] : Offsets) {
         for (auto&& [startOffset, endOffset] : offsetRanges) {
-            static_cast<NPersQueue::TPartitionStreamImpl<false>*>(partitionStream.Get())->Commit(startOffset, endOffset);
+            static_cast<TPartitionStreamImpl<false>*>(partitionStream.Get())->Commit(startOffset, endOffset);
         }
     }
     Offsets.clear();
 }
 
-}
+}  // namespace NYdb::NTopic

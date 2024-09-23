@@ -1,4 +1,5 @@
 #pragma once
+#include "backtrace.h"
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -6,9 +7,9 @@
 namespace NYql {
     namespace NBacktrace {
         struct TStackFrame {
-            TString File;
+            const char* File;
             size_t Address;
         };
-        [[nodiscard]] TVector<TString> Symbolize(const TVector<TStackFrame>& frames);
+        void Symbolize(const TStackFrame* frames, size_t count, IOutputStream* out);
     }
 }

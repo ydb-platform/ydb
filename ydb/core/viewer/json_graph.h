@@ -69,13 +69,13 @@ public:
         if (response.GetError()) {
             json["status"] = "error";
             json["error"] = response.GetError();
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
         if (response.DataSize() != Metrics.size()) {
             json["status"] = "error";
             json["error"] = "Invalid data size received";
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
         for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
@@ -83,7 +83,7 @@ public:
             if (response.TimeSize() != protoMetric.ValuesSize()) {
                 json["status"] = "error";
                 json["error"] = "Invalid value size received";
-                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 return PassAway();
             }
         }
@@ -133,7 +133,7 @@ public:
             }
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -145,26 +145,48 @@ public:
 
 template <>
 struct TJsonRequestParameters<TJsonGraph> {
-    static TString GetParameters() {
-        return R"___([{"name":"target","in":"query","description":"metrics comma delimited","required":true,"type":"string"},
-                      {"name":"from","in":"query","description":"time in seconds","required":false,"type":"integer"},
-                      {"name":"until","in":"query","description":"time in seconds","required":false,"type":"integer"},
-                      {"name":"maxDataPoints","in":"query","description":"maximum number of data points","required":false,"type":"integer"},
-                      {"name":"format","in":"query","description":"response format, could be prometheus or graphite","required":false,"type":"string"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+                - name: target
+                  in: query
+                  description: metrics comma delimited
+                  required: true
+                  type: string
+                - name: from
+                  in: query
+                  description: time in seconds
+                  required: false
+                  type: integer
+                - name: until
+                  in: query
+                  description: time in seconds
+                  required: false
+                  type: integer
+                - name: maxDataPoints
+                  in: query
+                  description: maximum number of data points
+                  required: false
+                  type: integer
+                - name: format
+                  in: query
+                  description: response format, could be prometheus or graphite
+                  required: false
+                  type: string
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonGraph> {
     static TString GetSummary() {
-        return "\"Graph data\"";
+        return "Graph data";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonGraph> {
     static TString GetDescription() {
-        return "\"Returns graph data\"";
+        return "Returns graph data";
     }
 };
 

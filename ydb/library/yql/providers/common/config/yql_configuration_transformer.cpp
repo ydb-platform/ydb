@@ -131,8 +131,7 @@ bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TS
 {
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
-    Dispatcher->Dispatch(cluster, name, value, TSettingDispatcher::EStage::STATIC);
-    return true;
+    return Dispatcher->Dispatch(cluster, name, value, TSettingDispatcher::EStage::STATIC, TSettingDispatcher::GetErrorCallback(pos, ctx));
 }
 
 bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias,
@@ -151,8 +150,7 @@ bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TS
         return false;
     }
 
-    Dispatcher->Dispatch(cluster, "Auth", cred->Content, TSettingDispatcher::EStage::STATIC);
-    return true;
+    return Dispatcher->Dispatch(cluster, "Auth", cred->Content, TSettingDispatcher::EStage::STATIC, TSettingDispatcher::GetErrorCallback(pos, ctx));
 }
 
 THolder<IGraphTransformer> CreateProviderConfigurationTransformer(

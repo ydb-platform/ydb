@@ -27,9 +27,10 @@ message TBTreeIndexMeta {
     optional uint32 RootPageId = 1;
     optional uint32 LevelCount = 2;
     optional uint64 IndexSize = 3;
-    optional uint64 DataSize = 4;
+    optional uint64 DataSize = 4; // Main pages data size
     optional uint64 RowCount = 5; // Total number of data rows
     optional uint64 ErasedRowCount = 6; // Total number of erased data rows
+    optional uint64 GroupDataSize = 7; // Group pages data size (includes history and external blobs)
 }
 
 message TLayout {
@@ -39,12 +40,13 @@ message TLayout {
     optional uint32 Small = 6;  // EPage::Frames index for packed blobs
     optional uint32 ByKey = 4;  // EPage::ByKey bloom filter page
     optional uint32 Scheme = 5; // EPage::Schem2 with data pages scheme
-    repeated uint32 GroupIndexes = 7; // EPage::Index for alt column groups
-    repeated uint32 HistoricIndexes = 8; // EPage::Index for historic data
+    repeated uint32 GroupIndexes = 7; // EPage::FlatIndex for alt column groups
+    repeated uint32 HistoricIndexes = 8; // EPage::FlatIndex for historic data
     optional uint32 GarbageStats = 9; // EPage::GarbageStats for historic data
     optional uint32 TxIdStats = 10; // EPage::TxIdStats for uncommitted deltas
     repeated TBTreeIndexMeta BTreeGroupIndexes = 11;
     repeated TBTreeIndexMeta BTreeHistoricIndexes = 12;
+    optional uint32 BTreeIndexesFormatVersion = 13;
 }
 
 message TStat {

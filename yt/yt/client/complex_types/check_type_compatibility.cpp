@@ -164,6 +164,11 @@ static TCompatibilityPair CheckTypeCompatibilitySimple(
             case ESimpleLogicalValueType::Null:
             case ESimpleLogicalValueType::Void:
 
+            case ESimpleLogicalValueType::Date32:
+            case ESimpleLogicalValueType::Datetime64:
+            case ESimpleLogicalValueType::Timestamp64:
+            case ESimpleLogicalValueType::Interval64:
+
             case ESimpleLogicalValueType::Any:
                 result = ESchemaCompatibility::FullyCompatible;
                 break;
@@ -220,6 +225,10 @@ static TCompatibilityPair CheckTypeCompatibilitySimple(
         case ESimpleLogicalValueType::Interval:
         case ESimpleLogicalValueType::Json:
         case ESimpleLogicalValueType::Uuid:
+        case ESimpleLogicalValueType::Date32:
+        case ESimpleLogicalValueType::Datetime64:
+        case ESimpleLogicalValueType::Timestamp64:
+        case ESimpleLogicalValueType::Interval64:
         case ESimpleLogicalValueType::Any: {
             const auto compatibility =
                 oldElement == newElement ? ESchemaCompatibility::FullyCompatible : ESchemaCompatibility::Incompatible;

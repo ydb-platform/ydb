@@ -97,6 +97,20 @@ void TQueryBuilder::SetLimit(i64 limit)
     Limit_ = limit;
 }
 
+void TQueryBuilder::AddJoinExpression(
+    TString table,
+    TString alias,
+    TString onExpression,
+    ETableJoinType type)
+{
+    JoinEntries_.push_back(TJoinEntry{
+        std::move(table),
+        std::move(alias),
+        std::move(onExpression),
+        type,
+    });
+}
+
 TString TQueryBuilder::Build()
 {
     std::vector<TString> parts;
@@ -111,6 +125,11 @@ TString TQueryBuilder::Build()
         THROW_ERROR_EXCEPTION("Source must be specified in query");
     }
     parts.push_back(Format("FROM [%v]", *Source_));
+
+    for (const auto& join : JoinEntries_) {
+        TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
+        parts.push_back(Format("%v [%v] AS [%v] ON %v", joinType, join.Table, join.Alias, join.OnExpression));
+    }
 
     if (!WhereConjuncts_.empty()) {
         parts.push_back("WHERE");

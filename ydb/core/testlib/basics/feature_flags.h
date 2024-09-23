@@ -49,7 +49,6 @@ public:
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
     FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)
-    FEATURE_FLAG_SETTER(ForceColumnTablesCompositeMarks)
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableTopicMessageMeta)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
@@ -59,6 +58,8 @@ public:
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
+    FEATURE_FLAG_SETTER(EnableTableDatetime64)
+    FEATURE_FLAG_SETTER(EnableResourcePools)
 
     #undef FEATURE_FLAG_SETTER
 };

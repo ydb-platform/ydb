@@ -31,7 +31,8 @@ namespace NKikimr {
                         20,     // HullCompMaxInFlightReads
                         0.5,
                         TDuration::Minutes(5),
-                        TDuration::Seconds(1)))
+                        TDuration::Seconds(1),
+                        true))  // AddHeader
             , LevelIndexSettings(
                 HullCtx,
                 8u,                         // Level0MaxSstsAtOnce

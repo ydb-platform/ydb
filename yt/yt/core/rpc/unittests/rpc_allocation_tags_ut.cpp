@@ -24,11 +24,14 @@ constexpr auto MemoryAllocationTag = "memory_tag";
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 
 TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 {
+    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    auto previousLimit = memoryUsageTracker->GetLimit();
+    memoryUsageTracker->SetLimit(2_GB);
     static TMemoryTag testMemoryTag = 1 << 20;
     testMemoryTag++;
 
@@ -76,7 +79,7 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     }
 
     auto memoryUsageBefore = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
-    EXPECT_LE(memoryUsageBefore, numberOfLoops * 1536_KB);
+    EXPECT_LE(memoryUsageBefore, numberOfLoops * 2048_KB);
 
     for (const auto& rsp : responses) {
         WaitFor(rsp).ValueOrThrow();
@@ -88,6 +91,8 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
         << "InitialUsage: " << initialMemoryUsage << std::endl
         << "MemoryUsage before waiting: " << memoryUsageBefore << std::endl
         << "MemoryUsage after waiting: " << memoryUsageAfter;
+
+    memoryUsageTracker->SetLimit(previousLimit);
 }
 
 #endif

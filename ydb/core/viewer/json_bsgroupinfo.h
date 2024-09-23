@@ -58,14 +58,14 @@ using TJsonBSGroupInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRe
 template <>
 struct TJsonRequestSummary<TJsonBSGroupInfo> {
     static TString GetSummary() {
-        return "\"Storage groups information\"";
+        return "Storage groups information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonBSGroupInfo> {
     static TString GetDescription() {
-        return "\"Returns information about storage groups\"";
+        return "Returns information about storage groups";
     }
 };
 

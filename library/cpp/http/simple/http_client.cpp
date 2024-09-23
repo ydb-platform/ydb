@@ -301,8 +301,14 @@ TKeepAliveHttpClient TSimpleHttpClient::CreateClient() const {
 void TSimpleHttpClient::PrepareClient(TKeepAliveHttpClient&) const {
 }
 
+TRedirectableHttpClient::TRedirectableHttpClient(const TOptions& options)
+    : TSimpleHttpClient(options)
+    , Opts(options)
+{
+}
+
 TRedirectableHttpClient::TRedirectableHttpClient(const TString& host, ui32 port, TDuration socketTimeout, TDuration connectTimeout)
-    : TSimpleHttpClient(host, port, socketTimeout, connectTimeout)
+    : TRedirectableHttpClient(TOptions().Host(host).Port(port).SocketTimeout(socketTimeout).ConnectTimeout(connectTimeout))
 {
 }
 
@@ -315,6 +321,10 @@ void TRedirectableHttpClient::PrepareClient(TKeepAliveHttpClient& cl) const {
 void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, const unsigned statusCode) const {
     for (auto i = input.Headers().Begin(), e = input.Headers().End(); i != e; ++i) {
         if (0 == TString::compare(i->Name(), TStringBuf("Location"))) {
+            if (Opts.MaxRedirectCount() == 0) {
+                ythrow THttpRequestException(statusCode) << "Exceeds MaxRedirectCount limit, code " << statusCode << " at " << Host << relativeUrl;
+            }
+
             TVector<TString> request_url_parts, request_body_parts;
 
             size_t splitted_index = 0;
@@ -339,7 +349,12 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
                 }
             }
 
-            TRedirectableHttpClient cl(url, port, TDuration::Seconds(60), TDuration::Seconds(60));
+            auto opts = Opts;
+            opts.Host(url);
+            opts.Port(port);
+            opts.MaxRedirectCount(opts.MaxRedirectCount() - 1);
+
+            TRedirectableHttpClient cl(opts);
             if (HttpsVerification) {
                 cl.EnableVerificationForHttps();
             }

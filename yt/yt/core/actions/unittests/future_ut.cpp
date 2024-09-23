@@ -1414,7 +1414,7 @@ TEST_F(TFutureTest, AsyncViaCanceledInvoker)
 {
     auto context = New<TCancelableContext>();
     auto invoker = context->CreateInvoker(GetSyncInvoker());
-    auto generator = BIND([] () {}).AsyncVia(invoker);
+    auto generator = BIND([] {}).AsyncVia(invoker);
     context->Cancel(TError("oops"));
     auto future = generator();
     auto error = future.Get();
@@ -1687,6 +1687,34 @@ TEST_F(TFutureTest, AbandonDuringGet)
     });
     EXPECT_EQ(future.Get().GetCode(), EErrorCode::Canceled);
     thread.join();
+}
+
+TEST_F(TFutureTest, CancelAppliedToUncancellable)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    auto uncancelable = future.ToUncancelable();
+    auto future1 = uncancelable.Apply(BIND([&] () -> void {}));
+    future1.Cancel(TError("Cancel"));
+    EXPECT_FALSE(promise.IsSet());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_FALSE(uncancelable.IsSet());
+    EXPECT_FALSE(future1.IsSet());
+
+    auto immediatelyCancelable = uncancelable.ToImmediatelyCancelable();
+    auto future2 = immediatelyCancelable.Apply(BIND([&] () -> void {}));
+    future2.Cancel(TError("Cancel"));
+    EXPECT_FALSE(promise.IsSet());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_TRUE(immediatelyCancelable.IsSet());
+    EXPECT_TRUE(future2.IsSet());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future2.Get().GetCode());
+
+    promise.Set();
+    EXPECT_TRUE(uncancelable.IsSet());
+    EXPECT_TRUE(future1.IsSet());
+    EXPECT_TRUE(future1.Get().IsOK());
 }
 
 ///////////////////////////////////////////////////////////////////////////////

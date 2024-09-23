@@ -312,6 +312,9 @@ private:
             size_t readSize = 0;
             TExprNode::TListType pathNodes;
 
+            TStringBuilder path;
+            object.ForEachChild([&path](const TExprNode& child){ path << child.Head().Tail().Head().Content() << " "; });
+
             TMap<TMaybe<TVector<TExtraColumnValue>>, NS3Details::TPathList> pathsByExtraValues;
             const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;
             if (auto it = genColumnsByNode.find(node); it != genColumnsByNode.end()) {
@@ -499,12 +502,24 @@ private:
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 
+            auto row = Build<TCoArgument>(ctx, read.Pos())
+                .Name("row")
+                .Done();
+            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                .Args({row})
+                .Body<TCoBool>()
+                    .Literal().Build("true")
+                    .Build()
+                .Done().Ptr();
+            
             replaces.emplace(node, userSchema.back() ?
                 Build<TS3ReadObject>(ctx, read.Pos())
                     .World(read.World())
                     .DataSource(read.DataSource())
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
+                    .Path(ctx.NewAtom(object.Pos(), path))
+                    .FilterPredicate(emptyPredicate)
                     .ColumnOrder(std::move(userSchema.back()))
                 .Done().Ptr():
                 Build<TS3ReadObject>(ctx, read.Pos())
@@ -512,6 +527,8 @@ private:
                     .DataSource(read.DataSource())
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
+                    .Path(ctx.NewAtom(object.Pos(), path))
+                    .FilterPredicate(emptyPredicate)
                 .Done().Ptr());
         }
 
@@ -847,6 +864,10 @@ private:
                         entries.Directories.back().Path = req.S3Request.Pattern;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
+                        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+                        if (useRuntimeListing && !req.Options.IsPartitionedDataset) {
+                            req.Options.MaxResultSet = 1;
+                        }
                         future = ListingStrategy_->List(req.S3Request, req.Options);
                     }
                     PendingRequests_[req] = future;

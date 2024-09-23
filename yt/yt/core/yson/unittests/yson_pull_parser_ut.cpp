@@ -145,7 +145,8 @@ public:
     }
 
 private:
-    void NextBuffer() {
+    void NextBuffer()
+    {
         if (Data_.empty()) {
             CurrentInput_.reset();
         } else {
@@ -375,8 +376,7 @@ TEST(TYsonPullParserTest, String)
     EXPECT_EQ(GetYsonPullSignature(" Hello_789_World_123 "), "'Hello_789_World_123'");
     EXPECT_EQ(
         GetYsonPullSignature("\" abcdeABCDE <1234567> + (10_000) - = 900   \""),
-        "' abcdeABCDE <1234567> + (10_000) - = 900   '"
-    );
+        "' abcdeABCDE <1234567> + (10_000) - = 900   '");
 }
 
 TEST(TYsonPullParserTest, StringEscaping)
@@ -567,8 +567,7 @@ TEST(TYsonPullParserTest, ContextInExceptions_ManyBlocks)
                 "{fo",
                 manyO, // try to overflow 64 byte context
                 "o bar = 580}",
-            }
-        );
+            });
         TYsonPullParser parser(&input, EYsonType::Node);
         GetYsonPullSignature(&parser);
     } catch (const std::exception& ex) {
@@ -601,8 +600,7 @@ TEST(TYsonPullParserTest, ContextInExceptions_Margin)
                 "b",
                 "c",
                 "d bar = 580}",
-            }
-        );
+            });
         TYsonPullParser parser(&input, EYsonType::Node);
         GetYsonPullSignature(&parser);
     } catch (const std::exception& ex) {
@@ -669,8 +667,7 @@ TEST(TYsonPullParserTest, TypedParsingBasicCases)
                 "];"
                 "#;"
             "]"
-        }
-    );
+        });
 
     TYsonPullParser parser(&input, EYsonType::Node);
     EXPECT_TRUE(parser.ParseOptionalBeginList());

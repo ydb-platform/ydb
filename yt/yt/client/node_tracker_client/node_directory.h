@@ -88,7 +88,6 @@ bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
 bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf spec);
-TString ToString(const TNodeDescriptor& descriptor);
 
 // Accessors for some well-known addresses.
 std::optional<TString> FindDefaultAddress(const TAddressMap& addresses);

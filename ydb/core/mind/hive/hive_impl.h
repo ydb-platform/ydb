@@ -238,11 +238,13 @@ protected:
     friend class TTxUpdateTabletsObject;
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
+    friend class TLoggedMonTransaction;
 
     friend class TDeleteTabletActor;
 
     friend struct TStoragePoolInfo;
 
+    bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
@@ -411,6 +413,8 @@ protected:
     TSequenceGenerator Sequencer;
     TOwnershipKeeper Keeper;
     TEventPriorityQueue<THive> EventQueue{*this};
+    ui64 OperationsLogIndex = 0;
+    std::vector<TActorId> ActorsWaitingToMoveTablets;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -565,9 +569,12 @@ protected:
     void Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
+    void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
+    void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
+    bool TryToDeleteNode(TNodeInfo* node);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -585,22 +592,11 @@ protected:
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 
-    struct TBestNodeResult {
-        TNodeInfo* BestNode;
-        bool TryToContinue;
+    struct TNoNodeFound {};
+    struct TTooManyTabletsStarting {};
+    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting>;
 
-        TBestNodeResult(TNodeInfo& bestNode)
-            : BestNode(&bestNode)
-            , TryToContinue(true)
-        {}
-
-        TBestNodeResult(bool tryToContinue)
-            : BestNode(nullptr)
-            , TryToContinue(tryToContinue)
-        {}
-    };
-
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet);
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
     struct TSelectedNode {
         double Usage;
@@ -630,7 +626,7 @@ public:
     TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); }
-    TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
+TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
@@ -644,7 +640,7 @@ public:
     void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
-    void AddToBootQueue(TTabletInfo* tablet);
+    void AddToBootQueue(TTabletInfo* tablet, TNodeId node = 0);
     void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
     void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);
@@ -861,6 +857,10 @@ public:
         }
     }
 
+    bool GetEnableDestroyOperations() {
+        return CurrentConfig.GetEnableDestroyOperations();
+    }
+
     const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& GetTabletLimit() const {
         return TabletLimit;
     }
@@ -979,6 +979,7 @@ protected:
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
+    void WaitToMoveTablets(TActorId actor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);

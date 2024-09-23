@@ -35,6 +35,42 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
@@ -137,6 +173,7 @@
                                                                                                                                     "a (-\u221e, +\u221e)",
                                                                                                                                     "num (-\u221e, +\u221e)"
                                                                                                                                 ],
+                                                                                                                                "Scan": "Parallel",
                                                                                                                                 "Table": "postgres_jointest/join4.test_plan/b"
                                                                                                                             }
                                                                                                                         ],
@@ -172,6 +209,7 @@
                                                                                                 "ReadRanges": [
                                                                                                     "code (-\u221e, +\u221e)"
                                                                                                 ],
+                                                                                                "Scan": "Parallel",
                                                                                                 "Table": "postgres_jointest/join4.test_plan/a"
                                                                                             }
                                                                                         ],
@@ -208,6 +246,7 @@
                                                                 "ReadRanges": [
                                                                     "name (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/join4.test_plan/c"
                                                             }
                                                         ],

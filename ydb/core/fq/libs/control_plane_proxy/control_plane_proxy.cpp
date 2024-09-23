@@ -196,8 +196,6 @@ public:
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
-        Counters->InFly->Dec();
-        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         const auto& response = ev->Get()->Response;
         const auto& status = ev->Get()->Status;
         if (!status.Ok() || !response.has_subject()) {
@@ -209,19 +207,22 @@ public:
                 TActivationContext::Schedule(*delay, new IEventHandle(AccessService, static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
                 return;
             }
+            const TDuration delta = TInstant::Now() - StartTime;
+            Counters->InFly->Dec();
+            Counters->LatencyMs->Collect((delta).MilliSeconds());
             Counters->Error->Inc();
             CPP_LOG_E(errorMessage);
             NYql::TIssues issues;
             NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve subject type error");
             issues.AddIssue(issue);
-            Counters->Error->Inc();
-            const TDuration delta = TInstant::Now() - StartTime;
             Probe(delta, false, false);
             Send(Sender, new TResponseProxy(issues, {}), 0, Cookie);
             PassAway();
             return;
         }
 
+        Counters->InFly->Dec();
+        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         Counters->Ok->Inc();
         TString subjectType = GetSubjectType(response.subject());
         Event->Get()->SubjectType = subjectType;
@@ -332,8 +333,7 @@ public:
     }
 
     void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
-        Counters->InFly->Dec();
-        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
+
         const auto& status = ev->Get()->Status;
         if (!status.Ok() || ev->Get()->CloudId.empty()) {
             TString errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
@@ -344,18 +344,22 @@ public:
                 TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
                 return;
             }
+            const TDuration delta = TInstant::Now() - StartTime;
+            Counters->InFly->Dec();
+            Counters->LatencyMs->Collect((delta).MilliSeconds());
             Counters->Error->Inc();
             CPP_LOG_E(errorMessage);
             NYql::TIssues issues;
             NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve folder error");
             issues.AddIssue(issue);
-            const TDuration delta = TInstant::Now() - StartTime;
             Probe(delta, false, false);
             Send(Sender, new TResponseProxy(issues, {}), 0, Cookie);
             PassAway();
             return;
         }
 
+        Counters->InFly->Dec();
+        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         Counters->Ok->Inc();
         TString cloudId = ev->Get()->CloudId;
         Event->Get()->CloudId = cloudId;

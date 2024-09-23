@@ -399,7 +399,7 @@ private:
             << "top size# " << sorted.size()
             << ", time# " << now);
 
-        Send(MakePipePeNodeCacheID(false),
+        Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEvent.Release(), SysViewProcessorId, true));
     }
 
@@ -413,7 +413,7 @@ private:
     }
 
     void PassAway() override {
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
 
@@ -534,7 +534,7 @@ private:
 
         request->Record.SetIncludePathColumn(IncludePathColumn);
 
-        auto pipeCache = MakePipePeNodeCacheID(false);
+        auto pipeCache = MakePipePerNodeCacheID(false);
         Send(pipeCache, new TEvPipeCache::TEvForward(request.Release(), SchemeShardId, true),
             IEventHandle::FlagTrackDelivery);
 
@@ -675,7 +675,7 @@ private:
     }
 
     void PassAway() override {
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
 

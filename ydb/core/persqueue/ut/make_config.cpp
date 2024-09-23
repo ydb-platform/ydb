@@ -1,12 +1,15 @@
 #include "make_config.h"
 
+#include <util/datetime/base.h>
+
 #include <ydb/core/persqueue/utils.h>
 
 namespace NKikimr::NPQ::NHelpers {
 
 NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
                                       const TVector<TCreateConsumerParams>& consumers,
-                                      ui32 partitionsCount)
+                                      ui32 partitionsCount,
+                                      NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode)
 {
     NKikimrPQ::TPQTabletConfig config;
 
@@ -27,7 +30,9 @@ NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
     config.SetLocalDC(true);
     config.SetYdbDatabasePath("");
 
-    config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+    config.SetMeteringMode(meteringMode);
+    config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());
+    config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(10 << 20);
 
     Migrate(config);
 

@@ -1,0 +1,1 @@
+If the date value stored in the external data source is outside the allowed range for {{ ydb-short-name }} (all dates used must be later than 1970-01-01 but earlier than 2105-12-31), such a value in {{ ydb-short-name }} will be converted to `NULL`.

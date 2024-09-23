@@ -84,7 +84,6 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
             .ResolveHandler = walkFolders.ResolveHandler().Ptr(),
             .DiveHandler = walkFolders.DiveHandler().Ptr(),
             .PostHandler = walkFolders.PostHandler().Ptr(),
-            .StateKey = walkFolders.Ref().UniqueId(),
         });
         
         return true;

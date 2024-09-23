@@ -121,7 +121,7 @@ message TFeatureFlags {
     optional bool EnableStatistics = 106 [default = false];
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
     optional bool EnableTablePgTypes = 108 [default = false];
-    optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
     optional bool UseVDisksBalancing = 111 [default = false];
     optional bool EnableViews = 112 [default = false];
@@ -131,4 +131,17 @@ message TFeatureFlags {
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = false];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
+    optional bool EnableLocalDBFlatIndex = 119 [default = true];
+    optional bool ExtendedVDiskCounters = 120 [default = true];
+    optional bool ExtendedPDiskSensors = 121 [default = true];
+    optional bool EnableStableNodeNames = 122 [default = false];
+    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = true];
+    optional bool EnableGraphShard = 125 [default = false];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
+    optional bool EnableDbMetadataCache = 127 [default = false];
+    optional bool EnableTableDatetime64 = 128 [default = false];
+    optional bool EnableResourcePools  = 129 [default = false];
+    optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableSingleCompositeActionGroup = 131 [default = false];
 }

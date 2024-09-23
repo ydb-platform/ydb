@@ -1,11 +1,16 @@
 #include "yaml_config_parser.h"
+#include "yaml_config_parser_impl.h"
 #include "yaml_config_helpers.h"
 #include "core_constants.h"
 
+#include <ydb/library/pdisk_io/device_type.h>
 #include <ydb/library/yaml_config/protos/config.pb.h>
 
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_pdisk_category.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
 
@@ -169,10 +174,27 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, COMBINED_DISK_INFO_PATH);
 
+        Iterate(json, POOL_CONFIG_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 2);
+
+            TPoolConfigKey key{
+                .Domain = ids[0],
+                .StoragePoolType = ids[1],
+            };
+
+            ctx.PoolConfigInfo[key] = TPoolConfigInfo{
+                .HasErasureSpecies = node.Has("erasure_species"),
+                .HasKind = node.Has("kind"),
+                .HasVDiskKind = node.Has("vdisk_kind"),
+            };
+        });
+
         Iterate(json, GROUP_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
             Y_ENSURE_BT(ids.size() == 1);
             Y_ENSURE_BT(node.IsMap());
-            ctx.GroupErasureSpecies[ids[0]] = GetStringRobust(node, ERASURE_SPECIES_FIELD);
+            if (node.Has(ERASURE_SPECIES_FIELD)) {
+                ctx.GroupErasureSpecies[ids[0]] = GetStringRobust(node, ERASURE_SPECIES_FIELD);
+            }
         });
         EraseMultipleByPath(json, GROUP_PATH, ERASURE_SPECIES_FIELD);
         // for security config
@@ -212,13 +234,18 @@ namespace NKikimr::NYaml {
         return it->second;
     }
 
-    ui32 PdiskCategoryFromString(const TString& data) {
+    ui64 PdiskCategoryFromString(const TString& data) {
+        ui64 pDiskCategory = 0;
+        if (TryFromString(data, pDiskCategory)) {
+            return pDiskCategory;
+        }
+
         if (data == "ROT") {
-            return 0;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw();
         } else if (data == "SSD") {
-            return 1;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_SSD, 0).GetRaw();
         } else if (data == "NVME") {
-            return 2;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_NVME, 0).GetRaw();
         }
 
         Y_ENSURE_BT(false, "unknown pdisk category " << data);
@@ -357,9 +384,27 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareIcConfig(NKikimrConfig::TAppConfig& config) {
+    void PrepareIcConfig(NKikimrConfig::TAppConfig& config, const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         auto* icConfig = config.MutableInterconnectConfig();
         icConfig->SetStartTcp(true);
+
+        if (ephemeralConfig.HasTls()) {
+            ephemeralConfig.GetTls().CopyToTInterconnectConfig(*icConfig);
+        }
+
+        if (icConfig->HasPathToCertificateFile() &&
+            icConfig->HasPathToPrivateKeyFile() &&
+            icConfig->HasPathToCaFile() &&
+            !icConfig->HasEncryptionMode())
+        {
+            icConfig->SetEncryptionMode(NKikimrConfig::TInterconnectConfig::OPTIONAL);
+        }
+    }
+
+    void PrepareGrpcConfig(NKikimrConfig::TAppConfig& config, const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.HasTls()) {
+            ephemeralConfig.GetTls().CopyToTGRpcConfig(*config.MutableGRpcConfig());
+        }
     }
 
     void PrepareSecurityConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed) {
@@ -471,6 +516,92 @@ namespace NKikimr::NYaml {
             return;
         }
 
+        // TODO validate
+        auto defaultDiskType = ephemeralConfig.GetDefaultDiskType();
+
+        ui64 nextHostConfigID = 1;
+
+        // Find the next available host_config_id
+        if (ephemeralConfig.HostConfigsSize()) {
+            for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+                if (hostConfig.HasHostConfigId()) {
+                    nextHostConfigID = Max(
+                        nextHostConfigID,
+                        hostConfig.GetHostConfigId() + 1
+                    );
+                }
+            }
+        }
+
+        ui32 nextBodyID = 1;
+
+        // Extract inline drives into host_configs and find the next empty body ID
+        for(auto& host : *ephemeralConfig.MutableHosts()) {
+            if (host.DriveSize()) {
+                host.SetHostConfigId(nextHostConfigID);
+                auto* hostConfig = ephemeralConfig.AddHostConfigs();
+                hostConfig->SetHostConfigId(nextHostConfigID);
+                for (const auto& drive : host.GetDrive()) {
+                    hostConfig->AddDrive()->CopyFrom(drive);
+                }
+                ++nextHostConfigID;
+            }
+
+            if (host.HasLocation() && host.GetLocation().HasBody()) {
+                nextBodyID = Max(
+                    nextBodyID,
+                    host.GetLocation().GetBody() + 1
+                );
+            }
+
+            if (host.HasWalleLocation() && host.GetWalleLocation().HasBody()) {
+                nextBodyID = Max(
+                    nextBodyID,
+                    host.GetWalleLocation().GetBody() + 1
+                );
+            }
+        }
+
+        // Patch disk types
+        if (ephemeralConfig.HostConfigsSize()) {
+            for(auto& hostConfig : *ephemeralConfig.MutableHostConfigs()) {
+                int sectorMapIndex = 0;
+                for(auto& drive : *hostConfig.MutableDrive()) {
+                    if (!drive.HasType()) {
+                       drive.SetType(defaultDiskType);
+                    }
+
+                    if (drive.GetType() == "RAM") {
+                        ++sectorMapIndex;
+                        drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
+                        drive.SetType("SSD");
+                    }
+                }
+            }
+        }
+
+        // Fill locations
+        for(auto& host : *ephemeralConfig.MutableHosts()) {
+            if (host.HasWalleLocation()) {
+                continue;
+            }
+
+            auto& location = *host.MutableLocation();
+
+            if (!location.HasBody()) {
+                location.SetBody(nextBodyID);
+                ++nextBodyID;
+            }
+
+            if (!location.HasRack()) {
+                location.SetRack(Sprintf("generated-rack-%u", location.GetBody()));
+            }
+
+            if (!location.HasDataCenter()) {
+                location.SetDataCenter("default");
+            }
+        }
+
         ui32 nodeID = 0;
         for(auto& host : *ephemeralConfig.MutableHosts()) {
             nodeID++;
@@ -482,6 +613,249 @@ namespace NKikimr::NYaml {
             if (!host.HasPort()) {
                 host.SetPort(DEFAULT_INTERCONNECT_PORT);
             }
+        }
+    }
+
+    void ApplySingleNodeDefaults(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        const TString erasureName = "none";
+
+        std::optional<TString> diskType;
+        std::optional<TString> diskTypeLower;
+        std::optional<TString> drivePath;
+
+        if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize()) {
+            const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
+            diskType = drive.GetType();
+            diskTypeLower = diskType;
+            diskTypeLower->to_lower();
+            drivePath = drive.GetPath();
+        }
+
+        if (!ephemeralConfig.HasStaticErasure()) {
+            ephemeralConfig.SetStaticErasure(erasureName);
+        }
+
+        auto& domainsConfig = *config.MutableDomainsConfig();
+
+        if (!domainsConfig.DomainSize()) {
+            NKikimrBlobStorage::EPDiskType dtEnum;
+            Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType.value(), dtEnum), "incorrect enum: " << diskType.value());
+
+            auto& domain = *domainsConfig.AddDomain();
+            domain.SetName("Root"); // TODO: allow override
+            auto& storagePoolType =  *domain.AddStoragePoolTypes();
+            storagePoolType.SetKind(diskTypeLower.value());
+            auto& poolConfig = *storagePoolType.MutablePoolConfig();
+            poolConfig.SetBoxId(1);
+            poolConfig.SetErasureSpecies(erasureName);
+            poolConfig.AddPDiskFilter()->AddProperty()->SetType(dtEnum);
+            poolConfig.SetVDiskKind("Default");
+        }
+
+        if (!domainsConfig.StateStorageSize()) {
+            auto& stateStorage = *domainsConfig.AddStateStorage();
+            stateStorage.SetSSId(1);
+            auto& ring = *stateStorage.MutableRing();
+            ring.AddNode(1);
+            ring.SetNToSelect(1);
+        }
+
+        if (!config.HasBlobStorageConfig()) {
+            auto& bsConfig = *config.MutableBlobStorageConfig();
+            auto& serviceSet = *bsConfig.MutableServiceSet();
+            auto& group = *serviceSet.AddGroups();
+            ctx.GroupErasureSpecies[0] = erasureName;
+
+            auto& ring = *group.AddRings();
+            auto& failDomain = *ring.AddFailDomains();
+            failDomain.AddVDiskLocations();
+
+            auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
+
+            vdiskLoc.SetNodeID("1");
+            vdiskLoc.SetPath(drivePath.value());
+            vdiskLoc.SetPDiskCategory(diskType.value());
+        }
+
+        if (!config.HasChannelProfileConfig()) {
+            auto& channelProfile = *config.MutableChannelProfileConfig()->AddProfile();
+            channelProfile.SetProfileId(0);
+            for (size_t i = 0; i < 3; ++i) {
+                auto& channel = *channelProfile.AddChannel();
+                channel.SetErasureSpecies(erasureName);
+                channel.SetPDiskCategory(1);
+                channel.SetStoragePoolKind(diskTypeLower.value());
+            };
+        }
+    }
+
+    void ApplyMultiNodeDefaults(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        TMaybe<TString> erasureName;
+        TMaybe<TString> defaultDiskType;
+        TMaybe<TString> defaultDiskTypeLower;
+        TMaybe<NKikimrBlobStorage::EPDiskType> dtEnum;
+
+        const NKikimrConfig::TBlobStorageConfig::TAutoconfigSettings *autoconf = nullptr;
+        if (config.HasBlobStorageConfig()) {
+            if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
+                autoconf = &bsConfig.GetAutoconfigSettings();
+            }
+        }
+
+        if (ephemeralConfig.HasErasure()) {
+            erasureName = ephemeralConfig.GetErasure();
+        } else if (autoconf && autoconf->HasErasureSpecies()) {
+            erasureName = autoconf->GetErasureSpecies();
+        }
+
+        if (ephemeralConfig.HasDefaultDiskType()) {
+            defaultDiskType = ephemeralConfig.GetDefaultDiskType();
+            Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(*defaultDiskType, &dtEnum.ConstructInPlace()),
+                "incorrect enum: " << defaultDiskType);
+        } else if (autoconf) {
+            THashSet<TMaybe<NKikimrBlobStorage::EPDiskType>> options;
+            bool error = false;
+
+            if (autoconf->HasPDiskType()) {
+                options.insert(autoconf->GetPDiskType());
+            }
+
+            for (const auto& filter : autoconf->GetPDiskFilter()) {
+                TMaybe<NKikimrBlobStorage::EPDiskType> type;
+                for (const auto& prop : filter.GetProperty()) {
+                    if (prop.HasType()) {
+                        if (type) { // two Type values in single filter
+                            error = true;
+                        } else {
+                            type = prop.GetType();
+                        }
+                    }
+                }
+                options.insert(type);
+            }
+
+            if (options.size() == 1 && !error) {
+                dtEnum = *options.begin();
+                defaultDiskType = NKikimrBlobStorage::EPDiskType_Name(*dtEnum);
+            }
+        }
+
+        if (defaultDiskType) {
+            defaultDiskTypeLower = *defaultDiskType.Get();
+            defaultDiskTypeLower.Get()->to_lower();
+        }
+
+        if (erasureName && !ephemeralConfig.HasStaticErasure()) {
+            ephemeralConfig.SetStaticErasure(*erasureName);
+        }
+
+        if (!config.HasDomainsConfig()) {
+            auto& domainsConfig = *config.MutableDomainsConfig();
+            auto& domain = *domainsConfig.AddDomain();
+            domain.SetName("Root");
+
+            if (erasureName && defaultDiskTypeLower && dtEnum) {
+                auto& poolType = *domain.AddStoragePoolTypes();
+                poolType.SetKind(*defaultDiskTypeLower);
+                auto& poolConfig = *poolType.MutablePoolConfig();
+                poolConfig.SetErasureSpecies(*erasureName);
+                poolConfig.SetVDiskKind("Default");
+                auto& filter = *poolConfig.AddPDiskFilter();
+                auto& prop = *filter.AddProperty();
+                prop.SetType(*dtEnum);
+            }
+        } else {
+            auto& domainsConfig = *config.MutableDomainsConfig();
+
+            Y_ENSURE_BT(domainsConfig.DomainSize() <= 1, "Only a single domain is currently supported");
+            if (domainsConfig.DomainSize() == 1) {
+                auto& domain = *domainsConfig.MutableDomain(0);
+                ui32 storagePoolTypeId = 0;
+                for (auto& storagePoolType : *domain.MutableStoragePoolTypes()) {
+                    if (defaultDiskTypeLower && !storagePoolType.HasKind()) {
+                        storagePoolType.SetKind(*defaultDiskTypeLower);
+                    }
+
+                    if (storagePoolType.HasPoolConfig()) {
+                        auto& poolConfig = *storagePoolType.MutablePoolConfig();
+                        auto& info = ctx.PoolConfigInfo[{0, storagePoolTypeId}];
+
+                        if (erasureName && !info.HasErasureSpecies) {
+                            poolConfig.SetErasureSpecies(erasureName.GetRef());
+                        }
+
+                        if (defaultDiskTypeLower && !info.HasKind) {
+                            poolConfig.SetKind(*defaultDiskTypeLower);
+                        }
+
+                        if (defaultDiskType && !poolConfig.PDiskFilterSize()) {
+                            poolConfig.AddPDiskFilter()->AddProperty()->SetType(*dtEnum);
+                        }
+
+                        if (!info.HasVDiskKind) {
+                            poolConfig.SetVDiskKind("Default");
+                        }
+                    }
+                    ++storagePoolTypeId;
+                }
+            }
+        }
+
+        if (!config.HasGRpcConfig()) {
+            auto& grpc = *config.MutableGRpcConfig();
+            grpc.SetPort(2135);
+        }
+
+        if (config.HasBlobStorageConfig()) {
+            auto& bsConfig = *config.MutableBlobStorageConfig();
+            if (bsConfig.HasServiceSet()) {
+                auto& serviceSet = *bsConfig.MutableServiceSet();
+                for (ui32 groupID = 0; groupID < serviceSet.GroupsSize(); ++groupID) {
+                    if (erasureName && !ctx.GroupErasureSpecies.contains(groupID)) {
+                        ctx.GroupErasureSpecies[groupID] = erasureName.GetRef();
+                    }
+                }
+            }
+            if (defaultDiskType) {
+                for (auto& [_, loc] : ctx.CombinedDiskInfo) {
+                    if (!loc.HasPDiskCategory()) {
+                        loc.SetPDiskCategory(defaultDiskType.GetRef());
+                    }
+                }
+            }
+        }
+
+        if (config.HasChannelProfileConfig()) {
+            auto& cpConfig = *config.MutableChannelProfileConfig();
+            for (auto& profile : *cpConfig.MutableProfile()) {
+                for (auto& channel : *profile.MutableChannel()) {
+                    if (erasureName && !channel.HasErasureSpecies()) {
+                        channel.SetErasureSpecies(erasureName.GetRef());
+                    }
+
+                    if (defaultDiskTypeLower && !channel.HasStoragePoolKind()) {
+                        channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
+                    }
+                }
+            }
+        } else if (erasureName && defaultDiskTypeLower) {
+            auto& channelProfile = *config.MutableChannelProfileConfig()->AddProfile();
+            channelProfile.SetProfileId(0);
+
+            for (size_t i = 0; i < 3; ++i) {
+                auto& channel = *channelProfile.AddChannel();
+                channel.SetErasureSpecies(erasureName.GetRef());
+                channel.SetPDiskCategory(TPDiskCategory(PDiskTypeToPDiskType(*dtEnum), 0));
+                channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
+            };
+        }
+    }
+
+    void ApplyDefaultConfigs(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.HostsSize() == 1) {
+            ApplySingleNodeDefaults(ctx, config, ephemeralConfig);
+        } else if (ephemeralConfig.HostsSize() > 1) {
+            ApplyMultiNodeDefaults(ctx, config, ephemeralConfig);
         }
     }
 
@@ -597,7 +971,9 @@ namespace NKikimr::NYaml {
         }
 
         auto* bsConfig = config.MutableBlobStorageConfig();
-        Y_ENSURE_BT(bsConfig->HasServiceSet(), "service_set field in blob_storage_config must be json map.");
+        if (!bsConfig->HasServiceSet()) {
+            return;
+        }
 
         auto* serviceSet = bsConfig->MutableServiceSet();
         if (!serviceSet->AvailabilityDomainsSize()) {
@@ -684,12 +1060,7 @@ namespace NKikimr::NYaml {
 
                             std::optional<ui64> pDiskCategoryId;
                             if (info.HasPDiskCategory()) {
-                                ui64 pDiskCategory = 0;
-                                if (!TryFromString(info.GetPDiskCategory(), pDiskCategory)) {
-                                    pDiskCategory = PdiskCategoryFromString(info.GetPDiskCategory());
-                                }
-
-                                pDiskCategoryId = pDiskCategory;
+                                pDiskCategoryId = PdiskCategoryFromString(info.GetPDiskCategory());
                             }
 
                             info.CopyToTVDiskLocation(vdiskLocation);
@@ -745,11 +1116,28 @@ namespace NKikimr::NYaml {
         autoconfigSettings->ClearDefineHostConfig();
         autoconfigSettings->ClearDefineBox();
 
-        if (ephemeralConfig.HostConfigsSize()) {
-            for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
-                autoconfigSettings->AddDefineHostConfig()->CopyFrom(hostConfig);
+        bool hostConfigIdAssigned = false;
+        bool hostConfigIdProvided = false;
+        constexpr ui64 defaultHostConfigId = 1;
+        THashSet<ui64> validHostConfigIds;
+
+        for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+            auto *hostconf = autoconfigSettings->AddDefineHostConfig();
+            hostConfig.CopyToTDefineHostConfig(*hostconf);
+            if (hostConfig.HasHostConfigId()) {
+                hostConfigIdProvided = true;
+            } else if (!hostConfigIdAssigned) {
+                hostConfigIdAssigned = true;
+                hostconf->SetHostConfigId(defaultHostConfigId);
+            } else {
+                Y_ENSURE_BT(false, "multiple host configs without explicit id");
             }
+            Y_ENSURE_BT(validHostConfigIds.insert(hostconf->GetHostConfigId()).second, "duplicate host config id "
+                << hostconf->GetHostConfigId());
         }
+
+        Y_ENSURE_BT(!hostConfigIdProvided || !hostConfigIdAssigned, "mixed host configs with explicit id and without one");
+        Y_ENSURE_BT(!validHostConfigIds.empty(), "autoconfiguration is enabled, but no host configs provided");
 
         TMap<std::tuple<TString, ui32>, ui32> hostNodeMap; // (.nameservice_config.node[].interconnect_host, .nameservice_config.node[].port) -> .nameservice_config.node[].node_id
         Y_ENSURE_BT(config.HasNameserviceConfig());
@@ -760,36 +1148,36 @@ namespace NKikimr::NYaml {
             hostNodeMap[key] = item.GetNodeId();
         }
 
-
-        if (!ephemeralConfig.HostsSize()) {
-            return;
-        }
-
         NKikimrBlobStorage::TDefineBox* defineBox = nullptr;
         for (const auto& host : ephemeralConfig.GetHosts()) {
-            if (host.HasHostConfigId()) {
-                if (!defineBox) {
-                    defineBox = autoconfigSettings->MutableDefineBox();
-                    defineBox->SetBoxId(1);
-                }
-
-                TString fqdn;
-                if (host.HasInterconnectHost()) {
-                    fqdn = host.GetInterconnectHost();
-                } else {
-                    fqdn = host.GetHost();
-                }
-                ui32 port = 19001;
-                if (host.HasPort()) {
-                    port = host.GetPort();
-                }
-                const auto key = std::make_tuple(fqdn, port);
-                Y_ENSURE_BT(hostNodeMap.contains(key));
-
-                auto* dbHost = defineBox->AddHost();
-                dbHost->SetHostConfigId(host.GetHostConfigId());
-                dbHost->SetEnforcedNodeId(hostNodeMap[key]);
+            if (!host.HasHostConfigId() && !hostConfigIdAssigned) {
+                continue;
             }
+
+            if (!defineBox) {
+                defineBox = autoconfigSettings->MutableDefineBox();
+                defineBox->SetBoxId(1);
+            }
+
+            TString fqdn;
+            if (host.HasInterconnectHost()) {
+                fqdn = host.GetInterconnectHost();
+            } else {
+                fqdn = host.GetHost();
+            }
+            ui32 port = 19001;
+            if (host.HasPort()) {
+                port = host.GetPort();
+            }
+            const auto key = std::make_tuple(fqdn, port);
+            Y_ENSURE_BT(hostNodeMap.contains(key));
+
+            auto* dbHost = defineBox->AddHost();
+            dbHost->SetHostConfigId(host.HasHostConfigId() ? host.GetHostConfigId() : defaultHostConfigId);
+            dbHost->SetEnforcedNodeId(hostNodeMap[key]);
+
+            Y_ENSURE_BT(validHostConfigIds.contains(dbHost->GetHostConfigId()), "invalid host config id "
+                << dbHost->GetHostConfigId() << " for host " << fqdn << " and port " << port);
         }
     }
 
@@ -851,7 +1239,6 @@ namespace NKikimr::NYaml {
 
         if (!domainsConfig->HiveConfigSize()) {
             auto* hiveConfig = domainsConfig->AddHiveConfig();
-            hiveConfig->SetHiveUid(1);
             hiveConfig->SetHive(72057594037968897);
         }
 
@@ -870,14 +1257,6 @@ namespace NKikimr::NYaml {
 
             if (!domain.HasPlanResolution()) {
                 domain.SetPlanResolution(10);
-            }
-
-            if (!domain.HiveUidSize()) {
-                domain.AddHiveUid(1);
-            }
-
-            if (!domain.SSIdSize()) {
-                domain.AddSSId(1);
             }
 
             const auto& exps = EXPLICIT_TABLETS;
@@ -992,16 +1371,18 @@ namespace NKikimr::NYaml {
 
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
         PrepareHosts(ephemeralConfig);
+        ApplyDefaultConfigs(ctx, config, ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);
         PrepareStaticGroup(ctx, config, ephemeralConfig);
         PrepareBlobStorageConfig(config, ephemeralConfig);
         PrepareSystemTabletsInfo(config, ephemeralConfig, relaxed);
         PrepareDomainsConfig(config, ephemeralConfig, relaxed);
         PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
+        PrepareIcConfig(config, ephemeralConfig);
+        PrepareGrpcConfig(config, ephemeralConfig);
         PrepareSecurityConfig(ctx, config, relaxed);
         PrepareActorSystemConfig(config);
         PrepareLogConfig(config);
-        PrepareIcConfig(config);
     }
 
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data) {
@@ -1026,7 +1407,7 @@ namespace NKikimr::NYaml {
 
         for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
-            hostConfigProto->CopyFrom(hostConfig);
+            hostConfig.CopyToTDefineHostConfig(*hostConfigProto);
             // KIKIMR-16712
             // Avoid checking the version number for "host_config" configuration items.
             // This allows to add new host configuration items after the initial cluster setup.
@@ -1081,3 +1462,13 @@ namespace NKikimr::NYaml {
     }
 
 } // NKikimr::NYaml
+
+template <>
+NKikimrBlobStorage::EPDiskType
+NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<const TString, NKikimrBlobStorage::EPDiskType>(const TString* const in) {
+    NKikimrBlobStorage::EPDiskType res{};
+    if (!in || TryFromString(*in, res)) {
+        return res;
+    }
+    Y_ENSURE_BT(false, "Unknown EPDiskType enum value: " << *in);
+}

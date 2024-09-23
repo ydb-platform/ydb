@@ -22,6 +22,8 @@
 
 #include <library/cpp/yt/misc/hash.h>
 
+#include <library/cpp/yt/memory/tls_scratch.h>
+
 #include <library/cpp/yt/farmhash/farm_hash.h>
 
 #include <library/cpp/yt/coding/varint.h>
@@ -320,9 +322,23 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     // TODO(babenko): check flags; forbid comparing hunks and aggregates.
 
     if (lhs.Type == EValueType::Any || rhs.Type == EValueType::Any) {
-        if (!IsSentinel(lhs.Type) && !IsSentinel(rhs.Type)) {
-            // Never compare composite values with non-sentinels.
-            ThrowIncomparableTypes(lhs, rhs);
+        if (lhs.Type != rhs.Type) {
+            if (lhs.Type == EValueType::Composite || rhs.Type == EValueType::Composite) {
+                ThrowIncomparableTypes(lhs, rhs);
+            }
+            return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+        }
+        try {
+            auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
+            auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
+            return CompareYsonValues(lhsData, rhsData);
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::IncomparableComplexValues,
+                "Cannot compare complex values")
+                << TErrorAttribute("lhs_value", lhs)
+                << TErrorAttribute("rhs_value", rhs)
+                << ex;
         }
     }
 
@@ -338,7 +354,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
             auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
-            return CompareCompositeValues(lhsData, rhsData);
+            return CompareYsonValues(lhsData, rhsData);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
@@ -649,6 +665,7 @@ public:
     void OnBeginMap() override
     {
         ++Depth_;
+        MapFound_ = true;
     }
 
     void OnKeyedItem(TStringBuf /*key*/) override
@@ -664,6 +681,7 @@ public:
         if (Depth_ == 0) {
             THROW_ERROR_EXCEPTION("Table values cannot have top-level attributes");
         }
+        AttributesFound_ = true;
     }
 
     void OnEndAttributes() override
@@ -672,14 +690,29 @@ public:
     void OnRaw(TStringBuf /*yson*/, EYsonType /*type*/) override
     { }
 
+    bool CanBeSorted() const
+    {
+        return !MapFound_ && !AttributesFound_;
+    }
+
 private:
     int Depth_ = 0;
+    bool MapFound_ = false;
+    bool AttributesFound_ = false;
 };
 
 void ValidateAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+}
+
+bool CheckSortedAnyValue(TStringBuf yson)
+{
+    TYsonAnyValidator validator;
+    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+
+    return validator.CanBeSorted();
 }
 
 void ValidateDynamicValue(const TUnversionedValue& value, bool isKey)
@@ -754,7 +787,7 @@ void ValidateClientRow(
         }
 
         const auto& column = schema.Columns()[mappedId];
-        ValidateValueType(value, schema, mappedId, /*typeAnyAcceptsAllValues*/false);
+        ValidateValueType(value, schema, mappedId, /*typeAnyAcceptsAllValues*/ false);
 
         if (Any(value.Flags & EValueFlags::Aggregate) && !column.Aggregate()) {
             THROW_ERROR_EXCEPTION(
@@ -1036,8 +1069,18 @@ void ValidateValueType(
                             "Cannot write value of type %Qlv into type any column",
                             value.Type);
                     }
-                    if (IsAnyOrComposite(value.Type) && validateAnyIsValidYson) {
-                        ValidateAnyValue(value.AsStringBuf());
+                    if (IsAnyOrComposite(value.Type)) {
+                        if (columnSchema.SortOrder()) {
+                            bool canBeSorted = CheckSortedAnyValue(value.AsStringBuf());
+                            if (!canBeSorted) {
+                                THROW_ERROR_EXCEPTION(
+                                    NTableClient::EErrorCode::SchemaViolation,
+                                    "Cannot write value of type %Qlv, which contains a YSON map, into sorted column of type any",
+                                    value.Type);
+                            }
+                        } else if (validateAnyIsValidYson) {
+                            ValidateAnyValue(value.AsStringBuf());
+                        }
                     }
                 } else {
                     ValidateColumnType(EValueType::Composite, value);
@@ -1084,6 +1127,11 @@ void ValidateValueType(
             CASE(ESimpleLogicalValueType::Interval)
             CASE(ESimpleLogicalValueType::Json)
             CASE(ESimpleLogicalValueType::Uuid)
+
+            CASE(ESimpleLogicalValueType::Date32)
+            CASE(ESimpleLogicalValueType::Datetime64)
+            CASE(ESimpleLogicalValueType::Timestamp64)
+            CASE(ESimpleLogicalValueType::Interval64)
 #undef CASE
         }
         YT_ABORT();
@@ -1189,13 +1237,9 @@ void ValidateClientDataRow(
 void ValidateDuplicateAndRequiredValueColumns(
     TUnversionedRow row,
     const TTableSchema& schema,
-    const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer)
+    const TNameTableToSchemaIdMapping& idMapping)
 {
-    auto& columnSeen = *columnPresenceBuffer;
-    YT_VERIFY(std::ssize(columnSeen) >= schema.GetColumnCount());
-    std::fill(columnSeen.begin(), columnSeen.end(), 0);
-
+    auto columnSeenFlags = GetTlsScratchBuffer<bool>(schema.GetColumnCount());
     for (const auto& value : row) {
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0) {
@@ -1203,17 +1247,17 @@ void ValidateDuplicateAndRequiredValueColumns(
         }
         const auto& column = schema.Columns()[mappedId];
 
-        if (columnSeen[mappedId]) {
+        if (columnSeenFlags[mappedId]) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::DuplicateColumnInSchema,
                 "Duplicate column %v in table schema",
                 column.GetDiagnosticNameString());
         }
-        columnSeen[mappedId] = true;
+        columnSeenFlags[mappedId] = true;
     }
 
     for (int index = schema.GetKeyColumnCount(); index < schema.GetColumnCount(); ++index) {
-        if (!columnSeen[index] && schema.Columns()[index].Required()) {
+        if (!columnSeenFlags[index] && schema.Columns()[index].Required()) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::MissingRequiredColumnInSchema,
                 "Missing required column %v in table schema",
@@ -1228,15 +1272,14 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     const TNameTablePtr& nameTable,
-    const std::vector<int>& columnIndexToLockIndex,
-    bool allowSharedWriteLocks)
+    const std::vector<int>& columnIndexToLockIndex)
 {
     bool hasNonKeyColumns = false;
     for (const auto& value : row) {
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();
-            if (value.Id < 0 || value.Id >= size) {
+            if (value.Id >= size) {
                 THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
                     size - 1,
                     value.Id);
@@ -1252,10 +1295,6 @@ bool ValidateNonKeyColumnsAgainstLock(
         }
 
         auto lockType = locks.Get(lockIndex);
-
-        if (lockType == ELockType::SharedWrite && !allowSharedWriteLocks) {
-            THROW_ERROR_EXCEPTION("Shared write locks are not allowed for the table");
-        }
 
         if (mappedId >= schema.GetKeyColumnCount()) {
             hasNonKeyColumns = true;

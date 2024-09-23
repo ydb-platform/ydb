@@ -362,6 +362,7 @@ class TExecutor
     TAutoPtr<NUtil::ILogger> Logger;
 
     ui32 FollowerId = 0;
+    THashSet<ui32> PreloadTablesData;
 
     // This becomes true when executor enables the use of leases, e.g. starts persisting them
     // This may become false again when leases are not actively used for some time
@@ -483,6 +484,7 @@ class TExecutor
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
+    TControlWrapper MaxCommitRedoMB;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -685,6 +687,8 @@ public:
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
+
+    virtual void SetPreloadTablesData(THashSet<ui32> tables) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_EXECUTOR;

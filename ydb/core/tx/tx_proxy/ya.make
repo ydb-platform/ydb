@@ -9,6 +9,7 @@ SRCS(
     proxy.cpp
     read_table_impl.cpp
     resolvereq.cpp
+    rpc_long_tx.cpp
     snapshotreq.cpp
     commitreq.cpp
     upload_rows_common_impl.cpp
@@ -28,7 +29,7 @@ PEERDIR(
     ydb/core/docapi
     ydb/core/engine
     ydb/core/formats
-    ydb/core/grpc_services
+    ydb/core/grpc_services/local_rpc
     ydb/core/io_formats/arrow
     ydb/core/protos
     ydb/core/scheme

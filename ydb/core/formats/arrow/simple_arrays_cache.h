@@ -40,5 +40,6 @@ private:
 public:
     static std::shared_ptr<arrow::Array> GetNull(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
     static std::shared_ptr<arrow::Array> GetConst(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount);
+    static std::shared_ptr<arrow::Array> Get(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount);
 };
 }

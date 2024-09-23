@@ -2,11 +2,11 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <ydb/library/workload/workload_factory.h>
-#include <ydb/library/workload/stock_workload.h>
-#include <ydb/library/workload/stock_workload.h_serialized.h>
-#include <ydb/library/workload/kv_workload.h>
-#include <ydb/library/workload/kv_workload.h_serialized.h>
+#include <ydb/library/workload/abstract/workload_factory.h>
+#include <ydb/library/workload/stock/stock.h>
+#include <ydb/library/workload/stock/stock.h_serialized.h>
+#include <ydb/library/workload/kv/kv.h>
+#include <ydb/library/workload/kv/kv.h_serialized.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <util/generic/serialized_enum.h>

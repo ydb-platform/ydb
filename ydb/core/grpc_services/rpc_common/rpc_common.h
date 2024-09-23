@@ -27,6 +27,26 @@ inline void SetAuthToken(TEv& ev, const IRequestCtx& ctx) {
 }
 
 template<typename TEv>
+inline void SetClientIdentitySettings(TEv& ev, const IRequestCtx& ctx) {
+    ev->Record.SetClientAddress(ctx.GetPeerName());
+    const auto& token = ctx.GetInternalToken();
+    if (token && !token->GetSerializedToken().empty()) {
+        ev->Record.SetUserSID(token->GetUserSID());
+    } else {
+        ev->Record.SetUserSID("<anonymous>");
+    }
+
+    const auto& userAgent = ctx.GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
+    ev->Record.SetClientUserAgent(userAgent.GetOrElse("<empty>"));
+    const auto& sdkBuildInfo = ctx.GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    ev->Record.SetClientSdkBuildInfo(sdkBuildInfo.GetOrElse("<empty>"));
+    const auto& appName = ctx.GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME);
+    ev->Record.SetApplicationName(appName.GetOrElse("<empty>"));
+    const auto& pid = ctx.GetPeerMetaValues(NYdb::YDB_CLIENT_PID);
+    ev->Record.SetClientPID(pid.GetOrElse("<empty>"));
+}
+
+template<typename TEv>
 inline void SetDatabase(TEv& ev, const IRequestCtx& ctx) {
     // Empty database in case of absent header
     ev->Record.MutableRequest()->SetDatabase(CanonizePath(ctx.GetDatabaseName().GetOrElse("")));

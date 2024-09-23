@@ -24,13 +24,14 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 } // anonymous namespace
 
 TKqpScanComputeActor::TKqpScanComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-    : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings,
+    : TBase(executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
 {
+    InitializeTask();
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());
     YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
@@ -179,9 +180,9 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 void TKqpScanComputeActor::DoBootstrap() {
     CA_LOG_D("EVLOGKQP START");
     NDq::TDqTaskRunnerContext execCtx;
-    execCtx.FuncRegistry = AppData()->FunctionRegistry;
+    execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;
-    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx);
+    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx, std::nullopt);
     execCtx.RandomProvider = TAppData::RandomProvider.Get();
     execCtx.TimeProvider = TAppData::TimeProvider.Get();
     execCtx.ApplyCtx = nullptr;
@@ -215,7 +216,7 @@ void TKqpScanComputeActor::DoBootstrap() {
         };
     }
 
-    auto taskRunner = MakeDqTaskRunner(GetAllocator(), execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(GetAllocatorPtr(), execCtx, settings, logger);
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };

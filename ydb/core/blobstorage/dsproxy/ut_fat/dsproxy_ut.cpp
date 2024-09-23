@@ -4252,6 +4252,7 @@ public:
                 vDiskConfig->GCOnlySynced = false;
                 vDiskConfig->HullCompLevelRateThreshold = 0.1;
                 vDiskConfig->SkeletonFrontQueueBackpressureCheckMsgId = false;
+                vDiskConfig->UseCostTracker = false;
 
                 IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters);
                 TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);

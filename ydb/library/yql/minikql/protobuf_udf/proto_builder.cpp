@@ -69,7 +69,7 @@ namespace {
                     break;
 
                 case FieldDescriptor::TYPE_FLOAT:
-                    reflection.AddFloat(&target, &field, item.Get<float>());
+                    reflection.AddFloat(&target, &field, info.YtMode ? float(item.Get<double>()) : item.Get<float>());
                     break;
 
                 case FieldDescriptor::TYPE_INT64:
@@ -140,7 +140,7 @@ namespace {
                 break;
 
             case FieldDescriptor::TYPE_FLOAT:
-                reflection.SetFloat(&target, &field, source.Get<float>());
+                reflection.SetFloat(&target, &field, info.YtMode ? float(source.Get<double>()) : source.Get<float>());
                 break;
 
             case FieldDescriptor::TYPE_INT64:

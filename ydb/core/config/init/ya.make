@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     init.h
     init.cpp
+    init_noop.cpp
     dummy.h
     dummy.cpp
 )
@@ -15,11 +16,12 @@ PEERDIR(
     ydb/library/yaml_config
     ydb/library/yql/minikql
     ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_discovery
     ydb/public/sdk/cpp/client/ydb_driver
 )
+
+GENERATE_ENUM_SERIALIZATION(init.h)
 
 YQL_LAST_ABI_VERSION()
 

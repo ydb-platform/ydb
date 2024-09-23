@@ -342,6 +342,39 @@ TUnversionedValue TryDecodeUnversionedAnyValue(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TUnversionedValueRangeTruncationResult
+{
+    // Newly formed values are owned by the underlying row buffer.
+    TSharedRange<TUnversionedValue> Values;
+    //! Estimation of the total size based on the binary representation of unversioned values.
+    i64 Size;
+    //! If clipping was requested, signifies whether the resulting value range is actually equal to the input value range.
+    bool Clipped;
+};
+
+struct TUnversionedValueRangeTruncationOptions
+{
+    //! If true, the result will form a comparable prefix of the original values.
+    //! I.e. if rangeA is smaller than rangeB, then truncatedRangeA <= truncatedRangeB.
+    //! This is achieved by replacing all values after the first truncated or size-limit-overflowing value with a Null value.
+    //!
+    //! Otherwise, all values of primitive (not string-like) types are preserved and the remaining size
+    //! is uniformely distributed between truncated versions of the remaining string-like values.
+    bool ClipAfterOverflow = false;
+    //! Limits the total size of the resulting value range.
+    //! See value-preservation rules described above.
+    i64 MaxTotalSize = NTableClient::MaxSampleSize;
+};
+
+//! Captures and returns a new list of values truncated to roughly fit the provided size and form a comparable prefix.
+//! The resulting value runge has exactly the same length as the input value range.
+//! See the option descriptions above for more details on how values are truncated and what comparability guarantees are provided.
+//! NB: Newly generated values are captured into the provided row buffer, however, the lifetime of unchanged values remains the responsibility of the caller.
+//! NB: The resulting total binary size can be slightly larger than the limit, since even Null filler values take up some space.
+TUnversionedValueRangeTruncationResult TruncateUnversionedValues(TUnversionedValueRange values, const TRowBufferPtr& rowBuffer, const TUnversionedValueRangeTruncationOptions& options);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTableClient
 
 #define HELPERS_INL_H_

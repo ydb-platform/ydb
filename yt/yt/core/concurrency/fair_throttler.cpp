@@ -621,8 +621,7 @@ TFairThrottler::TFairThrottler(
 
         SharedBucket_->Limit.Value = std::shared_ptr<std::atomic<i64>>(
             &IPC_->State()->Value,
-            [ipc=IPC_] (auto /*ptr*/) { }
-        );
+            [ipc = IPC_] (auto /*ptr*/) { });
 
         Profiler_.AddFuncGauge("/leader", MakeStrong(this), [this] {
             return IsLeader_.load();
@@ -657,7 +656,7 @@ IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
     }
 
     auto throttler = New<TBucketThrottler>(
-        Logger.WithTag("Bucket: %v", name),
+        Logger().WithTag("Bucket: %v", name),
         Profiler_.WithTag("bucket", name),
         SharedBucket_,
         Config_);

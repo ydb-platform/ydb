@@ -10,6 +10,7 @@ from library.python.testing.style import rules
 import library.python.resource as lpr
 
 
+# keep in sync with the logic in https://a.yandex-team.ru/arcadia/devtools/ya/handlers/style/cpp_style.py?rev=r12543375#L21
 STYLE_CONFIG_JSON = json.dumps(yaml.safe_load(lpr.find('resfs/file/config.clang-format')))
 
 RES_FILE_PREFIX = '/cpp_style/files/'
@@ -17,7 +18,7 @@ CHECKED_PATHS = list(lpr.iterkeys(RES_FILE_PREFIX, strip_prefix=True))
 
 
 def check_style(filename, actual_source):
-    clang_format_binary = yatest.common.binary_path('contrib/libs/clang14/tools/clang-format/clang-format')
+    clang_format_binary = yatest.common.binary_path('contrib/libs/clang16/tools/clang-format/clang-format')
     config = STYLE_CONFIG_JSON
 
     command = [clang_format_binary, '-assume-filename=' + filename, '-style=' + config]

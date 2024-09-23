@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TClientCommandGenConfigStatic : public TClientCommandConfig {
+class TClientCommandGenConfigStatic : public TClientCommandBase {
     TString ErasureList;
 
     TString ErasureStr;
@@ -86,7 +86,7 @@ class TClientCommandGenConfigStatic : public TClientCommandConfig {
 
 public:
     TClientCommandGenConfigStatic()
-        : TClientCommandConfig("static", {}, "Generate configuration for static group")
+        : TClientCommandBase("static", {}, "Generate configuration for static group")
     {
         TStringStream erasureList("{");
         for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {

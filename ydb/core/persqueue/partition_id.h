@@ -29,14 +29,15 @@ public:
 
     size_t GetHash() const
     {
-        return MultiHash(OriginalPartitionId, WriteId);
+        return MultiHash(MultiHash(OriginalPartitionId, WriteId), InternalPartitionId);
     }
 
     bool IsEqual(const TPartitionId& rhs) const
     {
         return
             (OriginalPartitionId == rhs.OriginalPartitionId) &&
-            (WriteId == rhs.WriteId);
+            (WriteId == rhs.WriteId) &&
+            (InternalPartitionId == rhs.InternalPartitionId);
     }
 
     void ToStream(IOutputStream& s) const

@@ -165,6 +165,15 @@ namespace NSequenceShard {
                 UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationStart(), 200011);
                 UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationCount(), 5u);
             }
+
+            // get sequence
+            {
+                auto getResult = ctx.GetSequence(TPathId(123, 51));
+                UNIT_ASSERT_VALUES_EQUAL(getResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvGetSequenceResult::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(getResult->Record.GetNextValue(), 200016);
+                UNIT_ASSERT_VALUES_EQUAL(getResult->Record.GetCache(), 5u);
+            }
         }
 
         Y_UNIT_TEST(MarkedPipeRetries) {

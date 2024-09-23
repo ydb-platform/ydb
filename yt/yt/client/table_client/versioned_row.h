@@ -294,7 +294,6 @@ void ValidateDuplicateAndRequiredValueColumns(
     TVersionedRow row,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
     const TTimestamp* writeTimestamps,
     int writeTimestampCount);
 
@@ -627,15 +626,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TVersionedValue& value, TStringBuf format);
-void FormatValue(TStringBuilderBase* builder, TVersionedRow row, TStringBuf format);
-void FormatValue(TStringBuilderBase* builder, TMutableVersionedRow row, TStringBuf format);
-void FormatValue(TStringBuilderBase* builder, const TVersionedOwningRow& row, TStringBuf format);
-
-TString ToString(const TVersionedValue& value);
-TString ToString(TVersionedRow row);
-TString ToString(TMutableVersionedRow row);
-TString ToString(const TVersionedOwningRow& row);
+void FormatValue(TStringBuilderBase* builder, const TVersionedValue& value, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TVersionedRow& row, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TMutableVersionedRow& row, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TVersionedOwningRow& row, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

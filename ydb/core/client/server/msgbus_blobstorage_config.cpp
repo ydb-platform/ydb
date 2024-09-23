@@ -40,6 +40,7 @@ public:
     TEvBlobStorage::TEvControllerConfigRequest *MakeReq(const TActorContext&) {
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         auto &record = ev->Record;
+        Request.SetUserSID(GetUserSID());
         Request.Swap(record.MutableRequest());
         return ev.Release();
     }

@@ -6,7 +6,7 @@ import json
 import os
 
 import pytest
-from hamcrest import any_of, assert_that, equal_to, is_, none, raises, less_than, has_length, not_
+from hamcrest import any_of, assert_that, calling, equal_to, is_, none, raises, less_than, has_length, not_
 from tornado import ioloop, gen
 from google.protobuf import text_format
 import logging
@@ -1114,16 +1114,17 @@ actions {
                 )
             )
 
-    def test_when_result_set_is_large_then_it_is_truncated(self):
+    def test_when_result_set_is_large_then_issue_occure(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         with session.transaction() as tx:
-            result_sets = tx.execute(
-                "select t.x from ( {data} select 201 as x ) as t".format(
-                    data='\n'.join('select {x} as x union all'.format(x=x) for x in range(2001))
-                )
+            assert_that(
+                calling(tx.execute).with_args(
+                    "select t.x from ( {data} select 201 as x ) as t".format(
+                        data='\n'.join('select {x} as x union all'.format(x=x) for x in range(2001))
+                    )
+                ),
+                raises(ydb.issues.TruncatedResponseError),
             )
-            assert_that(result_sets[0].rows, has_length(1000))
-            assert_that(result_sets[0].truncated, is_(True))
 
 
 class TestSessionNotFound(Base):
@@ -1204,7 +1205,7 @@ class TestSessionNotFoundOperations(Base):
             assert_that(
                 lambda: tx.execute('select 1 as cnt', commit_tx=True),
                 raises(
-                    ydb.PreconditionFailed,
+                    RuntimeError,  # "Any operation with finished transaction is denied"
                 )
             )
 

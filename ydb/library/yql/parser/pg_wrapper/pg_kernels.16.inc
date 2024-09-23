@@ -63,7 +63,9 @@ TExecFunc arrow_inetor() { return TGenericExec<TPgDirectFunc<&inetor>, true, fal
 TExecFunc arrow_inetpl() { return TGenericExec<TPgDirectFunc<&inetpl>, true, false, TArgs_inetpl_Policy>({}); }
 TExecFunc arrow_json_agg_finalfn() { return TGenericExec<TPgDirectFunc<&json_agg_finalfn>, false, false, TArgs_json_agg_finalfn_Policy>({}); }
 TExecFunc arrow_json_agg_transfn() { return TGenericExec<TPgDirectFunc<&json_agg_transfn>, false, true, TArgs_json_agg_transfn_Policy>({}); }
+TExecFunc arrow_json_build_array() { return TGenericExec<TPgDirectFunc<&json_build_array>, false, false, TDefaultArgsPolicy>({}); }
 TExecFunc arrow_json_build_array_noargs() { return TGenericExec<TPgDirectFunc<&json_build_array_noargs>, false, false, TArgs_json_build_array_noargs_Policy>({}); }
+TExecFunc arrow_json_build_object() { return TGenericExec<TPgDirectFunc<&json_build_object>, false, false, TDefaultArgsPolicy>({}); }
 TExecFunc arrow_json_build_object_noargs() { return TGenericExec<TPgDirectFunc<&json_build_object_noargs>, false, false, TArgs_json_build_object_noargs_Policy>({}); }
 TExecFunc arrow_json_in() { return TGenericExec<TPgDirectFunc<&json_in>, true, false, TArgs_json_in_Policy>({}); }
 TExecFunc arrow_json_object() { return TGenericExec<TPgDirectFunc<&json_object>, true, false, TArgs_json_object_Policy>({}); }

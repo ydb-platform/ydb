@@ -90,6 +90,10 @@ TString TYtNodeHashCalculator::MakeSalt(const TYtSettings::TConstPtr& config, co
             builder << path;
         }
     }
+    if (auto val = config->DockerImage.Get(cluster)) {
+        update = true;
+        builder << *val;
+    }
     if (auto val = config->NativeYtTypeCompatibility.Get(cluster)) {
         update = true;
         builder << *val;
@@ -168,6 +172,9 @@ TString TYtNodeHashCalculator::GetOutTableHash(const TExprNode& node, TArgIndex&
         }
         if (auto replicationFactor = Configuration->TemporaryReplicationFactor.Get(Cluster)) {
             builder << *replicationFactor;
+        }
+        if (auto optimizeFor = Configuration->OptimizeFor.Get(Cluster)) {
+            builder << *optimizeFor;
         }
     }
 

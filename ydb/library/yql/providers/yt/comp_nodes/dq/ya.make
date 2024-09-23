@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/yson/node
     yt/yt/core
     ydb/library/yql/public/udf/arrow
+    ydb/library/yql/public/udf
     contrib/libs/apache/arrow
     contrib/libs/flatbuffers
 )

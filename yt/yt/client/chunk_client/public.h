@@ -84,6 +84,9 @@ YT_DEFINE_ERROR_ENUM(
     ((LocationDisabled)                      (755))
     ((DiskFailed)                            (756))
     ((DiskWaitingReplacement)                (757))
+    ((LockFileIsFound)                       (758))
+    ((DiskHealthCheckFailed)                 (759))
+    ((TooManyChunksToFetch)                  (760))
 );
 
 using TChunkId = NObjectClient::TObjectId;

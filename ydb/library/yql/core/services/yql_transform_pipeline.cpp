@@ -81,18 +81,20 @@ TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssue
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddPreIOAnnotation(EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddPreIOAnnotation(bool withEpochsTransformer, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
         CreateIODiscoveryTransformer(*TypeAnnotationContext_), "IODiscovery", issueCode));
-    Transformers_.push_back(TTransformStage(
-        CreateEpochsTransformer(*TypeAnnotationContext_), "Epochs", issueCode));
+    if (withEpochsTransformer) {
+        Transformers_.push_back(TTransformStage(
+            CreateEpochsTransformer(*TypeAnnotationContext_), "Epochs", issueCode));
+    }
     AddIntentDeterminationTransformer();
 
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(EYqlIssueCode issueCode) {
-    AddPreIOAnnotation(issueCode);
+TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(bool withEpochsTransformer, EYqlIssueCode issueCode) {
+    AddPreIOAnnotation(withEpochsTransformer, issueCode);
     AddTableMetadataLoaderTransformer();
 
     auto& typeCtx = *TypeAnnotationContext_;

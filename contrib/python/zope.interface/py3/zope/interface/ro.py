@@ -454,6 +454,7 @@ class _TrackingC3(C3):
         if self.leaf not in bad_iros:
             if bad_iros == ():
                 import weakref
+
                 # This is a race condition, but it doesn't matter much.
                 bad_iros = C3.BAD_IROS = weakref.WeakKeyDictionary()
             bad_iros[self.leaf] = t = (
@@ -527,6 +528,7 @@ class _ROComparison:
     def _generate_report(self):
         if self._c3_report is None:
             import difflib
+
             # The opcodes we get describe how to turn 'a' into 'b'. So
             # the old one (legacy) needs to be first ('a')
             matcher = difflib.SequenceMatcher(None, self.legacy_ro, self.c3_ro)

@@ -15,6 +15,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+#include <library/cpp/yt/small_containers/compact_flat_map.h>
 
 namespace NYT::NApi {
 
@@ -220,6 +221,13 @@ DEFINE_ENUM(EMaintenanceComponent,
 
 using TMaintenanceId = TGuid;
 using TMaintenanceCounts = TEnumIndexedArray<EMaintenanceType, int>;
+
+// Almost always there is single maintenance target. The exception is virtual
+// "host" target which represents all nodes on a given host.
+constexpr int TypicalMaintenanceTargetCount = 1;
+
+using TMaintenanceIdPerTarget = TCompactFlatMap<TString, TMaintenanceId, TypicalMaintenanceTargetCount>;
+using TMaintenanceCountsPerTarget = TCompactFlatMap<TString, TMaintenanceCounts, TypicalMaintenanceTargetCount>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,0 +1,17 @@
+pragma warning("disable", "4527");
+
+$z0 = cast(0 as decimal(7,2));
+$z1_2 = cast("1.2" as decimal(7,2));
+$z1_3 = cast("1.3" as decimal(7,2));
+$z0_9 = cast("0.9" as decimal(7,2));
+$z0_99 = cast("0.99" as decimal(7,2));
+$z1_49 = cast("1.49" as decimal(7,2));
+
+$z0_35 = cast(0 as decimal(35,2));
+$z0_1_35 = cast("0.1" as decimal(35,2));
+$z1_2_35 = cast("1.2" as decimal(35,2));
+$z0_05_35 = cast("0.05" as decimal(35,2));
+$z0_9_35 = cast("0.9" as decimal(35,2));
+$z1_1_35 = cast("1.1" as decimal(35,2));
+$round = ($x,$y) -> {return $x;};
+$upscale = ($x) -> { return cast($x as decimal(35,9)); };

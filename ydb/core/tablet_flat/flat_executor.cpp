@@ -136,6 +136,7 @@ TExecutor::TExecutor(
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
     , LogFlushDelayOverrideUsec(-1, -1, 60*1000*1000)
+    , MaxCommitRedoMB(256, 1, 4096)
 {}
 
 TExecutor::~TExecutor() {
@@ -159,6 +160,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
+    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -322,7 +324,7 @@ void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) 
     if (Owner->ReassignChannelsEnabled()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
-            Send(MakePipePeNodeCacheID(false),
+            Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
                     info->HiveId,
@@ -485,6 +487,18 @@ void TExecutor::Active(const TActorContext &ctx) {
     }
 
     MakeLogSnapshot();
+
+    if (loadedState->ShouldSnapshotScheme) {
+        TTxStamp stamp = Stamp();
+        auto alter = Database->GetScheme().GetSnapshot();
+        alter->SetRewrite(true);
+        auto change = alter->SerializeAsString();
+        Database->RollUp(stamp, change, {}, {});
+        auto commit = CommitManager->Begin(true, ECommit::Misc, {});
+        LogicAlter->Clear();
+        LogicAlter->WriteLog(*commit, std::move(change));
+        CommitManager->Commit(commit);
+    }
 
     if (auto error = CheckBorrowConsistency()) {
         if (auto logl = Logger->Log(ELnLev::Crit))
@@ -1179,7 +1193,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run()) {
+        if (auto fetch = stage->Loader.Run(PreloadTablesData.contains(partSwitch.TableId))) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
@@ -1355,6 +1369,10 @@ THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
     auto *tableInfo = Scheme().GetTableInfo(tableId);
 
     THashSet<NTable::TTag> stickyColumns;
+    if (!tableInfo) {
+        return stickyColumns;
+    }
+
     for (const auto &column : tableInfo->Columns) {
         const auto* family = tableInfo->Families.FindPtr(column.second.Family);
         if (family && family->Cache == NTable::NPage::ECache::Ever) {
@@ -1708,12 +1726,17 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     }
 
     bool failed = false;
-    TString failureReason;
-    if (done && (failed = !Database->ValidateCommit(failureReason))) {
-        if (auto logl = Logger->Log(ELnLev::Crit)) {
-            logl
-                << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-                << " fatal commit failure: " << failureReason;
+    if (done) {
+        ui64 commitRedoBytes = Database->GetCommitRedoBytes();
+        ui64 maxCommitRedoBytes = ui64(MaxCommitRedoMB) << 20; // MB to bytes
+        if (commitRedoBytes > maxCommitRedoBytes) {
+            if (auto logl = Logger->Log(ELnLev::Crit)) {
+                logl
+                    << NFmt::Do(*this) << " " << NFmt::Do(*seat)
+                    << " fatal commit failure: Redo commit of " << commitRedoBytes
+                    << " bytes is more than the allowed limit";
+            }
+            failed = true;
         }
     }
 
@@ -1764,7 +1787,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
         Y_ABORT_UNLESS(!seat->CapturedMemory);
         if (!PrivatePageCache->GetStats().CurrentCacheMisses && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
-                    << NFmt::Do(*seat->Self) << " postoned w/o demands");
+                    << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
     }
@@ -1808,16 +1831,14 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     TTxType txType = seat->Self->GetTxType();
 
     ui32 touchedPages = 0;
-    ui64 touchedBytes = 0;
     ui32 newPinnedPages = 0;
-    ui32 waitPages = 0;
     ui32 loadPages = 0;
-    ui64 loadBytes = 0;
     ui64 prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinTouches(seat->Pinned, touchedPages, newPinnedPages, seat->MemoryTouched);
 
-    touchedBytes = seat->MemoryTouched - prevTouched;
+    ui32 newTouchedPages = newPinnedPages;
+    ui64 newTouchedBytes = seat->MemoryTouched - prevTouched;
     prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
@@ -1831,7 +1852,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-            << " touch new " << touchedBytes << "b"
+            << " touch new " << newTouchedBytes << "b"
             << ", " << (seat->MemoryTouched - prevTouched) << "b lo load"
             << " (" << seat->MemoryTouched << "b in total)"
             << ", " << requestedMemory << "b requested for data"
@@ -1904,6 +1925,8 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     auto *const pad = padHolder.Get();
     TransactionWaitPads[pad] = std::move(padHolder);
 
+    ui32 waitPages = 0;
+    ui64 loadBytes = 0;
     auto toLoad = PrivatePageCache->GetToLoad();
     for (auto &xpair : toLoad) {
         TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
@@ -1912,6 +1935,17 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
         const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
+            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                logl
+                    << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                    << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
+                for (auto i : xrange(pages.size())) {
+                    if (i != 0) logl << ", ";
+                    logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
+                }
+                logl << "]";
+            }
+            
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
@@ -1934,13 +1968,15 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_POSTPONED).Increment(1);
 
+    // Note: count all new touched pages (were obtained from cache), even not on the first attempt
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
     if (pad->Seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
-        Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(touchedPages);
     }
 
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(loadPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     if (AppTxCounters && txType != UnknownTxType) {
         AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(loadPages);
         AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(loadBytes);
@@ -1961,8 +1997,17 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks);
 
-    if (seat->Retries == 1) {
-        Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(touchedBlocks);
+    // Note: count all new touched pages (were obtained from cache), even not on the first attempt
+    ui32 newTouchedPages = 0;
+    ui64 newTouchedBytes = 0, pinnedTouchedBytes = 0;
+    PrivatePageCache->CountTouches(seat->Pinned, newTouchedPages, newTouchedBytes, pinnedTouchedBytes);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
+    if (seat->MemoryTouched >= pinnedTouchedBytes) {
+        // memory that was pinned (for instance by Precharge) but wasn't used during the last successful execution
+        Counters->Cumulative()[TExecutorCounters::TX_BYTES_WASTED].Increment(seat->MemoryTouched - pinnedTouchedBytes);
+    } else {
+        Y_DEBUG_ABORT("Cache counters are out of sync");
     }
 
     UnpinTransactionPages(*seat);
@@ -3435,7 +3480,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, true).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -4299,6 +4344,9 @@ const NTable::TRowVersionRanges& TExecutor::TableRemovedRowVersions(ui32 table)
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " starting compaction";
+
     using NTable::NPage::ECache;
 
     auto table = params->Table;
@@ -4315,6 +4363,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
@@ -4418,11 +4467,17 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     conf.Trace = true; /* Need for tracking gone blobs in GC */
     conf.Tablet = Owner->TabletID();
 
-    return Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    auto result = Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " started compaction " << result;
+    return result;
 }
 
 bool TExecutor::CancelCompaction(ui64 compactionId)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " cancelling compaction " << compactionId;
+
     return Scans->CancelSystem(compactionId);
 }
 
@@ -4727,6 +4782,10 @@ void TExecutor::ApplyCompactionChanges(
             }
         }
     }
+}
+
+void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
+    PreloadTablesData = std::move(tables);
 }
 
 }

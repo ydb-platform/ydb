@@ -43,6 +43,7 @@ def get_fqdn():
     assert False, 'Failed to get FQDN'
 
 
+# GRPC_SERVER:DEBUG,TICKET_PARSER:WARN,KQP_COMPILE_ACTOR:DEBUG
 def get_additional_log_configs():
     log_configs = os.getenv('YDB_ADDITIONAL_LOG_CONFIGS', '')
     rt = {}
@@ -223,6 +224,11 @@ class KikimrConfigGenerator(object):
 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(get_additional_log_configs())
+        if pg_compatible_expirement:
+            self.__additional_log_configs.update({
+                'PGWIRE': LogLevels.from_string('DEBUG'),
+                'LOCAL_PGWIRE': LogLevels.from_string('DEBUG'),
+            })
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
@@ -386,10 +392,13 @@ class KikimrConfigGenerator(object):
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
-            self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
+
+            # https://github.com/ydb-platform/ydb/issues/5152
+            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
 
         if generic_connector_config:
             if "query_service_config" not in self.yaml_config:

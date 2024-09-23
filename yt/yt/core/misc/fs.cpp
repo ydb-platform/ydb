@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <yt/yt/core/actions/invoker_util.h>
+
 #include <library/cpp/yt/system/handle_eintr.h>
 
 #include <util/folder/dirut.h>
@@ -39,7 +41,7 @@ namespace NYT::NFS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger Logger("FS");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
 ////////////////////////////////////////////////////////////////////////////////
 

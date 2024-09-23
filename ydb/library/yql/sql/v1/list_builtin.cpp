@@ -44,7 +44,7 @@ bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
         }
     }
 
-    Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+    Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
     Node = Y(OpName, Args[0], Args[1]);
     return true;
 }

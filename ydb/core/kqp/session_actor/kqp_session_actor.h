@@ -17,6 +17,7 @@ struct TKqpWorkerSettings {
     TString Cluster;
     TString Database;
     TMaybe<TString> ApplicationName;
+    TMaybe<TString> UserName;
     bool LongSession = false;
 
     NKikimrConfig::TTableServiceConfig TableService;
@@ -28,11 +29,12 @@ struct TKqpWorkerSettings {
     TKqpDbCountersPtr DbCounters;
 
     explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
-            const TMaybe<TString>& applicationName, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
             const  NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
         , ApplicationName(applicationName)
+        , UserName(userName)
         , TableService(tableServiceConfig)
         , QueryService(queryServiceConfig)
         , MkqlInitialMemoryLimit(2097152, 1, Max<i64>())
@@ -52,10 +54,9 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const TActorId& kqpTempTablesAgentActor);
 
 IActor* CreateKqpTempTablesManager(
-    TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database);
+    TKqpTempTablesState tempTablesState, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TActorId& target, const TString& database);
 
 }  // namespace NKikimr::NKqp

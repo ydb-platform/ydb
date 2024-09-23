@@ -93,7 +93,7 @@ public:
                         break;
                 }
                 break;
-            } while (++s.Rows_ < MaxLength_);
+            } while (++s.Rows_ < MaxLength_ && s.BuilderAllocatedSize_ <= s.MaxBuilderAllocatedSize_);
 
             if (s.Rows_)
                 s.MakeBlocks(ctx.HolderFactory);
@@ -147,6 +147,7 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
+        const auto second_cond = BasicBlock::Create(context, "second_cond", ctx.Func);
 
         BranchInst::Create(main, make, HasValue(statePtr, block), block);
         block = make;
@@ -174,6 +175,8 @@ public:
 
         const auto rowsPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetRows() }, "rows_ptr", block);
         const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsFinished() }, "is_finished_ptr", block);
+        const auto allocatedSizePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetBuilderAllocatedSize() }, "allocated_size_ptr", block);
+        const auto maxAllocatedSizePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetMaxBuilderAllocatedSize() }, "max_allocated_size_ptr", block);
         const auto finished = new LoadInst(Type::getInt1Ty(context), finishedPtr, "finished", block);
 
         BranchInst::Create(skip, read, finished, block);
@@ -202,7 +205,14 @@ public:
         }
 
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, increment, ConstantInt::get(indexType, MaxLength_), "next", block);
-        BranchInst::Create(read, work, next, block);
+        BranchInst::Create(second_cond, work, next, block);
+
+        block = second_cond;
+        
+        const auto read_allocated_size = new LoadInst(indexType, allocatedSizePtr, "read_allocated_size", block);
+        const auto read_max_allocated_size = new LoadInst(indexType, maxAllocatedSizePtr, "read_max_allocated_size", block);
+        const auto next2 = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, read_allocated_size, read_max_allocated_size, "next2", block);
+        BranchInst::Create(read, work, next2, block);
 
         block = stop;
 
@@ -257,15 +267,20 @@ private:
     struct TState : public TBlockState {
         size_t Rows_ = 0;
         bool IsFinished_ = false;
+        size_t BuilderAllocatedSize_ = 0;
+        size_t MaxBuilderAllocatedSize_ = 0;
         std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+        static const size_t MaxAllocatedFactor_ = 4;
+
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength, NUdf::TUnboxedValue**const fields)
             : TBlockState(memInfo, types.size() + 1U)
             , Builders_(types.size())
         {
             for (size_t i = 0; i < types.size(); ++i) {
                 fields[i] = &Values[i];
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder());
+                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
             }
+            MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
         }
 
         void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
@@ -275,6 +290,7 @@ private:
         void MakeBlocks(const THolderFactory& holderFactory) {
             Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
             Rows_ = 0;
+            BuilderAllocatedSize_ = 0;
 
             for (size_t i = 0; i < Builders_.size(); ++i) {
                 if (const auto builder = Builders_[i].get()) {
@@ -291,6 +307,8 @@ private:
         using TBase = TLLVMFieldsStructureBlockState;
         llvm::IntegerType*const RowsType;
         llvm::IntegerType*const IsFinishedType;
+        llvm::IntegerType*const BuilderAllocatedSizeType;
+        llvm::IntegerType*const MaxBuilderAllocatedSizeType;
     protected:
         using TBase::Context;
     public:
@@ -298,6 +316,8 @@ private:
             std::vector<llvm::Type*> result = TBase::GetFieldsArray();
             result.emplace_back(RowsType);
             result.emplace_back(IsFinishedType);
+            result.emplace_back(BuilderAllocatedSizeType);
+            result.emplace_back(MaxBuilderAllocatedSizeType);
             return result;
         }
 
@@ -309,10 +329,20 @@ private:
             return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 1);
         }
 
+        llvm::Constant* GetBuilderAllocatedSize() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 2);
+        }
+
+        llvm::Constant* GetMaxBuilderAllocatedSize() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 3);
+        }
+
         TLLVMFieldsStructureState(llvm::LLVMContext& context, size_t width)
             : TBase(context, width)
             , RowsType(Type::getInt64Ty(Context))
             , IsFinishedType(Type::getInt1Ty(Context))
+            , BuilderAllocatedSizeType(Type::getInt64Ty(Context))
+            , MaxBuilderAllocatedSizeType(Type::getInt64Ty(Context))
         {}
     };
 #endif
@@ -668,17 +698,20 @@ private:
         TUnboxedValueVector Values_;
         std::vector<std::unique_ptr<IBlockReader>> Readers_;
         std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
+        const std::vector<arrow::ValueDescr> ValuesDescr_;
 
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
             : TComputationValue(memInfo)
             , Values_(types.size() + 1)
+            , ValuesDescr_(ToValueDescr(types))
         {
             Pointer_ = Values_.data();
 
             const auto& pgBuilder = ctx.Builder->GetPgBuilder();
             for (size_t i = 0; i < types.size(); ++i) {
-                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), types[i]));
-                Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), types[i], pgBuilder));
+                const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
+                Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
             }
         }
 
@@ -688,7 +721,9 @@ private:
 
         NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
             TBlockItem item;
-            if (const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum(); datum.is_scalar()) {
+            const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
+            ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], datum.descr());
+            if (datum.is_scalar()) {
                 item = Readers_[idx]->GetScalarItem(*datum.scalar());
             } else {
                 MKQL_ENSURE(datum.is_array(), "Expecting array");
@@ -1200,8 +1235,7 @@ IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNode
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
     TVector<TType*> items;
     for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
-        const auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
-        items.push_back(blockType->GetItemType());
+        items.push_back(AS_TYPE(TBlockType, wideComponents[i]));
     }
 
     const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));

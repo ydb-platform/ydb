@@ -1,0 +1,11 @@
+{
+    "schema" = <"strict" = %true; "unique_keys" = %false> [
+        { "type" = "int64"; "required" = %true; "name" = "row" };
+        { "type" = "int64"; "required" = %true; "name" = "i" };
+    ];
+    "_yql_row_spec" = {
+        "TypePatch" = ["StructType";[
+            ["i"; ["DataType"; "Interval"]];
+        ]];
+    };
+}

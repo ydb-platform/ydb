@@ -286,6 +286,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                         index.Columns(item.Value().Cast<TCoAtomList>());
                     } else if (indexItemName == "dataColumns") {
                         index.DataColumns(item.Value().Cast<TCoAtomList>());
+                    } else if (indexItemName == "tableSettings") {
+                        index.TableSettings(item.Value().Cast<TCoNameValueTupleList>());
                     } else {
                         YQL_ENSURE(false, "unknown index item");
                     }
@@ -386,6 +388,56 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> valueType;
+    TMaybeNode<TCoAtom> temporary;
+    TMaybeNode<TCoAtom> ownedBy;
+
+    TVector<TCoNameValueTuple> sequenceSettings;
+
+    TVector<TCoNameValueTuple> other;
+
+    const static std::unordered_set<TString> sequenceSettingNames =
+        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "as") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                valueType = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "temporary")  {
+                temporary = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
+            } else if (sequenceSettingNames.contains(TString(name))) {
+                sequenceSettings.push_back(tuple);
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& sequenceSettingsList = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(sequenceSettings)
+        .Done();
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteSequenceSettings ret(otherSettings);
+    ret.Mode = mode;
+    ret.ValueType = valueType;
+    ret.Temporary = temporary;
+    ret.SequenceSettings = sequenceSettingsList;
+    return ret;
+}
+
 TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;
@@ -471,6 +523,70 @@ TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     ret.TopicSettings = builtSettings;
     ret.AlterConsumers = builtAlterCons;
     ret.DropConsumers = builtDropCons;
+
+    return ret;
+}
+
+TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoReplicationTarget> targets;
+    TVector<TCoNameValueTuple> settings;
+    TVector<TCoNameValueTuple> other;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "targets") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                for (const auto& target : tuple.Value().Cast<TExprList>()) {
+                    auto builtTarget = Build<TCoReplicationTarget>(ctx, node.Pos());
+
+                    YQL_ENSURE(target.Maybe<TCoNameValueTupleList>());
+                    for (const auto& item : target.Cast<TCoNameValueTupleList>()) {
+                        auto itemName = item.Name().Value();
+                        if (itemName == "remote") {
+                            builtTarget.RemotePath(item.Value().Cast<TCoAtom>());
+                        } else if (itemName == "local") {
+                            builtTarget.LocalPath(item.Value().Cast<TCoAtom>());
+                        } else {
+                            YQL_ENSURE(false, "unknown target item");
+                        }
+                    }
+
+                    targets.push_back(builtTarget.Done());
+                }
+            } else if (name == "settings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    settings.push_back(item);
+                }
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& builtTargets = Build<TCoReplicationTargetList>(ctx, node.Pos())
+        .Add(targets)
+        .Done();
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
+
+    const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteReplicationSettings ret(builtOther);
+    ret.Mode = mode;
+    ret.Targets = builtTargets;
+    ret.ReplicationSettings = builtSettings;
 
     return ret;
 }
@@ -1272,7 +1388,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& sta
     writer.OnEndMap();
 }
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addExternalMap) {
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addTotalKey, bool addExternalMap) {
     if (statistics.empty()) {
         return;
     }
@@ -1316,8 +1432,10 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
     std::transform(total.cbegin(), total.cend(), std::back_inserter(statKeys), [](const decltype(total)::value_type& v) { return v.first; });
     std::sort(statKeys.begin(), statKeys.end());
 
-    writer.OnKeyedItem("total");
-    writer.OnBeginMap();
+    if (addTotalKey) {
+        writer.OnKeyedItem("total");
+        writer.OnBeginMap();
+    }
     for (auto& key: statKeys) {
         auto& totalEntry = total[key];
         writer.OnKeyedItem(key);
@@ -1340,7 +1458,9 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 
         writer.OnEndMap();
     }
-    writer.OnEndMap(); // total
+    if (addTotalKey) {
+        writer.OnEndMap(); // total
+    }
     if (addExternalMap) {
         writer.OnEndMap();
     }
@@ -1378,13 +1498,49 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
     return false;
 }
 
-bool ValidateFormatForInput(std::string_view format, TExprContext& ctx) {
-    if (format.empty() || IsIn(FormatsForInput, format)) {
+bool ValidateFormatForInput(
+    std::string_view format,
+    const TStructExprType* schemaStructRowType,
+    const std::function<bool(TStringBuf)>& excludeFields,
+    TExprContext& ctx) {
+    if (format.empty()) {
         return true;
     }
-    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-        << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
-    return false;
+
+    if (!IsIn(FormatsForInput, format)) {
+        ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
+            << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
+        return false;
+    }
+
+    if (schemaStructRowType && format == TStringBuf("raw")) {
+        ui64 realSchemaColumnsCount = 0;
+
+        for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+            if (excludeFields && excludeFields(item->GetName())) {
+                continue;
+            }
+            const TTypeAnnotationNode* rowType = item->GetItemType();
+            if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+                rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (rowType->GetKind() != ETypeAnnotationKind::Data
+                || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
+                ctx.AddError(TIssue(TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
+                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                return false;
+            }
+            ++realSchemaColumnsCount;
+        }
+
+        if (realSchemaColumnsCount != 1) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
+                << realSchemaColumnsCount << " fields)"));
+            return false;
+        }
+    }
+    return true;
 }
 
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {

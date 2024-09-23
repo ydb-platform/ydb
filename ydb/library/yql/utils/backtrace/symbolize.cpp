@@ -8,7 +8,6 @@
 namespace NYql {
 
     namespace NBacktrace {
-
         TString Symbolize(const TString& input, const THashMap<TString, TString>& mapping) {
 #if defined(__linux__) && defined(__x86_64__)
             TString output;
@@ -16,6 +15,7 @@ namespace NYql {
 
             i64 stackSize = -1;
             TVector<TStackFrame> frames;
+            TVector<TString> usedFilenames;
             for (TStringBuf line: StringSplitter(input).SplitByString("\n")) {
                 if (line.StartsWith("StackFrames:")) {
                     TVector<TString> parts;
@@ -38,7 +38,8 @@ namespace NYql {
                         if (it != mapping.end()) {
                             modulePath = it->second;
                         }
-                        frames.emplace_back(TStackFrame{modulePath, address - offset});
+                        usedFilenames.emplace_back(std::move(modulePath));
+                        frames.emplace_back(TStackFrame{usedFilenames.back().c_str(), address - offset});
                     }
                 } else {
                     out << line << "\n";
@@ -48,9 +49,7 @@ namespace NYql {
             if (stackSize == 0) {
                 out << "Empty stack trace\n";
             }
-            for (auto &e: Symbolize(frames)) {
-                out << e << "\n";
-            }
+            Symbolize(frames.data(), frames.size(), &out);
             return output;
 #else
             Y_UNUSED(mapping);

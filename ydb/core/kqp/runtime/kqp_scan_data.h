@@ -61,15 +61,15 @@ struct TBytesStatistics {
 
 class TBatchDataAccessor {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, Batch);
     YDB_READONLY_DEF(std::vector<ui32>, DataIndexes);
-    mutable std::shared_ptr<arrow::RecordBatch> FilteredBatch;
+    mutable std::shared_ptr<arrow::Table> FilteredBatch;
 public:
-    std::shared_ptr<arrow::RecordBatch> GetFiltered() const {
+    std::shared_ptr<arrow::Table> GetFiltered() const {
         if (!FilteredBatch) {
             if (DataIndexes.size()) {
                 auto permutation = NArrow::MakeFilterPermutation(DataIndexes);
-                FilteredBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(Batch, permutation)).record_batch();
+                FilteredBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(Batch, permutation)).table();
             } else {
                 FilteredBatch = Batch;
             }
@@ -85,7 +85,7 @@ public:
         return DataIndexes.size() ? DataIndexes.size() : Batch->num_rows();
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<ui32>&& dataIndexes)
+    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch, std::vector<ui32>&& dataIndexes)
         : Batch(batch)
         , DataIndexes(std::move(dataIndexes))
     {
@@ -93,8 +93,15 @@ public:
         AFL_VERIFY(Batch->num_rows());
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
+    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch)
         : Batch(batch) {
+        AFL_VERIFY(Batch);
+        AFL_VERIFY(Batch->num_rows());
+
+    }
+
+    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
+        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch}))) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
 

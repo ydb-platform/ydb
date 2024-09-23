@@ -126,7 +126,7 @@ ALTER TABLE large_tuple_test ALTER COLUMN b SET STORAGE plain;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE large_tuple_test ALTER COLUMN b SET STORAGE plain;
 	^
 <sql-statement>
@@ -1243,7 +1243,7 @@ alter table mlparted11 drop a;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted11 drop a;
 	^
 <sql-statement>
@@ -1251,7 +1251,7 @@ alter table mlparted11 add a int;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted11 add a int;
 	^
 <sql-statement>
@@ -1259,7 +1259,7 @@ alter table mlparted11 drop a;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted11 drop a;
 	^
 <sql-statement>
@@ -1267,7 +1267,7 @@ alter table mlparted11 add a int not null;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted11 add a int not null;
 	^
 <sql-statement>
@@ -1285,7 +1285,7 @@ alter table mlparted1 attach partition mlparted11 for values from (2) to (5);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted1 attach partition mlparted11 for values from (2) to (5);
 	^
 <sql-statement>
@@ -1293,7 +1293,7 @@ alter table mlparted attach partition mlparted1 for values from (1, 2) to (1, 10
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted attach partition mlparted1 for values from (1, 2) to (1, 10);
 	^
 <sql-statement>
@@ -1332,7 +1332,7 @@ alter table mlparted add constraint check_b check (b = 3);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted add constraint check_b check (b = 3);
 	^
 <sql-statement>
@@ -1430,7 +1430,7 @@ alter table mlparted drop constraint check_b;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- check that RETURNING works correctly with tuple-routing
 	^
 <sql-statement>
@@ -1449,7 +1449,7 @@ alter table mlparted attach partition mlparted2 for values from (1, 10) to (1, 2
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted attach partition mlparted2 for values from (1, 10) to (1, 20);
 	^
 <sql-statement>
@@ -1473,7 +1473,7 @@ alter table mlparted4 drop a;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted4 drop a;
 	^
 <sql-statement>
@@ -1481,7 +1481,7 @@ alter table mlparted4 add a int not null;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted4 add a int not null;
 	^
 <sql-statement>
@@ -1489,7 +1489,7 @@ alter table mlparted attach partition mlparted4 for values from (1, 30) to (1, 4
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted attach partition mlparted4 for values from (1, 30) to (1, 40);
 	^
 <sql-statement>
@@ -1507,7 +1507,7 @@ alter table mlparted add c text;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted add c text;
 	^
 <sql-statement>
@@ -1526,7 +1526,7 @@ alter table mlparted5 attach partition mlparted5a for values in ('a');
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted5 attach partition mlparted5a for values in ('a');
 	^
 <sql-statement>
@@ -1534,7 +1534,7 @@ alter table mlparted attach partition mlparted5 for values from (1, 40) to (1, 5
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted attach partition mlparted5 for values from (1, 40) to (1, 50);
 	^
 <sql-statement>
@@ -1542,7 +1542,7 @@ alter table mlparted add constraint check_b check (a = 1 and b < 45);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted add constraint check_b check (a = 1 and b < 45);
 	^
 <sql-statement>
@@ -1583,7 +1583,7 @@ alter table mlparted drop constraint check_b;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted drop constraint check_b;
 	^
 <sql-statement>
@@ -1684,7 +1684,7 @@ alter table mlparted add d int, add e int;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- Check multi-level tuple routing with attributes dropped from the
 	^
 <sql-statement>
@@ -1692,7 +1692,7 @@ alter table mlparted drop e;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted drop e;
 	^
 <sql-statement>
@@ -1739,7 +1739,7 @@ alter table mlparted5_ab attach partition mlparted5_b for values in ('b');
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted5_ab attach partition mlparted5_b for values in ('b');
 	^
 <sql-statement>
@@ -1797,7 +1797,7 @@ alter table mlparted drop d;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted drop d;
 	^
 <sql-statement>
@@ -1814,7 +1814,7 @@ alter table mlparted add e int, add d int;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- Remove the before last attribute.
 	^
 <sql-statement>
@@ -1822,7 +1822,7 @@ alter table mlparted drop e;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted drop e;
 	^
 <sql-statement>
@@ -1872,7 +1872,7 @@ alter table mlparted drop d;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table mlparted drop d;
 	^
 <sql-statement>
@@ -2406,7 +2406,7 @@ alter table donothingbrtrig_test2 drop column c;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table donothingbrtrig_test2 drop column c;
 	^
 <sql-statement>
@@ -2438,7 +2438,7 @@ alter table donothingbrtrig_test attach partition donothingbrtrig_test1 for valu
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table donothingbrtrig_test attach partition donothingbrtrig_test1 for values in (1);
 	^
 <sql-statement>
@@ -2446,7 +2446,7 @@ alter table donothingbrtrig_test attach partition donothingbrtrig_test2 for valu
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table donothingbrtrig_test attach partition donothingbrtrig_test2 for values in (2);
 	^
 <sql-statement>
@@ -2638,7 +2638,7 @@ alter table returningwrtest add b text;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- check also that the wholerow vars in RETURNING list are converted as needed
 	^
 <sql-statement>
@@ -2649,7 +2649,7 @@ alter table returningwrtest2 drop c;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table returningwrtest2 drop c;
 	^
 <sql-statement>
@@ -2657,7 +2657,7 @@ alter table returningwrtest attach partition returningwrtest2 for values in (2);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	alter table returningwrtest attach partition returningwrtest2 for values in (2);
 	^
 <sql-statement>

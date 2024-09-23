@@ -4,7 +4,7 @@
         th {
             text-transform: uppercase;
         }
-        
+
         th, td {
             padding: 5px;
         }
@@ -28,12 +28,56 @@
         span.test_mute {
             color: blue;
         }
+        button.copy {
+            float: right;
+        }
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
             text-align: center;
         }
     </style>
+    <script>
+        function copyTestNameToClipboard(text) {
+            const full_name = text.trim();
+            const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+
+            if (!pieces) {
+                console.error("Unable to split path/test for %o", full_name);
+                return;
+            }
+            let [path, testName] = [pieces[1], pieces[2]];
+
+            const namePieces = testName.split('.');
+
+            if (namePieces.length === 2) {
+                testName = namePieces[0] + '::' + namePieces[1];
+            } else {
+                testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+            }
+
+            const cmdArg = `${path} -F '${testName}'`;
+
+            console.log(cmdArg);
+
+            navigator.clipboard.writeText(cmdArg).catch(
+                () => {
+                    console.error("Unable to copy %o to clipboard", cmdArg);
+                }
+            );
+        }
+        function copyOnPress(event) {
+            event.preventDefault();
+            copyTestNameToClipboard(event.target.previousElementSibling.textContent)
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const els = document.getElementsByClassName("copy");
+            for (let i = 0; i < els.length; i++) {
+                els[i].addEventListener('click', copyOnPress);
+            }
+        });
+    </script>
 </head>
 <body>
 {% for status in status_order %}
@@ -52,7 +96,10 @@
     <tbody>
     {% for t in tests[status] %}
     <tr>
-        <td>{{ t.full_name }}</td>
+        <td>
+            <span>{{ t.full_name }}</span>
+            {% if status.is_error %}<button class="copy" title="Copy test filter to clipboard">Copy test filter</button>{% endif %}
+        </td>
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>

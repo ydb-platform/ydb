@@ -1390,6 +1390,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(4);
 
+    queue = config.AddQueues();
+    queue->SetName("queue_statistics_scan");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(1);
+
     auto task = config.AddTasks();
     task->SetName(NLocalDb::UnknownTaskName);
     task->SetQueueName(NLocalDb::DefaultQueueName);
@@ -1513,6 +1518,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task = config.AddTasks();
     task->SetName("cdc_initial_scan");
     task->SetQueueName("queue_cdc_initial_scan");
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
+    task->SetName("statistics_scan");
+    task->SetQueueName("queue_statistics_scan");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     config.MutableResourceLimit()->SetCpu(TotalCPU);

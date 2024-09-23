@@ -101,63 +101,73 @@ public:
 
         NUdf::TUnboxedValue Save() const override {
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
 
-            TString out;
-            WriteUi32(out, StateVersion);
-            WriteUi32(out, StatesMap.size());
+            out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
-                WriteUnboxedValue(out, Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), key);
-                WriteUi64(out, state.HopIndex);
-                WriteUi32(out, state.Buckets.size());
+                out.WriteUnboxedValue(Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), key);
+                out(state.HopIndex);
+                out.Write<ui32>(state.Buckets.size());
                 for (const auto& bucket : state.Buckets) {
-                    WriteBool(out, bucket.HasValue);
+                    out(bucket.HasValue);
                     if (bucket.HasValue) {
                         Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                         if (Self->StateType) {
-                            WriteUnboxedValue(out, Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType),
+                            out.WriteUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType),
                                           Self->OutSave->GetValue(Ctx));
                         }
                     }
                 }
             }
 
-            WriteBool(out, Finished);
-
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            out(Finished);
+            return out.MakeState();
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in(state.Data(), state.Size());
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+            LoadStateImpl(in);
+        }
 
-            const auto stateVersion = ReadUi32(in);
-            if (stateVersion == 1) {
-                const auto statesMapSize = ReadUi32(in);
-                ClearState();
-                StatesMap.reserve(statesMapSize);
-                for (auto i = 0U; i < statesMapSize; ++i) {
-                    auto key = ReadUnboxedValue(in, Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), Ctx);
-                    const auto hopIndex = ReadUi64(in);
-                    const auto bucketsSize = ReadUi32(in);
+        bool Load2(const NUdf::TUnboxedValue& state) override {
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+            LoadStateImpl(in);
+            return true;
+        }
 
-                    TKeyState keyState(bucketsSize, hopIndex);
-                    for (auto& bucket : keyState.Buckets) {
-                        bucket.HasValue = ReadBool(in);
-                        if (bucket.HasValue) {
-                            if (Self->StateType) {
-                                Self->InLoad->SetValue(Ctx, ReadUnboxedValue(in, Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType), Ctx));
-                            }
-                            bucket.Value = Self->OutLoad->GetValue(Ctx);
-                        }
-                    }
-                    StatesMap.emplace(key, std::move(keyState));
-                    key.Ref();
-                }
-
-                Finished = ReadBool(in);
-            } else {
-                THROW yexception() << "Invalid state version " << stateVersion;
+        void LoadStateImpl(TInputSerializer& in) {
+            const auto loadStateVersion = in.GetStateVersion();
+            if (loadStateVersion != StateVersion) {
+                THROW yexception() << "Invalid state version " << loadStateVersion;
             }
+
+            const auto statesMapSize = in.Read<ui32>();
+            ClearState();
+            StatesMap.reserve(statesMapSize);
+            for (auto i = 0U; i < statesMapSize; ++i) {
+                auto key = in.ReadUnboxedValue(Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), Ctx);
+                const auto hopIndex = in.Read<ui64>();
+                const auto bucketsSize = in.Read<ui32>();
+
+                TKeyState keyState(bucketsSize, hopIndex);
+                for (auto& bucket : keyState.Buckets) {
+                    in(bucket.HasValue);
+                    if (bucket.HasValue) {
+                        if (Self->StateType) {
+                            Self->InLoad->SetValue(Ctx, in.ReadUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType), Ctx));
+                        }
+                        bucket.Value = Self->OutLoad->GetValue(Ctx);
+                    }
+                }
+                StatesMap.emplace(key, std::move(keyState));
+                key.Ref();
+            }
+
+            in(Finished);
+        }
+
+        bool HasListItems() const override {
+            return false;
         }
 
         TInstant GetWatermark() {
@@ -503,11 +513,15 @@ public:
         if (valueRef.IsInvalid()) {
             // Create new.
             valueRef = CreateStream(compCtx);
-        } else if (valueRef.HasValue() && !valueRef.IsBoxed()) {
-            // Load from saved state.
-            NUdf::TUnboxedValue stream = CreateStream(compCtx);
-            stream.Load(valueRef.AsStringRef());
-            valueRef = stream;
+        } else if (valueRef.HasValue()) {
+            MKQL_ENSURE(valueRef.IsBoxed(), "Expected boxed value");
+            bool isStateToLoad = valueRef.HasListItems();
+            if (isStateToLoad) {
+                // Load from saved state.
+                NUdf::TUnboxedValue stream = CreateStream(compCtx);
+                stream.Load2(valueRef);
+                valueRef = stream;
+            }
         }
 
         return valueRef;

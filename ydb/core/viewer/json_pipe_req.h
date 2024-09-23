@@ -2,13 +2,19 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/sys_view/common/events.h>
 #include "viewer.h"
 
 namespace NKikimr {
@@ -16,6 +22,7 @@ namespace NViewer {
 
 using namespace NKikimr;
 using namespace NSchemeCache;
+using NNodeWhiteboard::TNodeId;
 
 template <typename TDerived>
 class TViewerPipeClient : public TActorBootstrapped<TDerived> {
@@ -26,6 +33,9 @@ protected:
     bool WithRetry = true;
     ui32 Requests = 0;
     static constexpr ui32 MaxRequestsInFlight = 50;
+    NWilson::TSpan Span;
+    IViewer* Viewer = nullptr;
+    NMon::TEvHttpInfo::TPtr Event;
 
     struct TPipeInfo {
         TActorId PipeClient;
@@ -40,12 +50,98 @@ protected:
 
     std::deque<TDelayedRequest> DelayedRequests;
 
+    template<typename T>
+    struct TRequestResponse {
+        std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
+        NWilson::TSpan Span;
+
+        TRequestResponse() = default;
+        TRequestResponse(NWilson::TSpan&& span)
+            : Span(std::move(span))
+        {}
+
+        TRequestResponse(const TRequestResponse&) = delete;
+        TRequestResponse(TRequestResponse&&) = default;
+        TRequestResponse& operator =(const TRequestResponse&) = delete;
+        TRequestResponse& operator =(TRequestResponse&&) = default;
+
+        void Set(std::unique_ptr<T>&& response) {
+            if (!IsDone()) {
+                Span.EndOk();
+            }
+            Response = std::move(response);
+        }
+
+        void Set(TAutoPtr<TEventHandle<T>>&& response) {
+            Set(std::unique_ptr<T>(response->Release().Release()));
+        }
+
+        void Error(const TString& error) {
+            if (!IsDone()) {
+                Span.EndError(error);
+            }
+            if (!IsOk()) {
+                Response = error;
+            }
+        }
+
+        bool IsOk() const {
+            return std::holds_alternative<std::unique_ptr<T>>(Response);
+        }
+
+        bool IsError() const {
+            return std::holds_alternative<TString>(Response);
+        }
+
+        bool IsDone() const {
+            return Response.index() != 0;
+        }
+
+        explicit operator bool() const {
+            return IsOk();
+        }
+
+        T* Get() {
+            return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        T* operator ->() {
+            return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        TString GetError() const {
+            return std::get<TString>(Response);
+        }
+    };
+
     NTabletPipe::TClientConfig GetPipeClientConfig() {
         NTabletPipe::TClientConfig clientConfig;
         if (WithRetry) {
             clientConfig.RetryPolicy = {.RetryLimitCount = 3};
         }
         return clientConfig;
+    }
+
+    TViewerPipeClient() = default;
+
+    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : Viewer(viewer)
+        , Event(ev)
+    {
+        InitConfig(Event->Get()->Request.GetParams());
+        NWilson::TTraceId traceId;
+        TStringBuf traceparent = Event->Get()->Request.GetHeader("traceparent");
+        if (traceparent) {
+            traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+        }
+        TStringBuf wantTrace = Event->Get()->Request.GetHeader("X-Want-Trace");
+        if (!traceId && FromStringWithDefault<bool>(wantTrace)) {
+            traceId = NWilson::TTraceId::NewTraceId(TComponentTracingLevels::ProductionVerbose, Max<ui32>());
+        }
+        if (traceId) {
+            Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
+            Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
+        }
     }
 
     TActorId ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId) {
@@ -69,14 +165,28 @@ protected:
         }
     }
 
-    void SendRequest(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
-        SendEvent(std::make_unique<IEventHandle>(recipient, TBase::SelfId(), ev, flags, cookie));
+    void SendRequest(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        SendEvent(std::make_unique<IEventHandle>(recipient, TBase::SelfId(), ev, flags, cookie, nullptr/*forwardOnNondelivery*/, std::move(traceId)));
     }
 
-    void SendRequestToPipe(const TActorId& pipe, IEventBase* ev, ui64 cookie = 0) {
-        std::unique_ptr<IEventHandle> event = std::make_unique<IEventHandle>(pipe, TBase::SelfId(), ev, 0/*flags*/, cookie);
+    void SendRequestToPipe(const TActorId& pipe, IEventBase* ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        std::unique_ptr<IEventHandle> event = std::make_unique<IEventHandle>(pipe, TBase::SelfId(), ev, 0/*flags*/, cookie, nullptr/*forwardOnNondelivery*/, std::move(traceId));
         event->Rewrite(TEvTabletPipe::EvSend, pipe);
         SendEvent(std::move(event));
+    }
+
+    template<typename TResponse>
+    TRequestResponse<TResponse> MakeRequest(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
+        TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        SendRequest(recipient, ev, flags, cookie, response.Span.GetTraceId());
+        return response;
+    }
+
+    template<typename TResponse>
+    TRequestResponse<TResponse> MakeRequestToPipe(const TActorId& pipe, IEventBase* ev, ui64 cookie = 0) {
+        TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
+        return response;
     }
 
     void SendDelayedRequests() {
@@ -161,6 +271,70 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
+    void RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
+        restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
+        restartPDisk->MutableTargetPDiskId()->SetPDiskId(pdiskId);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    void RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
+        evictVDisk->SetGroupId(groupId);
+        evictVDisk->SetGroupGeneration(groupGeneration);
+        evictVDisk->SetFailRealmIdx(failRealmIdx);
+        evictVDisk->SetFailDomainIdx(failDomainIdx);
+        evictVDisk->SetVDiskIdx(vdiskIdx);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetPDisksRequest>();
+        request->Record.SetInclusiveFrom(true);
+        request->Record.SetInclusiveTo(true);
+        request->Record.MutableFrom()->SetNodeId(nodeId);
+        request->Record.MutableFrom()->SetPDiskId(pdiskId);
+        request->Record.MutableTo()->SetNodeId(nodeId);
+        request->Record.MutableTo()->SetPDiskId(pdiskId);
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release(), 0/*cookie*/);
+    }
+
+    TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
+        request->Record.SetInclusiveFrom(true);
+        request->Record.SetInclusiveTo(true);
+        request->Record.MutableFrom()->SetNodeId(nodeId);
+        request->Record.MutableFrom()->SetPDiskId(pdiskId);
+        request->Record.MutableFrom()->SetVSlotId(0);
+        request->Record.MutableTo()->SetNodeId(nodeId);
+        request->Record.MutableTo()->SetPDiskId(pdiskId);
+        request->Record.MutableTo()->SetVSlotId(std::numeric_limits<ui32>::max());
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release(), 0/*cookie*/);
+    }
+
+    void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* updateDriveStatus = request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
+        updateDriveStatus->CopyFrom(driveStatus);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
     void RequestSchemeCacheNavigate(const TString& path) {
         THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -189,13 +363,32 @@ protected:
     }
 
     void RequestStateStorageEndpointsLookup(const TString& path) {
-        if (!AppData()->DomainsInfo->Domain) {
-            return;
-        }
         TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                               TBase::SelfId(),
                                                               EBoardLookupMode::Second));
         ++Requests;
+    }
+
+    void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
+        if (!AppData()->DomainsInfo->Domain) {
+            return;
+        }
+        TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(path),
+                                                              TBase::SelfId(),
+                                                              EBoardLookupMode::Second));
+        ++Requests;
+    }
+
+    std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        std::vector<TNodeId> databaseNodes;
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
+                databaseNodes.emplace_back(actorId.NodeId());
+            }
+        }
+        std::sort(databaseNodes.begin(), databaseNodes.end());
+        databaseNodes.erase(std::unique(databaseNodes.begin(), databaseNodes.end()), databaseNodes.end());
+        return databaseNodes;
     }
 
     void InitConfig(const TCgiParameters& params) {
@@ -250,6 +443,46 @@ protected:
     void PassAway() override {
         ClosePipes();
         TBase::PassAway();
+    }
+
+    TRequestState GetRequest() const {
+        return {Event->Get(), Span.GetTraceId()};
+    }
+
+    void ReplyAndPassAway(TString data, const TString& error = {}) {
+        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        if (Span) {
+            if (error) {
+                Span.EndError(error);
+            } else {
+                Span.EndOk();
+            }
+        }
+        PassAway();
+    }
+
+    TString GetHTTPOK(TString contentType = {}, TString response = {}, TInstant lastModified = {}) {
+        return Viewer->GetHTTPOK(GetRequest(), contentType, response, lastModified);
+    }
+
+    TString GetHTTPOKJSON(TString response = {}, TInstant lastModified = {}) {
+        return Viewer->GetHTTPOKJSON(GetRequest(), response, lastModified);
+    }
+
+    TString GetHTTPGATEWAYTIMEOUT(TString contentType = {}, TString response = {}) {
+        return Viewer->GetHTTPGATEWAYTIMEOUT(GetRequest(), contentType, response);
+    }
+
+    TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {}) {
+        return Viewer->GetHTTPBADREQUEST(GetRequest(), contentType, response);
+    }
+
+    TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {}) {
+        return Viewer->GetHTTPINTERNALERROR(GetRequest(), contentType, response);
+    }
+
+    TString MakeForward(const std::vector<ui32>& nodes) {
+        return Viewer->MakeForward(GetRequest(), nodes);
     }
 };
 

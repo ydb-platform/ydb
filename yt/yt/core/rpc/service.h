@@ -20,6 +20,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/string/guid.h>
+
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -216,6 +218,9 @@ struct IServiceContext
      */
     virtual void SetRawResponseInfo(TString info, bool incremental) = 0;
 
+    //! Returns the memory usage tracker for request/response messages.
+    virtual const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const = 0;
+
     //! Returns the logger for request/response messages.
     virtual const NLogging::TLogger& GetLogger() const = 0;
 
@@ -236,22 +241,25 @@ struct IServiceContext
     virtual bool IsResponseBodySerializedWithCompression() const = 0;
     virtual void SetResponseBodySerializedWithCompression() = 0;
 
+    //! Returns total size of request. Sum of Header, Body, Attachments, TServiceContext, parsed RequestHeaderProto and TraceContext.
+    virtual i64 GetTotalSize() const = 0;
+
     // Extension methods.
 
     void SetRequestInfo();
     void SetResponseInfo();
 
     template <class... TArgs>
-    void SetRequestInfo(const char* format, TArgs&&... args);
+    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalRequestInfo(const char* format, TArgs&&... args);
+    void SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetResponseInfo(const char* format, TArgs&&... args);
+    void SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalResponseInfo(const char* format, TArgs&&... args);
+    void SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
@@ -283,7 +291,7 @@ struct TServiceId
     TRealmId RealmId;
 };
 
-TString ToString(const TServiceId& serviceId);
+void FormatValue(TStringBuilderBase* builder, const TServiceId& id, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,11 +1,5 @@
-OWNER(
-    xenoxeno
-    g:kikimr
-)
-
 RECURSE(
     api
-    protos
     service
     shard
 )

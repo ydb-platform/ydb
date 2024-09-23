@@ -51,6 +51,7 @@
                                                     "f1 (-\u221e, +\u221e)"
                                                 ],
                                                 "Reverse": true,
+                                                "Scan": "Sequential",
                                                 "Table": "postgres_select.test_plan/foo"
                                             }
                                         ],

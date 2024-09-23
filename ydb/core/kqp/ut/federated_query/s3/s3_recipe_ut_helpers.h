@@ -1,3 +1,7 @@
+#pragma once
+
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/strbuf.h>
@@ -24,6 +28,8 @@ namespace NTestUtils {
 
     extern const TString TEST_SCHEMA;
     extern const TString TEST_SCHEMA_IDS;
+
+    std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt);
 
     Aws::S3::S3Client MakeS3Client();
 

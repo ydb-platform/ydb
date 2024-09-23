@@ -2,6 +2,7 @@ items:
 - { name: Overview,                                  href: index.md }
 - { name: Directory,                                 href: dir.md }
 - { name: Table,                                     href: table.md }
+- { name: View,                                      href: view.md }
 - { name: Topic,                                     href: ../topic.md }
 - { name: Secrets,                                   href: secrets.md }
 - { name: External tables,                           href: external_table.md }

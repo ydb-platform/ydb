@@ -310,7 +310,10 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 
 
 void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_WAIT_SCHEME || State == ES_INITED);
+    if (State != ES_WAIT_SCHEME && State != ES_INITED) {
+        return CloseSession("erroneous internal state", NPersQueue::NErrorCode::ERROR, ctx);
+    }
+
     auto& res = ev->Get()->Result;
     Y_ABORT_UNLESS(res->ResultSet.size() == 1);
 
@@ -448,6 +451,10 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
 void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     State = ES_WAIT_PARTITION;
 
+    if (PartitionChooser) {
+        ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
+    }
+
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
     PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, FullConverter, SourceId, preferedPartition));
 }
@@ -503,6 +510,11 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
 }
 
 void TWriteSessionActor::CloseSession(const TString& errorReason, const NPersQueue::NErrorCode::EErrorCode errorCode, const NActors::TActorContext& ctx) {
+    if (SessionClosed) {
+        return;
+    }
+    SessionClosed = true;
+
     if (errorCode != NPersQueue::NErrorCode::OK) {
         if (InternalErrorCode(errorCode)) {
             SLIErrors.Inc();
@@ -864,7 +876,9 @@ void TWriteSessionActor::LogSession(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_INITED);
+    if (State != ES_INITED) {
+        return CloseSession("erroneous internal state", NPersQueue::NErrorCode::ERROR, ctx);
+    }
 
     auto now = ctx.Now();
 
@@ -884,7 +898,7 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
         ctx.Send(PartitionChooser, new NPQ::TEvPartitionChooser::TEvRefreshRequest());
         LastSourceIdUpdate = now + SOURCEID_UPDATE_PERIOD;
     }
-    
+
     if (now >= LogSessionDeadline) {
         LogSession(ctx);
     }

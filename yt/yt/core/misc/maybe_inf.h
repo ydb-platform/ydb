@@ -72,9 +72,6 @@ protected:
 template <class T>
 void FormatValue(TStringBuilderBase* builder, TMaybeInf<T> value, TStringBuf format);
 
-template <class T>
-TString ToString(TMaybeInf<T> value);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

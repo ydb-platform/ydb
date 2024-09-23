@@ -353,6 +353,39 @@ class ObjectIdentifierEncoder(AbstractItemEncoder):
         return octets, False, False
 
 
+class RelativeOIDEncoder(AbstractItemEncoder):
+    supportIndefLenMode = False
+
+    def encodeValue(self, value, asn1Spec, encodeFun, **options):
+        if asn1Spec is not None:
+            value = asn1Spec.clone(value)
+
+        octets = ()
+
+        # Cycle through subIds
+        for subOid in value.asTuple():
+            if 0 <= subOid <= 127:
+                # Optimize for the common case
+                octets += (subOid,)
+
+            elif subOid > 127:
+                # Pack large Sub-Object IDs
+                res = (subOid & 0x7f,)
+                subOid >>= 7
+
+                while subOid:
+                    res = (0x80 | (subOid & 0x7f),) + res
+                    subOid >>= 7
+
+                # Add packed Sub-Object ID to resulted RELATIVE-OID
+                octets += res
+
+            else:
+                raise error.PyAsn1Error('Negative RELATIVE-OID arc %s at %s' % (subOid, value))
+
+        return octets, False, False
+
+
 class RealEncoder(AbstractItemEncoder):
     supportIndefLenMode = False
     binEncBase = 2  # set to None to choose encoding base automatically
@@ -715,6 +748,7 @@ TAG_MAP = {
     univ.OctetString.tagSet: OctetStringEncoder(),
     univ.Null.tagSet: NullEncoder(),
     univ.ObjectIdentifier.tagSet: ObjectIdentifierEncoder(),
+    univ.RelativeOID.tagSet: RelativeOIDEncoder(),
     univ.Enumerated.tagSet: IntegerEncoder(),
     univ.Real.tagSet: RealEncoder(),
     # Sequence & Set have same tags as SequenceOf & SetOf
@@ -747,6 +781,7 @@ TYPE_MAP = {
     univ.OctetString.typeId: OctetStringEncoder(),
     univ.Null.typeId: NullEncoder(),
     univ.ObjectIdentifier.typeId: ObjectIdentifierEncoder(),
+    univ.RelativeOID.typeId: RelativeOIDEncoder(),
     univ.Enumerated.typeId: IntegerEncoder(),
     univ.Real.typeId: RealEncoder(),
     # Sequence & Set have same tags as SequenceOf & SetOf

@@ -1,7 +1,5 @@
 LIBRARY()
 
-OWNER(g:yql g:yql_ydb_core)
-
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
 SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
 SET(sql_grammar ${ARCADIA_ROOT}/ydb/library/yql/sql/v0/SQL.g)

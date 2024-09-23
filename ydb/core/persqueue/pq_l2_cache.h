@@ -42,7 +42,7 @@ class TPersQueueCacheL2 : public TActorBootstrapped<TPersQueueCacheL2> {
 public:
     struct TKey {
         ui64 TabletId;
-        ui32 Partition;
+        TPartitionId Partition;
         ui64 Offset;
         ui16 PartNo;
 
@@ -52,13 +52,13 @@ public:
             , Offset(blob.Offset)
             , PartNo(blob.PartNo)
         {
-            KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition) << 16) + PartNo);
+            KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition.InternalPartitionId) << 17) + PartNo + (Partition.IsSupportivePartition() ? 0 : (1 << 16)));
             KeyHash = Hash128to32(KeyHash, Offset);
         }
 
         bool operator == (const TKey& key) const {
             return TabletId == key.TabletId &&
-                Partition == key.Partition &&
+                Partition.IsEqual(key.Partition) &&
                 Offset == key.Offset &&
                 PartNo == key.PartNo;
         }

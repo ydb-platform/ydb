@@ -62,6 +62,10 @@ public:
     bool GetForeign() const;
     void SetForeign(bool value);
 
+    // "read_via_exec_node"
+    bool GetReadViaExecNode() const;
+    void SetReadViaExecNode(bool value);
+
     // "columns"
     std::optional<std::vector<TString>> GetColumns() const;
     void SetColumns(const std::vector<TString>& columns);
@@ -172,7 +176,7 @@ bool operator== (const TRichYPath& lhs, const TRichYPath& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TRichYPath& path);
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec);
 
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths);
 

@@ -23,15 +23,15 @@ public:
         Become(&TStatisticsTableCreator::StateFunc);
         Register(
             CreateTableCreator(
-                { ".metadata", "statistics" },
+                { ".metadata", "_statistics" },
                 {
                     Col("owner_id", NScheme::NTypeIds::Uint64),
                     Col("local_path_id", NScheme::NTypeIds::Uint64),
                     Col("stat_type", NScheme::NTypeIds::Uint32),
-                    Col("column_name", NScheme::NTypeIds::Utf8),
+                    Col("column_tag", NScheme::NTypeIds::Uint32),
                     Col("data", NScheme::NTypeIds::String),
                 },
-                { "owner_id", "local_path_id", "stat_type", "column_name" },
+                { "owner_id", "local_path_id", "stat_type", "column_tag"},
                 NKikimrServices::STATISTICS
             )
         );
@@ -72,19 +72,19 @@ class TSaveStatisticsQuery : public NKikimr::TQueryBase {
 private:
     const TPathId PathId;
     const ui64 StatType;
-    const std::vector<TString> ColumnNames;
+    const std::vector<ui32> ColumnTags;
     const std::vector<TString> Data;
 
 public:
     TSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
-        std::vector<TString>&& columnNames, std::vector<TString>&& data)
+        std::vector<ui32>&& columnTags, std::vector<TString>&& data)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
         , PathId(pathId)
         , StatType(statType)
-        , ColumnNames(std::move(columnNames))
+        , ColumnTags(std::move(columnTags))
         , Data(std::move(data))
     {
-        Y_ABORT_UNLESS(ColumnNames.size() == Data.size());
+        Y_ABORT_UNLESS(ColumnTags.size() == Data.size());
     }
 
     void OnRunQuery() override {
@@ -93,21 +93,19 @@ public:
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
             DECLARE $stat_type AS Uint32;
-            DECLARE $column_names AS List<Utf8>;
+            DECLARE $column_tags AS List<Uint32>;
             DECLARE $data AS List<String>;
 
-            UPSERT INTO `.metadata/statistics`
-                (owner_id, local_path_id, stat_type, column_name, data)
+            UPSERT INTO `.metadata/_statistics`
+                (owner_id, local_path_id, stat_type, column_tag, data)
             VALUES
         )";
 
         for (size_t i = 0; i < Data.size(); ++i) {
-            sql << " ($owner_id, $local_path_id, $stat_type, $column_names[" << i << "], $data[" << i << "])";
+            sql << " ($owner_id, $local_path_id, $stat_type, $column_tags[" << i << "], $data[" << i << "])";
             sql << (i == Data.size() - 1 ? ";" : ",");
         }
 
-        Y_UNUSED(StatType);
-        Y_UNUSED(PathId);
         NYdb::TParamsBuilder params;
         params
             .AddParam("$owner_id")
@@ -119,13 +117,13 @@ public:
             .AddParam("$stat_type")
                 .Uint32(StatType)
                 .Build();
-        auto& columnNames = params.AddParam("$column_names").BeginList();
-        for (size_t i = 0; i < ColumnNames.size(); ++i) {
-            columnNames
+        auto& columnTags = params.AddParam("$column_tags").BeginList();
+        for (size_t i = 0; i < ColumnTags.size(); ++i) {
+            columnTags
                 .AddListItem()
-                .Utf8(ColumnNames[i]);
+                .Uint32(ColumnTags[i]);
         }
-        columnNames.EndList().Build();
+        columnTags.EndList().Build();
         auto& data = params.AddParam("$data").BeginList();
         for (size_t i = 0; i < Data.size(); ++i) {
             data
@@ -150,9 +148,9 @@ public:
 };
 
 NActors::IActor* CreateSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
-    std::vector<TString>&& columnNames, std::vector<TString>&& data)
+    std::vector<ui32>&& columnTags, std::vector<TString>&& data)
 {
-    return new TSaveStatisticsQuery(pathId, statType, std::move(columnNames), std::move(data));
+    return new TSaveStatisticsQuery(pathId, statType, std::move(columnTags), std::move(data));
 }
 
 
@@ -160,16 +158,18 @@ class TLoadStatisticsQuery : public NKikimr::TQueryBase {
 private:
     const TPathId PathId;
     const ui64 StatType;
-    const TString ColumnName;
+    const ui32 ColumnTag;
+    const ui64 Cookie;
 
-    TMaybe<TString> Data;
+    std::optional<TString> Data;
 
 public:
-    TLoadStatisticsQuery(const TPathId& pathId, ui64 statType, const TString& columnName)
+    TLoadStatisticsQuery(const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
         , PathId(pathId)
         , StatType(statType)
-        , ColumnName(columnName)
+        , ColumnTag(columnTag)
+        , Cookie(cookie)
     {}
 
     void OnRunQuery() override {
@@ -177,16 +177,16 @@ public:
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
             DECLARE $stat_type AS Uint32;
-            DECLARE $column_name AS Utf8;
+            DECLARE $column_tag AS Uint32;
 
             SELECT
                 data
-            FROM `.metadata/statistics`
+            FROM `.metadata/_statistics`
             WHERE
                 owner_id = $owner_id AND
                 local_path_id = $local_path_id AND
                 stat_type = $stat_type AND
-                column_name = $column_name;
+                column_tag = $column_tag;
         )";
 
         NYdb::TParamsBuilder params;
@@ -200,8 +200,8 @@ public:
             .AddParam("$stat_type")
                 .Uint32(StatType)
                 .Build()
-            .AddParam("$column_name")
-                .Utf8(ColumnName)
+            .AddParam("$column_tag")
+                .Uint32(ColumnTag)
                 .Build();
 
         RunDataQuery(sql, &params, TTxControl::BeginTx());
@@ -209,16 +209,16 @@ public:
 
     void OnQueryResult() override {
         if (ResultSets.size() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected read response");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected read response", false);
             return;
         }
         NYdb::TResultSetParser result(ResultSets[0]);
         if (result.RowsCount() == 0) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "No data");
+            Finish(Ydb::StatusIds::BAD_REQUEST, "No data", false);
             return;
         }
         result.TryNextRow();
-        Data = result.ColumnParser("data").GetOptionalString();
+        Data = *result.ColumnParser("data").GetOptionalString();
         Finish();
     }
 
@@ -226,6 +226,7 @@ public:
         Y_UNUSED(issues);
         auto response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
         response->Success = (status == Ydb::StatusIds::SUCCESS);
+        response->Cookie = Cookie;
         if (response->Success) {
             response->Data = Data;
         }
@@ -233,8 +234,62 @@ public:
     }
 };
 
-NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType, const TString& columnName) {
-    return new TLoadStatisticsQuery(pathId, statType, columnName);
+NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType,
+    ui32 columnTag, ui64 cookie)
+{
+    return new TLoadStatisticsQuery(pathId, statType, columnTag, cookie);
+}
+
+
+class TDeleteStatisticsQuery : public NKikimr::TQueryBase {
+private:
+    const TPathId PathId;
+
+public:
+    TDeleteStatisticsQuery(const TPathId& pathId)
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
+        , PathId(pathId)
+    {
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $owner_id AS Uint64;
+            DECLARE $local_path_id AS Uint64;
+
+            DELETE FROM `.metadata/_statistics`
+            WHERE
+                owner_id = $owner_id AND
+                local_path_id = $local_path_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$owner_id")
+                .Uint64(PathId.OwnerId)
+                .Build()
+            .AddParam("$local_path_id")
+                .Uint64(PathId.LocalPathId)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Y_UNUSED(issues);
+        auto response = std::make_unique<TEvStatistics::TEvDeleteStatisticsQueryResponse>();
+        response->Success = (status == Ydb::StatusIds::SUCCESS);
+        Send(Owner, response.release());
+    }
+};
+
+NActors::IActor* CreateDeleteStatisticsQuery(const TPathId& pathId)
+{
+    return new TDeleteStatisticsQuery(pathId);
 }
 
 } // NKikimr::NStat

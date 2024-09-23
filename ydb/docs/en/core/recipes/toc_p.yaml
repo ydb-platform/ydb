@@ -1,0 +1,11 @@
+items:
+- name: Overview
+  href: index.md
+- name: YDB SDK
+  include:
+    mode: link
+    path: ydb-sdk/toc_p.yaml
+- name: YQL
+  include:
+    mode: link
+    path: yql/toc_p.yaml

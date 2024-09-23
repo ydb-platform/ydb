@@ -182,18 +182,20 @@ void TSchemeShard::UpdateBackgroundCompaction(
     auto ctx = ActorContext();
 
     if (newStats.HasBorrowedData) {
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "background compaction update removed shard# " << shardIdx
-            << " with borrowed parts at schemeshard " << TabletID());
-        RemoveBackgroundCompaction(shardIdx);
+        if (RemoveBackgroundCompaction(shardIdx)) {
+            LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "background compaction update removed shard# " << shardIdx
+                << " with borrowed parts at schemeshard " << TabletID());
+        }
         return;
     }
 
     if (newStats.HasLoanedData) {
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "background compaction update removed shard# " << shardIdx
-            << " with loaned parts at schemeshard " << TabletID());
-        RemoveBackgroundCompaction(shardIdx);
+        if (RemoveBackgroundCompaction(shardIdx)) {
+            LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "background compaction update removed shard# " << shardIdx
+                << " with loaned parts at schemeshard " << TabletID());
+        }
         return;
     }
 
@@ -206,17 +208,22 @@ void TSchemeShard::UpdateBackgroundCompaction(
         << " at schemeshard " << TabletID());
 
     TShardCompactionInfo info(shardIdx, newStats);
-    if (!CompactionQueue->Update(info))
+    if (!CompactionQueue->Update(info)) {
         CompactionQueue->Enqueue(std::move(info));
+    }
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::RemoveBackgroundCompaction(const TShardIdx& shardIdx) {
+bool TSchemeShard::RemoveBackgroundCompaction(const TShardIdx& shardIdx) {
     if (!CompactionQueue)
-        return;
+        return false;
 
-    CompactionQueue->Remove(TShardCompactionInfo(shardIdx));
-    UpdateBackgroundCompactionQueueMetrics();
+    if (CompactionQueue->Remove(TShardCompactionInfo(shardIdx))) {
+        UpdateBackgroundCompactionQueueMetrics();
+        return true;
+    }
+
+    return false;
 }
 
 void TSchemeShard::ShardRemoved(const TShardIdx& shardIdx) {

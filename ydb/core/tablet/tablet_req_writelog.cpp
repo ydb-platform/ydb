@@ -171,7 +171,7 @@ public:
             NWilson::TTraceId innerTraceId;
 
             if (RequestSpan) {
-                auto res = BlobSpans.try_emplace(ref.Id, TWilsonTablet::TabletFull, RequestSpan.GetTraceId(), "Tablet.WriteLog.Reference");
+                auto res = BlobSpans.try_emplace(ref.Id, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.Reference");
 
                 innerTraceId = res.first->second.GetTraceId();
             }
@@ -191,7 +191,7 @@ public:
         NWilson::TTraceId traceId;
 
         if (RequestSpan) {
-            auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::TabletFull, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
+            auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
 
             traceId = std::move(res.first->second.GetTraceId());
         }

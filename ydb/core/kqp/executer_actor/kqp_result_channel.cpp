@@ -56,6 +56,8 @@ private:
             }
         } catch (const yexception& ex) {
             InternalError(ex.what());
+        } catch (const NKikimr::TMemoryLimitExceededException& ex) {
+            InternalError("Memory limit exceeded exception", NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
         }
     }
 
@@ -97,10 +99,10 @@ private:
         Send(ComputeActor, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ ChannelId);
     }
 
-    void InternalError(const TString& msg) {
+    void InternalError(const TString& msg, const NYql::NDqProto::StatusIds_StatusCode& code = NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
         LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, msg);
 
-        auto evAbort = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, msg);
+        auto evAbort = MakeHolder<TEvKqp::TEvAbortExecution>(code, msg);
         Send(Executer, evAbort.Release());
 
         Become(&TResultCommonChannelProxy::DeadState);
@@ -112,7 +114,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvents::TEvPoison, HandlePoison);
             }
-            
+
         } catch(const yexception& ex) {
             InternalError(ex.what());
         }

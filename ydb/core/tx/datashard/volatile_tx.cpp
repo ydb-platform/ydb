@@ -151,6 +151,25 @@ namespace NKikimr::NDataShard {
                 }
             }
 
+            if (!info->ArbiterReadSets.empty()) {
+                NKikimrTx::TReadSetData data;
+                data.SetDecision(NKikimrTx::TReadSetData::DECISION_ABORT);
+
+                TString bodyStr;
+                bool ok = data.SerializeToString(&bodyStr);
+                Y_ABORT_UNLESS(ok, "Failed to serialize an abort decision readset");
+
+                NIceDb::TNiceDb db(txc.DB);
+                for (ui64 seqNo : info->ArbiterReadSets) {
+                    auto rsInfo = Self->OutReadSets.ReplaceReadSet(db, seqNo, bodyStr);
+                    if (Y_LIKELY(rsInfo.TxId == TxId)) {
+                        auto msg = Self->PrepareReadSet(rsInfo.Step, rsInfo.TxId, rsInfo.From, rsInfo.To, bodyStr, seqNo);
+                        ReadSets.push_back(std::move(msg));
+                    }
+                }
+                info->ArbiterReadSets.clear();
+            }
+
             Self->VolatileTxManager.PersistRemoveVolatileTx(TxId, txc);
             return true;
         }
@@ -168,6 +187,11 @@ namespace NKikimr::NDataShard {
                 TActivationContext::Send(ev.Release());
             }
             info->DelayedAcks.clear();
+
+            // Arbiter notifies other shards on abort
+            if (!ReadSets.empty()) {
+                Self->SendReadSets(ctx, std::move(ReadSets));
+            }
 
             // Make a copy since it will disappear soon
             auto commitTxIds = info->CommitTxIds;
@@ -191,6 +215,7 @@ namespace NKikimr::NDataShard {
 
     private:
         ui64 TxId;
+        TVector<THolder<TEvTxProcessing::TEvReadSet>> ReadSets;
     };
 
     void TVolatileTxManager::TTxMap::Add(ui64 txId, TRowVersion version) {
@@ -307,6 +332,7 @@ namespace NKikimr::NDataShard {
             info->AddCommitted = true; // we loaded it from local db, so it is committed
             info->CommitOrder = details.GetCommitOrder();
             info->CommitOrdered = details.GetCommitOrdered();
+            info->IsArbiter = details.GetIsArbiter();
 
             maxCommitOrder = Max(maxCommitOrder, info->CommitOrder);
 
@@ -443,6 +469,7 @@ namespace NKikimr::NDataShard {
             TConstArrayRef<ui64> participants,
             std::optional<ui64> changeGroup,
             bool commitOrdered,
+            bool isArbiter,
             TTransactionContext& txc)
     {
         using Schema = TDataShard::Schema;
@@ -464,6 +491,7 @@ namespace NKikimr::NDataShard {
         info->ChangeGroup = changeGroup;
         info->CommitOrder = NextCommitOrder++;
         info->CommitOrdered = commitOrdered;
+        info->IsArbiter = isArbiter;
 
         if (info->Participants.empty()) {
             // Transaction is committed when we don't have to wait for other participants
@@ -517,6 +545,9 @@ namespace NKikimr::NDataShard {
         details.SetCommitOrder(info->CommitOrder);
         if (info->CommitOrdered) {
             details.SetCommitOrdered(true);
+        }
+        if (info->IsArbiter) {
+            details.SetIsArbiter(true);
         }
 
         db.Table<Schema::TxVolatileDetails>().Key(info->TxId).Update(
@@ -853,6 +884,12 @@ namespace NKikimr::NDataShard {
     }
 
     void TVolatileTxManager::RunCommitCallbacks(TVolatileTxInfo* info) {
+        if (info->IsArbiterOnHold && !info->ArbiterReadSets.empty()) {
+            Self->OutReadSets.ReleaseOnHoldReadSets(info->ArbiterReadSets,
+                TActivationContext::ActorContextFor(Self->SelfId()));
+            info->ArbiterReadSets.clear();
+        }
+
         auto callbacks = std::move(info->Callbacks);
         info->Callbacks.clear();
         for (auto& callback : callbacks) {

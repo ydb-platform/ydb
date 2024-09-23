@@ -1,8 +1,0 @@
-items:
-- name: Чтение и запись данных
-  href: crud.md
-  hidden: true
-- name: Пользовательские атрибуты таблицы
-  href: manage-users-attr.md
-- name: Использование планов при оптимизации запросов
-  href: query_plans_optimization.md

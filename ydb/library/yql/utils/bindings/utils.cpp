@@ -34,6 +34,8 @@ void LoadBindings(THashMap<TString, NSQLTranslation::TTableBindingSettings>& dst
                 binding.ClusterType = v.GetString();
             } else if (k == "schema") {
                 binding.Settings["schema"] = SerializeJsonValueAsYsonText(v);
+            } else if (k == "constraints") {
+                binding.Settings["constraints"] = SerializeJsonValueAsYsonText(v);
             } else {
                 YQL_ENSURE(v.IsString());
                 binding.Settings.emplace(k, v.GetString());

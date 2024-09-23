@@ -178,6 +178,14 @@ TString MakeCreateExternalDataSourceQuery(
     switch (connectionContent.setting().connection_case()) {
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Ydb",
+                    DATABASE_ID={database_id},
+                    USE_TLS="{use_tls}"
+                )",
+                "database_id"_a = EncloseAndEscapeString(connectionContent.setting().ydb_database().database_id(), '"'),
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
         break;
         case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             properties = fmt::format(
@@ -207,8 +215,8 @@ TString MakeCreateExternalDataSourceQuery(
         }
         case FederatedQuery::ConnectionSetting::kMonitoring:
         break;
-        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-            const auto schema = connectionContent.setting().postgresql_cluster().schema();
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
+            const auto pgschema = connectionContent.setting().postgresql_cluster().schema();
             properties = fmt::format(
                 R"(
                     SOURCE_TYPE="PostgreSQL",
@@ -221,7 +229,25 @@ TString MakeCreateExternalDataSourceQuery(
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
-                "schema"_a =  schema ? ", SCHEMA=" + EncloseAndEscapeString(schema, '"') : TString{});
+                "schema"_a =  pgschema ? ", SCHEMA=" + EncloseAndEscapeString(pgschema, '"') : TString{});
+        }
+        break;
+        case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
+            const auto gpschema = connectionContent.setting().greenplum_cluster().schema();
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Greenplum",
+                    MDB_CLUSTER_ID={mdb_cluster_id},
+                    DATABASE_NAME={database_name},
+                    USE_TLS="{use_tls}"
+                    {schema}
+                )",
+                "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().greenplum_cluster().database_id(), '"'),
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().greenplum_cluster().database_name(), '"'),
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
+                "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
+
+        }
         break;
     }
 

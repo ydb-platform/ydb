@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "mood.h"
 
 namespace NKikimr {
 namespace NBsController {
@@ -40,14 +41,15 @@ struct Schema : NIceDb::Schema {
         struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {};
         struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDecommitStatus; static constexpr Type Default = Type::DECOMMIT_NONE; };
+        struct Mood : Column<18, NScheme::NTypeIds::Uint8> { using Type = TPDiskMood::EValue; static constexpr Type Default = Type::Normal; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus>;
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood>;
     };
 
     struct Group : Table<4> {
-        struct ID : Column<1, NScheme::NTypeIds::Uint32> {}; // PK
+        struct ID : Column<1, NScheme::NTypeIds::Uint32> { using Type = TGroupId; static constexpr Type Default = TGroupId::Zero();}; // PK
         struct Generation : Column<2, NScheme::NTypeIds::Uint32> {};
         struct ErasureSpecies : Column<3, NScheme::NTypeIds::Uint32> { using Type = TErasureType::EErasureSpecies; };
         struct Owner : Column<4, NScheme::NTypeIds::Uint64> {};
@@ -119,7 +121,7 @@ struct Schema : NIceDb::Schema {
         struct PDiskID : Column<2, PDisk::PDiskID::ColumnType> {}; // PK + FK PDisk.PDiskID
         struct VSlotID : Column<3, NScheme::NTypeIds::Uint32> {}; // PK
         struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = NKikimrBlobStorage::TVDiskKind::EVDiskKind; };
-        struct GroupID : Column<5, Group::ID::ColumnType> {}; // FK Group.ID
+        struct GroupID : Column<5, Group::ID::ColumnType> {using Type = TGroupId; static constexpr Type Default = TGroupId::Zero(); }; // FK Group.ID
         struct GroupGeneration : Column<6, Group::Generation::ColumnType> {};
         struct RingIdx : Column<7, NScheme::NTypeIds::Uint32> {};
         struct FailDomainIdx : Column<8, NScheme::NTypeIds::Uint32> {};

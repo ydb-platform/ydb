@@ -3,6 +3,8 @@
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
+#include <yt/yt/client/sequoia_client/public.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -1353,7 +1355,7 @@ void ToProto(
         protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -1364,6 +1366,8 @@ void ToProto(
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
+    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
@@ -1430,12 +1434,17 @@ void FromProto(
     } else {
         query->AccessControlObject.reset();
     }
+    if (protoQuery.has_access_control_objects()) {
+        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
+    } else {
+        query->AccessControlObjects.reset();
+    }
     if (protoQuery.has_state()) {
         query->State = ConvertQueryStateFromProto(protoQuery.state());
     } else {
         query->State.reset();
     }
-    if (protoQuery.result_count()) {
+    if (protoQuery.has_result_count()) {
         query->ResultCount = protoQuery.result_count();
     } else {
         query->ResultCount.reset();
@@ -1888,8 +1897,20 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
 }
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned)
+bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)
 {
+    // For now transient Sequoia failures are always retriable even if client's
+    // retries are disabled.
+    // TODO(kvk1920): consider to make a separate flag "EnableSequoiaRetries"
+    // for this.
+    if (error.FindMatching(NSequoiaClient::EErrorCode::SequoiaRetriableError)) {
+        return true;
+    }
+
+    if (retrySequoiaErrorsOnly) {
+        return false;
+    }
+
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
         error.FindMatching(NRpc::EErrorCode::PeerBanned))
     {

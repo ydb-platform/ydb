@@ -107,6 +107,9 @@ bool operator == (const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema
@@ -278,10 +281,14 @@ public:
     bool HasAggregateColumns() const;
     bool HasHunkColumns() const;
     bool HasTimestampColumn() const;
+    bool HasTtlColumn() const;
     bool IsSorted() const;
     bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
+    bool IsCGCompatarorApplicable() const;
+
+    std::optional<int> GetTtlColumnIndex() const;
 
     std::vector<TColumnStableName> GetKeyColumnStableNames() const;
     TKeyColumns GetKeyColumnNames() const;
@@ -320,7 +327,11 @@ public:
     //! but without |$timestamp| column, if any.
     TTableSchemaPtr ToWrite() const;
 
-    //! For sorted tables, return the current schema
+    //! For sorted tables, return the current schema.
+    //! For ordered tables, prepends the current schema with |(tablet_index, sequence_number)| key column.
+    TTableSchemaPtr ToWriteViaQueueProducer() const;
+
+    //! For sorted tables, return the current schema.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
 
@@ -335,6 +346,10 @@ public:
     //! For sorted tables, returns the non-computed key columns.
     //! For ordered tables, returns an empty schema.
     TTableSchemaPtr ToDelete() const;
+
+    //! For sorted tables, returns the non-computed key columns.
+    //! For ordered tables, returns an empty schema.
+    TTableSchemaPtr ToLock() const;
 
     //! Returns just the key columns.
     TTableSchemaPtr ToKeys() const;
@@ -370,7 +385,7 @@ public:
 
     TTableSchemaPtr ToModifiedSchema(ETableSchemaModification schemaModification) const;
 
-    TComparator ToComparator() const;
+    TComparator ToComparator(TCallback<TUUComparerSignature> cgComparator = {}) const;
 
     TKeyColumnTypes GetKeyColumnTypes() const;
 
@@ -410,9 +425,6 @@ DEFINE_REFCOUNTED_TYPE(TTableSchema)
 
 void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
-
-TString ToString(const TTableSchema& schema);
-TString ToString(const TTableSchemaPtr& schema);
 
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
 TString SerializeToWireProto(const TTableSchemaPtr& schema);
@@ -466,6 +478,8 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 ////////////////////////////////////////////////////////////////////////////////
 
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
+
+void ValidateDynamicTableKeyColumnCount(int count);
 
 void ValidateColumnName(const TString& name);
 

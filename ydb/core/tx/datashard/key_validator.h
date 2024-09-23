@@ -26,14 +26,14 @@ public:
     struct TValidateOptions {
         bool IsLockTxId;
         bool IsLockNodeId;
-        bool IsRepeatableSnapshot;
+        bool UsesMvccSnapshot;
         bool IsImmediateTx;
         bool IsWriteTx;
         const NTable::TScheme& Scheme;
 
         TValidateOptions(ui64 LockTxId,
                          ui32 LockNodeId,
-                         bool isRepeatableSnapshot,
+                         bool usesMvccSnapshot,
                          bool isImmediateTx,
                          bool isWriteTx,
                          const NTable::TScheme& scheme);

@@ -141,7 +141,7 @@ class FederatedQueryClient(object):
     @retry.retry_intrusive
     def create_query_impl(self, name, text, type=fq.QueryContent.QueryType.ANALYTICS, mode=fq.ExecuteMode.RUN,
                           visibility=fq.Acl.Visibility.PRIVATE, streaming_disposition=None, check_issues=True,
-                          automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0):
+                          automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0, parameters=None):
         request = fq.CreateQueryRequest()
         request.execute_mode = mode
         request.content.type = type
@@ -161,7 +161,11 @@ class FederatedQueryClient(object):
         if vcpu_time_limit:
             request.content.limits.vcpu_time_limit = vcpu_time_limit
 
-        logging.debug("Request: {}".format(self._pretty_retry(request)))
+        if parameters is not None:
+            for k, v in parameters.items():
+                request.content.parameters[k].CopyFrom(v)
+
+        logging.debug("Request: {}".format(request))
 
         response = self.service.CreateQuery(
             request,
@@ -176,8 +180,9 @@ class FederatedQueryClient(object):
 
     def create_query(self, name, text, type=fq.QueryContent.QueryType.ANALYTICS, mode=fq.ExecuteMode.RUN,
                      visibility=fq.Acl.Visibility.PRIVATE, streaming_disposition=None, check_issues=True,
-                     automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0):
+                     automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0, parameters=None):
         idempotency_key_for_retries = idempotency_key if idempotency_key is not None else str(uuid.uuid4())
+
         return self.create_query_impl(name=name,
                                       text=text,
                                       type=type,
@@ -188,13 +193,14 @@ class FederatedQueryClient(object):
                                       automatic=automatic,
                                       idempotency_key=idempotency_key_for_retries,
                                       pg_syntax=pg_syntax, execution_ttl=execution_ttl,
-                                      vcpu_time_limit=vcpu_time_limit)
+                                      vcpu_time_limit=vcpu_time_limit,
+                                      parameters=parameters)
 
     @retry.retry_intrusive
     def modify_query(self, query_id, name, text, type=fq.QueryContent.QueryType.ANALYTICS,
                      execute_mode=fq.ExecuteMode.RUN,
                      visibility=fq.Acl.Visibility.PRIVATE, state_load_mode=fq.StateLoadMode.EMPTY,
-                     streaming_disposition=None, check_issues=True):
+                     streaming_disposition=None, check_issues=True, parameters=None):
 
         request = fq.ModifyQueryRequest()
         request.query_id = query_id
@@ -206,6 +212,10 @@ class FederatedQueryClient(object):
         request.content.acl.visibility = visibility
         if streaming_disposition is not None:
             request.disposition.CopyFrom(streaming_disposition)
+
+        if parameters is not None:
+            for k, v in parameters.items():
+                request.content.parameters[k].CopyFrom(v)
 
         logging.debug("Request: {}".format(self._pretty_retry(request)))
 
@@ -380,13 +390,13 @@ class FederatedQueryClient(object):
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
     @retry.retry_intrusive
-    def create_ydb_connection(self, name, database, endpoint, visibility=fq.Acl.Visibility.PRIVATE,
-                              auth_method=AuthMethod.no_auth(), check_issues=True):
+    def create_ydb_connection(self, name, database_id,
+                              secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()
         request.content.name = name
         ydb = request.content.setting.ydb_database
-        ydb.database = database
-        ydb.endpoint = endpoint
+        ydb.database_id = database_id
+        ydb.secure = secure
 
         ydb.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility

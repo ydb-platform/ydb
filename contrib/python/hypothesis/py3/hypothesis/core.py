@@ -77,7 +77,10 @@ from hypothesis.internal.compat import (
 )
 from hypothesis.internal.conjecture.data import ConjectureData, Status
 from hypothesis.internal.conjecture.engine import BUFFER_SIZE, ConjectureRunner
-from hypothesis.internal.conjecture.junkdrawer import ensure_free_stackframes
+from hypothesis.internal.conjecture.junkdrawer import (
+    ensure_free_stackframes,
+    gc_cumulative_time,
+)
 from hypothesis.internal.conjecture.shrinker import sort_key
 from hypothesis.internal.entropy import deterministic_PRNG
 from hypothesis.internal.escalation import (
@@ -108,6 +111,7 @@ from hypothesis.internal.reflection import (
     repr_call,
 )
 from hypothesis.internal.scrutineer import (
+    MONITORING_TOOL_ID,
     Trace,
     Tracer,
     explanatory_lines,
@@ -785,7 +789,6 @@ class StateForActualGivenExecution:
         self.explain_traces = defaultdict(set)
         self._start_timestamp = time.time()
         self._string_repr = ""
-        self._jsonable_arguments = {}
         self._timing_features = {}
 
     @property
@@ -820,29 +823,45 @@ class StateForActualGivenExecution:
         self._string_repr = ""
         text_repr = None
         if self.settings.deadline is None and not TESTCASE_CALLBACKS:
-            test = self.test
+
+            @proxies(self.test)
+            def test(*args, **kwargs):
+                with ensure_free_stackframes():
+                    return self.test(*args, **kwargs)
+
         else:
 
             @proxies(self.test)
             def test(*args, **kwargs):
                 arg_drawtime = math.fsum(data.draw_times.values())
+                arg_stateful = math.fsum(data._stateful_run_times.values())
+                arg_gctime = gc_cumulative_time()
                 start = time.perf_counter()
                 try:
-                    result = self.test(*args, **kwargs)
+                    with ensure_free_stackframes():
+                        result = self.test(*args, **kwargs)
                 finally:
                     finish = time.perf_counter()
                     in_drawtime = math.fsum(data.draw_times.values()) - arg_drawtime
-                    runtime = datetime.timedelta(seconds=finish - start - in_drawtime)
+                    in_stateful = (
+                        math.fsum(data._stateful_run_times.values()) - arg_stateful
+                    )
+                    in_gctime = gc_cumulative_time() - arg_gctime
+                    runtime = finish - start - in_drawtime - in_stateful - in_gctime
                     self._timing_features = {
-                        "execute_test": finish - start - in_drawtime,
+                        "execute:test": runtime,
+                        "overall:gc": in_gctime,
                         **data.draw_times,
+                        **data._stateful_run_times,
                     }
 
                 if (current_deadline := self.settings.deadline) is not None:
                     if not is_final:
                         current_deadline = (current_deadline // 4) * 5
-                    if runtime >= current_deadline:
-                        raise DeadlineExceeded(runtime, self.settings.deadline)
+                    if runtime >= current_deadline.total_seconds():
+                        raise DeadlineExceeded(
+                            datetime.timedelta(seconds=runtime), self.settings.deadline
+                        )
                 return result
 
         def run(data):
@@ -911,7 +930,7 @@ class StateForActualGivenExecution:
                     ),
                 )
                 self._string_repr = printer.getvalue()
-                self._jsonable_arguments = {
+                data._observability_arguments = {
                     **dict(enumerate(map(to_jsonable, args))),
                     **{k: to_jsonable(v) for k, v in kwargs.items()},
                 }
@@ -927,22 +946,33 @@ class StateForActualGivenExecution:
                     msg, format_arg = data._sampled_from_all_strategies_elements_message
                     add_note(e, msg.format(format_arg))
                 raise
+            finally:
+                if parts := getattr(data, "_stateful_repr_parts", None):
+                    self._string_repr = "\n".join(parts)
 
         # self.test_runner can include the execute_example method, or setup/teardown
         # _example, so it's important to get the PRNG and build context in place first.
         with local_settings(self.settings):
             with deterministic_PRNG():
                 with BuildContext(data, is_final=is_final) as context:
-                    # Run the test function once, via the executor hook.
-                    # In most cases this will delegate straight to `run(data)`.
-                    result = self.test_runner(data, run)
+                    # providers may throw in per_case_context_fn, and we'd like
+                    # `result` to still be set in these cases.
+                    result = None
+                    with data.provider.per_test_case_context_manager():
+                        # Run the test function once, via the executor hook.
+                        # In most cases this will delegate straight to `run(data)`.
+                        result = self.test_runner(data, run)
 
         # If a failure was expected, it should have been raised already, so
         # instead raise an appropriate diagnostic error.
         if expected_failure is not None:
             exception, traceback = expected_failure
             if isinstance(exception, DeadlineExceeded) and (
-                runtime_secs := self._timing_features.get("execute_test")
+                runtime_secs := math.fsum(
+                    v
+                    for k, v in self._timing_features.items()
+                    if k.startswith("execute:")
+                )
             ):
                 report(
                     "Unreliable test timings! On an initial run, this "
@@ -975,8 +1005,27 @@ class StateForActualGivenExecution:
         """
         trace: Trace = set()
         try:
+            # this is actually covered by our tests, but only on >= 3.12.
+            if (
+                sys.version_info[:2] >= (3, 12)
+                and sys.monitoring.get_tool(MONITORING_TOOL_ID) is not None
+            ):  # pragma: no cover
+                warnings.warn(
+                    "avoiding tracing test function because tool id "
+                    f"{MONITORING_TOOL_ID} is already taken by tool "
+                    f"{sys.monitoring.get_tool(MONITORING_TOOL_ID)}.",
+                    HypothesisWarning,
+                    # I'm not sure computing a correct stacklevel is reasonable
+                    # given the number of entry points here.
+                    stacklevel=1,
+                )
+
             _can_trace = (
-                sys.gettrace() is None or sys.version_info[:2] >= (3, 12)
+                (sys.version_info[:2] < (3, 12) and sys.gettrace() is None)
+                or (
+                    sys.version_info[:2] >= (3, 12)
+                    and sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
+                )
             ) and not PYPY
             _trace_obs = TESTCASE_CALLBACKS and OBSERVABILITY_COLLECT_COVERAGE
             _trace_failure = (
@@ -1053,21 +1102,26 @@ class StateForActualGivenExecution:
             # Conditional here so we can save some time constructing the payload; in
             # other cases (without coverage) it's cheap enough to do that regardless.
             if TESTCASE_CALLBACKS:
-                if self.failed_normally or self.failed_due_to_deadline:
-                    phase = "shrink"
-                elif runner := getattr(self, "_runner", None):
+                if runner := getattr(self, "_runner", None):
                     phase = runner._current_phase
+                elif self.failed_normally or self.failed_due_to_deadline:
+                    phase = "shrink"
                 else:  # pragma: no cover  # in case of messing with internals
                     phase = "unknown"
+                backend_desc = f", using backend={self.settings.backend!r}" * (
+                    self.settings.backend != "hypothesis"
+                    and not getattr(runner, "_switch_to_hypothesis_provider", False)
+                )
                 tc = make_testcase(
                     start_timestamp=self._start_timestamp,
                     test_name_or_nodeid=self.test_identifier,
                     data=data,
-                    how_generated=f"generated during {phase} phase",
+                    how_generated=f"during {phase} phase{backend_desc}",
                     string_repr=self._string_repr,
-                    arguments={**self._jsonable_arguments, **data._observability_args},
+                    arguments=data._observability_args,
                     timing=self._timing_features,
                     coverage=tractable_coverage_report(trace) or None,
+                    phase=phase,
                 )
                 deliver_json_blob(tc)
             self._timing_features = {}
@@ -1184,7 +1238,7 @@ class StateForActualGivenExecution:
                     "status": "passed" if sys.exc_info()[0] else "failed",
                     "status_reason": str(origin or "unexpected/flaky pass"),
                     "representation": self._string_repr,
-                    "arguments": self._jsonable_arguments,
+                    "arguments": ran_example._observability_args,
                     "how_generated": "minimal failing example",
                     "features": {
                         **{

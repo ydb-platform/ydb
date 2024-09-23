@@ -38,6 +38,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPathDoesNotExist, msg)};
     }
 
+    {
+        auto checks = workingDir.Check();
+        checks
+            .IsResolved()
+            .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
@@ -72,14 +83,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
-    auto checks = baseTablePath.Check();
-    checks
-        .PathShardsLimit(baseShards)
-        .PathsLimit(pathToCreate)
-        .ShardsLimit(shardsToCreate);
+    {
+        auto checks = baseTablePath.Check();
+        checks
+            .PathShardsLimit(baseShards)
+            .PathsLimit(pathToCreate)
+            .ShardsLimit(shardsToCreate);
 
-    if (!checks) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
+        if (!checks) {
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
+        }
     }
 
     THashMap<TString, TTableColumns> indexes;
@@ -193,6 +206,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     {
         auto scheme = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         scheme.SetFailOnExist(tx.GetFailOnExist());
+        scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
         scheme.MutableCreateTable()->CopyFrom(baseTableDescription);
         if (tx.HasAlterUserAttributes()) {
@@ -208,6 +222,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             scheme.SetFailOnExist(tx.GetFailOnExist());
+            scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+            scheme.SetInternal(tx.GetInternal());
 
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
             if (!indexDescription.HasType()) {
@@ -227,6 +243,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
+            scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
             const auto& implTableColumns = indexes.at(indexDescription.GetName());
 
@@ -244,6 +261,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
         scheme.SetFailOnExist(tx.GetFailOnExist());
+        scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
         *scheme.MutableSequence() = sequenceDescription;
 

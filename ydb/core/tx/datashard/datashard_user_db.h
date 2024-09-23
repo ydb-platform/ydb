@@ -15,6 +15,8 @@ namespace NKikimr::NMiniKQL {
 
 namespace NKikimr::NDataShard {
 
+class TUniqueConstrainException: public yexception {};
+
 class IDataShardUserDb {
 protected:
     ~IDataShardUserDb() = default;
@@ -45,6 +47,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
     
+    virtual void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+
     virtual void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) = 0;
@@ -110,6 +117,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
             
+    void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
@@ -158,7 +170,9 @@ private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
     void UpdateRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void EnsureMissingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
+    void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;
@@ -173,7 +187,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
     YDB_ACCESSOR_DEF(bool, IsWriteTx);
-    YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
+    YDB_ACCESSOR_DEF(bool, UsesMvccSnapshot);
 
     YDB_ACCESSOR_DEF(TRowVersion, ReadVersion);
     YDB_ACCESSOR_DEF(TRowVersion, WriteVersion);
@@ -188,6 +202,8 @@ private:
     absl::flat_hash_set<ui64> VolatileCommitTxIds;
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
     YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
+
+    YDB_ACCESSOR_DEF(bool, PerformedUserReads);
 
     NMiniKQL::TEngineHostCounters& Counters;
 };

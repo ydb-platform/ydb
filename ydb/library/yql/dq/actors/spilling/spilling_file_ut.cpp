@@ -145,7 +145,7 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     }
 
     TStringBuf GetPostContent() const override {
-        return TString();
+        return TStringBuf();
     }
 
     HTTP_METHOD GetMethod() const override {

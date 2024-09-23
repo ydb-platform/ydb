@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "events.h"
+#include "events_internal.h"
 #include "subscriber.h"
 
 #include <ydb/core/base/tablet_types.h>
@@ -77,17 +78,17 @@ public:
         return CountEvents<TEvent>(false);
     }
 
-    TSchemeBoardEvents::TEvHandshakeResponse::TPtr HandshakeReplica(
+    NInternalEvents::TEvHandshakeResponse::TPtr HandshakeReplica(
         const TActorId& replica,
         const TActorId& sender,
         ui64 owner = 1,
         ui64 generation = 1,
         bool grabResponse = true
     ) {
-        Send(replica, sender, new TSchemeBoardEvents::TEvHandshakeRequest(owner, generation));
+        Send(replica, sender, new NInternalEvents::TEvHandshakeRequest(owner, generation));
 
         if (grabResponse) {
-            return GrabEdgeEvent<TSchemeBoardEvents::TEvHandshakeResponse>(sender);
+            return GrabEdgeEvent<NInternalEvents::TEvHandshakeResponse>(sender);
         }
 
         return nullptr;
@@ -99,11 +100,11 @@ public:
         ui64 owner = 1,
         ui64 generation = 1
     ) {
-        Send(replica, sender, new TSchemeBoardEvents::TEvCommitRequest(owner, generation));
+        Send(replica, sender, new NInternalEvents::TEvCommitRequest(owner, generation));
     }
 
     template <typename TPath>
-    TSchemeBoardEvents::TEvNotify::TPtr SubscribeReplica(
+    NInternalEvents::TEvNotify::TPtr SubscribeReplica(
         const TActorId& replica,
         const TActorId& sender,
         const TPath& path,
@@ -111,13 +112,13 @@ public:
         const ui64 domainOwnerId = 0,
         const NKikimrSchemeBoard::TEvSubscribe::TCapabilities& capabilities = NKikimrSchemeBoard::TEvSubscribe::TCapabilities()
     ) {
-        auto subscribe = MakeHolder<TSchemeBoardEvents::TEvSubscribe>(path, domainOwnerId);
+        auto subscribe = MakeHolder<NInternalEvents::TEvSubscribe>(path, domainOwnerId);
         subscribe->Record.MutableCapabilities()->CopyFrom(capabilities);
 
         Send(replica, sender, subscribe.Release());
 
         if (grabResponse) {
-            return GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(sender);
+            return GrabEdgeEvent<NInternalEvents::TEvNotify>(sender);
         }
 
         return nullptr;
@@ -125,7 +126,7 @@ public:
 
     template <typename TPath>
     void UnsubscribeReplica(const TActorId& replica, const TActorId& sender, const TPath& path) {
-        Send(replica, sender, new TSchemeBoardEvents::TEvUnsubscribe(path));
+        Send(replica, sender, new NInternalEvents::TEvUnsubscribe(path));
     }
 
     template <typename TEvent, typename TPath>
@@ -155,7 +156,7 @@ public:
         ui64 domainOwnerId = 1,
         ui32 nodeIndex = 0
     ) {
-        return CreateSubscriber<TSchemeBoardEvents::TEvNotify>(
+        return CreateSubscriber<NInternalEvents::TEvNotify>(
             owner, path, domainOwnerId, false, nodeIndex
         );
     }
@@ -291,7 +292,7 @@ NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
     TDomainId domainId = TDomainId()
 );
 
-TSchemeBoardEvents::TEvUpdate* GenerateUpdate(
+NInternalEvents::TEvUpdate* GenerateUpdate(
     const NKikimrScheme::TEvDescribeSchemeResult& describe,
     ui64 owner = 1,
     ui64 generation = 1,
@@ -308,7 +309,7 @@ struct TCombinationsArgs {
     ui64 Generation;
     bool IsDeletion;
 
-    TSchemeBoardEvents::TEvUpdate* GenerateUpdate() const {
+    NInternalEvents::TEvUpdate* GenerateUpdate() const {
         return ::NKikimr::NSchemeBoard::GenerateUpdate(GenerateDescribe(), OwnerId, Generation, IsDeletion);
     }
 

@@ -23,7 +23,7 @@ Features
 * Standards compliant BER/CER/DER codecs
 * Can operate on streams of serialized data
 * Dumps/loads ASN.1 structures from Python types
-* 100% Python, works with Python 2.7 and 3.6+
+* 100% Python, works with Python 3.8+
 * MT-safe
 * Contributed ASN.1 compiler [Asn1ate](https://github.com/kimgr/asn1ate)
 

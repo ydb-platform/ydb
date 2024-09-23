@@ -9,7 +9,7 @@ from yql_utils import get_param
 
 
 def run_one(item):
-    line, input, output = item
+    line, input, output, should_fail = item
     start_time = time.time()
     try:
         support_udfs = False
@@ -26,10 +26,10 @@ def run_one(item):
 
         dom = cyson.loads(yqlrun_res.results)
         elapsed_time = time.time() - start_time
-        return (line, input, output, dom, None, elapsed_time)
+        return (line, input, output, dom, None, elapsed_time, should_fail)
     except Exception as e:
         elapsed_time = time.time() - start_time
-        return (line, input, output, None, e, elapsed_time)
+        return (line, input, output, None, e, elapsed_time, should_fail)
 
 
 def convert_cell(cell, output):
@@ -69,11 +69,15 @@ def test_doc():
     queue = []
     total = 0
     skipped = 0
+    skipped_exception = 0
+    skipped_mismatch_res = 0
+    skipped_same_res = 0
     set_of = None
     original_line = None
     original_input = None
     multiline = None
     skip_in_progress = skip_before is not None
+    should_fail = None
     for raw_line in doc_data:
         line = raw_line.strip()
         if stop_at is not None and line.startswith("## " + stop_at):
@@ -84,7 +88,7 @@ def test_doc():
             continue
         if set_of is not None:
             if line.startswith("]"):
-                queue.append((original_line, original_input, set_of))
+                queue.append((original_line, original_input, set_of, should_fail))
                 set_of = None
                 original_line = None
                 original_input = None
@@ -94,7 +98,7 @@ def test_doc():
         if multiline is not None:
             if line.endswith('"""'):
                 multiline.append(line[0:line.index('"""')])
-                queue.append((original_line, original_input, "".join(multiline)))
+                queue.append((original_line, original_input, "".join(multiline), should_fail))
                 multiline = None
                 original_line = None
                 original_input = None
@@ -114,9 +118,11 @@ def test_doc():
         total += 1
         line = line.replace("~→ ", "→ ~")
         input, output = [x.strip() for x in line.split("→")]
-        if input.startswith("#"):
+        should_fail = False
+        if input.startswith("#") and not input.startswith("# "):
+            should_fail = True
             skipped += 1
-            continue
+            input = input[1:]
         if not input.startswith("SELECT"):
             input = "SELECT " + input
         if "/*" in output:
@@ -133,25 +139,44 @@ def test_doc():
             original_line = line
             original_input = input
             continue
-        queue.append((line, input, output))
+        queue.append((line, input, output, should_fail))
     with ThreadPool(16) as pool:
         for res in pool.map(run_one, queue):
-            line, input, output, dom, e, elapsed_time = res
+            line, input, output, dom, e, elapsed_time, should_fail = res
             print("TEST: " + line)
             print("INPUT: ", input)
             print("OUTPUT: ", output)
             print("ELAPSED: ", elapsed_time)
             if e is not None:
-                raise e
-            data = dom[0][b"Write"][0][b"Data"]
-            print("DATA: ", data)
-            if isinstance(output, list):
-                pairs = [convert_value(x[0], x[1]) for x in zip(data, output)]
-                value = [x[0] for x in pairs]
-                output = [x[1] for x in pairs]
+                if not should_fail:
+                    raise e
+                else:
+                    skipped_exception += 1
+                    print("SKIPPED, EXCEPTION")
             else:
-                value, output = convert_value(data[0], output)
-            print("VALUE: ", value)
-            assert value == output, f"Expected '{output}' but got '{value}', test: {line}"
+                data = dom[0][b"Write"][0][b"Data"]
+                print("DATA: ", data)
+                if isinstance(output, list):
+                    pairs = [convert_value(x[0], x[1]) for x in zip(data, output)]
+                    value = [x[0] for x in pairs]
+                    output = [x[1] for x in pairs]
+                else:
+                    value, output = convert_value(data[0], output)
+                print("VALUE: ", value)
+                try:
+                    assert value == output, f"Expected '{output}' but got '{value}', test: {line}"
+                except Exception as err:
+                    if should_fail:
+                        e = err
+                        skipped_mismatch_res += 1
+                        print("SKIPPED, MISMATCH RESULT")
+                    else:
+                        raise
+            if should_fail and e is None:
+                print("SKIPPED, SAME RESULT")
+                skipped_same_res += 1
     print("TOTAL TESTS: ", total)
     print("SKIPPED TESTS: ", skipped)
+    print("SKIPPED TESTS WITH EXCEPTION: ", skipped_exception)
+    print("SKIPPED TESTS WITH MISMATCH RESULT: ", skipped_mismatch_res)
+    print("SKIPPED TESTS WITH SAME RESULT: ", skipped_same_res)

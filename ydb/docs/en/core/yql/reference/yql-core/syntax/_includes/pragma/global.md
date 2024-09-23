@@ -112,7 +112,6 @@ This pragma brings the behavior of the `IN` operator in accordance with the stan
 `1 IN (2, 3, NULL) = NULL (was Just(False))`
 `NULL IN () = Just(False) (was NULL)`
 `(1, null) IN ((2, 2), (3, 3)) = Just(False) (was NULL)`
-`2147483648u IN (1, 2147483648u) = True (was False)`
 
 For more information about the `IN` behavior when operands include `NULL`s, see [here](../../expressions.md#in). You can explicitly select the old behavior by specifying the pragma `DisableAnsiInForEmptyOrNullableItemsCollections`. If no pragma is set, then a warning is issued and the old version works.
 

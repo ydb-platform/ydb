@@ -12,8 +12,6 @@ SRCS(
     concurrent_rw_hash.h
     console.cpp
     console.h
-    count_min_sketch.cpp
-    count_min_sketch.h
     counted_leaky_bucket.h
     defs.h
     event_priority_queue.h
@@ -24,6 +22,8 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    gen_step.cpp
+    gen_step.h
     hazard.cpp
     hyperlog_counter.cpp
     hyperlog_counter.h

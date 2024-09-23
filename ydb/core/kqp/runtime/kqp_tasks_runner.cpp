@@ -70,7 +70,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
 
 
 TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
-    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
     : LogFunc(logFunc)
     , Alloc(alloc)
@@ -230,13 +230,13 @@ const NYql::NDq::TDqTaskSettings& TKqpTasksRunner::GetTask(ui64 taskId) const {
 
 TGuard<NMiniKQL::TScopedAlloc> TKqpTasksRunner::BindAllocator(TMaybe<ui64> memoryLimit) {
     if (memoryLimit) {
-        Alloc.SetLimit(*memoryLimit);
+        Alloc->SetLimit(*memoryLimit);
     }
-    return TGuard(Alloc);
+    return TGuard(*Alloc);
 }
 
 TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
-    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
 {
     return new TKqpTasksRunner(std::move(tasks), alloc, execCtx, settings, logFunc);

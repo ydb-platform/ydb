@@ -13,7 +13,7 @@ TEST_SRCS(
     test_queue_attributes_validation.py
     test_queues_managing.py
     test_format_without_version.py
-    test_throttling_nonexistent_queue.py
+    test_throttling.py
     test_queue_counters.py
 )
 

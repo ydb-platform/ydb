@@ -149,11 +149,13 @@ IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::T
                     })
             );
         }
-        if (batchRes.empty()) {
-            return {};
-        }
         IYtGateway::TBatchFolderResult res;
         res.SetSuccess();
+        if (batchRes.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "Batch get result is empty";
+            return res;
+        }
+
         res.Items.reserve(batchRes.size());
 
         batchGet->ExecuteBatch();
@@ -231,9 +233,9 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
             .Get().GetOrElse(DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY);
         batchOptions.Concurrency(concurrency);
     }
-    batchList->ExecuteBatch(batchOptions);
 
     try {
+        batchList->ExecuteBatch(batchOptions);
         WaitExceptionOrAll(batchRes).Wait();
         for (auto& res : batchRes) {
             const auto items = res.ExtractValue();

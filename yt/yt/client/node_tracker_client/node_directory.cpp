@@ -35,7 +35,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = NodeTrackerClientLogger;
+static constexpr auto& Logger = NodeTrackerClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -201,11 +201,6 @@ void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor,
         builder->AppendChar('#');
         builder->AppendString(*dataCenter);
     }
-}
-
-TString ToString(const TNodeDescriptor& descriptor)
-{
-    return ToStringViaBuilder(descriptor);
 }
 
 std::optional<TString> FindDefaultAddress(const TAddressMap& addresses)

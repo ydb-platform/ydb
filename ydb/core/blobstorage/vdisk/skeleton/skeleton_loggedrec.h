@@ -158,12 +158,12 @@ namespace NKikimr {
     class TLoggedRecAnubisOsirisPut : public ILoggedRec {
     public:
         TLoggedRecAnubisOsirisPut(TLsnSeg seg, bool confirmSyncLogAlso,
-                const TEvAnubisOsirisPut::THullDbInsert &insert, std::unique_ptr<TEvAnubisOsirisPutResult> result,
+                const THullDbInsert &insert, std::unique_ptr<TEvAnubisOsirisPutResult> result,
                 TEvAnubisOsirisPut::TPtr origEv);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
-        TEvAnubisOsirisPut::THullDbInsert Insert;
+        THullDbInsert Insert;
         std::unique_ptr<TEvAnubisOsirisPutResult> Result;
         TEvAnubisOsirisPut::TPtr OrigEv;
     };
@@ -186,11 +186,13 @@ namespace NKikimr {
     class TLoggedRecDelLogoBlobDataSyncLog : public ILoggedRec {
     public:
         TLoggedRecDelLogoBlobDataSyncLog(TLsnSeg seg, bool confirmSyncLogAlso,
+                const THullDbInsert &insert,
                 std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result, const TActorId &recipient,
                 ui64 recipientCookie);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
+        THullDbInsert Insert;
         std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;

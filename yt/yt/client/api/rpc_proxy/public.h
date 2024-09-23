@@ -27,6 +27,7 @@ YT_DEFINE_ERROR_ENUM(
 
 DEFINE_ENUM(ERpcProxyFeature,
     ((GetInSyncWithoutKeys)(0))
+    ((WideLocks)           (1))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

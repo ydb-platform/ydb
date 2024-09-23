@@ -43,6 +43,7 @@ SRCS(
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     datashard__cancel_tx_proposal.cpp
+    datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__cleanup_borrowed.cpp
@@ -67,6 +68,7 @@ SRCS(
     datashard__read_columns.cpp
     datashard__s3_download_txs.cpp
     datashard__s3_upload_txs.cpp
+    datashard__object_storage_listing.cpp
     datashard__kqp_scan.cpp
     datashard__snapshot_txs.cpp
     datashard__stats.cpp
@@ -254,6 +256,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber
+    ydb/library/minsketch
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
@@ -261,6 +264,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
+    ydb/library/uuid
 )
 
 YQL_LAST_ABI_VERSION()
@@ -286,9 +290,11 @@ RECURSE_FOR_TESTS(
     ut_build_index
     ut_change_collector
     ut_change_exchange
+    ut_column_stats
     ut_compaction
     ut_erase_rows
     ut_followers
+    ut_incremental_backup
     ut_init
     ut_keys
     ut_kqp
@@ -297,6 +303,7 @@ RECURSE_FOR_TESTS(
     ut_locks
     ut_minikql
     ut_minstep
+    ut_object_storage_listing
     ut_order
     ut_range_ops
     ut_read_iterator
@@ -307,8 +314,8 @@ RECURSE_FOR_TESTS(
     ut_sequence
     ut_snapshot
     ut_stats
+    ut_trace
     ut_upload_rows
     ut_volatile
     ut_write
-    ut_trace
 )

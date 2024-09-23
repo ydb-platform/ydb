@@ -61,8 +61,8 @@ RECURSE(
     fetch
     log
     plan
-    simd
     signals
+    simd
     sys
     test_http_server
     threading

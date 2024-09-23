@@ -389,10 +389,13 @@ SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
     FROM products p LEFT JOIN sales s USING (product_id)
     GROUP BY product_id, p.name, p.price;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate, At function: OrderedMap, At function: OrderedMap, At function: FlattenMembers
     	-- OK
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: product_id
+        	-- OK
 	^
 <sql-statement>
 -- fail
@@ -400,17 +403,20 @@ SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
     FROM products p LEFT JOIN sales s USING (product_id)
     GROUP BY product_id;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate, At function: OrderedMap, At function: OrderedMap, At function: FlattenMembers
     	-- fail
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: product_id
+        	-- fail
 	^
 <sql-statement>
 ALTER TABLE products ADD PRIMARY KEY (product_id);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE products ADD PRIMARY KEY (product_id);
 	^
 <sql-statement>
@@ -419,10 +425,13 @@ SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
     FROM products p LEFT JOIN sales s USING (product_id)
     GROUP BY product_id;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate, At function: OrderedMap, At function: OrderedMap, At function: FlattenMembers
     	-- OK now
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: product_id
+        	-- OK now
 	^
 <sql-statement>
 -- Drupal example, http://drupal.org/node/555530
@@ -504,7 +513,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- fail
 	^
 <sql-statement>
@@ -533,7 +542,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 	^
 <sql-statement>
@@ -541,7 +550,7 @@ ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTR
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTRICT; --fail
 	^
 <sql-statement>
@@ -573,7 +582,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 	^
 <sql-statement>
@@ -598,7 +607,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
 	^
 <sql-statement>
@@ -634,7 +643,7 @@ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 	^
 <sql-statement>

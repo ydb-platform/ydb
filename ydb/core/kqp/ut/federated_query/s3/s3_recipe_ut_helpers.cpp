@@ -1,5 +1,6 @@
 #include "s3_recipe_ut_helpers.h"
 
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <library/cpp/testing/hook/hook.h>
 
 #include <util/string/builder.h>
@@ -19,6 +20,10 @@ namespace NTestUtils {
     extern const TString TEST_SCHEMA = R"(["StructType";[["key";["DataType";"Utf8";];];["value";["DataType";"Utf8";];];];])";
 
     extern const TString TEST_SCHEMA_IDS = R"(["StructType";[["key";["DataType";"Utf8";];];];])";
+
+    std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig) {
+        return NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory());
+    }
 
     Aws::S3::S3Client MakeS3Client() {
         Aws::Client::ClientConfiguration s3ClientConfig;

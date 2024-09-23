@@ -945,12 +945,16 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareMinMax(TTupleType* tu
     case NUdf::EDataSlot::Date:
         return PrepareMinMaxFixed<TTag, ui16, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Date32:
         return PrepareMinMaxFixed<TTag, i32, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Uint32:
     case NUdf::EDataSlot::Datetime:
         return PrepareMinMaxFixed<TTag, ui32, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
+    case NUdf::EDataSlot::Timestamp64:
+    case NUdf::EDataSlot::Datetime64:
         return PrepareMinMaxFixed<TTag, i64, IsMin>(dataType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Uint64:
     case NUdf::EDataSlot::Timestamp:

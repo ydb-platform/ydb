@@ -94,6 +94,18 @@ void THive::RestartPipeTx(ui64 tabletId) {
     }
 }
 
+bool THive::TryToDeleteNode(TNodeInfo* node) {
+    if (node->CanBeDeleted()) {
+        DeleteNode(node->Id);
+        return true;
+    }
+    if (!node->DeletionScheduled) {
+        Schedule(GetNodeDeletePeriod(), new TEvPrivate::TEvDeleteNode(node->Id));
+        node->DeletionScheduled = true;
+    }
+    return false;
+}
+
 void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
         BLOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
@@ -108,9 +120,9 @@ void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
         TNodeInfo* node = FindNode(ev->Get()->ClientId.NodeId());
         if (node != nullptr) {
             Erase(node->PipeServers, ev->Get()->ServerId);
-            if (node->PipeServers.empty() && node->IsUnknown() && node->CanBeDeleted()) {
+            if (node->PipeServers.empty() && node->IsUnknown()) {
                 ObjectDistributions.RemoveNode(*node);
-                DeleteNode(node->Id);
+                TryToDeleteNode(node);
             }
         }
     }
@@ -217,7 +229,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     while (!BootQueue.BootQueue.empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
         ++processedItems;
-        TTabletInfo* tablet = FindTablet(record.TabletId);
+        TTabletInfo* tablet = FindTablet(record.TabletId, record.FollowerId);
         if (tablet == nullptr) {
             continue;
         }
@@ -226,17 +238,17 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
             continue;
         }
         if (tablet->IsReadyToStart(now)) {
-            TBestNodeResult bestNodeResult = FindBestNode(*tablet);
-            if (bestNodeResult.BestNode != nullptr) {
-                if (tablet->InitiateStart(bestNodeResult.BestNode)) {
+            TBestNodeResult bestNodeResult = FindBestNode(*tablet, record.SuggestedNodeId);
+            if (std::holds_alternative<TNodeInfo*>(bestNodeResult)) {
+                if (tablet->InitiateStart(std::get<TNodeInfo*>(bestNodeResult))) {
                     ++tabletsStarted;
                     continue;
                 }
             } else {
-                if (!bestNodeResult.TryToContinue) {
+                if (std::holds_alternative<TTooManyTabletsStarting>(bestNodeResult)) {
                     delayedTablets.push_back(record);
                     break;
-                } else {
+                } else if (std::holds_alternative<TNoNodeFound>(bestNodeResult)) {
                     for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
@@ -335,10 +347,10 @@ void THive::ProcessWaitQueue() {
     ProcessBootQueue();
 }
 
-void THive::AddToBootQueue(TTabletInfo* tablet) {
+void THive::AddToBootQueue(TTabletInfo* tablet, TNodeId node) {
     tablet->UpdateWeight();
     tablet->BootState = BootStateBooting;
-    BootQueue.AddToBootQueue(*tablet);
+    BootQueue.EmplaceToBootQueue(*tablet, node);
     UpdateCounterBootQueueSize(BootQueue.BootQueue.size());
 }
 
@@ -469,10 +481,19 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     SignalTabletActive(DEPRECATED_CTX);
     ReadyForConnections = true;
     RequestPoolsInformation();
+    std::vector<TNodeInfo*> unimportantNodes; // ping nodes with tablets first
+    unimportantNodes.reserve(Nodes.size());
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
-            node.Ping();
+            if (node.GetTabletsTotal() > 0) {
+                node.Ping();
+            } else {
+                unimportantNodes.push_back(&node);
+            }
         }
+    }
+    for (auto* node : unimportantNodes) {
+        node->Ping();
     }
     TVector<TTabletId> tabletsToReleaseFromParent;
     TSideEffects sideEffects;
@@ -674,8 +695,8 @@ void THive::Handle(TEvLocal::TEvSyncTablets::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
     TAutoPtr<TEvPrivate::TEvProcessDisconnectNode> event = ev->Release();
-    TNodeInfo& node = GetNode(event->NodeId);
-    if (node.IsDisconnecting()) {
+    TNodeInfo* node = FindNode(event->NodeId);
+    if (!node || node->IsDisconnecting()) {
         auto itCategory = event->Tablets.begin();
         if (itCategory != event->Tablets.end()) {
             BLOG_D("THive::Handle::TEvProcessDisconnectNode: Node " << event->NodeId << " Category " << itCategory->first);
@@ -712,6 +733,7 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     if (ConnectedNodes.insert(nodeId).second) {
         BLOG_W("Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId << " Cookie " << ev->Cookie);
+        UpdateCounterNodesConnected(+1);
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
     } else {
         BLOG_TRACE("Handle TEvInterconnect::TEvNodeConnected (duplicate), NodeId " << nodeId << " Cookie " << ev->Cookie);
@@ -721,7 +743,9 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << nodeId);
-    ConnectedNodes.erase(nodeId);
+    if (ConnectedNodes.erase(nodeId)) {
+       UpdateCounterNodesConnected(-1);
+    }
     Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
 }
 
@@ -790,12 +814,17 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
 
     BLOG_D("THive::Handle::TEvKickTablet TabletId=" << tabletId);
     TBestNodeResult result = FindBestNode(*tablet);
-    if (result.BestNode == nullptr) {
-        Execute(CreateRestartTablet(tabletId));
-    } else if (result.BestNode != tablet->Node) {
-        if (IsTabletMoveExpedient(*tablet, *result.BestNode)) {
+    if (std::holds_alternative<TTooManyTabletsStarting>(result)) {
+        if (tablet->Node == nullptr || !tablet->Node->IsAllowedToRunTablet(*tablet)) {
             Execute(CreateRestartTablet(tabletId));
         }
+    } else if (std::holds_alternative<TNodeInfo*>(result)) {
+        TNodeInfo* node = std::get<TNodeInfo*>(result);
+        if (node != tablet->Node && IsTabletMoveExpedient(*tablet, *node)) {
+            Execute(CreateRestartTablet(tabletId));
+        }
+    } else {
+        Execute(CreateRestartTablet(tabletId));
     }
 }
 
@@ -1145,7 +1174,7 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
     return selectedNodes;
 }
 
-THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
+THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
 
@@ -1154,13 +1183,20 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
         if (node != nullptr) {
             if (node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
                 BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " choose node " << node->Id << " because of preferred node");
-                return TBestNodeResult(*node);
+                return node;
+            } else {
+                BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " preferred unavailable node " << node->Id);
+                tablet.BootState = TStringBuilder() << "Preferred unavailable node " << node->Id;
+                return TNoNodeFound();
             }
-            if (node->Freeze) {
-                BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " preferred to freezed node " << node->Id);
-                tablet.BootState = TStringBuilder() << "Preferred to freezed node " << node->Id;
-                return TBestNodeResult(true);
-            }
+        }
+    }
+
+    if (suggestedNodeId != 0) {
+        TNodeInfo* node = FindNode(suggestedNodeId);
+        if (node && node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
+            BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " choose node " << node->Id << " because of suggested node");
+            return node;
         }
     }
 
@@ -1281,7 +1317,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                     thereAreNodesWithManyStarts = true;
                     if (GetBootStrategy() == NKikimrConfig::THiveConfig::HIVE_BOOT_STRATEGY_BALANCED) {
                         tablet.BootState = BootStateTooManyStarting;
-                        return TBestNodeResult(false);
+                        return TTooManyTabletsStarting();
                     }
                 }
             } else {
@@ -1300,7 +1336,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected nodes count " << selectedNodes.size());
     if (selectedNodes.empty() && thereAreNodesWithManyStarts) {
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " all available nodes are booting too many tablets");
-        return TBestNodeResult(false);
+        return TTooManyTabletsStarting();
     }
 
     TNodeInfo* selectedNode = nullptr;
@@ -1327,7 +1363,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     if (selectedNode != nullptr) {
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected node " << selectedNode->Id);
         tablet.BootState = BootStateStarting;
-        return TBestNodeResult(*selectedNode);
+        return selectedNode;
     } else {
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " no node was selected");
 
@@ -1335,45 +1371,45 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
 
         if (tablet.IsFollower() && debugState.LeaderNotRunning) {
             tablet.BootState = BootStateLeaderNotRunning;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         if (debugState.NodesDead == nodesLeft) {
             tablet.BootState = BootStateAllNodesAreDead;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesDead;
         if (debugState.NodesDown == nodesLeft) {
             tablet.BootState = BootStateAllNodesAreDeadOrDown;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesDown;
         if (debugState.NodesNotAllowed + debugState.NodesInDatacentersNotAllowed == nodesLeft) {
             tablet.BootState = BootStateNoNodesAllowedToRun;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesNotAllowed;
         nodesLeft -= debugState.NodesInDatacentersNotAllowed;
         if (debugState.NodesWithSomeoneFromOurFamily == nodesLeft) {
             tablet.BootState = BootStateWeFilledAllAvailableNodes;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesWithSomeoneFromOurFamily;
         if (debugState.NodesWithoutDomain == nodesLeft) {
             tablet.BootState = TStringBuilder() << "Can't find domain " << tablet.GetNodeFilter().GetEffectiveAllowedDomains();
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesWithoutDomain;
         if (tablet.IsFollower() && debugState.NodesFilledWithDatacenterFollowers == nodesLeft) {
             tablet.BootState = BootStateNotEnoughDatacenters;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         if (debugState.NodesWithoutResources == nodesLeft) {
             tablet.BootState = BootStateNotEnoughResources;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
         if (debugState.NodesWithoutLocation == nodesLeft) {
             tablet.BootState = BootStateNodesLocationUnknown;
-            return TBestNodeResult(true);
+            return TNoNodeFound();
         }
 
         TStringBuilder state;
@@ -1413,7 +1449,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
         }
         tablet.BootState = state;
 
-        return TBestNodeResult(true);
+        return TNoNodeFound();
     }
 }
 
@@ -1966,6 +2002,9 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
         }
+        if (!node.Name.empty()) {
+            nodeStats.SetNodeName(node.Name);
+        }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
                 auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});
@@ -2104,10 +2143,20 @@ void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
+    NKikimrHive::EDrainDownPolicy policy;
+    if (!ev->Get()->Record.HasDownPolicy() && ev->Get()->Record.HasKeepDown()) {
+        if (ev->Get()->Record.GetKeepDown()) {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN;
+        } else {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN;
+        }
+    } else {
+        policy = ev->Get()->Record.GetDownPolicy();
+    }
     Execute(CreateSwitchDrainOn(ev->Get()->Record.GetNodeID(),
     {
         .Persist = ev->Get()->Record.GetPersist(),
-        .KeepDown = ev->Get()->Record.GetKeepDown(),
+        .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
     }, ev->Sender));
 }
@@ -2341,7 +2390,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             case EResourceToBalance::Network:
                 balancerType = EBalancerType::ScatterNetwork;
                 break;
-            case EResourceToBalance::Dominant:
+            case EResourceToBalance::ComputeResources:
                 balancerType = EBalancerType::Scatter;
                 break;
         }
@@ -2376,8 +2425,9 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
     });
     StorageScatter = stats.Scatter;
     TabletCounters->Simple()[NHive::COUNTER_STORAGE_SCATTER].Set(StorageScatter * 100);
+    BLOG_D("StorageScatter = " << StorageScatter << ": " << stats.MaxUsage << " at " << stats.MaxUsageGroupId << " vs " << stats.MinUsage << " at " << stats.MinUsageGroupId);
     if (StorageScatter > GetMinStorageScatterToBalance()) {
-        BLOG_D("Storage Scatter = " << stats.Scatter << " in pool " << pool.Name << ", starting StorageBalancer");
+        BLOG_D("Starting StorageBalancer");
         ui64 numReassigns = 1;
         auto it = pool.Groups.find(stats.MaxUsageGroupId);
         if (it != pool.Groups.end()) {
@@ -2458,6 +2508,12 @@ bool THive::StopSubActor(TSubActorId subActorId) {
         }
     }
     return false;
+}
+
+void THive::WaitToMoveTablets(TActorId actor) {
+    if (std::find(ActorsWaitingToMoveTablets.begin(), ActorsWaitingToMoveTablets.end(), actor) == ActorsWaitingToMoveTablets.end()) {
+        ActorsWaitingToMoveTablets.push_back(actor);
+    }
 }
 
 bool THive::IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics) {
@@ -2916,6 +2972,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvStartStorageBalancer, Handle);
         hFunc(TEvPrivate::TEvProcessStorageBalancer, Handle);
         hFunc(TEvHive::TEvUpdateDomain, Handle);
+        hFunc(TEvPrivate::TEvDeleteNode, Handle);
+        hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
     }
 }
 
@@ -3016,6 +3074,8 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvStartStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3276,6 +3336,41 @@ void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
     }
     TabletMoveSamplesForLog.clear();
     TabletMovesByTypeForLog.clear();
+}
+
+void THive::Handle(TEvPrivate::TEvDeleteNode::TPtr& ev) {
+    auto node = FindNode(ev->Get()->NodeId);
+    if (node == nullptr) {
+        return;
+    }
+    node->DeletionScheduled = false;
+    if (!node->IsAlive()) {
+        TryToDeleteNode(node);
+    }
+}
+
+void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
+    std::unordered_map<TNodeId, std::unordered_set<TTabletId>> distribution;
+    auto& tabletIds = ev->Get()->Record.GetTabletIds();
+    for (auto& tabletId : tabletIds) {
+        TTabletInfo* tablet = FindTablet(tabletId);
+        if (tablet == nullptr) {
+            continue;
+        }
+        auto nodeId = tablet->NodeId;
+        distribution[nodeId].insert(tabletId);
+    }
+    auto response = std::make_unique<TEvHive::TEvResponseTabletDistribution>();
+    auto& record = response->Record;
+    for (auto& [nodeId, tabletIds] : distribution) {
+        auto* node = record.AddNodes();
+        node->SetNodeId(nodeId);
+        node->MutableTabletIds()->Reserve(tabletIds.size());
+        for (auto& tabletId : tabletIds) {
+            node->AddTabletIds(tabletId);
+        }
+    }
+    Send(ev->Sender, response.release());
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

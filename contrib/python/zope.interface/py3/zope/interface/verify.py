@@ -23,8 +23,10 @@ from zope.interface.exceptions import BrokenMethodImplementation
 from zope.interface.exceptions import DoesNotImplement
 from zope.interface.exceptions import Invalid
 from zope.interface.exceptions import MultipleInvalid
+from zope.interface.interface import Method
+from zope.interface.interface import fromFunction
+from zope.interface.interface import fromMethod
 
-from zope.interface.interface import fromMethod, fromFunction, Method
 
 __all__ = [
     'verifyObject',

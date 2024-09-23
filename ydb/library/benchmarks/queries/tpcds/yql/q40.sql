@@ -6,9 +6,9 @@ select
    warehouse.w_state
   ,item.i_item_id
   ,sum(case when (cast(d_date as date) < cast ('2000-03-18' as date))
- 		then cs_sales_price - coalesce(cr_refunded_cash,0) else 0 end) as sales_before
+ 		then cs_sales_price - coalesce(cr_refunded_cash,$z0) else $z0 end) as sales_before
   ,sum(case when (cast(d_date as date) >= cast ('2000-03-18' as date))
- 		then cs_sales_price - coalesce(cr_refunded_cash,0) else 0 end) as sales_after
+ 		then cs_sales_price - coalesce(cr_refunded_cash,$z0) else $z0 end) as sales_after
  from
    {{catalog_sales}} as catalog_sales
    left join {{catalog_returns}} as catalog_returns on
@@ -18,7 +18,7 @@ select
   cross join {{item}} as item
   cross join {{date_dim}} as date_dim
  where
-     i_current_price between 0.99 and 1.49
+     i_current_price between $z0_99 and $z1_49
  and i_item_sk          = cs_item_sk
  and cs_warehouse_sk    = w_warehouse_sk
  and cs_sold_date_sk    = d_date_sk

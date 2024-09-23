@@ -11,7 +11,6 @@ class TGarbageCollectionActor: public TSharedBlobsCollectionActor<TGarbageCollec
 private:
     using TBase = TSharedBlobsCollectionActor<TGarbageCollectionActor>;
     const NActors::TActorId TabletActorId;
-    THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> Requests;
     std::shared_ptr<TGCTask> GCTask;
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);
     void CheckFinished();
@@ -20,17 +19,17 @@ private:
         CheckFinished();
     }
 public:
-    TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>>&& requests, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
-        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed())
+    TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
+        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed(), task)
         , TabletActorId(tabletActorId)
-        , Requests(std::move(requests))
         , GCTask(task)
     {
 
     }
 
     STFUNC(StateWork) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("action_id", GCTask->GetActionGuid());
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
+            ("action_id", GCTask->GetActionGuid())("tablet_id", GCTask->GetTabletId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             default:
@@ -39,9 +38,11 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
-        for (auto&& i : Requests) {
-            SendToBSProxy(ctx, i.first, i.second.release());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
+        for (auto&& i : GCTask->GetListsByGroupId()) {
+            auto request = GCTask->BuildRequest(i.first);
+            AFL_VERIFY(request);
+            SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);
         Become(&TGarbageCollectionActor::StateWork);

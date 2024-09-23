@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: idna
-Version: 3.6
+Version: 3.7
 Summary: Internationalized Domain Names in Applications (IDNA)
 Author-email: Kim Davies <kim+pypi@gumleaf.org>
 Requires-Python: >=3.5

@@ -12,6 +12,8 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
+#include <yt/yt/core/actions/invoker_util.h>
+
 #include <library/cpp/yt/system/handle_eintr.h>
 
 #include <util/folder/dirut.h>
@@ -32,11 +34,20 @@
   #include <errno.h>
   #include <sys/wait.h>
   #include <sys/resource.h>
+  #include <spawn.h>
 #endif
 
 #ifdef _darwin_
   #include <crt_externs.h>
   #define environ (*_NSGetEnviron())
+#endif
+
+#if defined(__APPLE__)
+    #define YT_USE_POSIX_SPAWN_API
+#endif
+
+#if defined(YT_USE_POSIX_SPAWN_API)
+    #include <spawn.h>
 #endif
 
 namespace NYT {
@@ -47,21 +58,152 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger Logger("Process");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Process");
 
 static constexpr pid_t InvalidProcessId = -1;
-
-static constexpr int ExecveRetryCount = 5;
-static constexpr auto ExecveRetryTimeout = TDuration::Seconds(1);
 
 static constexpr int ResolveRetryCount = 5;
 static constexpr auto ResolveRetryTimeout = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#if defined(YT_USE_POSIX_SPAWN_API)
+
+class TPosixSpawnFileActions
+{
+public:
+    TPosixSpawnFileActions()
+    {
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawn_file_actions_init(&Actions_) != 0,
+            TError("Failed to initialize spawn file actions object")
+                << TError::FromSystem());
+    }
+
+    ~TPosixSpawnFileActions()
+    {
+        auto res = ::posix_spawn_file_actions_destroy(&Actions_);
+        YT_LOG_FATAL_UNLESS(
+            res != 0,
+            "Failed to destroy spawn file actions object");
+    }
+
+    void AddDup2FileAction(int oldFD, int newFD)
+    {
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawn_file_actions_adddup2(&Actions_, oldFD, newFD) != 0,
+            TError("Failed to add dup2 file action (OldFD: %v, NewFD: %v)", oldFD, newFD)
+                << TError::FromSystem());
+    }
+
+    void AddChdirFileAction(TString path)
+    {
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawn_file_actions_addchdir_np(&Actions_, path.c_str()) != 0,
+            TError("Failed to add chdir file actions (Path: %v)", path)
+                << TError::FromSystem());
+    }
+
+    posix_spawn_file_actions_t* Get()
+    {
+        return &Actions_;
+    }
+
+private:
+    posix_spawn_file_actions_t Actions_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TPosixSpawnAttrs
+{
+public:
+    TPosixSpawnAttrs()
+    {
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawnattr_init(&Actions_) != 0,
+            TError("Failed to initialize spawnattrs object")
+                << TError::FromSystem());
+    }
+
+    ~TPosixSpawnAttrs()
+    {
+        auto res = ::posix_spawnattr_destroy(&Actions_);
+
+        YT_LOG_FATAL_UNLESS(
+            res != 0,
+            "Failed to destroy spawnattrs object");
+    }
+
+    void AddResetAllSignals()
+    {
+        sigset_t allBlocked;
+        sigfillset(&allBlocked);
+
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawnattr_setsigdefault(&Actions_, &allBlocked) != 0,
+            TError("Failed to set default signal handlers for spawnattrs")
+                << TError::FromSystem());
+
+        UpdateFlags(POSIX_SPAWN_SETSIGDEF);
+    }
+
+    void AddSetSigMask(sigset_t* sigset)
+    {
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawnattr_setsigmask(&Actions_, sigset) != 0,
+            TError("Failed to set signal mask for spawnattrs")
+                << TError::FromSystem());
+
+        UpdateFlags(POSIX_SPAWN_SETSIGMASK);
+    }
+
+    void AddCreateProcessGroup()
+    {
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawnattr_setpgroup(&Actions_, 0) != 0,
+            TError("Failed to set pgroup value to 0 of spawnattrs")
+                << TError::FromSystem());
+
+        UpdateFlags(POSIX_SPAWN_SETPGROUP);
+    }
+
+    posix_spawnattr_t* Get()
+    {
+        return &Actions_;
+    }
+
+private:
+    posix_spawnattr_t Actions_;
+
+    void UpdateFlags(int mask)
+    {
+        auto currentFlags = GetFlags();
+
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawnattr_setflags(&Actions_, currentFlags | mask) != 0,
+            TError("Failed to set flags to spawnattrs (OldFlags: %v, Mask: %v)", currentFlags, mask)
+                << TError::FromSystem());
+    }
+
+    short GetFlags() const
+    {
+        short flags;
+        THROW_ERROR_EXCEPTION_IF(
+            ::posix_spawnattr_getflags(&Actions_, &flags) != 0,
+            TError("Failed to flags from spawnattrs")
+                << TError::FromSystem());
+        return flags;
+    }
+};
+
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+
 TErrorOr<TString> ResolveBinaryPath(const TString& binary)
 {
-    auto Logger = NYT::Logger
+    auto Logger = NYT::Logger()
         .WithTag("Binary: %v", binary);
 
     YT_LOG_DEBUG("Resolving binary path");
@@ -144,6 +286,20 @@ TErrorOr<TString> ResolveBinaryPath(const TString& binary)
     return failure();
 }
 
+std::vector<TString> GetEnviron()
+{
+    std::vector<TString> env;
+    size_t size = 0;
+    for (char** envIt = environ; *envIt; ++envIt) {
+        ++size;
+    }
+    env.reserve(size);
+    for (char** envIt = environ; *envIt; ++envIt) {
+        env.emplace_back(*envIt);
+    }
+    return env;
+}
+
 bool TryKillProcessByPid(int pid, int signal)
 {
 #ifdef _unix_
@@ -201,14 +357,6 @@ void Wait4OrDie(pid_t id, int* status, int options, rusage* rusage)
     }
 }
 
-void Cleanup(int pid)
-{
-    YT_VERIFY(pid > 0);
-
-    YT_VERIFY(TryKillProcessByPid(pid, 9));
-    YT_VERIFY(TryWaitid(P_PID, pid, nullptr, WEXITED));
-}
-
 bool TrySetSignalMask(const sigset_t* sigmask, sigset_t* oldSigmask)
 {
     int error = pthread_sigmask(SIG_SETMASK, sigmask, oldSigmask);
@@ -216,6 +364,16 @@ bool TrySetSignalMask(const sigset_t* sigmask, sigset_t* oldSigmask)
         return false;
     }
     return true;
+}
+
+#if !defined(YT_USE_POSIX_SPAWN_API)
+
+void Cleanup(int pid)
+{
+    YT_VERIFY(pid > 0);
+
+    YT_VERIFY(TryKillProcessByPid(pid, 9));
+    YT_VERIFY(TryWaitid(P_PID, pid, nullptr, WEXITED));
 }
 
 bool TryResetSignals()
@@ -226,6 +384,8 @@ bool TryResetSignals()
     }
     return true;
 }
+
+#endif
 
 #endif
 
@@ -278,12 +438,243 @@ void TProcessBase::CreateProcessGroup()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSimpleProcess::TProcessSpawnState
+{
+public:
+    TProcessSpawnState() = default;
+
+#if !defined(YT_USE_POSIX_SPAWN_API)
+    void SetErrorPipe(TPipe* errorPipe)
+    {
+        Pipe_ = errorPipe;
+    }
+
+    TError ValidateSpawnResult()
+    {
+    #ifdef _unix_
+        int data[2];
+        ssize_t res;
+        YT_VERIFY(Pipe_);
+        res = HandleEintr(::read, Pipe_->GetReadFD(), &data, sizeof(data));
+        Pipe_->CloseReadFD();
+
+        if (res == 0) {
+            return {};
+        }
+
+        YT_VERIFY(res == sizeof(data));
+
+        int actionIndex = data[0];
+        int errorCode = data[1];
+
+        YT_VERIFY(0 <= actionIndex && actionIndex < std::ssize(SpawnActions_));
+        const auto& action = SpawnActions_[actionIndex];
+
+        return TError("%v", action.ErrorMessage)
+            << TError::FromSystem(errorCode);
+    #else
+        THROW_ERROR_EXPECTION("Unsupported platform");
+    #endif
+    }
+#endif
+
+    void AddDup2FileAction(int oldFD, int newFD)
+    {
+    #if defined(YT_USE_POSIX_SPAWN_API)
+        SpawnFileActions_.AddDup2FileAction(oldFD, newFD);
+    #else
+        TSpawnAction action{
+            std::bind(TryDup2, oldFD, newFD),
+            Format("Error duplicating %v file descriptor to %v in child process", oldFD, newFD)
+        };
+        SpawnActions_.push_back(action);
+    #endif
+    }
+
+    void AddSignalSafetySpawnActions(sigset_t* oldSignals)
+    {
+    #if defined(YT_USE_POSIX_SPAWN_API)
+        SpawnAttrs_.AddResetAllSignals();
+        SpawnAttrs_.AddSetSigMask(oldSignals);
+    #else
+        SpawnActions_.push_back(TSpawnAction{
+            TryResetSignals,
+            "Error resetting signals to default disposition in child process: signal failed"
+        });
+
+        SpawnActions_.push_back(TSpawnAction{
+            std::bind(TrySetSignalMask, oldSignals, nullptr),
+            "Error unblocking signals in child process: pthread_sigmask failed"
+        });
+    #endif
+    }
+
+    void AddChdirSpawnAction(const TString& workingDirectory)
+    {
+    #if defined(YT_USE_POSIX_SPAWN_API)
+        SpawnFileActions_.AddChdirFileAction(workingDirectory);
+    #else
+        SpawnActions_.push_back(TSpawnAction{
+            [&] {
+                NFs::SetCurrentWorkingDirectory(workingDirectory);
+                return true;
+            },
+            "Error changing working directory"
+        });
+    #endif
+    }
+
+    void AddCreateProcessGroupAction()
+    {
+    #if defined(YT_USE_POSIX_SPAWN_API)
+        SpawnAttrs_.AddCreateProcessGroup();
+    #else
+        SpawnActions_.push_back(TSpawnAction{
+            [&] {
+                setpgrp();
+                return true;
+            },
+            "Error creating process group"
+        });
+    #endif
+    }
+
+    void AddExecvSpawnAction(
+        const char* resolvedPath,
+        char* const* argv,
+        char* const* env)
+    {
+        Path_ = resolvedPath;
+        Argv_ = argv;
+        Env_ = env;
+    #if defined(YT_USE_POSIX_SPAWN_API)
+        // This step is automatic for posix_spawn.
+    #else
+        SpawnActions_.push_back(TSpawnAction{
+            [=] {
+                // Execve may fail, if called binary is being updated, e.g. during yandex-yt package update
+                // with errno ETXTBSY - executable file is open for writing. For example see YT-6352.
+                // Initiator could retry after getting error EProcessErrorCode::CannotStartProcess.
+                return TryExecve(resolvedPath, argv, env);
+            },
+            "Error starting child process: execve failed"
+        });
+    #endif
+    }
+
+    pid_t SpawnChild()
+    {
+    #if defined(YT_USE_POSIX_SPAWN_API)
+        return DoSpawnChildPosixSpawn();
+    #else
+        return DoSpawnChildVFork();
+    #endif
+    }
+
+private:
+    const char* Path_;
+    char* const* Argv_;
+    char* const* Env_;
+
+#if defined(YT_USE_POSIX_SPAWN_API)
+    TPosixSpawnFileActions SpawnFileActions_;
+    TPosixSpawnAttrs SpawnAttrs_;
+#else
+    struct TSpawnAction
+    {
+        std::function<bool()> Callback;
+        TString ErrorMessage;
+    };
+
+    std::vector<TSpawnAction> SpawnActions_;
+
+    TPipe* Pipe_;
+#endif
+
+#if defined(YT_USE_POSIX_SPAWN_API)
+    pid_t DoSpawnChildPosixSpawn()
+    {
+        pid_t pid;
+
+        auto result = ::posix_spawn(
+            &pid,
+            Path_,
+            SpawnFileActions_.Get(),
+            SpawnAttrs_.Get(),
+            Argv_,
+            Env_);
+
+        THROW_ERROR_EXCEPTION_IF(
+            result != 0,
+            TError("Failed to spawn process with posix_spawn")
+                << TError::FromSystem());
+
+        return pid;
+    }
+
+#else
+    pid_t DoSpawnChildVFork()
+    {
+        // NB: fork() copy-on-write cause undefined behaviour when run concurrently with
+        // Disk IO on O_DIRECT file descriptor. vfork don't suffer from the same issue.
+        // NB: vfork() blocks parent until child executes new program or exits.
+        int pid = vfork();
+
+        if (pid < 0) {
+            THROW_ERROR_EXCEPTION("Error starting child process: vfork failed")
+                << TErrorAttribute("path", Path_)
+                << TError::FromSystem();
+        }
+
+        if (pid == 0) {
+            try {
+                // Successful call to Execve leaves
+                // the current context and starts execution
+                // of a specified binary. Child never returns
+                // from this call.
+                Child();
+            } catch (...) {
+                YT_ABORT();
+            }
+        }
+
+        // Parent returns.
+        return pid;
+    }
+
+    [[noreturn]] void Child()
+    {
+        for (int actionIndex = 0; actionIndex < std::ssize(SpawnActions_); ++actionIndex) {
+            auto& action = SpawnActions_[actionIndex];
+            if (!action.Callback()) {
+                // Report error through the pipe.
+                int data[] = {
+                    actionIndex,
+                    errno
+                };
+
+                // According to pipe(7) write of small buffer is atomic.
+                YT_VERIFY(Pipe_);
+                ssize_t size = HandleEintr(::write, Pipe_->GetWriteFD(), &data, sizeof(data));
+                YT_VERIFY(size == sizeof(data));
+                _exit(1);
+            }
+        }
+        YT_ABORT();
+    }
+
+#endif
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSimpleProcess::TSimpleProcess(const TString& path, bool copyEnv, TDuration pollPeriod)
     // TString is guaranteed to be zero-terminated.
     // https://wiki.yandex-team.ru/Development/Poisk/arcadia/util/TStringAndTStringBuf#sobstvennosimvoly
     : TProcessBase(path)
     , PollPeriod_(pollPeriod)
     , PipeFactory_(3)
+    , SpawnState_(std::make_unique<TProcessSpawnState>())
 {
     AddArgument(path);
 
@@ -294,15 +685,13 @@ TSimpleProcess::TSimpleProcess(const TString& path, bool copyEnv, TDuration poll
     }
 }
 
+TSimpleProcess::~TSimpleProcess()
+{ }
+
 void TSimpleProcess::AddDup2FileAction(int oldFD, int newFD)
 {
-    TSpawnAction action{
-        std::bind(TryDup2, oldFD, newFD),
-        Format("Error duplicating %v file descriptor to %v in child process", oldFD, newFD)
-    };
-
+    SpawnState_->AddDup2FileAction(oldFD, newFD);
     MaxSpawnActionFD_ = std::max(MaxSpawnActionFD_, newFD);
-    SpawnActions_.push_back(action);
 }
 
 IConnectionReaderPtr TSimpleProcess::GetStdOutReader()
@@ -353,7 +742,10 @@ TFuture<void> TProcessBase::Spawn()
 
         DoSpawn();
     } catch (const std::exception& ex) {
-        FinishedPromise_.TrySet(ex);
+        FinishedPromise_.TrySet(TError(EProcessErrorCode::CannotStartProcess,
+            "Cannot spawn child process %v",
+            ResolvedPath_)
+            << ex);
     }
     return FinishedPromise_;
 }
@@ -361,7 +753,7 @@ TFuture<void> TProcessBase::Spawn()
 void TSimpleProcess::DoSpawn()
 {
 #ifdef _unix_
-    auto finally = Finally([&] () {
+    auto finally = Finally([&] {
         StdPipes_[STDIN_FILENO].CloseReadFD();
         StdPipes_[STDOUT_FILENO].CloseWriteFD();
         StdPipes_[STDERR_FILENO].CloseWriteFD();
@@ -371,15 +763,7 @@ void TSimpleProcess::DoSpawn()
     YT_VERIFY(ProcessId_ == InvalidProcessId && !Finished_);
 
     // Make sure no spawn action closes Pipe_.WriteFD
-    TPipeFactory pipeFactory(MaxSpawnActionFD_ + 1);
-    Pipe_ = pipeFactory.Create();
-    pipeFactory.Clear();
-
-    YT_LOG_DEBUG("Spawning new process (Path: %v, ErrorPipe: %v,  Arguments: %v, Environment: %v)",
-        ResolvedPath_,
-        Pipe_,
-        Args_,
-        Env_);
+    PrepareErrorPipe();
 
     Env_.push_back(nullptr);
     Args_.push_back(nullptr);
@@ -405,59 +789,14 @@ void TSimpleProcess::DoSpawn()
             << TError::FromSystem();
     }
 
-    SpawnActions_.push_back(TSpawnAction{
-        TryResetSignals,
-        "Error resetting signals to default disposition in child process: signal failed"
-    });
-
-    SpawnActions_.push_back(TSpawnAction{
-        std::bind(TrySetSignalMask, &oldSignals, nullptr),
-        "Error unblocking signals in child process: pthread_sigmask failed"
-    });
-
-    if (!WorkingDirectory_.empty()) {
-        SpawnActions_.push_back(TSpawnAction{
-            [&] () {
-                NFs::SetCurrentWorkingDirectory(WorkingDirectory_);
-                return true;
-            },
-            "Error changing working directory"
-        });
-    }
-
-    if (CreateProcessGroup_) {
-        SpawnActions_.push_back(TSpawnAction{
-            [&] () {
-                setpgrp();
-                return true;
-            },
-            "Error creating process group"
-        });
-    }
-
-    SpawnActions_.push_back(TSpawnAction{
-        [this] {
-            for (int retryIndex = 0; retryIndex < ExecveRetryCount; ++retryIndex) {
-                // Execve may fail, if called binary is being updated, e.g. during yandex-yt package update.
-                // So we'd better retry several times.
-                // For example see YT-6352.
-                TryExecve(ResolvedPath_.c_str(), Args_.data(), Env_.data());
-                if (retryIndex < ExecveRetryCount - 1) {
-                    Sleep(ExecveRetryTimeout);
-                }
-            }
-            // If we are still here, return failure.
-            return false;
-        },
-        "Error starting child process: execve failed"
-    });
+    PrepareSpawnActions(&oldSignals);
 
     SpawnChild();
 
     // This should not fail ever.
     YT_VERIFY(TrySetSignalMask(&oldSignals, nullptr));
 
-    Pipe_.CloseWriteFD();
+    CloseErrorPipe();
 
     ValidateSpawnResult();
 
@@ -472,44 +811,45 @@ void TSimpleProcess::DoSpawn()
 #endif
 }
 
-void TSimpleProcess::SpawnChild()
+void TSimpleProcess::PrepareErrorPipe()
 {
-    // NB: fork() will cause data corruption when run concurrently with
-    // Disk IO on O_DIRECT file descriptor. Seems like vfork don't suffer from the same issue.
-
-#ifdef _unix_
-    int pid = vfork();
-
-    if (pid < 0) {
-        THROW_ERROR_EXCEPTION("Error starting child process: vfork failed")
-            << TErrorAttribute("path", ResolvedPath_)
-            << TError::FromSystem();
-    }
-
-    if (pid == 0) {
-        try {
-            Child();
-        } catch (...) {
-            YT_ABORT();
-        }
-    }
-
-    ProcessId_ = pid;
-    Started_ = true;
+#if defined(YT_USE_POSIX_SPAWN_API)
+    YT_LOG_DEBUG("Spawning new process (Path: %v, Arguments: %v, Environment: %v)",
+        ResolvedPath_,
+        Args_,
+        Env_);
 #else
-    THROW_ERROR_EXCEPTION("Unsupported platform");
+    TPipeFactory pipeFactory(MaxSpawnActionFD_ + 1);
+    Pipe_ = pipeFactory.Create();
+    SpawnState_->SetErrorPipe(&Pipe_);
+
+    pipeFactory.Clear();
+
+    YT_LOG_DEBUG("Spawning new process (Path: %v, ErrorPipe: %v, Arguments: %v, Environment: %v)",
+        ResolvedPath_,
+        Pipe_,
+        Args_,
+        Env_);
+#endif
+}
+
+void TSimpleProcess::CloseErrorPipe()
+{
+#if !defined(YT_USE_POSIX_SPAWN_API)
+    Pipe_.CloseWriteFD();
 #endif
 }
 
 void TSimpleProcess::ValidateSpawnResult()
 {
-#ifdef _unix_
-    int data[2];
-    ssize_t res;
-    res = HandleEintr(::read, Pipe_.GetReadFD(), &data, sizeof(data));
-    Pipe_.CloseReadFD();
+#if defined (YT_USE_POSIX_SPAWN_API)
 
-    if (res == 0) {
+    YT_LOG_DEBUG("Child process spawned successfully (Pid: %v)", ProcessId_);
+    return;
+#else
+    auto result = SpawnState_->ValidateSpawnResult();
+
+    if (result.IsOK()) {
         // Child successfully spawned or was killed by a signal.
         // But there is no way to distinguish between these two cases:
         // * child killed by signal before exec
@@ -519,27 +859,46 @@ void TSimpleProcess::ValidateSpawnResult()
         return;
     }
 
-    YT_VERIFY(res == sizeof(data));
     Finished_ = true;
 
     Cleanup(ProcessId_);
     ProcessId_ = InvalidProcessId;
 
-    int actionIndex = data[0];
-    int errorCode = data[1];
+    THROW_ERROR_EXCEPTION(std::move(result));
+#endif
+}
 
-    YT_VERIFY(0 <= actionIndex && actionIndex < std::ssize(SpawnActions_));
-    const auto& action = SpawnActions_[actionIndex];
-    THROW_ERROR_EXCEPTION("%v", action.ErrorMessage)
-        << TError::FromSystem(errorCode);
+void TSimpleProcess::PrepareSpawnActions(sigset_t* oldSignals)
+{
+    SpawnState_->AddSignalSafetySpawnActions(oldSignals);
+
+    if (!WorkingDirectory_.empty()) {
+        SpawnState_->AddChdirSpawnAction(WorkingDirectory_);
+    }
+
+    if (CreateProcessGroup_) {
+        SpawnState_->AddCreateProcessGroupAction();
+    }
+
+    SpawnState_->AddExecvSpawnAction(
+        ResolvedPath_.c_str(),
+        const_cast<char* const*>(Args_.data()),
+        const_cast<char* const*>(Env_.data()));
+}
+
+void TSimpleProcess::SpawnChild()
+{
+#ifdef _unix_
+    ProcessId_ = SpawnState_->SpawnChild();
+    Started_ = true;
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif
 }
 
-#ifdef _unix_
 void TSimpleProcess::AsyncPeriodicTryWait()
 {
+#ifdef _unix_
     siginfo_t processInfo;
     memset(&processInfo, 0, sizeof(siginfo_t));
 
@@ -666,30 +1025,6 @@ const char* TProcessBase::Capture(TStringBuf arg)
 {
     StringHolders_.push_back(TString(arg));
     return StringHolders_.back().c_str();
-}
-
-void TSimpleProcess::Child()
-{
-#ifdef _unix_
-    for (int actionIndex = 0; actionIndex < std::ssize(SpawnActions_); ++actionIndex) {
-        auto& action = SpawnActions_[actionIndex];
-        if (!action.Callback()) {
-            // Report error through the pipe.
-            int data[] = {
-                actionIndex,
-                errno
-            };
-
-            // According to pipe(7) write of small buffer is atomic.
-            ssize_t size = HandleEintr(::write, Pipe_.GetWriteFD(), &data, sizeof(data));
-            YT_VERIFY(size == sizeof(data));
-            _exit(1);
-        }
-    }
-#else
-    THROW_ERROR_EXCEPTION("Unsupported platform");
-#endif
-    YT_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -32,7 +32,6 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -335,7 +334,6 @@ public:
         , Params(std::move(params))
         , CreatedAt(Params.CreatedAt)
         , QueryCounters(queryCounters)
-        , EnableCheckpointCoordinator(Params.QueryType == FederatedQuery::QueryContent::STREAMING && Params.Config.GetCheckpointCoordinator().GetEnabled())
         , MaxTasksPerStage(Params.Config.GetCommon().GetMaxTasksPerStage() ? Params.Config.GetCommon().GetMaxTasksPerStage() : 500)
         , MaxTasksPerOperation(Params.Config.GetCommon().GetMaxTasksPerOperation() ? Params.Config.GetCommon().GetMaxTasksPerOperation() : 40)
         , Compressor(Params.Config.GetCommon().GetQueryArtifactsCompressionMethod(), Params.Config.GetCommon().GetQueryArtifactsCompressionMinSize())
@@ -922,21 +920,6 @@ private:
             EvalInfos.emplace(info.ExecuterId, info);
         } else {
             DqGraphParams.push_back(ev->Get()->GraphParams);
-
-            NYql::IDqGateway::TResult gatewayResult;
-            // fake it till you make it
-            // generate dummy result for YQL facade now, remove this gateway completely
-            // when top-level YQL facade call like Preprocess() is implemented
-            if (ev->Get()->GraphParams.GetResultType()) {
-                // for resultable graphs return dummy "select 1" result (it is not used and is required to satisfy YQL facade only)
-                gatewayResult.SetSuccess();
-                gatewayResult.Data = "[[\001\0021]]";
-                gatewayResult.Truncated = true;
-                gatewayResult.RowsCount = 0;
-            } else {
-                // for resultless results expect infinite INSERT FROM SELECT and just return "nothing"
-            }
-            ev->Get()->Result.SetValue(gatewayResult);
         }
     }
 
@@ -1541,7 +1524,12 @@ private:
         dqConfiguration->FreezeDefaults();
         dqConfiguration->FallbackPolicy = EFallbackPolicy::Never;
 
-        ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
+        bool enableCheckpointCoordinator =
+            Params.QueryType == FederatedQuery::QueryContent::STREAMING && 
+            Params.Config.GetCheckpointCoordinator().GetEnabled() && 
+            !dqConfiguration->DisableCheckpoints.Get().GetOrElse(false);
+
+        ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), enableCheckpointCoordinator));
 
         NActors::TActorId resultId;
         if (dqGraphParams.GetResultType()) {
@@ -1565,7 +1553,7 @@ private:
             resultId = ExecuterId;
         }
 
-        if (EnableCheckpointCoordinator) {
+        if (enableCheckpointCoordinator) {
             ControlId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
@@ -1793,7 +1781,7 @@ private:
                     }
                 }
 
-                Register(NYql::NDq::MakeS3ApplicatorActor(SelfId()
+                Register(Params.S3ActorsFactory->CreateS3ApplicatorActor(SelfId()
                                             , Params.S3Gateway
                                             , Params.QueryId
                                             , Params.JobId
@@ -1868,6 +1856,10 @@ private:
             auto& issue = *QueryStateUpdateRequest.add_issues();
             issue.set_message(FederatedQuery::QueryMeta::ComputeStatus_Name(QueryStateUpdateRequest.status()));
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
+        }
+
+        if (!QueryStateUpdateRequest.has_result_id() && FinalQueryStatus != FederatedQuery::QueryMeta::COMPLETED && FinalQueryStatus != FederatedQuery::QueryMeta::COMPLETING) {
+            QueryStateUpdateRequest.mutable_result_id()->set_value("");
         }
 
         Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest, true));
@@ -2251,7 +2243,6 @@ private:
     TString SessionId;
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
-    bool EnableCheckpointCoordinator = false;
     Fq::Private::PingTaskRequest QueryStateUpdateRequest;
 
     const ui64 MaxTasksPerStage;

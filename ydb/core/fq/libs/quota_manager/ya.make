@@ -22,6 +22,5 @@ END()
 
 RECURSE(
     events
-    proto
     ut_helpers
 )

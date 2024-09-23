@@ -291,10 +291,11 @@ namespace NActors {
         TActorId GetInterconnectProxy(ui32 nodeIndexFrom, ui32 nodeIndexTo);
         void BlockOutputForActor(const TActorId& actorId);
         IActor* FindActor(const TActorId& actorId, ui32 nodeIndex = Max<ui32>()) const;
+        TStringBuf FindActorName(const TActorId& actorId, ui32 nodeIndex = Max<ui32>()) const;
         void EnableScheduleForActor(const TActorId& actorId, bool allow = true);
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
-        void SetupMonitoring();
+        void SetupMonitoring(ui16 monitoringPortOffset = 0, bool monitoringTypeAsync = false);
 
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
@@ -320,7 +321,7 @@ namespace NActors {
                 if (this != &other)
                 {
                     Remove();
-                    
+
                     List = std::move(other.List);
                     Iter = std::move(other.Iter);
 
@@ -654,6 +655,8 @@ namespace NActors {
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
         bool NeedMonitoring;
+        ui16 MonitoringPortOffset = 0;
+        bool MonitoringTypeAsync = false;
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;

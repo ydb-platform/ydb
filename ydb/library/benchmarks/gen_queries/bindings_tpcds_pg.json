@@ -4,6 +4,9 @@
         "path": "{{data}}/call_center/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["cc_call_center_sk"]
+        },
         "schema": [
             "StructType", [
                  ["cc_call_center_id",  ["PgType", "text"]],
@@ -45,6 +48,9 @@
         "path": "{{data}}/catalog_page/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["cp_catalog_page_sk"]
+        },
         "schema": [
             "StructType", [
                 ["cp_catalog_number",  ["PgType", "int4"]],
@@ -64,6 +70,9 @@
         "path": "{{data}}/catalog_returns/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["cr_item_sk", "cr_order_number"]
+        },
         "schema": [
             "StructType", [
                 ["cr_call_center_sk",  ["PgType", "int4"]],
@@ -101,6 +110,9 @@
         "path": "{{data}}/catalog_sales/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["cs_item_sk", "cs_order_number"]
+        },
         "schema": [
             "StructType", [
                 ["cs_bill_addr_sk",["PgType","int4"]],
@@ -145,6 +157,9 @@
         "path": "{{data}}/customer/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["c_customer_sk"]
+        },
         "schema": [
             "StructType", [
                 ["c_birth_country",["PgType","text"]],
@@ -173,6 +188,9 @@
         "path": "{{data}}/customer_address/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["ca_address_sk"]
+        },
         "schema": [
             "StructType", [
                 ["ca_address_id",["PgType","text"]],
@@ -196,6 +214,9 @@
         "path": "{{data}}/customer_demographics/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["cd_demo_sk"]
+        },
         "schema": [
             "StructType", [
                 ["cd_credit_rating",["PgType","text"]],
@@ -215,6 +236,9 @@
         "path": "{{data}}/date_dim/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["d_date_sk"]
+        },
         "schema": [
             "StructType", [
                 ["d_current_day",["PgType","text"]],
@@ -253,6 +277,9 @@
         "path": "{{data}}/household_demographics/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["hd_demo_sk"]
+        },
         "schema": [
             "StructType", [
                 ["hd_buy_potential",["PgType","text"]],
@@ -268,6 +295,9 @@
         "path": "{{data}}/income_band/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["ib_income_band_sk"]
+        },
         "schema": [
             "StructType", [
                 ["ib_income_band_sk",["PgType","int4"]],
@@ -281,6 +311,9 @@
         "path": "{{data}}/inventory/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["inv_date_sk", "inv_item_sk", "inv_warehouse_sk"]
+        },
         "schema": [
             "StructType", [
                 ["inv_date_sk",["PgType","int4"]],
@@ -295,6 +328,9 @@
         "path": "{{data}}/item/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["i_item_sk"]
+        },
         "schema": [
             "StructType", [
                 ["i_brand",["PgType","text"]],
@@ -327,6 +363,9 @@
         "path": "{{data}}/promotion/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["p_promo_sk"]
+        },
         "schema": [
             "StructType", [
                 ["p_channel_catalog",["PgType","text"]],
@@ -356,6 +395,9 @@
         "path": "{{data}}/reason/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["r_reason_sk"]
+        },
         "schema": [
             "StructType", [
                 ["r_reason_desc",["PgType","text"]],
@@ -369,6 +411,9 @@
         "path": "{{data}}/ship_mode/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["sm_ship_mode_sk"]
+        },
         "schema": [
             "StructType", [
                 ["sm_carrier",["PgType","text"]],
@@ -385,6 +430,9 @@
         "path": "{{data}}/store/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["s_store_sk"]
+        },
         "schema": [
             "StructType", [
                 ["s_city",["PgType","text"]],
@@ -424,6 +472,9 @@
         "path": "{{data}}/store_returns/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_keys": ["sr_item_sk", "sr_ticket_number"]
+        },
         "schema": [
             "StructType", [
                 ["sr_addr_sk",["PgType","int4"]],
@@ -454,6 +505,9 @@
         "path": "{{data}}/store_sales/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["ss_item_sk", "ss_ticket_number"]
+        },
         "schema": [
             "StructType", [
                 ["ss_addr_sk",["PgType","int4"]],
@@ -487,6 +541,9 @@
         "path": "{{data}}/time_dim/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["t_time_sk"]
+        },
         "schema": [
             "StructType", [
                 ["t_am_pm",["PgType","text"]],
@@ -507,6 +564,9 @@
         "path": "{{data}}/warehouse/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_keys": ["w_warehouse_sk"]
+        },
         "schema": [
             "StructType", [
                 ["w_city",["PgType","text"]],
@@ -531,6 +591,9 @@
         "path": "{{data}}/web_page/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["wp_web_page_sk"]
+        },
         "schema": [
             "StructType", [
                 ["wp_access_date_sk",["PgType","int4"]],
@@ -555,6 +618,9 @@
         "path": "{{data}}/web_returns/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["wr_item_sk", "wr_order_number"]
+        },
         "schema": [
             "StructType", [
                 ["wr_account_credit",["PgType","numeric"]],
@@ -589,6 +655,9 @@
         "path": "{{data}}/web_sales/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_key": ["ws_item_sk", "ws_order_number"]
+        },
         "schema": [
             "StructType", [
                 ["ws_bill_addr_sk",["PgType","int4"]],
@@ -633,6 +702,9 @@
         "path": "{{data}}/web_site/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
+        "constraints": {
+            "primary_keys": ["web_site_sk"]
+        },
         "schema": [
             "StructType", [
                 ["web_city",["PgType","text"]],

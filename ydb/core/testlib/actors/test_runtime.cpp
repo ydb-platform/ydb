@@ -4,6 +4,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
@@ -11,6 +12,11 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/stream.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
@@ -154,6 +160,10 @@ namespace NActors {
             nodeAppData->GraphConfig = app0->GraphConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
+            if (nodeIndex < egg.Icb.size()) {
+                nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+            }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {
@@ -165,12 +175,20 @@ namespace NActors {
             }
 
             if (NeedMonitoring && !SingleSysEnv) {
-                ui16 port = GetPortManager().GetPort();
-                node->Mon.Reset(new NActors::TSyncHttpMon({
-                    .Port = port,
-                    .Threads = 10,
-                    .Title = "KIKIMR monitoring"
-                }));
+                ui16 port = MonitoringPortOffset ? MonitoringPortOffset + nodeIndex : GetPortManager().GetPort();
+                if (MonitoringTypeAsync) {
+                    node->Mon.Reset(new NActors::TAsyncHttpMon({
+                        .Port = port,
+                        .Threads = 10,
+                        .Title = "KIKIMR monitoring"
+                    }));
+                } else {
+                    node->Mon.Reset(new NActors::TSyncHttpMon({
+                        .Port = port,
+                        .Threads = 10,
+                        .Title = "KIKIMR monitoring"
+                    }));
+                }
                 nodeAppData->Mon = node->Mon.Get();
                 node->Mon->RegisterCountersPage("counters", "Counters", node->DynamicCounters);
                 auto actorsMonPage = node->Mon->RegisterIndexPage("actors", "Actors");
@@ -182,7 +200,7 @@ namespace NActors {
 
             node->ActorSystem->Start();
             if (nodeAppData->Mon) {
-                nodeAppData->Mon->Start();
+                nodeAppData->Mon->Start(node->ActorSystem.Get());
             }
         }
 
@@ -205,6 +223,10 @@ namespace NActors {
         return *node->GetAppData<NKikimr::TAppData>();
     }
 
+    ui32 TTestActorRuntime::GetFirstNodeId() {
+        return FirstNodeId;
+    }
+
     bool TTestActorRuntime::DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         Y_UNUSED(delay);
         Y_UNUSED(deadline);
@@ -215,6 +237,7 @@ namespace NActors {
             return true;
         case NKikimr::TEvBlobStorage::EvNotReadyRetryTimeout:
         case NKikimr::TEvTabletPipe::EvClientRetry:
+        case NKikimr::TEvTabletPipe::EvClientCheckDelay:
         case NKikimr::TEvTabletBase::EvFollowerRetry:
         case NKikimr::TEvTabletBase::EvTryBuildFollowerGraph:
         case NKikimr::TEvTabletBase::EvTrySyncFollower:

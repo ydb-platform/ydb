@@ -3,9 +3,11 @@ import inspect
 import glob
 import platform
 import distutils.command.install as orig
+from typing import cast
 
 import setuptools
 from ..warnings import SetuptoolsDeprecationWarning, SetuptoolsWarning
+from .bdist_egg import bdist_egg as bdist_egg_cls
 
 # Prior to numpy 1.9, NumPy relies on the '_install' name, so provide it for
 # now. See https://github.com/pypa/setuptools/issues/199/
@@ -47,12 +49,12 @@ class install(orig.install):
             #       and then add a due_date to this warning.
         )
 
-        orig.install.initialize_options(self)
+        super().initialize_options()
         self.old_and_unmanageable = None
         self.single_version_externally_managed = None
 
     def finalize_options(self):
-        orig.install.finalize_options(self)
+        super().finalize_options()
         if self.root:
             self.single_version_externally_managed = True
         elif self.single_version_externally_managed:
@@ -76,11 +78,11 @@ class install(orig.install):
     def run(self):
         # Explicit request for old-style install?  Just do it
         if self.old_and_unmanageable or self.single_version_externally_managed:
-            return orig.install.run(self)
+            return super().run()
 
         if not self._called_from_setup(inspect.currentframe()):
             # Run in backward-compatibility mode to support bdist_* commands.
-            orig.install.run(self)
+            super().run()
         else:
             self.do_egg_install()
 
@@ -135,7 +137,8 @@ class install(orig.install):
         cmd.package_index.scan(glob.glob('*.egg'))
 
         self.run_command('bdist_egg')
-        args = [self.distribution.get_command_obj('bdist_egg').egg_output]
+        bdist_egg = cast(bdist_egg_cls, self.distribution.get_command_obj('bdist_egg'))
+        args = [bdist_egg.egg_output]
 
         if setuptools.bootstrap_install_from:
             # Bootstrap self-installation of setuptools

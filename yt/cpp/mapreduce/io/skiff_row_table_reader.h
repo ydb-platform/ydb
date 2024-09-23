@@ -39,10 +39,10 @@ public:
     bool IsRawReaderExhausted() const override;
 
 private:
-    bool Retry();
+    bool Retry(const std::exception_ptr& error);
     void SkipRow();
     void CheckValidity() const;
-    bool PrepareRetry();
+    bool PrepareRetry(const std::exception_ptr& error);
 
 private:
     NDetail::TCountingRawTableReader Input_;

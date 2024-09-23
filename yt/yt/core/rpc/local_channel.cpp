@@ -30,7 +30,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -331,7 +331,7 @@ private:
             YT_LOG_DEBUG(detailedError, "Local request failed (RequestId: %v)",
                 RequestId_);
 
-            Handler_->HandleError(detailedError);
+            Handler_->HandleError(std::move(detailedError));
         }
     };
 

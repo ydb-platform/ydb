@@ -5,7 +5,6 @@ SRCS(
     http_ping.cpp
     http_ping.h
     msgbus_blobstorage_config.cpp
-    msgbus_bsadm.cpp
     msgbus_http_server.h
     msgbus_http_server.cpp
     msgbus_server.cpp
@@ -13,10 +12,8 @@ SRCS(
     msgbus_server_cms.cpp
     msgbus_server_configdummy.cpp
     msgbus_server_console.cpp
-    msgbus_server_db.cpp
     msgbus_server_drain_node.cpp
     msgbus_server_fill_node.cpp
-    msgbus_server_get.cpp
     msgbus_server_hive_create_tablet.cpp
     msgbus_server_keyvalue.cpp
     msgbus_server_persqueue.cpp
@@ -28,7 +25,6 @@ SRCS(
     msgbus_server_pq_read_session_info.cpp
     msgbus_server_resolve_node.cpp
     msgbus_server_ic_debug.cpp
-    msgbus_server_load.cpp
     msgbus_server_local_enumerate_tablets.cpp
     msgbus_server_local_minikql.cpp
     msgbus_server_local_scheme_tx.cpp
@@ -47,7 +43,6 @@ SRCS(
     msgbus_server_test_shard_request.cpp
     msgbus_server_tx_request.cpp
     msgbus_server_types.cpp
-    msgbus_server_whoami.cpp
     msgbus_servicereq.h
     msgbus_tabletreq.h
     grpc_server.cpp
@@ -74,7 +69,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/grpc_services
-    ydb/core/grpc_services/auth_processor
+    ydb/core/security/certificate_check
     ydb/core/grpc_services/base
     ydb/core/keyvalue
     ydb/core/kqp/common

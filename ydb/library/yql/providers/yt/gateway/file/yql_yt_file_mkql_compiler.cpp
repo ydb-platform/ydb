@@ -1047,8 +1047,9 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 const auto outputType = NCommon::BuildType(wrapper.Ref(),
                     *ytRead.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder);
 
+                const bool forceKeyColumns = HasRangesWithKeyColumns(ytRead.Input().Ref());
                 auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
-                    ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"});
+                    ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
 
                 return ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx);
@@ -1066,8 +1067,9 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 const auto outputType = NCommon::BuildType(wrapper.Ref(),
                     *ytRead.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder);
 
+                const bool forceKeyColumns = HasRangesWithKeyColumns(ytRead.Input().Ref());
                 auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
-                    ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"});
+                    ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
                 return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }

@@ -217,7 +217,7 @@ TEST(TYsonStructSchemaTest, TestSchemaForProtobufMessage)
                         item={
                             type_name="struct";
                             members=[
-                                {name="int32_field";type="uint32";};
+                                {name="int32_field";type="int32";};
                                 {name="string_field";"type"="utf8";};
                             ];
                         };

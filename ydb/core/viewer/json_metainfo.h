@@ -108,15 +108,14 @@ public:
     void ReplyAndDie(const TActorContext &ctx) {
         TStringStream json;
         TProtoToJson::ProtoToJson(json, MetaInfo, JsonSettings);
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
     void HandleTimeout(const TActorContext &ctx) {
         TStringStream result;
-        result << Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get());
         RenderPendingRequests(result);
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(result.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), result.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
@@ -129,36 +128,60 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonMetaInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TMetaInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TMetaInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonMetaInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"tablet_id","in":"query","description":"tablet identifier","required":false,"type":"integer"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"counters","in":"query","description":"return tablet counters","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: tablet_id
+              in: query
+              description: tablet identifier
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: counters
+              in: query
+              description: return tablet counters
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonMetaInfo> {
     static TString GetSummary() {
-        return "\"Schema meta information\"";
+        return "Schema meta information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonMetaInfo> {
     static TString GetDescription() {
-        return "\"Returns meta information about schema path\"";
+        return "Returns meta information about schema path";
     }
 };
 

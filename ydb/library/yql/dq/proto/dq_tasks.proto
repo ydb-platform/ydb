@@ -168,6 +168,25 @@ message TDqTransform {
     google.protobuf.Any Settings = 4;
 }
 
+message TDqStreamLookupSource {
+    bytes SerializedRowType = 1; //Serialized TStructType
+    string ProviderName = 2;
+    google.protobuf.Any LookupSource = 3; //Provider specific DataSource
+    string Table = 4; //Table name to look up in
+}
+
+message TDqInputTransformLookupSettings {
+    string LeftLabel = 1;
+    TDqStreamLookupSource RightSource = 2;
+    string RightLabel = 3;
+    string JoinType = 4; //Inner, Left, LeftSemi
+    repeated string LeftJoinKeyNames = 5; //Join column names in the left hand, in the same order as the next
+    repeated string RightJoinKeyNames = 6; //Join column names in the right hand, in the same order as previous
+    bytes NarrowInputRowType = 7; //Serialized struct type
+    bytes NarrowOutputRowType = 8; //Serialized struct type
+    //TODO add lookup cache parameters
+}
+
 message TDqTask {
     uint64 Id = 1;
     uint32 StageId = 9;
@@ -187,4 +206,5 @@ message TDqTask {
     optional bool UseLlvm = 16;
     repeated bytes ReadRanges = 17;
     map<string, string> RequestContext = 18;
+    optional bool EnableSpilling = 19;
 }

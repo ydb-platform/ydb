@@ -25,7 +25,6 @@ SRCS(
     group_mapper.cpp
     group_mapper.h
     group_metrics_exchange.cpp
-    group_reconfigure_wipe.cpp
     impl.h
     indir.h
     init_scheme.cpp
@@ -58,7 +57,6 @@ SRCS(
     update_group_latencies.cpp
     update_last_seen_ready.cpp
     update_seen_operational.cpp
-    vdisk_status_tracker.h
     virtual_group.cpp
 )
 

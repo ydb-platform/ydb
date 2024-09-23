@@ -1,6 +1,7 @@
 #include "executor_pool_shared.h"
 
 #include "actorsystem.h"
+#include "config.h"
 #include "executor_pool_basic.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
@@ -17,7 +18,6 @@ TSharedExecutorPool::TSharedExecutorPool(const TSharedExecutorPoolConfig &config
     , PoolCount(poolCount)
     , SharedThreadCount(poolsWithThreads.size())
     , Threads(new TSharedExecutorThreadCtx[SharedThreadCount])
-    , Timers(new TTimers[SharedThreadCount])
     , TimePerMailbox(config.TimePerMailbox)
     , EventsPerMailbox(config.EventsPerMailbox)
     , SoftProcessingDurationTs(config.SoftProcessingDurationTs)
@@ -48,7 +48,7 @@ void TSharedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TR
         for (i16 i = 0; i != SharedThreadCount; ++i) {
             // !TODO
             Threads[i].ExecutorPools[0].store(dynamic_cast<TBasicExecutorPool*>(poolByThread[i]), std::memory_order_release);
-            Threads[i].Thread.Reset(
+            Threads[i].Thread.reset(
                 new TSharedExecutorThread(
                     -1,
                     actorSystem,
@@ -120,6 +120,19 @@ void TSharedExecutorPool::ReturnBorrowedHalfThread(i16 pool) {
 }
 
 void TSharedExecutorPool::GiveHalfThread(i16 from, i16 to) {
+    if (from == to) {
+        return;
+    }
+    i16 borrowedThreadIdx = State.BorrowedThreadByPool[from];
+    if (borrowedThreadIdx != -1) {
+        i16 originalPool = State.PoolByThread[borrowedThreadIdx];
+        if (originalPool == to) {
+            return ReturnOwnHalfThread(to);
+        } else {
+            ReturnOwnHalfThread(originalPool);
+        }
+        from = originalPool;
+    }
     i16 threadIdx = State.ThreadByPool[from];
     TBasicExecutorPool* borrowingPool = Pools[to];
     Threads[threadIdx].ExecutorPools[1].store(borrowingPool, std::memory_order_release);
@@ -136,12 +149,19 @@ void TSharedExecutorPool::GetSharedStats(i16 poolId, std::vector<TExecutorThread
     }
 }
 
+void TSharedExecutorPool::GetSharedStatsForHarmonizer(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {
+    statsCopy.resize(SharedThreadCount + 1);
+    for (i16 i = 0; i < SharedThreadCount; ++i) {
+        Threads[i].Thread->GetSharedStatsForHarmonizer(poolId, statsCopy[i + 1]);
+    }
+}
+
 TCpuConsumption TSharedExecutorPool::GetThreadCpuConsumption(i16 poolId, i16 threadIdx) {
     if (threadIdx >= SharedThreadCount) {
         return {0.0, 0.0};
     }
     TExecutorThreadStats stats;
-    Threads[threadIdx].Thread->GetSharedStats(poolId, stats);
+    Threads[threadIdx].Thread->GetSharedStatsForHarmonizer(poolId, stats);
     return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs), stats.NotEnoughCpuExecutions};
 }
 

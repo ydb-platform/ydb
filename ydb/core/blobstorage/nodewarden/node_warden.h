@@ -19,6 +19,7 @@ namespace NKikimr {
     struct TNodeWardenConfig : public TThrRefBase {
         NKikimrConfig::TBlobStorageConfig BlobStorageConfig;
         NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
+        std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;

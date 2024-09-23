@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
             (let read0 (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"input"))) (Void) '()))
             (let world (Left! read0))
-            (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"input"))) (Void) '('('pg_delete (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"" (Void) (lambda '() (PgStar))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('())))))) '('set_ops '('push))))) '('mode 'delete))))
+            (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"input"))) (Void) '('('pg_delete (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"" (Void) (lambda '() (PgStar))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('('('push)))))))) '('set_ops '('push))))) '('mode 'delete))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -109,6 +109,15 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableStmt_SystemColumns) {
+        auto res = PgSqlToYql("CREATE TABLE t(XMIN int)");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("system column") != TString::npos);
     }
 
     Y_UNIT_TEST(CreateTableStmt_NotNull) {
@@ -157,7 +166,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
-    }    
+    }
 
     Y_UNIT_TEST(CreateTableStmt_PKAndNotNull) {
         auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY NOT NULL, b text)");
@@ -250,6 +259,83 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                 (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '()) '('temporary))))
                 (let world (CommitAll! world))
                 (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateSeqStmt) {
+        auto res = PgSqlToYql(
+            "CREATE TEMP SEQUENCE IF NOT EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TString program = R"(
+            ((let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"")
+            (Key '('pgObject (String '"seq") (String 'pgSequence))) (Void) '(
+                '('mode 'create_if_not_exists) '('temporary) '('"as" '"int4")
+                '('"start" '10) '('"increment" '2) '('"cache" '3))))
+            (let world (CommitAll! world)) (return world))
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(DropSequenceStmt) {
+        auto res = PgSqlToYql("DROP SEQUENCE IF EXISTS seq;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) (let world (Write! world (DataSink '"kikimr" '"") (Key '('pgObject (String '"seq") (String 'pgSequence))) (Void) '('('mode 'drop_if_exists))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterSequenceStmt) {
+        auto res = PgSqlToYql("ALTER SEQUENCE IF EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"")
+                 (Key '('pgObject (String '"seq") (String 'pgSequence)))
+                 (Void) '('('mode 'alter_if_exists) '('"as" '"int4") '('"start" '10) '('"increment" '2) '('"cache" '3))))
+                 (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableStmt) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq');");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableStmtWithCast) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq'::regclass);");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
             )
         )";
         const auto expectedAst = NYql::ParseAst(program);
@@ -417,7 +503,7 @@ SELECT COUNT(*) FROM public.t;");
                         '('result '((PgResultItem '"" (Void) (lambda '() (PgStar)))
                             (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'unknown))))))
                         '('from '('((Right! read0) '"input" '())))
-                        '('join_ops '('()))
+                        '('join_ops '('('('push))))
                         '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown)))))) '('unknowns_allowed)))))
                         '('set_ops '('push)))
                     )
@@ -473,7 +559,7 @@ SELECT COUNT(*) FROM public.t;");
             settings);
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
         UNIT_ASSERT(res.Root);
-        
+
         res = SqlToYqlWithMode(
             R"(select oid,
 typinput::int4 as typinput,
@@ -505,7 +591,7 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
-        
+
         res = SqlToYqlWithMode(
             R"(select set_config('search_path', 'public', false);)",
             NSQLTranslation::ESqlMode::QUERY,

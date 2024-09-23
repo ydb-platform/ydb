@@ -48,6 +48,7 @@ void RegisterMinus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TMinus, TUnaryArgsOpt>(registry, "Minus");
     NDecimal::RegisterUnaryFunction<TDecimalMinus, TUnaryArgsOpt>(registry, "Minus");
     RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TMinus, TUnaryArgsOpt>(registry, "Minus");
+    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TMinus, TUnaryArgsOpt>(registry, "Minus");
 }
 
 void RegisterMinus(TKernelFamilyMap& kernelFamilyMap) {

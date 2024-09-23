@@ -162,7 +162,7 @@ void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx) {
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
     Y_UNUSED(ev);
-    Y_DEBUG_ABORT_UNLESS(false, "Unhandled StateInit event 0x%08" PRIx32, ev->GetTypeRewrite());
+    Y_DEBUG_ABORT("Unhandled StateInit event 0x%08" PRIx32, ev->GetTypeRewrite());
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {

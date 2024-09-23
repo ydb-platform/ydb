@@ -78,22 +78,34 @@
   - inttypes.h:    contrib/libs/libx264/extras/inttypes.h
   - stdint.h:      contrib/libs/libx264/extras/stdint.h
 
-- source_filter: "^contrib/tools/bison"
+- source_filter: "^contrib/tools/bison/"
   includes:
-  - alloca.h:      contrib/tools/bison/gnulib/platform/win64/alloca.h
-  - getopt.h:      contrib/tools/bison/gnulib/platform/win64/getopt.h
-  - fcntl.h:       contrib/tools/bison/gnulib/platform/win64/fcntl.h
-  - langinfo.h:    contrib/tools/bison/gnulib/platform/win64/langinfo.h
-  - locale.h:      contrib/tools/bison/gnulib/platform/win64/locale.h
-  - math.h:        contrib/tools/bison/gnulib/platform/win64/math.h
-  - sched.h:       contrib/tools/bison/gnulib/platform/win64/sched.h
-  - signal.h:      contrib/tools/bison/gnulib/platform/win64/signal.h
-  - spawn.h:       contrib/tools/bison/gnulib/platform/win64/spawn.h
-  - stdbool.h:     contrib/tools/bison/gnulib/platform/win64/stdbool.h
-  - sys/stat.h:    contrib/tools/bison/gnulib/platform/win64/sys/stat.h
-  - sys/time.h:    contrib/tools/bison/gnulib/platform/win64/sys/time.h
-  - sys/wait.h:    contrib/tools/bison/gnulib/platform/win64/sys/wait.h
-  - unistd.h:      contrib/tools/bison/gnulib/platform/win64/unistd.h
+  - alloca.h:      contrib/tools/bison/lib/platform/win64/alloca.h
+  - getopt.h:      contrib/tools/bison/lib/platform/win64/getopt.h
+  - fcntl.h:       contrib/tools/bison/lib/platform/win64/fcntl.h
+  - sched.h:       contrib/tools/bison/lib/platform/win64/sched.h
+  - signal.h:      contrib/tools/bison/lib/platform/win64/signal.h
+  - spawn.h:       contrib/tools/bison/lib/platform/win64/spawn.h
+  - sys/stat.h:    contrib/tools/bison/lib/platform/win64/sys/stat.h
+  - sys/wait.h:    contrib/tools/bison/lib/platform/win64/sys/wait.h
+  - unistd.h:      contrib/tools/bison/lib/platform/win64/unistd.h
+
+- source_filter: "^contrib/tools/m4/"
+  includes:
+  - alloca.h:      contrib/tools/m4/lib/platform/win64/alloca.h
+  - getopt.h:      contrib/tools/m4/lib/platform/win64/getopt.h
+  - fcntl.h:       contrib/tools/m4/lib/platform/win64/fcntl.h
+  - langinfo.h:    contrib/tools/m4/lib/platform/win64/langinfo.h
+  - locale.h:      contrib/tools/m4/lib/platform/win64/locale.h
+  - math.h:        contrib/tools/m4/lib/platform/win64/math.h
+  - sched.h:       contrib/tools/m4/lib/platform/win64/sched.h
+  - signal.h:      contrib/tools/m4/lib/platform/win64/signal.h
+  - spawn.h:       contrib/tools/m4/lib/platform/win64/spawn.h
+  - stdbool.h:     contrib/tools/m4/lib/platform/win64/stdbool.h
+  - sys/stat.h:    contrib/tools/m4/lib/platform/win64/sys/stat.h
+  - sys/time.h:    contrib/tools/m4/lib/platform/win64/sys/time.h
+  - sys/wait.h:    contrib/tools/m4/lib/platform/win64/sys/wait.h
+  - unistd.h:      contrib/tools/m4/lib/platform/win64/unistd.h
 
 - source_filter: "^contrib/libs/libpq"
   includes:

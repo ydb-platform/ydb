@@ -8,6 +8,7 @@ from asyncio import Task
 from collections import deque
 from typing import Optional, Set, Dict, Union, Callable
 
+import ydb
 from .. import _apis, issues
 from .._utilities import AtomicCounter
 from ..aio import Driver
@@ -35,7 +36,7 @@ class TopicReaderError(YdbError):
     pass
 
 
-class TopicReaderUnexpectedCodec(YdbError):
+class PublicTopicReaderUnexpectedCodecError(YdbError):
     pass
 
 
@@ -191,7 +192,7 @@ class ReaderReconnector:
                 if self._stream_reader is not None:
                     # noinspection PyBroadException
                     try:
-                        await self._stream_reader.close()
+                        await self._stream_reader.close(flush=False)
                     except BaseException:
                         # supress any error on close stream reader
                         pass
@@ -222,9 +223,7 @@ class ReaderReconnector:
 
     async def close(self, flush: bool):
         if self._stream_reader:
-            if flush:
-                await self.flush()
-            await self._stream_reader.close()
+            await self._stream_reader.close(flush)
         for task in self._background_tasks:
             task.cancel()
 
@@ -339,9 +338,12 @@ class ReaderStream:
         self._update_token_event.set()
 
         self._background_tasks.add(asyncio.create_task(self._read_messages_loop(), name="read_messages_loop"))
-        self._background_tasks.add(asyncio.create_task(self._decode_batches_loop()))
+        self._background_tasks.add(asyncio.create_task(self._decode_batches_loop(), name="decode_batches"))
         if self._get_token_function:
             self._background_tasks.add(asyncio.create_task(self._update_token_loop(), name="update_token_loop"))
+        self._background_tasks.add(
+            asyncio.create_task(self._handle_background_errors(), name="handle_background_errors")
+        )
 
     async def wait_error(self):
         raise await self._first_error
@@ -410,6 +412,17 @@ class ReaderStream:
             self._stream.write(StreamReadMessage.FromClient(client_message=client_message))
 
         return waiter
+
+    async def _handle_background_errors(self):
+        done, _ = await asyncio.wait(self._background_tasks, return_when=asyncio.FIRST_EXCEPTION)
+        for f in done:
+            f = f  # type: asyncio.Future
+            err = f.exception()
+            if not isinstance(err, ydb.Error):
+                old_err = err
+                err = ydb.Error("Background process failed unexpected")
+                err.__cause__ = old_err
+            self._set_first_error(err)
 
     async def _read_messages_loop(self):
         try:
@@ -602,7 +615,7 @@ class ReaderStream:
         try:
             decode_func = self._decoders[batch._codec]
         except KeyError:
-            raise TopicReaderUnexpectedCodec("Receive message with unexpected codec: %s" % batch._codec)
+            raise PublicTopicReaderUnexpectedCodecError("Receive message with unexpected codec: %s" % batch._codec)
 
         decode_data_futures = []
         for message in batch.messages:
@@ -628,9 +641,6 @@ class ReaderStream:
             return self._first_error.result()
 
     async def flush(self):
-        if self._closed:
-            raise RuntimeError("Flush on closed Stream")
-
         futures = []
         for session in self._partition_sessions.values():
             futures.extend(w.future for w in session._ack_waiters)
@@ -638,11 +648,14 @@ class ReaderStream:
         if futures:
             await asyncio.wait(futures)
 
-    async def close(self):
+    async def close(self, flush: bool):
         if self._closed:
             return
 
         self._closed = True
+
+        if flush:
+            await self.flush()
 
         self._set_first_error(TopicReaderStreamClosedError())
         self._state_changed.set()

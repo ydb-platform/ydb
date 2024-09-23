@@ -1,0 +1,55 @@
+- name: download bazel-remote
+  ansible.builtin.get_url:
+    url: "https://github.com/buchgr/bazel-remote/releases/download/v{{ bazel_remote_version }}/bazel-remote-{{ bazel_remote_version }}-linux-x86_64"
+    dest: /usr/local/bin/bazel-remote
+    mode: '0755'
+
+- name: add bazel-remote group
+  ansible.builtin.group:
+    name: bazel-remote
+    system: true
+
+- name: add bazel-remote user
+  ansible.builtin.user:
+    name: bazel-remote
+    group: bazel-remote
+    system: true
+
+- name: create folders
+  ansible.builtin.file:
+    path: "{{ item.config.dir }}"
+    state: directory
+    mode: 0755
+    owner: bazel-remote
+    group: bazel-remote
+  loop: "{{ bazel_remote_instances }}"
+
+- ansible.builtin.include_tasks: htpasswd.yaml
+
+- name: configure instances
+  ansible.builtin.template:
+    src: bazel-remote.yaml.j2
+    dest: "/usr/local/etc/bazel-remote-{{ item.name }}.yaml"
+  notify:
+    - restart-bazel-remote
+  loop: "{{ bazel_remote_instances }}"
+  
+- name: configure systemd unit
+  ansible.builtin.template:
+    src: bazel-remote.service.j2
+    dest: "/etc/systemd/system/bazel-remote@.service"
+  register: systemd_unit
+  notify:
+    - restart-bazel-remote
+
+- name: reload systemd daemon
+  ansible.builtin.systemd_service:
+    daemon-reload: true
+  when: systemd_unit.changed
+
+- name: enable systemd units
+  ansible.builtin.systemd_service:
+    name: "bazel-remote@{{ item.name }}"
+    enabled: true
+  loop: "{{ bazel_remote_instances }}"
+  

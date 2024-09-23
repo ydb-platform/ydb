@@ -10,7 +10,7 @@ import sys
 from contextlib import suppress
 from glob import iglob
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, MutableMapping, Optional, Set, Tuple
 
 import distutils.cmd
 import distutils.command
@@ -202,7 +202,11 @@ def check_packages(dist, attr, value):
             )
 
 
-_Distribution = get_unpatched(distutils.core.Distribution)
+if TYPE_CHECKING:
+    # Work around a mypy issue where type[T] can't be used as a base: https://github.com/python/mypy/issues/10962
+    _Distribution = distutils.core.Distribution
+else:
+    _Distribution = get_unpatched(distutils.core.Distribution)
 
 
 class Distribution(_Distribution):
@@ -283,12 +287,12 @@ class Distribution(_Distribution):
                 dist._version = _normalization.safe_version(str(attrs['version']))
                 self._patched_dist = dist
 
-    def __init__(self, attrs=None):
+    def __init__(self, attrs: Optional[MutableMapping] = None) -> None:
         have_package_data = hasattr(self, "package_data")
         if not have_package_data:
-            self.package_data = {}
+            self.package_data: Dict[str, List[str]] = {}
         attrs = attrs or {}
-        self.dist_files = []
+        self.dist_files: List[Tuple[str, str, str]] = []
         # Filter-out setuptools' specific options.
         self.src_root = attrs.pop("src_root", None)
         self.patch_missing_pkg_info(attrs)
@@ -381,7 +385,7 @@ class Distribution(_Distribution):
             k: list(map(str, _reqs.parse(v or []))) for k, v in extras_require.items()
         }
 
-    def _finalize_license_files(self):
+    def _finalize_license_files(self) -> None:
         """Compute names of all license files which should be included."""
         license_files: Optional[List[str]] = self.metadata.license_files
         patterns: List[str] = license_files if license_files else []
@@ -394,7 +398,7 @@ class Distribution(_Distribution):
             # Default patterns match the ones wheel uses
             # See https://wheel.readthedocs.io/en/stable/user_guide.html
             # -> 'Including license files in the generated wheel file'
-            patterns = ('LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*')
+            patterns = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
 
         self.metadata.license_files = list(
             unique_everseen(self._expand_patterns(patterns))
@@ -531,7 +535,8 @@ class Distribution(_Distribution):
 
     def _setuptools_commands(self):
         try:
-            return metadata.distribution('setuptools').entry_points.names
+            entry_points = metadata.distribution('setuptools').entry_points
+            return {ep.name for ep in entry_points}  # Avoid newer API for compatibility
         except metadata.PackageNotFoundError:
             # during bootstrapping, distribution doesn't exist
             return []
@@ -681,7 +686,7 @@ class Distribution(_Distribution):
             os.mkdir(egg_cache_dir)
             windows_support.hide_file(egg_cache_dir)
             readme_txt_filename = os.path.join(egg_cache_dir, 'README.txt')
-            with open(readme_txt_filename, 'w') as f:
+            with open(readme_txt_filename, 'w', encoding="utf-8") as f:
                 f.write(
                     'This directory contains eggs that were downloaded '
                     'by setuptools to build, test, and run plug-ins.\n\n'

@@ -8,8 +8,6 @@ namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TStringBuf ObjectIdPathPrefix("#");
-
 TVersionedObjectId::TVersionedObjectId(TObjectId objectId)
     : ObjectId(objectId)
 { }
@@ -42,11 +40,6 @@ TVersionedObjectId TVersionedObjectId::FromString(TStringBuf str)
 void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v:%v", id.ObjectId, id.TransactionId);
-}
-
-TString ToString(const TVersionedObjectId& id)
-{
-    return ToStringViaBuilder(id);
 }
 
 bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)

@@ -75,6 +75,8 @@ struct TEvPQProxy {
         EvDirectReadDestroyPartitionSession,
         EvDirectReadCloseSession,
         EvDirectReadSendClientData,
+        EvReadingStarted,
+        EvReadingFinished,
         EvEnd
     };
 
@@ -557,6 +559,16 @@ struct TEvPQProxy {
         ui64 StartingReadId;
     };
 
+    struct TEvDirectReadDataSessionConnectedResponse : public TEventLocal<TEvDirectReadDataSessionConnectedResponse, EvDirectReadDataSessionConnected> {
+        TEvDirectReadDataSessionConnectedResponse(ui64 assignId, ui32 tabletGeneration)
+            : AssignId(assignId)
+            , Generation(tabletGeneration)
+        {}
+
+        const ui64 AssignId;
+        ui32 Generation;
+    };
+
     struct TEvDirectReadDataSessionDead : public TEventLocal<TEvDirectReadDataSessionDead, EvDirectReadDataSessionDead> {
         TEvDirectReadDataSessionDead(const TString& session)
             : Session(session)
@@ -597,7 +609,32 @@ struct TEvPQProxy {
         std::shared_ptr<Ydb::Topic::StreamDirectReadMessage::FromServer> Message;;
     };
 
+    struct TEvReadingStarted : public TEventLocal<TEvReadingStarted, EvReadingStarted> {
+        TEvReadingStarted(const TString& topic, ui32 partitionId)
+            : Topic(topic)
+            , PartitionId(partitionId)
+        {}
 
+        TString Topic;
+        ui32 PartitionId;
+    };
+
+    struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds)
+            : Topic(topic)
+            , PartitionId(partitionId)
+            , FirstMessage(first)
+            , AdjacentPartitionIds(std::move(adjacentPartitionIds))
+            , ChildPartitionIds(std::move(childPartitionIds))
+        {}
+
+        TString Topic;
+        ui32 PartitionId;
+        bool FirstMessage;
+
+        std::vector<ui32> AdjacentPartitionIds;
+        std::vector<ui32> ChildPartitionIds;
+    };
 };
 
 struct TLocalRequestBase {

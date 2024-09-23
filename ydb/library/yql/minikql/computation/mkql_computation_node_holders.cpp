@@ -3496,7 +3496,7 @@ KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_OPT)
 KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT)
 #undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple) {
+void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple) {
     isTuple = false;
     encoded = false;
     useIHash = false;

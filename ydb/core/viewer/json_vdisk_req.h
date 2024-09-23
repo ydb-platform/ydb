@@ -60,6 +60,8 @@ protected:
     ui32 PDiskId = 0;
     ui32 VSlotId = 0;
 
+    std::optional<TActorId> TcpProxyId;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -111,6 +113,7 @@ public:
             hFunc(ResponseType, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
+            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -143,7 +146,12 @@ public:
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+        TcpProxyId = ev->Sender;
+    }
+
     void Disconnected() {
+        TcpProxyId = {};
         if (!RetryRequest()) {
             TBase::RequestDone();
         }
@@ -170,6 +178,13 @@ public:
         }
     }
 
+    void PassAway() override {
+        if (TcpProxyId) {
+            this->Send(*TcpProxyId, new TEvents::TEvUnsubscribe);
+        }
+        TBase::PassAway();
+    }
+
     void ReplyAndPassAway(const TString &error = "") {
         try {
             TStringStream json;
@@ -182,35 +197,64 @@ public:
         } catch (const std::exception& e) {
             TBase::Send(Initiator, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
-        TBase::PassAway();
+        PassAway();
     }
-
-
 };
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestParameters<TJsonVDiskRequest<RequestType, ResponseType>> {
-    static TString GetParameters() {
-        return R"___([{"name":"node_id","in":"query","description":"node identifier","required":true,"type":"integer"},
-               {"name":"pdisk_id","in":"query","description":"pdisk identifier","required":true,"type":"integer"},
-               {"name":"vslot_id","in":"query","description":"vdisk slot identifier","required":true,"type":"integer"},)___"
-               +
-               TJsonVDiskRequestHelper<RequestType, ResponseType>::GetAdditionalParameters()
-               +
-               R"___({"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-               {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-               {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-               {"name":"retries","in":"query","description":"number of retries","required":false,"type":"integer"},
-               {"name":"retry_period","in":"query","description":"retry period in ms","required":false,"type":"integer","default":500}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: node_id
+              in: query
+              description: node identifier
+              required: true
+              type: integer
+            - name: pdisk_id
+              in: query
+              description: pdisk identifier
+              required: true
+              type: integer
+            - name: vslot_id
+              in: query
+              description: vdisk slot identifier
+              required: true
+              type: integer
+            )___" + TJsonVDiskRequestHelper<RequestType, ResponseType>::GetAdditionalParameters() + R"___(
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: retries
+              in: query
+              description: number of retries
+              required: false
+              type: integer
+            - name: retry_period
+              in: query
+              description: retry period in ms
+              required: false
+              type: integer
+              default: 500
+            )___");
     }
 };
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestSchema<TJsonVDiskRequest<RequestType, ResponseType>> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<typename ResponseType::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
     }
 };
 

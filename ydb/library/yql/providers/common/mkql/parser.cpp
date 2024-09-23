@@ -215,6 +215,7 @@ TRuntimeNode BuildParseCall(
             if (parseItemStructType->GetMembersCount() == 0) {
                 return ctx.ProgramBuilder.NewStruct(parseItemType, {});
             }
+            MKQL_ENSURE(parseItemStructType->GetMembersCount() == 1, "Only one column in schema supported in raw format");
 
             bool isOptional;
             const auto schemeType = UnpackOptionalData(

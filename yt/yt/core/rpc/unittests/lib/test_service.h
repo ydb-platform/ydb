@@ -70,7 +70,8 @@ using TTestCreateChannelCallback = TCallback<IChannelPtr(const TString& address)
 ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
-    TTestCreateChannelCallback createChannel);
+    TTestCreateChannelCallback createChannel,
+    IMemoryUsageTrackerPtr memoryUsageTracker);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -9,6 +9,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -52,6 +53,27 @@ TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
     YQL_ENSURE(str.TrySplit(':', ownerStr, idStr));
 
     return TKikimrPathId(FromString<ui64>(ownerStr), FromString<ui64>(idStr));
+}
+
+void TReplicationSettings::TOAuthToken::Serialize(NKikimrReplication::TOAuthToken& proto) const {
+    if (Token) {
+        proto.SetToken(Token);
+    }
+    if (TokenSecretName) {
+        proto.SetTokenSecretName(TokenSecretName);
+    }
+}
+
+void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TStaticCredentials& proto) const {
+    if (UserName) {
+        proto.SetUser(UserName);
+    }
+    if (Password) {
+        proto.SetPassword(Password);
+    }
+    if (PasswordSecretName) {
+        proto.SetPasswordSecretName(PasswordSecretName);
+    }
 }
 
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {

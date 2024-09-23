@@ -11,17 +11,17 @@ namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
 
-class TS3Mock: public THttpServer, public THttpServer::ICallBack {
+class TS3Mock: public THttpServer::ICallBack {
 public:
     struct TSettings {
-        TOptions HttpOptions;
+        THttpServer::TOptions HttpOptions;
         bool CorruptETags;
         bool RejectUploadParts;
 
         TSettings();
         explicit TSettings(ui16 port);
 
-        TSettings& WithHttpOptions(const TOptions& opts);
+        TSettings& WithHttpOptions(const THttpServer::TOptions& opts);
         TSettings& WithCorruptETags(bool value);
         TSettings& WithRejectUploadParts(bool value);
 
@@ -65,7 +65,9 @@ public:
     explicit TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings = {});
     explicit TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings = {});
 
-    TClientRequest* CreateClient() override;
+    TClientRequest* CreateClient();
+    bool Start();
+    const char* GetError();
 
     const THashMap<TString, TString>& GetData() const { return Data; }
 
@@ -75,6 +77,7 @@ private:
 
     int NextUploadId = 1;
     THashMap<std::pair<TString, TString>, TVector<TString>> MultipartUploads;
+    THttpServer HttpServer;
 
 }; // TS3Mock
 

@@ -124,8 +124,14 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
+
+            if (op.GetAllowIndexImplLock()) {
+                checks.IsInsideTableIndexPath();
+            } else {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -143,8 +149,11 @@ public:
                 .NotUnderDeleting()
                 .NotUnderOperation()
                 .IsTable()
-                .NotAsyncReplicaTable()
-                .IsCommonSensePath();
+                .NotAsyncReplicaTable();
+
+            if (!op.GetAllowIndexImplLock()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

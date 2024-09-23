@@ -77,7 +77,7 @@ void InitLdapSettingsWithUnavailableHost(NKikimrProto::TLdapAuthentication* ldap
     ldapSettings->SetHost("unavailablehost");
 }
 
-void InitLdapSettingsWithEmptyHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+void InitLdapSettingsWithEmptyHosts(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
     InitLdapSettings(ldapSettings, ldapPort, certificateFile);
     ldapSettings->SetHost("");
 }
@@ -128,6 +128,8 @@ private:
 
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
         initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, CaCertificateFile);
         return appConfig;
@@ -142,7 +144,7 @@ private:
 private:
     TTempFileHandle CaCertificateFile;
     ui16 LdapPort;
-    TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings> Server;
+    TKikimrWithGrpcAndRootSchemaWithAuth Server;
     NYdb::TDriver Connection;
     NConsoleClient::TDummyClient Client;
 };
@@ -208,7 +210,9 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString expectedErrorMessage = "Could not perform initial LDAP bind for dn cn=invalidRobouser,dc=search,dc=yandex,dc=net on server localhost\nInvalid credentials";
+        TStringBuilder expectedErrorMessage;
+        expectedErrorMessage << "Could not perform initial LDAP bind for dn cn=invalidRobouser,dc=search,dc=yandex,dc=net on server "
+                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nInvalid credentials";
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();
@@ -227,7 +231,9 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString expectedErrorMessage = "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server localhost\nInvalid credentials";
+        TStringBuilder expectedErrorMessage;
+        expectedErrorMessage << "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server "
+                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nInvalid credentials";
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();
@@ -246,7 +252,9 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString expectedErrorMessage = "Could not search for filter &(uid=" + login + ")() on server localhost\nBad search filter";
+        TStringBuilder expectedErrorMessage;
+        expectedErrorMessage << "Could not search for filter &(uid=" << login << ")() on server "
+                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nBad search filter";
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();
@@ -273,8 +281,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not start TLS\nCan't contact LDAP server");
     }
 
-    Y_UNIT_TEST(LdapAuthSettingsWithEmptyHost) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "Ldap server host is empty");
+    Y_UNIT_TEST(LdapAuthSettingsWithEmptyHosts) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHosts, "List of ldap server hosts is empty");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyBaseDn) {
@@ -317,7 +325,10 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = nonExistentUser + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString expectedErrorMessage = "LDAP user " + nonExistentUser + " does not exist. LDAP search for filter uid=" + nonExistentUser + " on server localhost return no entries";
+        TStringBuilder expectedErrorMessage;
+        expectedErrorMessage << "LDAP user " << nonExistentUser << " does not exist. LDAP search for filter uid="
+                             << nonExistentUser << " on server "
+                             << "ldap://localhost:" << loginConnection.GetLdapPort() << " return no entries";
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();
@@ -359,7 +370,9 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TString expectedErrorMessage = "LDAP login failed for user uid=" + login + ",dc=search,dc=yandex,dc=net on server localhost\nInvalid credentials";
+        TStringBuilder expectedErrorMessage;
+        expectedErrorMessage << "LDAP login failed for user uid=" << login << ",dc=search,dc=yandex,dc=net on server "
+                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nInvalid credentials";
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();

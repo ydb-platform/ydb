@@ -28,6 +28,7 @@ PEERDIR(
     yt/yt_proto/yt/formats
     library/cpp/yson/node
     yt/cpp/mapreduce/skiff
+    yt/yt/core
 )
 
 END()

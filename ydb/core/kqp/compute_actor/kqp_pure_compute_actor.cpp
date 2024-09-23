@@ -1,6 +1,6 @@
 #include "kqp_pure_compute_actor.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-
 
 namespace NKikimr {
 namespace NKqp {
@@ -12,12 +12,14 @@ bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
 
 TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-    : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
+    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
+    : TBase(executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
     , ComputeCtx(settings.StatsMode)
+    , FederatedQuerySetup(federatedQuerySetup)
 {
+    InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(Meta.Get()), "Invalid task meta: " << GetTask().GetMeta().DebugString());
@@ -40,11 +42,11 @@ void TKqpComputeActor::DoBootstrap() {
 
     TDqTaskRunnerContext execCtx;
 
-    execCtx.FuncRegistry = AppData()->FunctionRegistry;
+    execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.RandomProvider = TAppData::RandomProvider.Get();
     execCtx.TimeProvider = TAppData::TimeProvider.Get();
     execCtx.ComputeCtx = &ComputeCtx;
-    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx);
+    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx, FederatedQuerySetup);
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
@@ -67,7 +69,7 @@ void TKqpComputeActor::DoBootstrap() {
         settings.ReadRanges.push_back(readRange);
     }
 
-    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocator(), execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocatorPtr(), execCtx, settings, logger);
     SetTaskRunner(taskRunner);
 
     auto wakeup = [this]{ ContinueExecute(); };
@@ -276,12 +278,13 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TGUCSettings::TPtr& GUCSettings)
 {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, std::move(traceId), std::move(arena));
+        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings);
 }
 
 } // namespace NKqp

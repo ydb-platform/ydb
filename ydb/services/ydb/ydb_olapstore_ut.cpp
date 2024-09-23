@@ -374,9 +374,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(BulkUpsert, NotNull) {
+    Y_UNIT_TEST(BulkUpsert) {
         for (auto& [type, name] : allowedTypes) {
-            TestBulkUpsert<NotNull>(type);
+            TestBulkUpsert<true>(type);
         }
     }
 
@@ -412,9 +412,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         CompareQueryResults(connection, "log1", "SELECT count(*) FROM <TABLE>;");
     }
 
-    Y_UNIT_TEST_TWIN(ManyTables, NotNull) {
+    Y_UNIT_TEST(ManyTables) {
         for (auto& sharding : testShardingVariants) {
-            TestManyTables<NotNull>(sharding);
+            TestManyTables<true>(sharding);
         }
     }
 
@@ -465,9 +465,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DuplicateRows, NotNull) {
+    Y_UNIT_TEST(DuplicateRows) {
         for (auto& sharding : testShardingVariants) {
-            TestDuplicateRows<NotNull>(sharding);
+            TestDuplicateRows<true>(sharding);
         }
     }
 
@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         CompareQueryResults(connection, "log1", query);
     }
 
-    Y_UNIT_TEST_TWIN(LogLast50, NotNull) {
+    Y_UNIT_TEST(LogLast50) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -505,11 +505,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogLast50ByResource, NotNull) {
+    Y_UNIT_TEST(LogLast50ByResource) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -519,11 +519,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogGrepNonExisting, NotNull) {
+    Y_UNIT_TEST(LogGrepNonExisting) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -533,11 +533,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogGrepExisting, NotNull) {
+    Y_UNIT_TEST(LogGrepExisting) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -547,11 +547,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogNonExistingRequest, NotNull) {
+    Y_UNIT_TEST(LogNonExistingRequest) {
         TString query(R"(
             $request_id = '0xfaceb00c';
 
@@ -563,11 +563,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogExistingRequest, NotNull) {
+    Y_UNIT_TEST(LogExistingRequest) {
         TString query(R"(
             $request_id = '1f';
 
@@ -579,11 +579,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogNonExistingUserId, NotNull) {
+    Y_UNIT_TEST(LogNonExistingUserId) {
         // Should be fixed after Arrow kernel implementation for JSON_VALUE
         // https://st.yandex-team.ru/KIKIMR-17903
         TString query(R"(
@@ -598,11 +598,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogExistingUserId, NotNull) {
+    Y_UNIT_TEST(LogExistingUserId) {
         // Should be fixed after Arrow kernel implementation for JSON_VALUE
         // https://st.yandex-team.ru/KIKIMR-17903
         TString query(R"(
@@ -617,11 +617,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogPagingBefore, NotNull) {
+    Y_UNIT_TEST(LogPagingBefore) {
         TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
@@ -639,11 +639,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogPagingBetween, NotNull) {
+    Y_UNIT_TEST(LogPagingBetween) {
         TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
@@ -667,11 +667,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogPagingAfter, NotNull) {
+    Y_UNIT_TEST(LogPagingAfter) {
         TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
@@ -695,11 +695,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogCountByResource, NotNull) {
+    Y_UNIT_TEST(LogCountByResource) {
         TString query(R"(
             SELECT count(*)
               FROM <TABLE>
@@ -708,11 +708,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogWithUnionAllAscending, NotNull) {
+    Y_UNIT_TEST(LogWithUnionAllAscending) {
         TString query(R"(
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -740,11 +740,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogWithUnionAllDescending, NotNull) {
+    Y_UNIT_TEST(LogWithUnionAllDescending) {
         TString query(R"(
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -772,11 +772,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogTsRangeDescending, NotNull) {
+    Y_UNIT_TEST(LogTsRangeDescending) {
         TString query(R"(
                 --PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 }

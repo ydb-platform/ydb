@@ -21,6 +21,12 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTracingAttributes
+{
+    TTraceId TraceId = InvalidTraceId;
+    TSpanId SpanId = InvalidSpanId;
+};
+
 //! TSpanContext represents span identity propagated across the network.
 //!
 //! See https://opentracing.io/specification/
@@ -33,7 +39,6 @@ struct TSpanContext
 };
 
 void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStringBuf spec);
-TString ToString(const TSpanContext& context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -272,8 +277,6 @@ DEFINE_REFCOUNTED_TYPE(TTraceContext)
 
 void FormatValue(TStringBuilderBase* builder, const TTraceContextPtr& context, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TTraceContext* context, TStringBuf spec);
-TString ToString(const TTraceContextPtr& context);
-TString ToString(const TTraceContextPtr* context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -299,7 +302,9 @@ TTraceContextPtr CreateTraceContextFromCurrent(TString spanName);
 class TCurrentTraceContextGuard
 {
 public:
-    explicit TCurrentTraceContextGuard(TTraceContextPtr traceContext);
+    explicit TCurrentTraceContextGuard(
+        TTraceContextPtr traceContext,
+        TSourceLocation location = FROM_HERE);
     TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
     ~TCurrentTraceContextGuard();
 
@@ -319,7 +324,7 @@ private:
 class TNullTraceContextGuard
 {
 public:
-    TNullTraceContextGuard();
+    TNullTraceContextGuard(TSourceLocation location = FROM_HERE);
     TNullTraceContextGuard(TNullTraceContextGuard&& other);
     ~TNullTraceContextGuard();
 
@@ -398,23 +403,16 @@ void AnnotateTraceContext(TFn&& fn);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO(babenko): move impl to cpp.
 class TTraceContextHandler
 {
 public:
-    TTraceContextHandler()
-        : TraceContext_(NTracing::TryGetCurrentTraceContext())
-    { }
+    TTraceContextHandler();
 
-    NTracing::TCurrentTraceContextGuard MakeTraceContextGuard() const
-    {
-        return NTracing::TCurrentTraceContextGuard(TraceContext_);
-    }
+    NTracing::TCurrentTraceContextGuard MakeTraceContextGuard() const;
 
-    void UpdateTraceContext()
-    {
-        TraceContext_ = NTracing::TryGetCurrentTraceContext();
-    }
+    void UpdateTraceContext();
+
+    std::optional<TTracingAttributes> GetTracingAttributes() const;
 
 private:
     NTracing::TTraceContextPtr TraceContext_;

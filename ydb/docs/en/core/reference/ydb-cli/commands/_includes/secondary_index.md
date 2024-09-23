@@ -10,7 +10,7 @@ By using the `table index` command, you can create and delete [secondary indexes
 
 You can also add or delete a secondary index with the [ADD INDEX and DROP INDEX](../../../../yql/reference/syntax/alter_table.md#secondary-index) directives of YQL ALTER TABLE.
 
-To learn about secondary indexes and their use in application development, see [Secondary indexes](../../../../best_practices/secondary_indexes.md) under "Recommendations".
+To learn about secondary indexes and their use in application development, see [Secondary indexes](../../../../dev/secondary-indexes.md) under "Recommendations".
 
 ## Creating a secondary index {#add}
 

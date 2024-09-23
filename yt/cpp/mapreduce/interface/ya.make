@@ -11,6 +11,7 @@ SRCS(
     cypress.cpp
     errors.cpp
     format.cpp
+    helpers.cpp
     job_counters.cpp
     job_statistics.cpp
     io.cpp
@@ -29,6 +30,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface/logging
     yt/yt_proto/yt/formats
     yt/yt/library/tvm
+    yt/yt/core
 )
 
 GENERATE_ENUM_SERIALIZATION(client_method_options.h)

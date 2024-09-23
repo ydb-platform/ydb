@@ -1,24 +1,37 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
-import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
-import "ydb/library/services/services.proto";
+import "ydb/core/protos/node_limits.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
 import "ydb/library/actors/protos/actors.proto";
-
+import "ydb/library/services/services.proto";
 
 package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
 
 
+message TPartitionCounterData {
+    optional uint64 MessagesWrittenTotal = 1;
+    optional uint64 MessagesWrittenGrpc = 2;
+    optional uint64 BytesWrittenTotal = 3;
+    optional uint64 BytesWrittenGrpc = 4;
+    optional uint64 BytesWrittenUncompressed = 5;
+    repeated uint64 MessagesSizes = 6;
+    //ToDo: !! InputLag = 7
+}
+
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
+    optional TPartitionCounterData CounterData = 4;
 }
 
 message TPartitionTxMeta {
@@ -208,11 +221,11 @@ message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
             optional string Endpoint = 1;
-            optional string ServiceAccountKey = 2;
+            optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
         }
         oneof Credentials {
-            string OauthToken = 1;
-            string JwtParams = 2;
+            string OauthToken = 1 [(Ydb.sensitive) = true];
+            string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
         }
     }
@@ -290,6 +303,17 @@ enum EConsumerScalingSupport {
     PARTIAL_SUPPORT = 2;
     // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
     FULL_SUPPORT = 3;
+}
+
+message TOffloadConfig {
+    message TIncrementalBackup {
+        optional string DstPath = 1;
+        optional NKikimrProto.TPathID DstPathId = 2;
+    }
+
+    oneof Strategy {
+        TIncrementalBackup IncrementalBackup = 1;
+    }
 }
 
 message TPQTabletConfig {
@@ -372,17 +396,33 @@ message TPQTabletConfig {
     }
     optional EMeteringMode MeteringMode = 34;
 
+    enum TPartitionStrategyType {
+        // The autoscaling is disabled.
+        DISABLED = 0;
+        // The autoscaling algorithm will increase partitions count depending on the load characteristics.
+        // The autoscaling algorithm will never decrease the number of partitions.
+        CAN_SPLIT = 1;
+        // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
+        CAN_SPLIT_AND_MERGE = 2;
+    }
+
     // Strategy for automatically changing the number of topic partitions depending on the load
     message TPartitionStrategy {
         // The minimum number of partitions that will be supported by the strategy
         optional uint32 MinPartitionCount = 1 [default = 1];
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
-        required uint32 MaxPartitionCount = 2;
+        optional uint32 MaxPartitionCount = 2 [default = 1];;
+        optional uint32 ScaleThresholdSeconds = 3 [default = 300];
+        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
+        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
+        required TPartitionStrategyType PartitionStrategyType = 6 [default = DISABLED];
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
     repeated TPartition AllPartitions = 36; // filled by schemeshard
+
+    optional TOffloadConfig OffloadConfig = 38;
 }
 
 message THeartbeat {
@@ -603,10 +643,11 @@ message TReleasePartition {
     optional uint64 Generation = 2;
     optional string Session = 3;
     optional string ClientId = 4;
-    optional uint32 Count = 5;
+    optional uint32 Count = 5 [deprecated = true]; // Remove at 2025-1
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
+    reserved 9; // repeated uint32 Partition = 9
 }
 
 message TPartitionReleased {
@@ -713,6 +754,12 @@ message TAggregatedCounters {
     }
 }
 
+enum EScaleStatus {
+    NORMAL = 0;
+    NEED_SPLIT = 1;
+    NEED_MERGE = 2;
+}
+
 message TStatusResponse {
     enum EStatus {
         STATUS_OK = 0;
@@ -773,6 +820,11 @@ message TStatusResponse {
 
         optional int64 UsedReserveSize = 31;
         optional TAggregatedCounters AggregatedCounters = 32;
+
+        optional uint32 Generation = 33;
+        optional uint64 Cookie = 34;
+
+        optional EScaleStatus ScaleStatus = 35;
     }
 
     message TConsumerResult {
@@ -811,6 +863,9 @@ message THasDataInfoResponse { //signal
     optional uint64 Cookie = 2;
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
+    repeated uint32 AdjacentPartitionIds = 6;
+    repeated uint32 ChildPartitionIds = 7;
 }
 
 message TBatchHeader {
@@ -888,6 +943,7 @@ message TPartitionOperation {
     optional uint64 End = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
+    optional uint32 SupportivePartition = 6;
 };
 
 message TDataTransaction {
@@ -918,6 +974,19 @@ message TEvProposeTransaction {
         TDataTransaction Data = 3;
         TConfigTransaction Config = 4;
     }
+    optional NActorsProto.TActorId SupportivePartitionActor = 5;
+};
+
+message TError {
+    enum EKind {
+        OK = 0;
+        ERROR = 1;
+        INTERNAL = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EKind Kind = 1;
+    optional string Reason = 2;
 };
 
 message TEvProposeTransactionResult {
@@ -940,6 +1009,7 @@ message TEvProposeTransactionResult {
     optional string StatusMessage = 7;
     optional uint64 Step = 8;
     repeated fixed64 DomainCoordinators = 9;
+    repeated TError Errors = 10;
 };
 
 message TEvCancelTransactionProposal {
@@ -972,10 +1042,31 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
-// The consumer's reading of the partition is finished
+// The consumer's reading of the partition is finished  (from the partition)
 message TEvReadingPartitionStatusRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
+};
+
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
+message TEvPartitionScaleStatusChanged {
+    required uint32 PartitionId = 1;
+    required EScaleStatus ScaleStatus = 2;
 };
 
 message TTransaction {

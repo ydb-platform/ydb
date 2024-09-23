@@ -22,8 +22,7 @@ void FromProto(TSummarySnapshot<double>* summary, const NProto::TSummaryDouble& 
         proto.min(),
         proto.max(),
         proto.last(),
-        proto.count()
-    );
+        proto.count());
 }
 
 void ToProto(NProto::TSummaryDuration* proto, const TSummarySnapshot<TDuration>& summary)
@@ -42,8 +41,7 @@ void FromProto(TSummarySnapshot<TDuration>* summary, const NProto::TSummaryDurat
         TDuration::FromValue(proto.min()),
         TDuration::FromValue(proto.max()),
         TDuration::FromValue(proto.last()),
-        proto.count()
-    );
+        proto.count());
 }
 
 void ToProto(NProto::THistogramSnapshot* proto, const THistogramSnapshot& histogram)

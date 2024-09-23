@@ -35,6 +35,15 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
@@ -294,6 +303,7 @@
                                                                                                                                     "x1 (-\u221e, +\u221e)",
                                                                                                                                     "x2 (-\u221e, +\u221e)"
                                                                                                                                 ],
+                                                                                                                                "Scan": "Parallel",
                                                                                                                                 "Table": "postgres_jointest/join0.test_plan/ononequery1"
                                                                                                                             }
                                                                                                                         ],
@@ -332,6 +342,7 @@
                                                                                                                                                     "y1 (-\u221e, +\u221e)",
                                                                                                                                                     "y2 (-\u221e, +\u221e)"
                                                                                                                                                 ],
+                                                                                                                                                "Scan": "Parallel",
                                                                                                                                                 "Table": "postgres_jointest/join0.test_plan/ononequery2"
                                                                                                                                             }
                                                                                                                                         ],
@@ -371,6 +382,7 @@
                                                                                                 "ReadRanges": [
                                                                                                     "f1 (-\u221e, +\u221e)"
                                                                                                 ],
+                                                                                                "Scan": "Parallel",
                                                                                                 "Table": "postgres_jointest/join0.test_plan/int4_tbl"
                                                                                             }
                                                                                         ],
@@ -417,6 +429,7 @@
                                                                     "unique1 (-\u221e, +\u221e)",
                                                                     "unique2 (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
                                                             }
                                                         ],

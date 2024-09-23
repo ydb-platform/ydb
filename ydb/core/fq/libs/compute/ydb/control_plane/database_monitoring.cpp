@@ -34,6 +34,8 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
         ::NMonitoring::TDynamicCounters::TCounterPtr InstantLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr AverageLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr QuotedLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AvailableLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TargetLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingQueueSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingQueueOverload;
 
@@ -51,6 +53,8 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
             InstantLoadPercentage = subComponent->GetCounter("InstantLoadPercentage", false);
             AverageLoadPercentage = subComponent->GetCounter("AverageLoadPercentage", false);
             QuotedLoadPercentage = subComponent->GetCounter("QuotedLoadPercentage", false);
+            AvailableLoadPercentage = subComponent->GetCounter("AvailableLoadPercentage", false);
+            TargetLoadPercentage = subComponent->GetCounter("TargetLoadPercentage", false);
             PendingQueueSize = subComponent->GetCounter("PendingQueueSize", false);
             PendingQueueOverload = subComponent->GetCounter("PendingQueueOverload", true);
         }
@@ -78,7 +82,10 @@ public:
         , PendingQueueSize(config.GetPendingQueueSize())
         , Strict(config.GetStrict())
         , CpuNumber(config.GetCpuNumber())
-    {}
+    {
+        *Counters.AvailableLoadPercentage = 100;
+        *Counters.TargetLoadPercentage = static_cast<ui64>(MaxClusterLoad * 100);
+    }
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_MONITORING_ACTOR";
 
@@ -155,7 +162,7 @@ public:
         auto& request = *ev.Get()->Get();
 
         if (request.Quota > 1.0) {
-            Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Incorrect quota value (exceeds 1.0) " << request.Quota}}), 0, ev->Cookie);
+            Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Incorrect quota value (exceeds 1.0) " << request.Quota}}), 0, ev->Cookie);
         } else {
             if (!request.Quota) {
                 request.Quota = DefaultQueryLoad;
@@ -163,7 +170,7 @@ public:
             CheckLoadIsOutdated();
             if (MaxClusterLoad > 0.0 && ((!Ready && Strict) || QuotedLoad >= MaxClusterLoad)) {
                 if (PendingQueue.size() >= PendingQueueSize) {
-                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{
+                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED, NYql::TIssues{
                         NYql::TIssue{TStringBuilder{}
                         << "Cluster is overloaded, current quoted load " << static_cast<ui64>(QuotedLoad * 100)
                         << "%, average load " << static_cast<ui64>(AverageLoad * 100) << "%"
@@ -176,7 +183,7 @@ public:
             } else {
                 QuotedLoad += request.Quota;
                 *Counters.QuotedLoadPercentage = static_cast<ui64>(QuotedLoad * 100);
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(QuotedLoad * 100), 0, ev->Cookie);
             }
         }
     }
@@ -214,7 +221,7 @@ public:
             if (Strict) {
                 while (PendingQueue.size()) {
                     auto& ev = PendingQueue.front();
-                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load info is not available"}}), 0, ev->Cookie);
+                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load info is not available"}}), 0, ev->Cookie);
                     PendingQueue.pop();
                     Counters.PendingQueueSize->Dec();
                 }
@@ -228,11 +235,11 @@ public:
             auto& ev = PendingQueue.front();
             auto& request = *ev.Get()->Get();
             if (request.Deadline && now >= request.Deadline) {
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::CANCELLED, NYql::TIssues{
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::CANCELLED, NYql::TIssues{
                     NYql::TIssue{TStringBuilder{} << "Deadline reached " << request.Deadline}}), 0, ev->Cookie);
             } else {
                 QuotedLoad += request.Quota;
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(QuotedLoad * 100), 0, ev->Cookie);
             }
             PendingQueue.pop();
             Counters.PendingQueueSize->Dec();

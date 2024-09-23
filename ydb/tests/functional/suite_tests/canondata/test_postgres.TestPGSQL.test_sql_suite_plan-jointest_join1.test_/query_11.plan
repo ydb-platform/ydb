@@ -34,7 +34,13 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 8
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
                                                         "InternalOperatorId": 1
@@ -89,6 +95,7 @@
                                                                                     "i (-\u221e, +\u221e)",
                                                                                     "k (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join1.test_plan/J2_TBL"
                                                                             }
                                                                         ],
@@ -136,6 +143,7 @@
                                                                                     "j (-\u221e, +\u221e)",
                                                                                     "t (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join1.test_plan/J1_TBL"
                                                                             }
                                                                         ],

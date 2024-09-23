@@ -14,7 +14,7 @@ namespace NYdb::NQuery {
 using namespace NThreading;
 
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto) {
-    switch (txSettings.Mode_) {
+    switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
             proto->mutable_serializable_read_write();
             break;
@@ -77,7 +77,7 @@ public:
                     stats = TExecStats(std::move(*self->Response_.mutable_exec_stats()));
                 }
 
-                if (self->Response_.has_tx_meta() && self->Session_.Defined()) {
+                if (self->Response_.has_tx_meta() && self->Response_.tx_meta().id() && self->Session_.Defined()) {
                     tx = TTransaction(self->Session_.GetRef(), self->Response_.tx_meta().id());
                 }
 
@@ -207,6 +207,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+    request.set_pool_id(settings.PoolId_);
     request.mutable_query_content()->set_text(query);
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
     if (session.Defined()) {
@@ -217,6 +218,10 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 
     if (settings.ConcurrentResultSets_) {
         request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
+    }
+
+    if (settings.OutputChunkMaxSize_) {
+        request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
     }
 
     if (txControl.HasTx()) {

@@ -15,6 +15,9 @@ SET(ORIG_SOURCES
     mkql_block_agg_some.cpp
     mkql_block_agg_sum.cpp
     mkql_block_coalesce.cpp
+    mkql_block_container.cpp
+    mkql_block_exists.cpp
+    mkql_block_getelem.cpp
     mkql_block_if.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp
@@ -22,7 +25,6 @@ SET(ORIG_SOURCES
     mkql_block_func.cpp
     mkql_block_skiptake.cpp
     mkql_block_top.cpp
-    mkql_block_tuple.cpp
     mkql_blocks.cpp
     mkql_callable.cpp
     mkql_chain_map.cpp

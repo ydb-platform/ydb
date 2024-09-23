@@ -3,6 +3,7 @@
 #include "yql_yt_gateway.h"
 #include "yql_yt_table_desc.h"
 #include "yql_yt_table.h"
+#include "yql_yt_io_discovery_walk_folders.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
@@ -43,6 +44,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     TMaybe<bool> MonotonicKeys;
     size_t WriteValidateCount = 0;
     TMaybe<TString> Hash;
+    TString ColumnGroupSpec;
 
     bool Fill(
         const TString& cluster, const TString& table, TExprContext& ctx,
@@ -85,6 +87,7 @@ struct TYtState : public TThrRefBase {
     void LeaveEvaluation(ui64 id);
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
+    bool HybridTakesTooLong() const;
 
     TString SessionId;
     IYtGateway::TPtr Gateway;
@@ -96,25 +99,32 @@ struct TYtState : public TThrRefBase {
     THashMap<std::pair<TString, TString>, TString> AnonymousLabels; // cluster + label -> name
     std::unordered_map<ui64, TString> NodeHash; // unique id -> hash
     THashMap<ui32, TOperationStatistics> Statistics; // public id -> stat
-    THashMap<TString, TOperationStatistics> HybridStatistics; // operation name -> stat
+    THashMap<TString, TOperationStatistics> HybridStatistics; // subfolder -> stat
+    THashMap<TString, THashMap<TString, TOperationStatistics>> HybridOpStatistics; // operation name -> subfolder -> stat
     TMutex StatisticsMutex;
     THashSet<std::pair<TString, TString>> Checkpoints; // Set of checkpoint tables
     THolder<IDqIntegration> DqIntegration_;
     ui32 NextEpochId = 1;
     bool OnlyNativeExecution = false;
+    bool PassiveExecution = false;
     TDuration TimeSpentInHybrid;
     NMonotonic::TMonotonic HybridStartTime;
     std::unordered_set<ui32> HybridInFlightOprations;
+    THashMap<ui64, TWalkFoldersImpl> WalkFoldersState;
+    ui32 PlanLimits = 10;
+
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;
 };
 
 
+class TYtGatewayConfig;
+std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx);
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateYtDataSink(TYtState::TPtr state);
 
-TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway);
+TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, ui32 planLimits = 10);
 
 const THashSet<TStringBuf>& YtDataSourceFunctions();
 const THashSet<TStringBuf>& YtDataSinkFunctions();

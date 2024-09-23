@@ -1,7 +1,7 @@
 #pragma once
 
 #include "blob.h"
-#include <ydb/core/tx/columnshard/engines/reader/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
@@ -9,24 +9,16 @@ class TVersionedIndex;
 
 namespace NKikimr::NColumnShard {
 
-using NOlap::TReadMetadata;
 using NOlap::IBlobInUseTracker;
 
 class TInFlightReadsTracker {
 public:
     // Returns a unique cookie associated with this request
-    ui64 AddInFlightRequest(NOlap::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+    [[nodiscard]] TConclusion<ui64> AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
         const ui64 cookie = NextCookie++;
-        AddToInFlightRequest(cookie, readMeta, index);
-        return cookie;
-    }
-
-    // Returns a unique cookie associated with this request
-    template <class TReadMetadataList>
-    ui64 AddInFlightRequest(const TReadMetadataList& readMetaList, const NOlap::TVersionedIndex* index) {
-        const ui64 cookie = NextCookie++;
-        for (const auto& readMetaPtr : readMetaList) {
-            AddToInFlightRequest(cookie, readMetaPtr, index);
+        auto status = AddToInFlightRequest(cookie, readMeta, index);
+        if (!status) {
+            return status;
         }
         return cookie;
     }
@@ -51,12 +43,12 @@ public:
     }
 
 private:
-    void AddToInFlightRequest(const ui64 cookie, NOlap::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
+    [[nodiscard]] TConclusionStatus AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 
 private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 NextCookie{1};
-    THashMap<ui64, TList<NOlap::TReadMetadataBase::TConstPtr>> RequestsMeta;
+    THashMap<ui64, TList<NOlap::NReader::TReadMetadataBase::TConstPtr>> RequestsMeta;
     THashMap<ui64, ui64> PortionUseCount;
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 };

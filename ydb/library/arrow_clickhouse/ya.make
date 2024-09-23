@@ -29,7 +29,7 @@ SRCS(
 END()
 
 RECURSE(
-    Common
     Columns
+    Common
     DataStreams
 )

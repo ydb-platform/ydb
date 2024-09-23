@@ -123,6 +123,10 @@ function RenderRemoveConfigItems(content) {
     return "<b>RemoveItems:</b>\n\tCookies:\n\t\t" + cf.join("\n\t\t");
 }
 
+function RenderYamlConfigChange(content) {
+    return "<b>click to view</b>"
+}
+
 const ActionRenderers = {
     "AddConfigItem": RenderAddConfigItem,
     "RemoveConfigItem": RenderRemoveConfigItem,
@@ -162,9 +166,15 @@ function onConsoleLogLoaded(data) {
         var cell2 = document.createElement('td');
         var cell3 = document.createElement('td');
         var cell4 = document.createElement('td');
+        var isYamlChange = false;
 
         if (rec['Data'].hasOwnProperty('AffectedKinds')) {
-            cell3.innerHTML = "<pre>" + rec['Data']['AffectedKinds'].map(x => cmsEnums.get('ItemKinds', x)).join("\n") + "</pre>";
+            var affectedKinds = rec['Data']['AffectedKinds'];
+            if (affectedKinds.length === 1 && affectedKinds[0] === 32768) {
+                isYamlChange = true;
+            } else {
+                cell3.innerHTML = "<pre>" + affectedKinds.map(x => cmsEnums.get('ItemKinds', x)).join("\n") + "</pre>";
+            }
         }
 
         cell0.textContent = rec['Id'];
@@ -173,15 +183,20 @@ function onConsoleLogLoaded(data) {
         cell1.textContent = timestamp.toLocaleString('en-GB', { timeZone: 'UTC' });
         cell2.textContent = rec['User'];
         var contents = [];
-        for (var action of rec['Data']['Action']['Actions']) {
-            var key = (Object.keys(action)[0]);
-            var content = action[key];
-            contents.push(ActionRenderers[key](content));
+        if (!isYamlChange) {
+            for (var action of rec['Data']['Action']['Actions']) {
+                var key = (Object.keys(action)[0]);
+                var content = action[key];
+                contents.push(ActionRenderers[key](content));
+            }
+            cell4.innerHTML = "<pre>" + contents.join("<br/>") + "</pre>";
+            cell4.title = JSON.stringify(rec['Data']['Action'], null, 2);
+            cell4.setAttribute('data', JSON.stringify(rec['Data'], null, 2));
+        } else {
+            cell4.innerHTML = RenderYamlConfigChange(rec['Data']['YamlConfigChange']);
+            cell4.title = "yaml-config-change";
+            cell4.setAttribute('data', JSON.stringify(rec['Data'], null, 2));
         }
-        cell4.innerHTML = "<pre>" + contents.join("<br/>") + "</pre>";
-        cell4.title = JSON.stringify(rec['Data']['Action'], null, 2);
-        cell4.setAttribute('data', JSON.stringify(rec['Data'], null, 2));
-
         line.appendChild(cell0);
         line.appendChild(cell1);
         line.appendChild(cell2);
@@ -322,53 +337,133 @@ function copyDataToClipboard(ev) {
     temp.remove();
 }
 
+function GnuNormalFormat(item) {
+    var i,
+        nf = [],
+        op,
+        str = [];
+
+    // del add description
+    // 0   >0  added count to rhs
+    // >0  0   deleted count from lhs
+    // >0  >0  changed count lines
+    if (item.lhs.del === 0 && item.rhs.add > 0) {
+        op = 'a';
+    } else if (item.lhs.del > 0 && item.rhs.add === 0) {
+        op = 'd';
+    } else {
+        op = 'c';
+    }
+
+    function encodeSide(side, key) {
+        // encode side as a start,stop if a range
+        str.push(side.at + 1);
+        if (side[key] > 1) {
+            str.push(',');
+            str.push(side[key] + side.at);
+        }
+    }
+    encodeSide(item.lhs, 'del');
+    str.push(op);
+    encodeSide(item.rhs, 'add');
+
+    nf.push(str.join(''));
+    for (i = item.lhs.at; i < item.lhs.at + item.lhs.del; ++i) {
+        nf.push('< ' + item.lhs.ctx.getLine(i));
+    }
+    if (item.rhs.add && item.lhs.del) {
+        nf.push('---');
+    }
+    for (i = item.rhs.at; i < item.rhs.at + item.rhs.add; ++i) {
+        nf.push('> ' + item.rhs.ctx.getLine(i));
+    }
+    return nf.join('\n');
+}
+
+function renderCopyablePre(data) {
+    var div = $("<div></div>");
+    var pre = $("<pre></pre>");
+    pre.html(data);
+    div.append(pre);
+    var copy = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
+    copy.click({elem: pre}, copyDataToClipboard);
+    div.append(copy);
+    return div;
+}
+
 function renderConsolePopup(data, user, time) {
     // set header
     $("#popup-header").text("Change by \"" + user + "\" at " + time);
 
     var div = $("<div></div>");
 
-    // create action view
-    var cmdDiv = $("<div></div>")
-    var cmd = $("<pre></pre>");
-    cmd.html(syntaxHighlight(JSON.stringify(data['Action'], null, 2)));
-    var copyCmd = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
-    copyCmd.click({elem: cmd}, copyDataToClipboard);
-    cmdDiv.append(copyCmd);
-    cmdDiv.append(cmd);
-    div.append(renderSpoiler("Command", cmdDiv));
-
     if (!data.hasOwnProperty('AffectedKinds')) {
         data['AffectedKinds'] = [];
     }
 
-    if (data.hasOwnProperty("AffectedConfigs")) {
-        for (var i in data['AffectedConfigs']) {
-            var oldConfigDiv = $("<div></div>")
-            var oldConfig = $("<pre></pre>");
-            var oldConfigData = data['AffectedConfigs'][i]['OldConfig'];
-            oldConfigData = filterUnaffected(oldConfigData, data['AffectedKinds']);
-            oldConfig.html(syntaxHighlight(JSON.stringify(oldConfigData, null, 2)));
-            var copyOldConfig = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
-            copyOldConfig.click({elem: oldConfig}, copyDataToClipboard);
-            oldConfigDiv.append(copyOldConfig);
-            oldConfigDiv.append(oldConfig);
-            div.append(renderSpoiler(
-                "Old Config for Tenant:\"" + data['AffectedConfigs'][i]['Tenant'] +
-                "\" NodeType:\"" + data['AffectedConfigs'][i]['NodeType'] + "\"", oldConfigDiv));
+    var affectedKinds = data['AffectedKinds'];
+    if (affectedKinds.length === 1 && affectedKinds[0] === 32768) {
+        var cmd = renderCopyablePre(syntaxHighlight(JSON.stringify(data, null, 2)));
+        div.append(renderSpoiler("Raw", cmd));
 
-            var newConfigDiv = $("<div></div>")
-            var newConfig = $("<pre></pre>");
-            var newConfigData = data['AffectedConfigs'][i]['NewConfig'];
-            newConfigData = filterUnaffected(newConfigData, data['AffectedKinds']);
-            newConfig.html(syntaxHighlight(JSON.stringify(newConfigData, null, 2)));
-            var copyNewConfig = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
-            copyNewConfig.click({elem: newConfig}, copyDataToClipboard);
-            newConfigDiv.append(copyNewConfig);
-            newConfigDiv.append(newConfig);
-            div.append(renderSpoiler(
-                "New Config for Tenant:\"" + data['AffectedConfigs'][i]['Tenant'] +
-                "\" NodeType:\"" + data['AffectedConfigs'][i]['NodeType'] + "\"", newConfigDiv));
+        var lhs = data['YamlConfigChange']['OldYamlConfig'];
+        var old = renderCopyablePre(lhs);
+        div.append(renderSpoiler("Old", old));
+
+        var rhs = data['YamlConfigChange']['NewYamlConfig'];
+        var new_ = renderCopyablePre(rhs);
+        div.append(renderSpoiler("New", new_));
+
+        const diff = Myers.diff(lhs, rhs);
+
+        var i = 0;
+        var out = [];
+        for (i = 0; i < diff.length; ++i) {
+            out.push(GnuNormalFormat(diff[i]));
+        }
+        var result = out.join('\n')
+
+        var diffs = renderCopyablePre(result);
+        div.append(renderSpoiler("Diff", diffs));
+    } else {
+        // create action view
+        var cmdDiv = $("<div></div>")
+        var cmd = $("<pre></pre>");
+        cmd.html(syntaxHighlight(JSON.stringify(data['Action'], null, 2)));
+        var copyCmd = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
+        copyCmd.click({elem: cmd}, copyDataToClipboard);
+        cmdDiv.append(copyCmd);
+        cmdDiv.append(cmd);
+        div.append(renderSpoiler("Command", cmdDiv));
+
+        if (!isYamlChangedata.hasOwnProperty("AffectedConfigs") && !isYamlChange) {
+            for (var i in data['AffectedConfigs']) {
+                var oldConfigDiv = $("<div></div>")
+                var oldConfig = $("<pre></pre>");
+                var oldConfigData = data['AffectedConfigs'][i]['OldConfig'];
+                oldConfigData = filterUnaffected(oldConfigData, affectedKinds);
+                oldConfig.html(syntaxHighlight(JSON.stringify(oldConfigData, null, 2)));
+                var copyOldConfig = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
+                copyOldConfig.click({elem: oldConfig}, copyDataToClipboard);
+                oldConfigDiv.append(copyOldConfig);
+                oldConfigDiv.append(oldConfig);
+                div.append(renderSpoiler(
+                    "Old Config for Tenant:\"" + data['AffectedConfigs'][i]['Tenant'] +
+                    "\" NodeType:\"" + data['AffectedConfigs'][i]['NodeType'] + "\"", oldConfigDiv));
+
+                var newConfigDiv = $("<div></div>")
+                var newConfig = $("<pre></pre>");
+                var newConfigData = data['AffectedConfigs'][i]['NewConfig'];
+                newConfigData = filterUnaffected(newConfigData, affectedKinds);
+                newConfig.html(syntaxHighlight(JSON.stringify(newConfigData, null, 2)));
+                var copyNewConfig = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
+                copyNewConfig.click({elem: newConfig}, copyDataToClipboard);
+                newConfigDiv.append(copyNewConfig);
+                newConfigDiv.append(newConfig);
+                div.append(renderSpoiler(
+                    "New Config for Tenant:\"" + data['AffectedConfigs'][i]['Tenant'] +
+                    "\" NodeType:\"" + data['AffectedConfigs'][i]['NodeType'] + "\"", newConfigDiv));
+            }
         }
     }
 

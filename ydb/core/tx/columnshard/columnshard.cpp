@@ -4,7 +4,10 @@
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
+#include "bg_tasks/manager/manager.h"
 
+#include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
@@ -18,13 +21,18 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
+    if (BackgroundSessionsManager) {
+        BackgroundSessionsManager->Stop();
+    }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
 
     StoragesManager->Stop();
+    DataLocksManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);
     }
+    NYDBTest::TControllers::GetColumnShardController()->OnCleanupActors(TabletID());
 }
 
 void TColumnShard::BecomeBroken(const TActorContext& ctx) {
@@ -39,9 +47,8 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
         for (auto&& i : TablesManager.GetTables()) {
-            ActivateTiering(i.first, i.second.GetTieringUsage(), true);
+            ActivateTiering(i.first, i.second.GetTieringUsage());
         }
-        OnTieringModified();
 
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
@@ -49,18 +56,20 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx);
     }
+    CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
+    BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
+    NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
-
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
 
     const auto selfActorId = SelfId();
-    StoragesManager->Initialize();
+    StoragesManager->Initialize(Executor()->Generation());
     Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
         [selfActorId](const TActorContext& ctx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_new_event");
@@ -70,11 +79,11 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         Tiers->TakeConfigs(NYDBTest::TControllers::GetColumnShardController()->GetFallbackTiersSnapshot(), nullptr);
     }
+    BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(selfActorId, (NOlap::TTabletId)TabletID(), *this));
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
     Limits.RegisterControls(icb);
-    CompactionLimits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
@@ -222,7 +231,6 @@ void TColumnShard::UpdateIndexCounters() {
     auto& stats = TablesManager.MutablePrimaryIndex().GetTotalStats();
     SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
     SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
-    SetCounter(COUNTER_INDEX_COLUMN_METADATA_BYTES, stats.ColumnMetadataBytes);
     SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
     SetCounter(COUNTER_INSERTED_BLOBS, stats.GetInsertedStats().Blobs);
     SetCounter(COUNTER_INSERTED_ROWS, stats.GetInsertedStats().Rows);
@@ -255,7 +263,7 @@ void TColumnShard::UpdateIndexCounters() {
         << " s-compacted " << stats.GetSplitCompactedStats().DebugString()
         << " inactive " << stats.GetInactiveStats().DebugString()
         << " evicted " << stats.GetEvictedStats().DebugString()
-        << " column records " << stats.ColumnRecords << " meta bytes " << stats.ColumnMetadataBytes
+        << " column records " << stats.ColumnRecords
         << " at tablet " << TabletID());
 }
 
@@ -321,14 +329,6 @@ void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
 
     tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
     tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
-}
-
-TDuration TColumnShard::GetControllerPeriodicWakeupActivationPeriod() {
-    return NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(TSettings::DefaultPeriodicWakeupActivationPeriod);
-}
-
-TDuration TColumnShard::GetControllerStatsReportInterval() {
-    return NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval);
 }
 
 void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {

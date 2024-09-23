@@ -3,6 +3,7 @@
 #include "block_item.h"
 #include "block_reader.h"
 
+
 #include <ydb/library/yql/public/udf/udf_ptr.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 #include <ydb/library/yql/public/udf/udf_type_size_check.h>
@@ -147,6 +148,39 @@ public:
         return lhs.AsStringRef() < rhs.AsStringRef();
     }
 };
+
+template<typename TTzType, bool Nullable>
+class TTzDateBlockItemComparator : public TBlockItemComparatorBase<TTzDateBlockItemComparator<TTzType, Nullable>, Nullable> {
+    using TLayout = typename TDataType<TTzType>::TLayout;
+
+public:
+    bool DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        const auto x = lhs.Get<TLayout>();
+        const auto y = rhs.Get<TLayout>();
+        
+        if (x == y) {
+            const auto tx = lhs.GetTimezoneId();
+            const auto ty = rhs.GetTimezoneId();
+            return (tx == ty) ? 0 : (tx < ty ? -1 : 1);
+        }
+
+        if (x < y) {
+            return -1;
+        }
+
+        return 1;
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        return lhs.Get<TLayout>() == rhs.Get<TLayout>() && lhs.GetTimezoneId() == rhs.GetTimezoneId();
+    }
+    
+    
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        return std::forward_as_tuple(lhs.Get<TLayout>(), lhs.GetTimezoneId()) < std::forward_as_tuple(rhs.Get<TLayout>(), rhs.GetTimezoneId());
+    }
+};
+
 
 template <bool Nullable>
 class TTupleBlockItemComparator : public TBlockItemComparatorBase<TTupleBlockItemComparator<Nullable>, Nullable> {

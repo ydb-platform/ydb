@@ -41,6 +41,10 @@ void AddPrefix(TVector<TString>& columnOrder, const TString& prefix) {
 
 IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+    
     TVector<TString> columnOrder;
     auto result = GetSetting(node->Tail(), "result");
     auto emitPgStar = GetSetting(node->Tail(), "emit_pg_star");

@@ -7,7 +7,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const NProfiling::TProfiler Profiler{"/jaeger"};
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, Profiler, "/jaeger");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,7 +49,7 @@ bool TSampler::TUserState::TrySampleByMinCount(ui64 minCount, TCpuDuration perio
 
 TSampler::TSampler()
     : Config_(New<TSamplerConfig>())
-    , TracesSampled_(Profiler.WithHot().Counter("/traces_sampled"))
+    , TracesSampled_(Profiler().WithHot().Counter("/traces_sampled"))
 { }
 
 TSampler::TSampler(const TSamplerConfigPtr& config)
@@ -63,7 +63,7 @@ void TSampler::SampleTraceContext(const TString& user, const TTraceContextPtr& t
     auto [userState, inserted] = Users_.FindOrInsert(user, [&user] {
         auto state = New<TUserState>();
 
-        auto profiler = Profiler.WithSparse().WithHot().WithTag("user", user);
+        auto profiler = Profiler().WithSparse().WithHot().WithTag("user", user);
         state->TracesSampledByUser = profiler.WithSparse().Counter("/traces_sampled_by_user");
         state->TracesSampledByProbability = profiler.WithSparse().Counter("/traces_sampled_by_probability");
 

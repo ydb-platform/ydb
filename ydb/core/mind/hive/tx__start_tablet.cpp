@@ -49,6 +49,14 @@ public:
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStartingOnNode(Local.NodeId()) || leader.IsBootingSuppressed() && External) {
+                    if (!leader.DeletedHistory.empty()) {
+                        if (!leader.WasAliveSinceCutHistory) {
+                            BLOG_ERROR("THive::TTxStartTablet::Execute Tablet " << TabletId << " failed to start after cutting history - will restore history");
+                            leader.RestoreDeletedHistory();
+                        } else {
+                            leader.WasAliveSinceCutHistory = false;
+                        }
+                    }
                     BLOG_D("THive::TTxStartTablet::Execute, Sending TEvBootTablet(" << leader.ToString() << ")"
                             << " to node " << Local.NodeId()
                             << " storage " << leader.TabletStorageInfo->ToString());

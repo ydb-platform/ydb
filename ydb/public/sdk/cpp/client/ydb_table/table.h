@@ -23,6 +23,8 @@ class CreateTableRequest;
 class Changefeed;
 class ChangefeedDescription;
 class DescribeTableResult;
+class ExplicitPartitions;
+class GlobalIndexSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
@@ -148,17 +150,67 @@ struct TAlterTableColumn {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Represents table partitioning settings
+class TPartitioningSettings {
+public:
+    TPartitioningSettings();
+    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto);
+
+    const Ydb::Table::PartitioningSettings& GetProto() const;
+
+    TMaybe<bool> GetPartitioningBySize() const;
+    TMaybe<bool> GetPartitioningByLoad() const;
+    ui64 GetPartitionSizeMb() const;
+    ui64 GetMinPartitionsCount() const;
+    ui64 GetMaxPartitionsCount() const;
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+struct TExplicitPartitions {
+    using TSelf = TExplicitPartitions;
+
+    FLUENT_SETTING_VECTOR(TValue, SplitPoints);
+    
+    template <typename TProto>
+    static TExplicitPartitions FromProto(const TProto& proto);
+    
+    void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
+};
+
+struct TGlobalIndexSettings {
+    using TUniformOrExplicitPartitions = std::variant<std::monostate, ui64, TExplicitPartitions>;
+
+    TPartitioningSettings PartitioningSettings;
+    TUniformOrExplicitPartitions Partitions;
+
+    template <typename TProto>
+    static TGlobalIndexSettings FromProto(const TProto& proto);
+
+    void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
+};
+
 //! Represents index description
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
 
 public:
     TIndexDescription(
-        const TString& name, EIndexType type,
+        const TString& name,
+        EIndexType type,
         const TVector<TString>& indexColumns,
-        const TVector<TString>& dataColumns = TVector<TString>());
+        const TVector<TString>& dataColumns = {},
+        const TGlobalIndexSettings& settings = {}
+    );
 
-    TIndexDescription(const TString& name, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns = TVector<TString>());
+    TIndexDescription(
+        const TString& name,
+        const TVector<TString>& indexColumns,
+        const TVector<TString>& dataColumns = {},
+        const TGlobalIndexSettings& settings = {}
+    );
 
     const TString& GetIndexName() const;
     EIndexType GetIndexType() const;
@@ -182,6 +234,7 @@ private:
     EIndexType IndexType_;
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
+    TGlobalIndexSettings GlobalIndexSettings_;
     ui64 SizeBytes = 0;
 };
 
@@ -213,9 +266,26 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Represents index description
+//! Represents changefeed description
 class TChangefeedDescription {
     friend class NYdb::TProtoAccessor;
+
+public:
+    class TInitialScanProgress {
+    public:
+        TInitialScanProgress();
+        explicit TInitialScanProgress(ui32 total, ui32 completed);
+
+        TInitialScanProgress& operator+=(const TInitialScanProgress& other);
+
+        ui32 GetPartsTotal() const;
+        ui32 GetPartsCompleted() const;
+        float GetProgress() const; // percentage
+
+    private:
+        ui32 PartsTotal;
+        ui32 PartsCompleted;
+    };
 
 public:
     TChangefeedDescription(const TString& name, EChangefeedMode mode, EChangefeedFormat format);
@@ -244,6 +314,7 @@ public:
     bool GetInitialScan() const;
     const THashMap<TString, TString>& GetAttributes() const;
     const TString& GetAwsRegion() const;
+    const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -267,6 +338,7 @@ private:
     bool InitialScan_ = false;
     THashMap<TString, TString> Attributes_;
     TString AwsRegion_;
+    std::optional<TInitialScanProgress> InitialScanProgress_;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);
@@ -419,25 +491,6 @@ public:
     TMaybe<TString> GetData() const;
     TMaybe<EColumnFamilyCompression> GetCompression() const;
     TMaybe<bool> GetKeepInMemory() const;
-
-private:
-    class TImpl;
-    std::shared_ptr<TImpl> Impl_;
-};
-
-//! Represents table partitioning settings
-class TPartitioningSettings {
-public:
-    TPartitioningSettings();
-    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto);
-
-    const Ydb::Table::PartitioningSettings& GetProto() const;
-
-    TMaybe<bool> GetPartitioningBySize() const;
-    TMaybe<bool> GetPartitioningByLoad() const;
-    ui64 GetPartitionSizeMb() const;
-    ui64 GetMinPartitionsCount() const;
-    ui64 GetMaxPartitionsCount() const;
 
 private:
     class TImpl;
@@ -1221,12 +1274,6 @@ struct TStoragePolicy {
     FLUENT_SETTING_VECTOR(TColumnFamilyPolicy, ColumnFamilies);
 };
 
-struct TExplicitPartitions {
-    using TSelf = TExplicitPartitions;
-
-    FLUENT_SETTING_VECTOR(TValue, SplitPoints);
-};
-
 struct TPartitioningPolicy {
     using TSelf = TPartitioningPolicy;
 
@@ -1577,6 +1624,8 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(ui64, BatchLimitBytes);
 
     FLUENT_SETTING_OPTIONAL(ui64, BatchLimitRows);
+
+    FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
 //! Represents all session operations
@@ -2008,19 +2057,3 @@ class TReadRowsResult : public TStatus {
 
 } // namespace NTable
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TIndexDescription, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TChangefeedDescription, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TValueSinceUnixEpochModeSettings::EUnit, o, x) {
-    return NYdb::NTable::TValueSinceUnixEpochModeSettings::Out(o, x);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TTxSettings, o, x) {
-    return x.Out(o);
-}

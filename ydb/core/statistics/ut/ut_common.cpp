@@ -1,5 +1,7 @@
 #include "ut_common.h"
 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
 namespace NKikimr {
 namespace NStat {
 
@@ -33,9 +35,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Settings->SetDomainName("Root");
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);
+    Settings->SetUseRealThreads(false);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
+    featureFlags.SetEnableColumnStatistics(true);
     Settings->SetFeatureFlags(featureFlags);
 
     for (ui32 i : xrange(storagePools)) {
@@ -46,11 +50,12 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 
+    auto sender = Server->GetRuntime()->AllocateEdgeActor();
+    Server->SetupRootStoragePools(sender);
+
     Client = MakeHolder<Tests::TClient>(*Settings);
 
     Tenants = MakeHolder<Tests::TTenants>(Server);
-
-    Client->InitRootScheme("Root");
 
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
@@ -83,6 +88,56 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount
     subdomainSettings.SetExternalStatisticsAggregator(true);
     UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
         env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
+}
+
+void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey) {
+    auto subdomain = GetSubDomainDeclareSettings(databaseName);
+    subdomain.MutableResourcesDomainKey()->SetSchemeShard(resourcesDomainKey.OwnerId);
+    subdomain.MutableResourcesDomainKey()->SetPathId(resourcesDomainKey.LocalPathId);
+    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+        env.GetClient().CreateExtSubdomain("/Root", subdomain));
+
+    env.GetTenants().Run("/Root/" + databaseName, 0);
+
+    auto subdomainSettings = GetSubDomainDefaultSettings(databaseName, env.GetPools());
+    subdomainSettings.SetExternalSchemeShard(true);
+    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+        env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
+}
+
+TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path,
+    TPathId* domainKey, ui64* tabletId)
+{
+    auto sender = runtime.AllocateEdgeActor();
+
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    auto request = std::make_unique<TNavigate>();
+    auto& entry = request->ResultSet.emplace_back();
+    entry.Path = SplitPath(path);
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    entry.ShowPrivatePath = true;
+    runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.release()));
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+    UNIT_ASSERT(ev);
+    UNIT_ASSERT(ev->Get());
+    std::unique_ptr<TNavigate> response(ev->Get()->Request.Release());
+    UNIT_ASSERT(response->ResultSet.size() == 1);
+    auto& resultEntry = response->ResultSet[0];
+
+    if (domainKey) {
+        *domainKey = resultEntry.DomainInfo->DomainKey;
+    }
+
+    if (tabletId && resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
+        *tabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
+    }
+
+    return resultEntry.TableId.PathId;
 }
 
 } // NStat

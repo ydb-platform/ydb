@@ -1080,6 +1080,7 @@ private:
     }
 
     void OnQueryStatus(TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+        // TODO: remove me YQL-18071. Executer actor is responsible for this function
         Y_UNUSED(ctx);
 
         auto sessionId = ev->Get()->Record.request().GetSession();

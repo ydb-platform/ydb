@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
 
 #include <library/cpp/lwtrace/all.h>
@@ -9,6 +10,7 @@
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/core/base/monitoring_provider.h>
 
+#include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
@@ -17,8 +19,6 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/mon.pb.h>
-
-#include <ydb/core/driver_lib/version/version_mon_page.h>
 
 #include "mon_impl.h"
 
@@ -247,21 +247,41 @@ public:
         PassAway();
     }
 
-    void ReplyUnathorizedAndPassAway(const TString& error = {}) {
+    TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
+        switch (status) {
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return "401 Unauthorized";
+        case Ydb::StatusIds::INTERNAL_ERROR:
+            return "500 Internal Server Error";
+        case Ydb::StatusIds::UNAVAILABLE:
+            return "503 Service Unavailable";
+        case Ydb::StatusIds::OVERLOADED:
+            return "429 Too Many Requests";
+        case Ydb::StatusIds::TIMEOUT:
+            return "408 Request Timeout";
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return "412 Precondition Failed";
+        default:
+            return "400 Bad Request";
+        }
+    }
+
+    void ReplyErrorAndPassAway(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         NHttp::THeaders headers(request->Headers);
         TStringBuilder response;
         TStringBuilder body;
-        body << "<html><body><h1>401 Unauthorized</h1>";
-        if (!error.empty()) {
-            body << "<p>" << error << "</p>";
+        const TString httpError = YdbToHttpError(result.Status);
+        body << "<html><body><h1>" << httpError << "</h1>";
+        if (result.Issues) {
+            body << "<p>" << result.Issues.ToString() << "</p>";
         }
         body << "</body></html>";
         TString origin = TString(headers["Origin"]);
         if (origin.empty()) {
             origin = "*";
         }
-        response << "HTTP/1.1 401 Unauthorized\r\n";
+        response << "HTTP/1.1 " << httpError << "\r\n";
         response << "Access-Control-Allow-Origin: " << origin << "\r\n";
         response << "Access-Control-Allow-Credentials: true\r\n";
         response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
@@ -292,17 +312,20 @@ public:
         PassAway();
     }
 
-    void SendRequest(const NKikimr::TEvTicketParser::TEvAuthorizeTicketResult* authorizeResult = {}) {
+    void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            TString user = authorizeResult ? authorizeResult->Token->GetUserSID() : "anonymous";
+            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
             LOG_NOTICE_S(*TlsActivationContext, NActorsServices::HTTP,
                 (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
                 << " " << request->URL);
         }
-        TString serializedToken = authorizeResult ? authorizeResult->SerializedToken : "";
+        TString serializedToken;
+        if (result && result->UserToken) {
+            serializedToken = result->UserToken->GetSerializedToken();
+        }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -326,14 +349,14 @@ public:
         PassAway();
     }
 
-    void Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        const NKikimr::TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (result.Error) {
-            return ReplyUnathorizedAndPassAway(result.Error.Message);
+    void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
+        const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (result.Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyErrorAndPassAway(result);
         }
         bool found = false;
         for (const TString& sid : ActorMonPage->AllowedSIDs) {
-            if (result.Token->IsExist(sid)) {
+            if (result.UserToken->IsExist(sid)) {
                 found = true;
                 break;
             }
@@ -349,7 +372,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NMon::IEvHttpInfoRes, HandleResponse);
-            hFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, Handle);
+            hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
         }
     }
 };
@@ -692,7 +715,7 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
         TGuard<TMutex> g(Mutex);
         ActorSystem = actorSystem;
         Register(new TIndexRedirectMonPage(IndexMonPage));
-        Register(new NMonitoring::TYdbVersionMonPage);
+        Register(new NMonitoring::TVersionMonPage);
         Register(new NMonitoring::TBootstrapCssMonPage);
         Register(new NMonitoring::TTablesorterCssMonPage);
         Register(new NMonitoring::TBootstrapJsMonPage);
@@ -731,7 +754,9 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
             "text/html",
             "text/css",
             "text/javascript",
+            "application/javascript",
             "application/json",
+            "application/yaml",
         };
         addPort->SslCertificatePem = Config.Certificate;
         addPort->Secure = !Config.Certificate.empty();

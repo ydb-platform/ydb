@@ -2,7 +2,7 @@ import os
 
 import ymake
 import ytest
-from _common import get_norm_unit_path, rootrel_arc_src, to_yesno
+from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, to_yesno
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -32,7 +32,7 @@ class PluginLogger(object):
                 parts.append(m if isinstance(m, str) else repr(m))
 
         # cyan color (code 36) for messages
-        return "\033[0;32m{}\033[0;49m \033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
+        return "\033[0;32m{}\033[0;49m\n\033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
 
     def info(self, *messages):
         if self.unit:
@@ -203,12 +203,13 @@ def on_peerdir_ts_resource(unit, *resources):
 
 
 @_with_report_configure_error
-def on_ts_configure(unit, *tsconfig_paths):
-    # type: (Unit, *str) -> None
+def on_ts_configure(unit):
+    # type: (Unit) -> None
     from lib.nots.package_manager.base import PackageJson
     from lib.nots.package_manager.base.utils import build_pj_path
     from lib.nots.typescript import TsConfig
 
+    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
     # for use in CMD as inputs
     __set_append(
         unit, "TS_CONFIG_FILES", _build_cmd_input_paths(tsconfig_paths, hide=True, disable_include_processor=True)
@@ -251,6 +252,26 @@ def on_ts_configure(unit, *tsconfig_paths):
         _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
 
     _setup_eslint(unit)
+    _setup_tsc_typecheck(unit, tsconfig_paths)
+
+
+@_with_report_configure_error
+def on_setup_build_env(unit):  # type: (Unit) -> None
+    build_env_var = unit.get("TS_BUILD_ENV")  # type: str
+    if not build_env_var:
+        return
+
+    options = []
+    for name in build_env_var.split(","):
+        options.append("--env")
+        value = unit.get(f"TS_ENV_{name}")
+        if value is None:
+            ymake.report_configure_error(f"Env var '{name}' is provided in a list, but var value is not provided")
+            continue
+        double_quote_escaped_value = value.replace('"', '\\"')
+        options.append(f'"{name}={double_quote_escaped_value}"')
+
+    unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
 
 
 def __set_append(unit, var_name, value):
@@ -322,6 +343,7 @@ def _get_test_runner_handlers():
     return {
         "jest": _add_jest_ts_test,
         "hermione": _add_hermione_ts_test,
+        "playwright": _add_playwright_ts_test,
     }
 
 
@@ -350,6 +372,15 @@ def _add_hermione_ts_test(unit, test_runner, test_files, deps, test_record):
     _add_test(unit, test_runner, test_files, deps, test_record)
 
 
+def _add_playwright_ts_test(unit, test_runner, test_files, deps, test_record):
+    test_record.update(
+        {
+            "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
+        }
+    )
+    _add_test(unit, test_runner, test_files, deps, test_record)
+
+
 def _setup_eslint(unit):
     if not _is_tests_enabled(unit):
         return
@@ -361,9 +392,12 @@ def _setup_eslint(unit):
     if not lint_files:
         return
 
-    unit.on_peerdir_ts_resource("eslint")
-
     mod_dir = unit.get("MODDIR")
+
+    unit.on_peerdir_ts_resource("eslint")
+    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_install_node_modules_recipe()
+
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
     deps = _create_pm(unit).get_peers_from_package_json()
     test_record = {
@@ -372,15 +406,54 @@ def _setup_eslint(unit):
     }
 
     _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
+    unit.set(["TEST_RECIPES_VALUE", user_recipes])
+
+
+def _setup_tsc_typecheck(unit, tsconfig_paths: list[str]):
+    if not _is_tests_enabled(unit):
+        return
+
+    if unit.get("_TS_TYPECHECK_VALUE") == "none":
+        return
+
+    typecheck_files = ytest.get_values_list(unit, "TS_INPUT_FILES")
+    if not typecheck_files:
+        return
+
+    tsconfig_path = tsconfig_paths[0]
+
+    if len(tsconfig_paths) > 1:
+        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+        if not tsconfig_path:
+            macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
+            raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
+        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        if not abs_tsconfig_path:
+            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+    unit.on_peerdir_ts_resource("typescript")
+    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_install_node_modules_recipe()
+    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+
+    _add_test(
+        unit,
+        test_type="tsc_typecheck",
+        test_files=[resolve_common_const(f) for f in typecheck_files],
+        deps=_create_pm(unit).get_peers_from_package_json(),
+        test_record={"TS_CONFIG_PATH": tsconfig_path},
+        test_cwd=unit.get("MODDIR"),
+    )
+    unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
 def _resolve_module_files(unit, mod_dir, file_paths):
+    mod_dir_with_sep_len = len(mod_dir) + 1
     resolved_files = []
 
     for path in file_paths:
         resolved = rootrel_arc_src(path, unit)
         if resolved.startswith(mod_dir):
-            mod_dir_with_sep_len = len(mod_dir) + 1
             resolved = resolved[mod_dir_with_sep_len:]
         resolved_files.append(resolved)
 
@@ -393,23 +466,33 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
     def sort_uniq(text):
         return sorted(set(text))
 
+    recipes_lines = ytest.format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
+    if recipes_lines:
+        deps = deps or []
+        deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
+
     if deps:
-        unit.ondepends(sort_uniq(deps))
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_type} deps: \n{joined_deps}")
+        unit.ondepends(deps)
 
     test_dir = get_norm_unit_path(unit)
     full_test_record = {
-        "TEST-NAME": test_type.lower(),
+        # Key to discover suite (see devtools/ya/test/explore/__init__.py#gen_suite)
+        "SCRIPT-REL-PATH": test_type,
+        # Test name as shown in PR check, should be unique inside one module
+        "TEST-NAME": test_type.lower().replace(".new", ""),
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
         "TEST-RECIPES": ytest.prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        "SCRIPT-REL-PATH": test_type,
         "SOURCE-FOLDER-PATH": test_dir,
         "BUILD-FOLDER-PATH": test_dir,
         "BINARY-PATH": os.path.join(test_dir, unit.filename()),
         "SPLIT-FACTOR": unit.get("TEST_SPLIT_FACTOR") or "",
         "FORK-MODE": unit.get("TEST_FORK_MODE") or "",
         "SIZE": unit.get("TEST_SIZE_NAME") or "",
+        "TEST-DATA": ytest.serialize_list(ytest.get_values_list(unit, "TEST_DATA_VALUE")),
         "TEST-FILES": ytest.serialize_list(test_files),
         "TEST-CWD": test_cwd or "",
         "TAG": ytest.serialize_list(ytest.get_values_list(unit, "TEST_TAGS_VALUE")),
@@ -469,7 +552,7 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
                 resource_name,
                 range_str,
                 ", ".join(map(str, toolchain_versions)),
-                "https://docs.yandex-team.ru/ya-make/manual/typescript/toolchain",
+                "https://docs.yandex-team.ru/frontend-in-arcadia/_generated/toolchain",
                 str(error),
             )
         )
@@ -477,20 +560,39 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit):
-    # Originally this peerdir was in .conf file
-    # but it kept taking default value of NPM_CONTRIBS_PATH
-    # before it was updated by CUSTOM_CONTRIB_TYPESCRIPT()
-    # so I moved it here.
-    unit.onpeerdir(unit.get("NPM_CONTRIBS_PATH"))
+    contrib_path = unit.get("NPM_CONTRIBS_PATH")
+    if contrib_path == '-':
+        unit.on_prepare_deps_configure_no_contrib()
+        return
+    unit.onpeerdir(contrib_path)
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     ins, outs = pm.calc_prepare_deps_inouts(unit.get("_TARBALLS_STORE"), has_deps)
 
-    if pj.has_dependencies():
+    if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+
+    else:
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
+        unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
+def on_prepare_deps_configure_no_contrib(unit):
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps)
+
+    if has_deps:
+        unit.onpeerdir(pm.get_local_peers_from_package_json())
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+        unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
+        unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
     else:
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
@@ -512,20 +614,6 @@ def on_node_modules_configure(unit):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
 
         if pj.get_use_prebuilder():
-            lf = pm.load_lockfile_from_dir(pm.sources_path)
-            is_valid, invalid_keys = lf.validate_has_addons_flags()
-
-            if not is_valid:
-                ymake.report_configure_error(
-                    "Project is configured to use @yatool/prebuilder. \n"
-                    + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                    + "Run `ya tool nots update-lockfile` to fix lockfile.\n"
-                    + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
-                    + "Misconfigured keys: \n"
-                    + "  - "
-                    + "\n  - ".join(invalid_keys)
-                )
-
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
             unit.set(
                 [
@@ -533,6 +621,39 @@ def on_node_modules_configure(unit):
                     "--yatool-prebuilder-path $YATOOL_PREBUILDER_ROOT/node_modules/@yatool/prebuilder",
                 ]
             )
+
+            # YATOOL_PREBUILDER_0_7_0_RESOURCE_GLOBAL
+            prebuilder_major = unit.get("YATOOL_PREBUILDER-ROOT-VAR-NAME").split("_")[2]
+            logger.info(f"Detected prebuilder \033[0;32mv{prebuilder_major}.x.x\033[0;49m")
+
+            if prebuilder_major == "0":
+                # TODO: FBP-1408
+                lf = pm.load_lockfile_from_dir(pm.sources_path)
+                is_valid, invalid_keys = lf.validate_has_addons_flags()
+
+                if not is_valid:
+                    ymake.report_configure_error(
+                        "Project is configured to use @yatool/prebuilder. \n"
+                        + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
+                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix lockfile.\n"
+                        + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
+                        + "Misconfigured keys: \n"
+                        + "  - "
+                        + "\n  - ".join(invalid_keys)
+                    )
+            else:
+                lf = pm.load_lockfile_from_dir(pm.sources_path)
+                requires_build_packages = lf.get_requires_build_packages()
+                is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
+
+                if not is_valid:
+                    ymake.report_configure_error(
+                        "Project is configured to use @yatool/prebuilder. \n"
+                        + "Some packages are misconfigured.\n"
+                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix pnpm-lock.yaml and package.json.\n"
+                        + "Validation details: \n"
+                        + "\n".join(validation_messages)
+                    )
 
 
 @_with_report_configure_error
@@ -546,7 +667,7 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
     for_mod_path = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([for_mod_path])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
-    unit.on_setup_extract_peer_tars_recipe([for_mod_path])
+    unit.on_setup_extract_output_tars_recipe([for_mod_path])
 
     root = "$B" if test_runner == "hermione" else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(root, for_mod_path, node_modules_filename)])
@@ -616,6 +737,18 @@ def on_ts_files(unit, *files):
 
 
 @_with_report_configure_error
+def on_ts_package_check_files(unit):
+    ts_files = unit.get("_TS_FILES_COPY_CMD")
+    if ts_files == "":
+        ymake.report_configure_error(
+            "\n"
+            "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
+            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+        )
+
+
+@_with_report_configure_error
 def on_depends_on_mod(unit):
-    for_mod_path = unit.get("TS_TEST_FOR_PATH")
-    unit.ondepends([for_mod_path])
+    if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
+        for_mod_path = unit.get("TS_TEST_FOR_PATH")
+        unit.ondepends([for_mod_path])

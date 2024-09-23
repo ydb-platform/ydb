@@ -125,7 +125,7 @@ IClientPtr CreateClient(
     auto tlsDialer = sslContext->CreateDialer(
         New<TDialerConfig>(),
         poller,
-        HttpLogger);
+        HttpLogger());
 
     auto httpClient = NHttp::CreateClient(
         config,

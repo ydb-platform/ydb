@@ -81,6 +81,7 @@ namespace {
             TString nodeName
         )
             : TTypeAnnotatorBase(typeAnnotationContext)
+            , TypeAnnotationContext_(typeAnnotationContext)
             , InputStructs_(inputStructs)
             , ProcessorMode_(processorMode)
             , InputNodeName_(std::move(nodeName))
@@ -102,12 +103,19 @@ namespace {
 
             YQL_ENSURE(inputIndex < InputStructs_.size());
 
-            if (ProcessorMode_ != EProcessorMode::PullList) {
-                input->SetTypeAnn(ctx.MakeType<TStreamExprType>(InputStructs_[inputIndex]));
-            } else {
-                input->SetTypeAnn(ctx.MakeType<TListExprType>(InputStructs_[inputIndex]));
+            auto itemType = InputStructs_[inputIndex];
+            TColumnOrder columnOrder;
+            for (const auto& i : itemType->GetItems()) {
+                columnOrder.push_back(TString(i->GetName()));
             }
 
+            if (ProcessorMode_ != EProcessorMode::PullList) {
+                input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
+            } else {
+                input->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
+            }
+
+            TypeAnnotationContext_->SetColumnOrder(*input, columnOrder, ctx);
             return TStatus::Ok;
         }
 

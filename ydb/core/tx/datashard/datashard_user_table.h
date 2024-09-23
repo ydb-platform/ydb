@@ -352,6 +352,7 @@ struct TUserTable : public TThrRefBase {
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
+        ui32 HistogramBucketsCount = 0;
         ui64 BackgroundCompactionRequests = 0;
         ui64 BackgroundCompactionCount = 0;
         ui64 CompactBorrowedCount = 0;
@@ -400,7 +401,7 @@ struct TUserTable : public TThrRefBase {
     mutable TStats Stats;
     mutable bool StatsUpdateInProgress = false;
     mutable bool StatsNeedUpdate = true;
-    mutable NTable::TDatabase::TChg LastTableChange{ 0, NTable::TEpoch::Zero() };
+    mutable NTable::TDatabase::TChangeCounter LastTableChange;
     mutable TMonotonic LastTableChangeTimestamp;
 
     ui32 SpecialColTablet = Max<ui32>();

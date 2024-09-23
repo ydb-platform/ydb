@@ -35,6 +35,15 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
@@ -93,6 +102,7 @@
                                                                                     "unique1 (-\u221e, +\u221e)",
                                                                                     "unique2 (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
                                                                             }
                                                                         ],
@@ -125,6 +135,7 @@
                                                                     "q1 (-\u221e, +\u221e)",
                                                                     "q2 (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/join0.test_plan/int8_tbl"
                                                             }
                                                         ],

@@ -15,30 +15,12 @@
                     <tmp_path>/program.sql:<main>:9:33: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
                     	GROUP BY cast(subkey as uint32) % 2 as odd
 	                                ^
-            <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: AggregationTraits
-            	
-	                 ^
-                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: MatchType
-                	
-	                          ^
-                    <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: MatchType
-                    	
-	                                           ^
-                        <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: ListItemType
-                        	
-	                                                ^
-                            <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: ListType
-                            	
-	                              ^
-                                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: TypeOf
-                                	
-	                                        ^
-                                    <tmp_path>/program.sql:<main>:7:3: Warning: At function: PersistableRepr
-                                    	  sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) as score
+            <tmp_path>/program.sql:<main>:7:3: Warning: At function: AggApply, At function: PersistableRepr
+            	  sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) as score
 	  ^
-                                        <tmp_path>/program.sql:<main>:7:33: Warning: At function: +
-                                        	  sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) as score
+                <tmp_path>/program.sql:<main>:7:33: Warning: At function: +
+                	  sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) as score
 	                                ^
-                                            <tmp_path>/program.sql:<main>:7:33: Warning: Integral type implicit bitcast: Optional<Int32> and Optional<Uint32>
-                                            	  sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) as score
+                    <tmp_path>/program.sql:<main>:7:33: Warning: Integral type implicit bitcast: Optional<Int32> and Optional<Uint32>
+                    	  sum(WeakField(data3, "int32") + WeakField(datahole3, "uint32", 999)) as score
 	                                ^

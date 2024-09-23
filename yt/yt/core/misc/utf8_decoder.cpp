@@ -66,7 +66,7 @@ TStringBuf TUtf8Transcoder::Decode(TStringBuf str)
             i += 1;
         } else {
             THROW_ERROR_EXCEPTION("Unicode symbols with codes greater than 255 are not supported. "
-                 "Please refer to https://wiki.yandex-team.ru/yt/userdoc/formats/#json and "
+                 "Please refer to https://ytsaurus.tech/docs/en/user-guide/storage/formats#json and "
                  "consider using encode_utf8=false in format options");
         }
     }

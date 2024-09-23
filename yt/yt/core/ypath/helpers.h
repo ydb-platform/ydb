@@ -23,9 +23,6 @@ TYPath StripAttributes(const TYPath& path);
 template <typename ...TArgs>
 TYPath YPathJoin(const TYPath& path, TArgs&&... literals);
 
-//! Changes all literal tokens in YPath to their literal values.
-TString ToStringLiteral(const TYPath& path);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYPath

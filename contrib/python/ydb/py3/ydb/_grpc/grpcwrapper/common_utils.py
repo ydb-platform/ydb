@@ -202,7 +202,7 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         # todo handle grpc exceptions and convert it to internal exceptions
         try:
             grpc_message = await self.from_server_grpc.__anext__()
-        except grpc.RpcError as e:
+        except (grpc.RpcError, grpc.aio.AioRpcError) as e:
             raise connection._rpc_error_handler(self._connection_state, e)
 
         issues._process_response(grpc_message)
@@ -289,6 +289,7 @@ def proto_duration_from_timedelta(t: Optional[datetime.timedelta]) -> Optional[P
 
     res = ProtoDuration()
     res.FromTimedelta(t)
+    return res
 
 
 def proto_timestamp_from_datetime(t: Optional[datetime.datetime]) -> Optional[ProtoTimeStamp]:
@@ -297,6 +298,7 @@ def proto_timestamp_from_datetime(t: Optional[datetime.datetime]) -> Optional[Pr
 
     res = ProtoTimeStamp()
     res.FromDatetime(t)
+    return res
 
 
 def datetime_from_proto_timestamp(

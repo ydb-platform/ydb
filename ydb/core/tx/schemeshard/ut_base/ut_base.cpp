@@ -2004,8 +2004,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
 
-        //no key in index descr
+        //no directory
         TestCreateIndexedTable(runtime, txId++, "/MyRoot/USER_0", R"(
+                TableDescription {
+                  Name: "Table2"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value0" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue0"
+                }
+            )", {NKikimrScheme::StatusPathDoesNotExist});
+
+        //no key in index descr
+        TestCreateIndexedTable(runtime, txId++, "/MyRoot/DirA", R"(
                 TableDescription {
                   Name: "Table2"
                   Columns { Name: "key"   Type: "Uint64" }
@@ -6332,17 +6345,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         );
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
-                           {NLs::PathsInsideDomain(4),
-                            NLs::ShardsInsideDomain(18),
-                            NLs::PathVersionEqual(1),
-                            NLs::NotFinished});
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
                             NLs::PathsInsideDomain(4),
                             NLs::ShardsInsideDomain(18),
@@ -6863,7 +6865,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
+        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -10488,45 +10490,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::NoMaxPartitionsCount
                             });
 
-        // request without token
+        // request direct alter of forbidden fields of indexImplTable
         TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
-                        Name: "indexImplTable"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 1
-                                SizeToSplit: 100502
-                                FastSplitSettings {
-                                    SizeThreshold: 100502
-                                    RowCountThreshold: 100502
-                                }
-                            }
+                Name: "indexImplTable"
+                KeyColumnNames: ["key", "value"]
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 100502
+                        FastSplitSettings {
+                            SizeThreshold: 100502
+                            RowCountThreshold: 100502
                         }
-                    )", {NKikimrScheme::StatusNameConflict});
-
-        {  // request with not a super user token
-            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
-                        Name: "indexImplTable"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 1
-                                SizeToSplit: 100501
-                                FastSplitSettings {
-                                    SizeThreshold: 100501
-                                    RowCountThreshold: 100501
-                                }
-                            }
-                        }
-               )");
-
-            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"not-a-root@builtin"});
-            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
-            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusNameConflict});
-        }
+                    }
+                }
+            )",
+            {TEvSchemeShard::EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
 
         {
-            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
+            TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
                         Name: "indexImplTable"
                         PartitionConfig {
                             PartitioningPolicy {
@@ -10538,13 +10522,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 }
                             }
                         }
-               )");
-            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"true-root@builtin"});
-            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
-            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusAccepted});
-
+               )"
+            );
             env.TestWaitNotification(runtime, txId);
         }
 

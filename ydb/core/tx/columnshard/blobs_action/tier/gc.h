@@ -16,8 +16,16 @@ private:
 protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
-    virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) override;
+    virtual void DoOnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/) override {
 
+    }
+    virtual bool DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) override {
+        return true;
+    }
+    virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) override;
+    virtual bool DoIsEmpty() const override {
+        return DraftBlobIds.empty();
+    }
 public:
     TGCTask(const TString& storageId, std::deque<TUnifiedBlobId>&& draftBlobIds, const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& externalStorageOperator,
         TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters)

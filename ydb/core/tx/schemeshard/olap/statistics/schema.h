@@ -7,16 +7,14 @@ class TOlapSchema;
 
 class TOlapStatisticsSchema {
 private:
-    YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(NOlap::NStatistics::TOperatorContainer, Operator);
 public:
     TOlapStatisticsSchema() = default;
 
-    TOlapStatisticsSchema(const TString& name, const NOlap::NStatistics::TOperatorContainer& container)
-        : Name(name)
-        , Operator(container)
+    TOlapStatisticsSchema(const NOlap::NStatistics::TOperatorContainer& container)
+        : Operator(container)
     {
-
+        AFL_VERIFY(container.GetName());
     }
 
     bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapStatisticsUpsert& upsert, IErrorCollector& errors);

@@ -392,3 +392,43 @@ ForceSpreadMembers(list_of_tuples:List<Tuple<String, T>>, result_keys:List<Strin
 SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
+
+## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference
+
+Комбинируют две структуры одним из четырех способов, используя предоставленную функцию для слияния полей с одинаковыми именами:
+
+* `StructUnion` добавляет в результат все поля обеих структур;
+* `StructIntersection` — поля, которые есть в обеих структурах; 
+* `StructDifference` — поля которые есть в left, но которых нет в right;
+* `StructSymmetricDifference` — все поля, которые есть только в одной из структур.
+
+**Сигнатуры**
+```
+StructUnion(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
+StructIntersection(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
+StructDifference(left:Struct<...>, right:Struct<...>)->Struct<...>
+StructSymmetricDifference(left:Struct<...>, right:Struct<...>)->Struct<...>
+```
+
+Аргументы:
+
+1. `left` - первая структура;
+2. `right` - вторая структура;
+3. `mergeLambda` - _(опционально)_ позволяет задать функцию для объединения полей (аргументы: имя поля, Optional значение поля в первой структуре, Optional значение поля во второй структуре); по умолчанию выбирается значение поля из первой структуры, а если в первой отсутствует — из второй.
+
+**Примеры**
+``` yql
+$merge = ($name, $l, $r) -> {
+    return ($l ?? 0) + ($r ?? 0);
+};
+$left = <|a: 1, b: 2, c: 3|>;
+$right = <|c: 1, d: 2, e: 3|>;
+
+SELECT
+    StructUnion($left, $right),                 -- <|a: 1, b: 2, c: 3, d: 2, e: 3|>
+    StructUnion($left, $right, $merge),         -- <|a: 1, b: 2, c: 4, d: 2, e: 3|>
+    StructIntersection($left, $right, $merge),  -- <|c: 4|>
+    StructDifference($left, $right),            -- <|a: 1, b: 1|>
+    StructSymmetricDifference($left, $right)    -- <|a: 1, b: 2, d: 2, e: 3|>
+;
+```

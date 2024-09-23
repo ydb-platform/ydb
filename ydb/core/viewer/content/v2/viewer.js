@@ -467,7 +467,10 @@ ViewerStorage.prototype.onStorageGroupChange = function(obj) {
         this.storageView.groupOrder = function(prev, next) { return Number(prev.substring(0, prev.length - 1)) > Number(next.substring(0, next.length - 1)); }
         break;
     case 'missing':
-        this.storageView.getStorageGroupName = function(storage) { var md = storage.getMissingDisks(); return md === 0 ? "Complete" : '-' + md; }
+        this.storageView.getStorageGroupName = function(storage) {
+            var md = storage.getMissingDisks();
+            return md === -1 ? "BlobDepot error" : md === 0 ? "Complete" : '-' + md;
+        }
         this.storageView.getStorageGroupHeader = function(storageGroup) { return storageGroup.storageTotal + ' groups'; }
         this.storageView.groupOrder = function(prev, next) { return prev < next; }
         break;

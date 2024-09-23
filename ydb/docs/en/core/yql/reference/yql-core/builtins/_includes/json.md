@@ -19,32 +19,6 @@ Despite the fact that the `age` field in the first object is of the `Number` typ
 
 To work with JSON, YQL implements a subset of the [SQL support for JavaScript Object Notation (JSON)](https://www.iso.org/standard/67367.html) standard, which is part of the common ANSI SQL standard.
 
-## Cookbook
-
-```
-$json = CAST(@@{
-    "friends": [
-        {
-            "name": "James Holden",
-            "age": 35
-        },
-        {
-            "name": "Naomi Nagata",
-            "age": 30
-        }
-    ]
-}@@ AS Json);
-
-SELECT
-    JSON_EXISTS($json, "$.friends[*].name"), -- True,
-    JSON_VALUE($json, "$.friends[0].age"), -- "35" (type Utf8?)
-    JSON_QUERY($json, "$.friends[0]"); -- {"name": "James Holden", "age": 35}
-```
-
-### Accessing a field in the database
-
-In tables, data can be stored in JSON format or as a string representation. JSON_* functions expect JSON as an input to run. To convert `String->JSON`, use the `CAST` function, such as `CAST (my_string AS JSON)`.
-
 ## JsonPath
 
 Values inside JSON objects are accessed using a query language called JsonPath. All functions for JSON accept a JsonPath query as an argument.
@@ -1174,3 +1148,7 @@ SELECT
     JSON_QUERY($json, "$.friends.name" WITH CONDITIONAL WRAPPER); -- ["James Holden", "Naomi Nagata"]
 ```
 
+## See also
+
+* [{#T}](../../../../recipes/yql/accessing-json.md)
+* [{#T}](../../../../recipes/yql/modifying-json.md)

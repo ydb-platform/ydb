@@ -44,6 +44,7 @@ struct TDatumBatch {
 
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
+    std::shared_ptr<arrow::Table> ToTable() const;
     std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
     static std::shared_ptr<TDatumBatch> FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
     static std::shared_ptr<TDatumBatch> FromTable(const std::shared_ptr<arrow::Table>& batch);
@@ -355,7 +356,7 @@ public:
         return sb;
     }
 
-    std::set<std::string> GetColumnsInUsage() const;
+    std::set<std::string> GetColumnsInUsage(const bool originalOnly = false) const;
 
     const std::set<ui32>& GetFilterOriginalColumnIds() const;
 
@@ -392,7 +393,7 @@ public:
 
     arrow::Status Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
 
-    arrow::Status ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
+    [[nodiscard]] arrow::Status ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
     arrow::Status ApplyAggregates(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
     arrow::Status ApplyFilters(TDatumBatch& batch) const;
     arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
@@ -404,7 +405,8 @@ public:
         return Filters.size() && (!GroupBy.size() && !GroupByKeys.size());
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const std::shared_ptr<arrow::Table>& t) const;
+    [[nodiscard]] arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> BuildFilter(const std::shared_ptr<arrow::Table>& t) const;
+    [[nodiscard]] arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const;
 };
 
 struct TProgram {
@@ -417,6 +419,18 @@ public:
     TProgram(std::vector<std::shared_ptr<TProgramStep>>&& steps)
         : Steps(std::move(steps))
     {}
+
+    arrow::Status ApplyTo(std::shared_ptr<arrow::Table>& table, arrow::compute::ExecContext* ctx) const {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(table);
+        for (auto&& i : batches) {
+            auto status = ApplyTo(i, ctx);
+            if (!status.ok()) {
+                return status;
+            }
+        }
+        table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+        return arrow::Status::OK();
+    }
 
     arrow::Status ApplyTo(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
         try {
@@ -434,7 +448,6 @@ public:
 
     std::set<std::string> GetEarlyFilterColumns() const;
     std::set<std::string> GetProcessingColumns() const;
-    std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const;
     TString DebugString() const {
         TStringBuilder sb;
         sb << "[";
@@ -447,10 +460,16 @@ public:
 };
 
 inline arrow::Status ApplyProgram(
+    std::shared_ptr<arrow::Table>& batch,
+    const TProgram& program,
+    arrow::compute::ExecContext* ctx = nullptr) {
+    return program.ApplyTo(batch, ctx);
+}
+
+inline arrow::Status ApplyProgram(
     std::shared_ptr<arrow::RecordBatch>& batch,
     const TProgram& program,
-    arrow::compute::ExecContext* ctx = nullptr)
-{
+    arrow::compute::ExecContext* ctx = nullptr) {
     return program.ApplyTo(batch, ctx);
 }
 

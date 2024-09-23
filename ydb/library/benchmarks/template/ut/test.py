@@ -73,6 +73,14 @@ Content
         expected = "VAR"
         self.assertEqual(expected, text)
 
+    def test_expose_var_from_var(self):
+        b = Builder()
+        b.add_vars({"var": "VAR"})
+        b.add("name", '{% set abc = var + "ABC" %}{{abc}}')
+        text = b.build("name", True)
+        expected = "VARABC"
+        self.assertEqual(expected, text)
+
     def test_result_formatter(self):
         d = {
             'data': [{
@@ -90,7 +98,8 @@ Content
                         ['28', '909', '6710689.259999996'],
                         ['29', '948', '7158866.629999996'],
                         ['30', '909', '6808436.1299999915'],
-                        ['31', '922', '6806670.179999996']]}],
+                        ['31', '922', '6806670.179999996'],
+                        ['0', '0', None]]}],
                 'Position': {'Column': '1', 'Row': '55', 'File': '<main>'}}],
             'errors': [],
             'id': '645e199819d7146f01c11bac',
@@ -118,7 +127,8 @@ Content
                         ['28', '909', '6710689.26'],
                         ['29', '948', '7158866.63'],
                         ['30', '909', '6808436.13'],
-                        ['31', '922', '6806670.18']]}],
+                        ['31', '922', '6806670.18'],
+                        ['0', '0', None]]}],
                 'Position': {'Column': '1', 'Row': '55', 'File': '<main>'}}],
             'errors': [],
             'id': '645e199819d7146f01c11bac',
@@ -205,7 +215,8 @@ Content
                                 ['totacctbal', ['DataType', 'Date']]]]],
                     'Data': [
                         ['9076'],
-                        ['9667']
+                        ['9667'],
+                        [None]
                     ]}]}]}
 
         expected = {
@@ -217,7 +228,8 @@ Content
                                 ['totacctbal', ['DataType', 'Date']]]]],
                     'Data': [
                         ['1994-11-07'],
-                        ['1996-06-20']
+                        ['1996-06-20'],
+                        [None]
                     ]}]}]}
 
         f = ResultFormatter("%.2f")

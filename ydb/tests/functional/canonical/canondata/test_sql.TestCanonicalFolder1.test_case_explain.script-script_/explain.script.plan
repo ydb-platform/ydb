@@ -95,6 +95,7 @@
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
@@ -201,6 +202,7 @@
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
@@ -288,6 +290,7 @@
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
@@ -394,6 +397,7 @@
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],

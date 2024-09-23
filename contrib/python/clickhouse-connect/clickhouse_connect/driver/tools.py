@@ -13,7 +13,12 @@ def insert_file(client: Client,
                 database: Optional[str] = None,
                 settings: Optional[Dict[str, Any]] = None,
                 compression: Optional[str] = None) -> QuerySummary:
-    full_table = f'{quote_identifier(database)}.{quote_identifier(table)}' if database else quote_identifier(table)
+    if not database and table[0] not in ('`', "'") and table.find('.') > 0:
+        full_table = table
+    elif database:
+        full_table = f'{quote_identifier(database)}.{quote_identifier(table)}'
+    else:
+        full_table = quote_identifier(table)
     if not fmt:
         fmt = 'CSV' if column_names else 'CSVWithNames'
     if compression is None:

@@ -1,6 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             SchemaPresets {
                 Name: "default"
                 Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             SchemaPresets {
                 Name: "default"
                 Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES

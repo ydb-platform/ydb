@@ -131,14 +131,16 @@ void FillResponse(TEvent& cloudEvent, const NYql::TIssues& issues) {
     cloudEvent.set_event_status(issues.Empty()
         ? yandex::cloud::events::EventStatus::DONE
         : yandex::cloud::events::EventStatus::ERROR);
-
-    // response field must always be filled
-    cloudEvent.mutable_response();
-
+    
+    // response and error fields are mutually exclusive
+    // exactly one of them is required
     if (issues) {
+        cloudEvent.clear_response();
         auto* error = cloudEvent.mutable_error();
         error->set_code(grpc::StatusCode::UNKNOWN);
         error->set_message(issues.ToString());
+    } else {
+        cloudEvent.mutable_response();
     }
 }
 

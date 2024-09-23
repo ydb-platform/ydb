@@ -11,7 +11,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2000-2022 The OpenLDAP Foundation.
+ * Copyright 2000-2024 The OpenLDAP Foundation.
  * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
  * All rights reserved.
  *

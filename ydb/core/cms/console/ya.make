@@ -73,8 +73,6 @@ SRCS(
     util.h
 )
 
-GENERATE_ENUM_SERIALIZATION(config_item_info.h)
-
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
@@ -84,6 +82,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
+    ydb/core/config/init
     ydb/core/control
     ydb/core/engine/minikql
     ydb/core/mind
@@ -97,6 +96,8 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/operation_id
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()
 

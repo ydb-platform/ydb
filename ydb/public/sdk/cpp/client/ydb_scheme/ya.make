@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    out.cpp
     scheme.cpp
 )
 

@@ -5,7 +5,7 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include "kafka_messages.h"
-#include "ydb/library/aclib/aclib.h"
+#include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
 
 using namespace NActors;

@@ -2,7 +2,7 @@
 #include "mkql_computation_node_holders_codegen.h"
 #include "mkql_value_builder.h"
 #include "mkql_computation_node_codegen.h" // Y_IGNORE
-#include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -580,7 +580,6 @@ public:
         HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
         ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
         ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
-        ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState);
     }
 
     ~TComputationGraph() {
@@ -602,8 +601,7 @@ public:
                 ValueBuilder.Get(),
                 CompOpts,
                 PatternNodes->GetMutables(),
-                //*ArrowMemoryPool
-                *arrow::default_memory_pool()));
+                *NYql::NUdf::GetYqlMemoryPool()));
             Ctx->ExecuteLLVM = Codegen.get() != nullptr;
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
@@ -727,16 +725,45 @@ public:
         for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
             const NUdf::TUnboxedValuePod& mutableValue = Ctx->MutableValues[i];
             if (mutableValue.IsInvalid()) {
-                WriteUi32(result, std::numeric_limits<ui32>::max()); // -1.
+                WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
             } else if (mutableValue.IsBoxed()) {
-                NUdf::TUnboxedValue saved = mutableValue.Save();
-                const TStringBuf savedBuf = saved.AsStringRef();
-                WriteUi32(result, savedBuf.Size());
-                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                TList<TString> taskState;
+                size_t taskStateSize = 0;
+
+                auto saveList = [&](auto& list) {
+                    auto listIt = list.GetListIterator();
+                    NUdf::TUnboxedValue str;
+                    while (listIt.Next(str)) {
+                        const TStringBuf strRef = str.AsStringRef();
+                        taskStateSize += strRef.Size();
+                        taskState.push_back({});
+                        taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
+                    }
+                };
+                bool isList = mutableValue.HasListItems();
+                NUdf::TUnboxedValue list;
+                if (isList) {   // No load was done during previous runs.
+                    saveList(mutableValue);
+                } else {
+                    NUdf::TUnboxedValue saved = mutableValue.Save();
+                    if (saved.IsString() || saved.IsEmbedded()) {  // Old version.
+                        const TStringBuf savedBuf = saved.AsStringRef();
+                        taskState.push_back({});
+                        taskState.back().AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                        taskStateSize = savedBuf.Size();
+                    } else {
+                        saveList(saved);
+                    }
+                }
+                WriteUi64(result, taskStateSize);
+                for (auto it = taskState.begin(); it != taskState.end();) {
+                    result.AppendNoAlias(it->Data(), it->Size());
+                    it = taskState.erase(it);
+                }
             } else { // No load was done during previous runs (if any).
                 MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
                 const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
-                WriteUi32(result, savedRef.Size());
+                WriteUi64(result, savedRef.Size());
                 result.AppendNoAlias(savedRef.Data(), savedRef.Size());
             }
         }
@@ -747,10 +774,10 @@ public:
         Prepare();
 
         for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
-            if (const ui32 size = ReadUi32(state); size != std::numeric_limits<ui32>::max()) {
+            if (const ui64 size = ReadUi64(state); size != std::numeric_limits<ui64>::max()) {
                 MKQL_ENSURE(state.Size() >= size, "Serialized state is corrupted - buffer is too short (" << state.Size() << ") for specified size: " << size);
-                const NUdf::TStringRef savedRef(state.Data(), size);
-                Ctx->MutableValues[i] = MakeString(savedRef);
+                TStringBuf savedRef(state.Data(), size);
+                Ctx->MutableValues[i] = NKikimr::NMiniKQL::TOutputSerializer::MakeArray(*Ctx, savedRef);
                 state.Skip(size);
             } // else leave it Invalid()
         }
@@ -763,7 +790,6 @@ private:
     const TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<THolderFactory> HolderFactory;
     THolder<TDefaultValueBuilder> ValueBuilder;
-    std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool;
     THolder<TComputationContext> Ctx;
     TComputationOptsFull CompOpts;
     NYql::NCodegen::ICodegen::TSharedPtr Codegen;

@@ -73,6 +73,8 @@ INSERT INTO TIMESTAMP_TBL VALUES ('Feb 10 17:32:01 1997 -0800');
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb 10 17:32:01 1997');
 INSERT INTO TIMESTAMP_TBL VALUES ('Feb 10 5:32PM 1997');
 INSERT INTO TIMESTAMP_TBL VALUES ('1997/02/10 17:32:01-0800');
+set datestyle to ymd;
+reset datestyle;
 -- this fails (even though TZ is a no-op, we still look it up)
 INSERT INTO TIMESTAMP_TBL VALUES ('19970710 173201 America/Does_not_exist');
 ERROR:  time zone "america/does_not_exist" not recognized

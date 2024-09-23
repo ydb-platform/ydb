@@ -199,7 +199,7 @@ void TConfig::Reset()
 
     GlobalTxId = GetEnv("YT_TRANSACTION", "");
 
-    UseAsyncTxPinger = false;
+    UseAsyncTxPinger = true;
     AsyncHttpClientThreads = 1;
     AsyncTxPingerPoolThreads = 1;
 
@@ -212,6 +212,7 @@ void TConfig::Reset()
     LoadTimings();
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
+    CacheUploadDeduplicationThreshold = 10_MB;
 
     RetryCount = Max(GetInt("YT_RETRY_COUNT", 10), 1);
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);

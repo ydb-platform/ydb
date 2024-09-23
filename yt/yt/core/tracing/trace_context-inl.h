@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
+#include <yt/yt/core/concurrency/propagating_storage.h>
+
 #include <library/cpp/yt/misc/tls.h>
 
 #include <atomic>
@@ -181,17 +183,18 @@ std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag new
 
 namespace NDetail {
 
-extern YT_THREAD_LOCAL(TTraceContext*) CurrentTraceContext;
+YT_DECLARE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 
 TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
 
 } // namespace NDetail
 
-Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext)
+Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext, TSourceLocation location)
     : Active_(static_cast<bool>(traceContext))
 {
     if (Active_) {
         OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext));
+        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(location);
     }
 }
 
@@ -216,6 +219,7 @@ Y_FORCE_INLINE void TCurrentTraceContextGuard::Release()
 {
     if (Active_) {
         NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(FROM_HERE);
         Active_ = false;
     }
 }
@@ -227,10 +231,12 @@ Y_FORCE_INLINE const TTraceContextPtr& TCurrentTraceContextGuard::GetOldTraceCon
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard()
+Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TSourceLocation location)
     : Active_(true)
     , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
-{ }
+{
+    NConcurrency::GetCurrentPropagatingStorage().RecordLocation(location);
+}
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
     : Active_(other.Active_)
@@ -253,6 +259,7 @@ Y_FORCE_INLINE void TNullTraceContextGuard::Release()
 {
     if (Active_) {
         NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(FROM_HERE);
         Active_ = false;
     }
 }
@@ -322,13 +329,13 @@ inline void TTraceContextFinishGuard::Release()
 
 Y_FORCE_INLINE TTraceContext* TryGetCurrentTraceContext()
 {
-    return NDetail::CurrentTraceContext;
+    return NDetail::CurrentTraceContext();
 }
 
 Y_FORCE_INLINE TTraceContext* GetCurrentTraceContext()
 {
-    YT_ASSERT(NDetail::CurrentTraceContext);
-    return NDetail::CurrentTraceContext;
+    YT_ASSERT(NDetail::CurrentTraceContext());
+    return NDetail::CurrentTraceContext();
 }
 
 Y_FORCE_INLINE TTraceContextPtr CreateTraceContextFromCurrent(TString spanName)

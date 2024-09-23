@@ -1,7 +1,5 @@
 PY3_PROGRAM(gen_queries)
 
-OWNER(g:yql)
-
 PY_SRCS(
     MAIN gen_queries.py
 )
@@ -10,6 +8,9 @@ RESOURCE(
     pragmas_scalar.yql pragmas_scalar.yql
     pragmas_scalar_pg.yql pragmas_scalar_pg.yql
     pragmas_block.yql pragmas_block.yql
+    pragmas_ytsaurus.yql pragmas_ytsaurus.yql
+    pragmas_ytsaurus_pg.yql pragmas_ytsaurus_pg.yql
+    tables_ytsaurus_pg.jinja tables_ytsaurus_pg.jinja
     tables.jinja tables_bindings.jinja
     tables_postgres.jinja tables_postgres.jinja
     header.sql.jinja header.sql.jinja
@@ -17,6 +18,8 @@ RESOURCE(
     bindings_tpcds_pg.json bindings_ds_pg.json
     bindings_tpch.json bindings_h_yql.json
     bindings_tpch_pg.json bindings_h_pg.json
+    consts.yql consts.yql
+    consts_decimal.yql consts_decimal.yql
 )
 
 RESOURCE(

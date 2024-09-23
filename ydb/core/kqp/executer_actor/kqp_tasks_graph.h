@@ -94,6 +94,8 @@ struct TGraphMeta {
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
+    bool AllowInconsistentReads = false;
+    bool AllowWithSpilling = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
@@ -125,6 +127,7 @@ struct TTaskInputMeta {
 };
 
 struct TTaskOutputMeta {
+    NKikimrKqp::TKqpTableSinkSettings* SinkSettings = nullptr;
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
 };
 

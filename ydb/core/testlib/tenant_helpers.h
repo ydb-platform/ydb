@@ -96,6 +96,7 @@ struct TCreateTenantRequest {
     TString Path;
     EType Type;
     TAttrsCont Attrs;
+    Ydb::Cms::DatabaseQuotas DatabaseQuotas;
     // Common & Shared
     TPoolsCont Pools;
     TSlotsCont Slots;
@@ -113,6 +114,18 @@ struct TCreateTenantRequest {
 
     TSelf& WithAttrs(const TAttrsCont& attrs) {
         Attrs = attrs;
+        return *this;
+    }
+
+    TSelf& WithDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& quotas) {
+        DatabaseQuotas = quotas;
+        return *this;
+    }
+
+    TSelf& WithDatabaseQuotas(const TString& quotas) {
+        Ydb::Cms::DatabaseQuotas parsedQuotas;
+        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(quotas, &parsedQuotas), quotas);
+        DatabaseQuotas = std::move(parsedQuotas);
         return *this;
     }
 
@@ -340,6 +353,8 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     if (request.PlanResolution) {
         event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution);
     }
+    
+    event->Record.MutableRequest()->mutable_database_quotas()->CopyFrom(request.DatabaseQuotas);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
@@ -347,7 +362,7 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     auto &operation = reply->Record.GetResponse().operation();
 
     if (operation.ready()) {
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), code, operation.DebugString());
     } else {
         TString id = operation.id();
         auto *request = new NConsole::TEvConsole::TEvNotifyOperationCompletionRequest;

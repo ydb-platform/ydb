@@ -1,0 +1,9 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Установка
+    href: install.md
+  - name: Глобальные опции
+    href: global-options.md
+  - name: Список устройств
+    href: device-list.md

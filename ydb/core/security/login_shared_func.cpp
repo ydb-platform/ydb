@@ -2,8 +2,8 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include "login_shared_func.h"
-#include "ldap_auth_provider.h"
 
 namespace NKikimr {
 

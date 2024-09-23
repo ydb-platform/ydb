@@ -74,11 +74,11 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     }
 
 
-    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {
+    void SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state) {
         CaSetup->SaveSourceState(checkpoint, state);
     }
 
-    void LoadSource(const NDqProto::TSourceState& state) {
+    void LoadSource(const TSourceState& state) {
         return CaSetup->LoadSource(state);
     }
 
@@ -94,7 +94,7 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
         InitAsyncOutput(BuildPqTopicSinkSettings(topic), freeSpace);
     }
 
-    void LoadSink(const NDqProto::TSinkState& state) {
+    void LoadSink(const TSinkState& state) {
         CaSetup->LoadSink(state);
     }
 

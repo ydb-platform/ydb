@@ -100,7 +100,7 @@ public:
     }
 
     void Exec(TActorSystem *actorSystem) override {
-        auto execSpan = Span.CreateChild(TWilson::PDisk, "PDisk.CompletionChunkWrite.Exec");
+        auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
         LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
                 "PDiskId# " << PDiskId << " ReqId# " << ReqId

@@ -27,7 +27,8 @@ public:
 
         for (const auto& [vslotId, v] : Self->VSlots) {
             if (std::exchange(v->MetricsDirty, false)) {
-                auto&& key = std::tie(v->GroupId, v->GroupGeneration, v->RingIdx, v->FailDomainIdx, v->VDiskIdx);
+                auto groupId = v->GroupId.GetRawId();
+                auto&& key = std::tie(groupId, v->GroupGeneration, v->RingIdx, v->FailDomainIdx, v->VDiskIdx);
                 auto value = v->Metrics;
                 value.ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(value);

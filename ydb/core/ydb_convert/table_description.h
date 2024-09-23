@@ -30,7 +30,7 @@ enum class EAlterOperationKind {
 struct TPathId;
 
 
-THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req); 
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req);
 bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
@@ -65,9 +65,9 @@ void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
 
 // out
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
-    const NKikimrSchemeOp::TTableDescription& in);
+    const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType);
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
-    const NKikimrSchemeOp::TTableDescription& in);
+    const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType);
 // in
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
@@ -126,6 +126,15 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 // in
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
-    Ydb::StatusIds::StatusCode& status, TString& error);
+    Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
+
+
+// out
+void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
+// out
+void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
 
 } // namespace NKikimr

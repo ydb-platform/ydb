@@ -34,31 +34,42 @@ using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqp
 
 /// resources request
 struct TKqpResourcesRequest {
-    ui32 ExecutionUnits = 0;
+    ui64 ExecutionUnits = 0;
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
+    ui64 ExternalMemory = 0;
+    bool ReleaseAllResources = false;
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
-           << ", ExecutionUnits: " << ExecutionUnits << " }";
+            << "ExternalMemory: " << ExternalMemory << " }";
     }
 };
 
 /// detailed information on allocation failure
-struct TKqpNotEnoughResources {
-    std::bitset<32> State;
+struct TKqpRMAllocateResult {
+    bool Success = true;
+    NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
+    TString FailReason;
+    ui64 TotalAllocatedQueryMemory = 0;
 
-    bool NotReady() const         { return State.test(0); }
-    bool ExecutionUnits() const   { return State.test(1); }
-    bool QueryMemoryLimit() const { return State.test(2); }
-    bool ScanQueryMemory() const  { return State.test(3); }
-    bool DataQueryMemory() const  { return State.test(4); }
+    NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
+        return Status;
+    }
 
-    void SetNotReady()         { State.set(0); }
-    void SetExecutionUnits()   { State.set(1); }
-    void SetQueryMemoryLimit() { State.set(2); }
-    void SetScanQueryMemory()  { State.set(3); }
-    void SetDataQueryMemory()  { State.set(4); }
+    TString GetFailReason() const {
+        return FailReason;
+    }
+
+    void SetError(NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason status, const TString& reason) {
+        Success = false;
+        Status = status;
+        FailReason = reason;
+    }
+
+    operator bool() const noexcept {
+        return Success;
+    }
 };
 
 /// local resources snapshot
@@ -72,25 +83,18 @@ class IKqpResourceManager : private TNonCopyable {
 public:
     virtual ~IKqpResourceManager() = default;
 
-    virtual bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        TKqpNotEnoughResources* details = nullptr) = 0;
+    virtual TKqpRMAllocateResult AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
     using TResourcesAllocatedCallback = std::function<void(NActors::TActorSystem* as)>;
-    using TNotEnoughtResourcesCallback = std::function<void(NActors::TActorSystem* as, const TString& reason, bool byTimeout)>;
-
-    virtual bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        TResourcesAllocatedCallback&& onSuccess, TNotEnoughtResourcesCallback&& onFail, TDuration timeout = {}) = 0;
 
     virtual void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void FreeResources(ui64 txId, ui64 taskId) = 0;
-    virtual void FreeResources(ui64 txId) = 0;
 
     virtual void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId) = 0;
 
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
+    virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
     virtual NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() = 0;
 

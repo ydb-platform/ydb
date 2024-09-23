@@ -535,7 +535,7 @@ void TPDisk::ReadAndParseMainLog(const TActorId &pDiskActor) {
 void TPDisk::ProcessLogReadQueue() {
     for (auto& req : JointLogReads) {
         req->SpanStack.PopOk();
-        req->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
+        req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         switch (req->GetType()) {
         case ERequestType::RequestLogRead:
         {
@@ -593,11 +593,11 @@ void TPDisk::ProcessLogReadQueue() {
         case ERequestType::RequestLogReadContinue:
         {
             TLogReadContinue *read = static_cast<TLogReadContinue*>(req);
-            read->CompletionAction->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize,
-                    TDriveModel::OP_TYPE_READ);
-            auto traceId = read->SpanStack.GetTraceId();
-            BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, read->CompletionAction,
-                    read->ReqId, &traceId); // ??? TraceId
+            if (auto ptr = read->CompletionAction.lock()) {
+                ptr->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize, TDriveModel::OP_TYPE_READ);
+                auto traceId = read->SpanStack.GetTraceId();
+                BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, ptr.get(), read->ReqId, &traceId); // ??? TraceId
+            }
             break;
         }
         case ERequestType::RequestLogSectorRestore:
@@ -736,7 +736,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
         if (status == NKikimrProto::OK) {
-            logWrite->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
+            logWrite->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
             LogWrite(*logWrite, logChunksToCommit);
             logWrite->ScheduleTime = HPNow();
             if (auto logWriteTraceId = logWrite->SpanStack.GetTraceId()) {
@@ -946,8 +946,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
     Y_ABORT_UNLESS(CommonLogger->NextChunks.empty());
 
-    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK,
-                GetStatusFlags(evLog.Owner, evLog.OwnerGroupType), nullptr));
+    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), nullptr));
     Y_ABORT_UNLESS(evLog.Result.Get());
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
@@ -1282,7 +1281,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     }
 
     if (req.IsChunksFromLogSplice) {
-        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.SpanStack.CreateChild(TWilson::PDisk, "PDisk.ReleaseChunks"));
+        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.ReleaseChunks"));
 
         auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
 

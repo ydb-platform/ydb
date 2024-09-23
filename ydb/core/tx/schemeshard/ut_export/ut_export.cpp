@@ -169,6 +169,49 @@ namespace {
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
+    const Ydb::Table::PartitioningSettings& GetPartitioningSettings(
+        const Ydb::Table::CreateTableRequest& tableDescription
+    ) {
+        UNIT_ASSERT_C(tableDescription.has_partitioning_settings(), tableDescription.DebugString());
+        return tableDescription.partitioning_settings();
+    }
+
+    const Ydb::Table::PartitioningSettings& GetIndexTablePartitioningSettings(
+        const Ydb::Table::CreateTableRequest& tableDescription
+    ) {
+        UNIT_ASSERT_C(tableDescription.indexes_size(), tableDescription.DebugString());
+
+        const auto& index = tableDescription.indexes(0);
+        UNIT_ASSERT_C(index.has_global_index(), index.DebugString());
+        UNIT_ASSERT_C(index.global_index().has_settings(), index.DebugString());
+
+        const auto& settings = index.global_index().settings();
+        UNIT_ASSERT_C(settings.has_partitioning_settings(), settings.DebugString());
+        return settings.partitioning_settings();
+    }
+
+    // It might be an overkill to convert expectedString to expectedProto and back to .DebugString(),
+    // but it allows us to ignore whitespace differences when comparing the protobufs.
+    auto CreateProtoComparator(TString&& expectedString) {
+        return [expectedString = std::move(expectedString)](const auto& proto) {
+            std::decay_t<decltype(proto)> expectedProto;
+            UNIT_ASSERT_C(
+                google::protobuf::TextFormat::ParseFromString(expectedString, &expectedProto),
+                expectedString
+            );
+            UNIT_ASSERT_STRINGS_EQUAL(proto.DebugString(), expectedProto.DebugString());
+        };
+    }
+
+    void CheckTableScheme(const TString& scheme, auto&& fieldGetter, auto&& fieldChecker) {
+        Ydb::Table::CreateTableRequest proto;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(scheme, &proto),
+            scheme
+        );
+        fieldChecker(fieldGetter(proto));
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
@@ -365,7 +408,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
       }
     }
   }
-  not_null: false
   from_literal {
     type {
       optional_type {
@@ -390,7 +432,6 @@ columns {
       }
     }
   }
-  not_null: false
   from_literal {
     type {
       optional_type {
@@ -1435,7 +1476,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         // Write bad DyNumber
-        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1505,4 +1546,276 @@ partitioning_settings {
         TestGetExport(runtime, exportId, "/MyRoot");
         env.TestWaitNotification(runtime, exportId);
     }
+
+    Y_UNIT_TEST(ExportStartTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+    }
+
+    Y_UNIT_TEST(CompletedExportEndTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    Y_UNIT_TEST(CancelledExportEndTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+                return false;
+            }
+
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+        };
+        
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (delayFunc(ev)) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        const ui64 exportId = txId;
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+
+        auto desc = TestGetExport(runtime, exportId, "/MyRoot");
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, exportId);
+
+        desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    Y_UNIT_TEST(ExportPartitioningSettings) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        Run(runtime, env, {
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            MinPartitionsCount: 10
+                            SplitByLoadSettings: {
+                                Enabled: true
+                            }
+                        }
+                    }
+                )"
+            },
+            Sprintf(
+                R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/Table"
+                            destination_prefix: ""
+                        }
+                    }
+                )",
+                port
+            )
+        );
+
+        auto* scheme = s3Mock.GetData().FindPtr("/scheme.pb");
+        UNIT_ASSERT(scheme);
+        CheckTableScheme(*scheme, GetPartitioningSettings, CreateProtoComparator(R"(
+            partitioning_by_size: DISABLED
+            partitioning_by_load: ENABLED
+            min_partitions_count: 10
+        )"));
+    }
+
+    Y_UNIT_TEST(ExportIndexTablePartitioningSettings) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                IndexImplTableDescription {
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            MinPartitionsCount: 10
+                            SplitByLoadSettings: {
+                                Enabled: true
+                            }
+                        }
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(
+                R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/Table"
+                            destination_prefix: ""
+                        }
+                    }
+                )",
+                port
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        auto* scheme = s3Mock.GetData().FindPtr("/scheme.pb");
+        UNIT_ASSERT(scheme);
+        CheckTableScheme(*scheme, GetIndexTablePartitioningSettings, CreateProtoComparator(R"(
+            partitioning_by_size: DISABLED
+            partitioning_by_load: ENABLED
+            min_partitions_count: 10
+        )"));
+    }
+
 }

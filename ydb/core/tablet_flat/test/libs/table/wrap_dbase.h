@@ -102,8 +102,8 @@ namespace NTest {
         TAutoPtr<TIter> Iter;
     };
 
-    using TWrapDbIter = TWrapDbIterImpl<TTableIt>;
-    using TWrapDbReverseIter = TWrapDbIterImpl<TTableReverseIt>;
+    using TWrapDbIter = TWrapDbIterImpl<TTableIter>;
+    using TWrapDbReverseIter = TWrapDbIterImpl<TTableReverseIter>;
 
 }
 }

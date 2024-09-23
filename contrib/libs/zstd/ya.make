@@ -12,18 +12,12 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.5.5)
+VERSION(1.5.6)
 
-ORIGINAL_SOURCE(https://github.com/facebook/zstd/archive/v1.5.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/facebook/zstd/archive/v1.5.6.tar.gz)
 
 PEERDIR(
     contrib/libs/xxhash
-)
-
-ADDINCL(
-    contrib/libs/zstd/lib
-    contrib/libs/zstd/lib/common
-    contrib/libs/zstd/lib/legacy
 )
 
 NO_COMPILER_WARNINGS()

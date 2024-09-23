@@ -10,9 +10,20 @@
 
 namespace NYql {
 
-TExprNode::TPtr TAggregateExpander::ExpandAggregate()
-{
+TExprNode::TPtr TAggregateExpander::ExpandAggregate() {
     YQL_CLOG(DEBUG, Core) << "Expand " << Node->Content();
+    auto result = ExpandAggregateWithFullOutput();
+    if (result) {
+        auto outputColumns = GetSetting(*Node->Child(NNodes::TCoAggregate::idx_Settings), "output_columns");
+        if (outputColumns) {
+            result = Ctx.NewCallable(result->Pos(), "ExtractMembers", { result, outputColumns->ChildPtr(1) });
+        }
+    }
+    return result;
+}
+
+TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
+{
     Suffix = Node->Content();
     YQL_ENSURE(Suffix.SkipPrefix("Aggregate"));
     AggList = Node->HeadPtr();
@@ -530,9 +541,13 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
     auto wideFlow = MakeExpandMap(Node->Pos(), inputColumns, flow, Ctx);
 
     TExprNode::TListType extractorArgs;
+    TExprNode::TListType newRowItems;
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
         extractorArgs.push_back(Ctx.NewArgument(Node->Pos(), "field" + ToString(i)));
+        newRowItems.push_back(Ctx.NewList(Node->Pos(), { Ctx.NewAtom(Node->Pos(), RowType->GetItems()[i]->GetName()), extractorArgs.back() }));
     }
+
+    const TExprNode::TPtr newRow = Ctx.NewCallable(Node->Pos(), "AsStruct", std::move(newRowItems));
 
     TExprNode::TListType extractorRoots;
     TVector<const TTypeAnnotationNode*> allKeyTypes;
@@ -585,21 +600,14 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         }
 
         auto rowArg = &trait->Child(2)->Head().Head();
+        const TNodeOnNodeOwnedMap remaps{ { rowArg, newRow } };
+
         TVector<TExprNode::TPtr> roots;
         for (ui32 i = 1; i < argsCount + 1; ++i) {
             auto root = trait->Child(2)->ChildPtr(i);
             allTypes.push_back(root->GetTypeAnn());            
 
-            auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-                Y_UNUSED(ctx);
-                if (node->IsCallable("Member") && &node->Head() == rowArg) {
-                    auto i = RowType->FindItem(node->Tail().Content());
-                    YQL_ENSURE(i, "Missing member");
-                    return extractorArgs[*i];
-                }
-
-                return node;
-            }, Ctx, TOptimizeExprSettings(&TypesCtx));
+            auto status = RemapExpr(root, root, remaps, Ctx, TOptimizeExprSettings(&TypesCtx));
 
             YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
             roots.push_back(root);
@@ -2456,6 +2464,7 @@ TExprNode::TPtr TAggregateExpander::SerializeIdxSet(const TIdxSet& indicies) {
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePhases() {
+    const TExprNode::TPtr cleanOutputSettings = RemoveSetting(*Node->Child(3), "output_columns", Ctx);
     const bool many = HaveDistinct;
     YQL_CLOG(DEBUG, Core) << "Aggregate: generate " << (many ? "phases with distinct" : "simple phases");
     TExprNode::TListType mergeTraits;
@@ -2571,7 +2580,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, AggList)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2580,7 +2589,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, combine)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(finalizeColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2614,7 +2623,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, AggList)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2634,7 +2643,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(1, Ctx.NewList(Node->Pos(), std::move(allKeyColumns)))
                 .List(2)
                 .Seal()
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2768,7 +2777,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(0, distinct)
                 .Add(1, KeyColumns)
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
-                .Add(3, Node->ChildPtr(3))
+                .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
 
@@ -2796,7 +2805,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         }
     }
 
-    auto settings = Node->ChildPtr(3);
+    auto settings = cleanOutputSettings;
     if (TypesCtx.IsBlockEngineEnabled()) {
         settings = AddSetting(*settings, Node->Pos(), "many_streams", Ctx.NewList(Node->Pos(), std::move(streams)), Ctx);
     }

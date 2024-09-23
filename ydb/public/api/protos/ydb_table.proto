@@ -46,13 +46,29 @@ message DeleteSessionResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message GlobalIndexSettings {
+    oneof partitions {
+        // Enable uniform partitioning of the table that implements the index using the specified partition count.
+        // Note that the index columns must be of type Uint32 or Uint64.
+        uint64 uniform_partitions = 1;
+        // Explicitly specify the key values of the index columns that define the partition boundaries
+        // for the table implementing the index.
+        ExplicitPartitions partition_at_keys = 2;
+    }
+    // Partitioning settings for the table that implements the index.
+    PartitioningSettings partitioning_settings = 3;
+}
+
 message GlobalIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 message GlobalAsyncIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 message GlobalUniqueIndex {
+    GlobalIndexSettings settings = 1;
 }
 
 // Represent secondary index
@@ -191,6 +207,11 @@ message ChangefeedDescription {
         STATE_INITIAL_SCAN = 3;
     }
 
+    message InitialScanProgress {
+        uint32 parts_total = 1;
+        uint32 parts_completed = 2;
+    }
+
     // Name of the feed
     string name = 1;
     // Mode specifies the information that will be written to the feed
@@ -207,6 +228,8 @@ message ChangefeedDescription {
     string aws_region = 7;
     // Interval of emitting of resolved timestamps. If unspecified, resolved timestamps are not emitted.
     google.protobuf.Duration resolved_timestamps_interval = 8;
+    // Progress of initial scan. If unspecified, initial scan was not launched.
+    InitialScanProgress initial_scan_progress = 9;
 }
 
 message StoragePool {
@@ -334,6 +357,10 @@ message TableProfile {
 }
 
 message SequenceDescription {
+    message SetVal {
+        optional sint64 next_value = 1;
+        optional bool next_used = 2;
+    }
     optional string name = 1; // mandatorys
     optional sint64 min_value = 2; // minimum value, defaults to 1 or Min<i64>
     optional sint64 max_value = 3; // maximum value, defaults to Max<i64> or -1
@@ -341,6 +368,7 @@ message SequenceDescription {
     optional uint64 cache = 5; // number of items to cache, defaults to 1
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
+    optional SetVal set_val = 8; // set_val(next_value, next_used) is executed atomically when creating
 }
 
 message ColumnMeta {
@@ -1085,6 +1113,7 @@ message ReadTableRequest {
     // greater than any of the limits
     uint64 batch_limit_bytes = 8;
     uint64 batch_limit_rows = 9;
+    Ydb.FeatureFlag.Status return_not_null_data_as_optional = 10;
 }
 
 // ReadTable doesn't use Operation, returns result directly

@@ -17,7 +17,7 @@ select  item.i_brand_id brand_id, item.i_brand brand, item.i_manufact_id, item.i
    and d_year=1998
    and ss_customer_sk = c_customer_sk
    and c_current_addr_sk = ca_address_sk
-   and substring(cast(ca_zip as string),1,5) <> substring(cast(s_zip as string),1,5)
+   and substring(cast(ca_zip as string),0,5) <> substring(cast(s_zip as string),0,5)
    and ss_store_sk = s_store_sk
  group by item.i_brand
       ,item.i_brand_id

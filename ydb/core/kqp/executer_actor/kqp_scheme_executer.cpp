@@ -39,9 +39,14 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
     struct TEvPrivate {
         enum EEv {
             EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvMakeTempDirResult,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+            IKqpGateway::TGenericResult Result;
+        };
+
+        struct TEvMakeTempDirResult : public TEventLocal<TEvMakeTempDirResult, EEv::EvMakeTempDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -69,11 +74,44 @@ public:
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(nullptr);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+            nullptr,
+            TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
     }
 
     void StartBuildOperation() {
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Become(&TKqpSchemeExecuter::ExecuteState);
+    }
+
+    void CreateTmpDirectory() {
+        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& record = ev->Record;
+
+        record.SetDatabaseName(Database);
+        if (UserToken) {
+            record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+        modifyScheme->SetAllowCreateInTempDir(false);
+        auto* makeDir = modifyScheme->MutableMkDir();
+        makeDir->SetName(SessionId);
+        ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
+
+        auto promise = NewPromise<IKqpGateway::TGenericResult>();
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        RegisterWithSameMailbox(requestHandler);
+
+        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto selfId = SelfId();
+        promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
+            ev->Result = future.GetValue();
+            actorSystem->Send(selfId, ev.Release());
+        });
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
@@ -108,11 +146,11 @@ public:
                         default:
                             YQL_ENSURE(false, "Unexpected operation type");
                     }
-                    tableDesc->SetName(tableDesc->GetName() + SessionId);
-                    tableDesc->SetPath(tableDesc->GetPath() + SessionId);
-                    YQL_ENSURE(KqpTempTablesAgentActor != TActorId(),
-                        "Create temp table with empty KqpTempTablesAgentActor");
-                    ActorIdToProto(KqpTempTablesAgentActor, modifyScheme.MutableTempTableOwnerActorId());
+                    const auto fullPath = JoinPath({tableDesc->GetPath(), tableDesc->GetName()});
+                    YQL_ENSURE(fullPath.size() > 1);
+                    tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, fullPath));
+                    tableDesc->SetPath(Database);
+                    modifyScheme.SetAllowCreateInTempDir(true);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
@@ -233,6 +271,42 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateSequence: {
+                const auto& modifyScheme = schemeOp.GetCreateSequence();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropSequence: {
+                const auto& modifyScheme = schemeOp.GetDropSequence();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateReplication: {
+                const auto& modifyScheme = schemeOp.GetCreateReplication();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterReplication: {
+                const auto& modifyScheme = schemeOp.GetAlterReplication();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropReplication: {
+                const auto& modifyScheme = schemeOp.GetDropReplication();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterSequence: {
+                const auto& modifyScheme = schemeOp.GetAlterSequence();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -316,7 +390,11 @@ public:
         if (schemeOp.GetObjectType()) {
             MakeObjectRequest();
         } else {
-            MakeSchemeOperationRequest();
+            if (Temporary) {
+                CreateTmpDirectory();
+            } else {
+                MakeSchemeOperationRequest();
+            }
         }
     }
 
@@ -325,6 +403,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvResult, HandleExecute);
+                hFunc(TEvPrivate::TEvMakeTempDirResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -355,6 +434,14 @@ public:
         }
     }
 
+    void Handle(TEvPrivate::TEvMakeTempDirResult::TPtr& result) {
+        if (!result->Get()->Result.Success()) {   
+            InternalError(TStringBuilder()
+                << "Error creating temporary directory for session " << SessionId
+                << ": " << result->Get()->Result.Issues().ToString(true));
+        }
+        MakeSchemeOperationRequest();
+    }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         const auto* msg = ev->Get();

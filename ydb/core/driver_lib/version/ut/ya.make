@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/driver_lib/version
+    ydb/apps/version
 )
 
 END()

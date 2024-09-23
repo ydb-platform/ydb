@@ -12,6 +12,7 @@ namespace NYT::NYTree {
 
 struct TVirtualCompositeNodeReadOffloadParams
 {
+    IInvokerPtr OffloadInvoker;
     NConcurrency::EWaitForStrategy WaitForStrategy = NConcurrency::EWaitForStrategy::WaitFor;
     i64 BatchSize = 10'000;
 };

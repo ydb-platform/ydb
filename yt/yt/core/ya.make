@@ -9,6 +9,8 @@ IF (ARCH_X86_64)
     CFLAGS(-mpclmul)
 ENDIF()
 
+NO_LTO()
+
 SRCS(
     actions/cancelable_context.cpp
     actions/current_invoker.cpp
@@ -117,7 +119,6 @@ SRCS(
     misc/coro_pipe.cpp
     misc/crash_handler.cpp
     misc/digest.cpp
-    misc/dnf.cpp
     misc/error.cpp
     misc/error_code.cpp
     misc/ema_counter.cpp
@@ -129,10 +130,8 @@ SRCS(
     misc/hedging_manager.cpp
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
-    misc/hr_timer.cpp
     misc/id_generator.cpp
     misc/linear_probe.cpp
-    misc/memory_reference_tracker.cpp
     misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
@@ -140,6 +139,7 @@ SRCS(
     misc/phoenix.cpp
     misc/pool_allocator.cpp
     misc/proc.cpp
+    misc/process_exit_profiler.cpp
     misc/protobuf_helpers.cpp
     misc/public.cpp
     misc/random.cpp
@@ -152,6 +152,7 @@ SRCS(
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
     misc/statistics.cpp
+    misc/string_helpers.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
@@ -171,6 +172,13 @@ SRCS(
     dns/dns_resolver.cpp
 
     profiling/timing.cpp
+
+    phoenix/context.cpp
+    phoenix/descriptors.cpp
+    phoenix/load.cpp
+    phoenix/schemas.cpp
+    phoenix/type_def.cpp
+    phoenix/type_registry.cpp
 
     rpc/authentication_identity.cpp
     rpc/authenticator.cpp
@@ -399,6 +407,7 @@ IF (NOT OS_WINDOWS)
         crypto/unittests
         json/unittests
         logging/unittests
+        phoenix/unittests
         profiling/unittests
         rpc/unittests
         ypath/unittests

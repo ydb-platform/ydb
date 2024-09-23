@@ -20,7 +20,7 @@ struct TEtag
 bool operator==(const TEtag& lhs, const TEtag& rhs);
 
 TErrorOr<TEtag> ParseEtag(TStringBuf etagString);
-TString ToString(const TEtag& Etag);
+void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

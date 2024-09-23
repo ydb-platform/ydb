@@ -39,6 +39,47 @@ public:
     }
 };
 
+template <bool Nullable>
+class TResourceBlockItemConverter : public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        if (item.IsEmbedded()) {
+            NUdf::TUnboxedValuePod embedded;
+            std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+            return embedded;
+        } else if (item.IsBoxed()) {
+            return NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+        } else {
+            return NYql::NUdf::TUnboxedValuePod(item.AsStringValue());
+        }
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        if (value.IsEmbedded()) {
+            TBlockItem embedded;
+            std::memcpy(embedded.GetRawPtr(), value.GetRawPtr(), sizeof(TBlockItem));
+            return embedded;
+        } else if (value.IsBoxed()) {
+            return TBlockItem(value.AsBoxed());
+        } else {
+            return TBlockItem(value.AsStringValue());
+        }
+    }
+};
+
 template<typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
 class TStringBlockItemConverter : public IBlockItemConverter {
 public:
@@ -64,7 +105,8 @@ public:
         } else if constexpr (PgString == NUdf::EPgStringType::Fixed) {
             auto str = item.AsStringRef().Data() + sizeof(void*);
             auto len = item.AsStringRef().Size() - sizeof(void*);
-            return PgBuilder->NewString(TypeLen, PgTypeId, NUdf::TStringRef(str, len)).Release();
+            Y_DEBUG_ABORT_UNLESS(ui32(TypeLen) <= len);
+            return PgBuilder->NewString(TypeLen, PgTypeId, NUdf::TStringRef(str, TypeLen)).Release();
         } else {
             return MakeString(item.AsStringRef());
         }
@@ -153,6 +195,37 @@ private:
     mutable TVector<TBlockItem> Items;
 };
 
+template <typename TTzDate, bool Nullable>
+class TTzDateBlockItemConverter : public IBlockItemConverter {
+public:
+    using TLayout = typename NYql::NUdf::TDataType<TTzDate>::TLayout;
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        NUdf::TUnboxedValuePod value {item.Get<TLayout>()};
+        value.SetTimezoneId(item.GetTimezoneId());
+        return value;
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        TBlockItem item {value.Get<TLayout>()};
+        item.SetTimezoneId(value.GetTimezoneId());
+        return item;
+    }
+};
+
 class TExternalOptionalBlockItemConverter : public IBlockItemConverter {
 public:
     TExternalOptionalBlockItemConverter(std::unique_ptr<IBlockItemConverter>&& inner)
@@ -187,6 +260,8 @@ struct TConverterTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
     using TStrings = TStringBlockItemConverter<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
+    template<typename TTzDate, bool Nullable>
+    using TTzDateConverter = TTzDateBlockItemConverter<TTzDate, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         if (desc.PassByValue) {
@@ -205,6 +280,24 @@ struct TConverterTraits {
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             }
+        }
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        if (isOptional) {
+            return std::make_unique<TResourceBlockItemConverter<true>>();
+        } else {
+            return std::make_unique<TResourceBlockItemConverter<false>>();
+        }
+    }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateConverter<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateConverter<TTzDate, false>>();
         }
     }
 };

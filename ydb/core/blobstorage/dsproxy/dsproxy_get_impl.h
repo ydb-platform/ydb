@@ -249,7 +249,7 @@ public:
     void PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
             TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult);
 
-    void AccelerateGet(TLogContext &logCtx, i32 slowDiskOrderNumber,
+    void AccelerateGet(TLogContext &logCtx, ui32 slowDisksMask,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts) {
         TAutoPtr<TEvBlobStorage::TEvGetResult> outGetResult;
@@ -259,7 +259,7 @@ public:
             TStackVec<TBlobState::TDisk, TypicalDisksInSubring> &disks = it->second.Disks;
             for (ui32 i = 0; i < disks.size(); ++i) {
                 TBlobState::TDisk &disk = disks[i];
-                disk.IsSlow = ((i32)disk.OrderNumber == slowDiskOrderNumber);
+                disk.IsSlow = slowDisksMask & (1 << disk.OrderNumber);
             }
         }
         Blackboard.ChangeAll();
@@ -269,14 +269,14 @@ public:
             RequestPrefix.data(), outGetResult->Print(false).c_str(), DumpFullState().c_str());
     }
 
-    void AcceleratePut(TLogContext &logCtx, i32 slowDiskOrderNumber,
+    void AcceleratePut(TLogContext &logCtx, ui32 slowDisksMask,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts) {
-        AccelerateGet(logCtx, slowDiskOrderNumber, outVGets, outVPuts);
+        AccelerateGet(logCtx, slowDisksMask, outVGets, outVPuts);
     }
 
-    ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx);
-    ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx);
+    ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent);
+    ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx, ui32 acceleratesSent);
 
     TString DumpFullState() const;
 
@@ -313,7 +313,7 @@ protected:
     void PrepareVPuts(TLogContext &logCtx,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts);
 
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId);
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst);
 }; //TGetImpl
 
 }//NKikimr

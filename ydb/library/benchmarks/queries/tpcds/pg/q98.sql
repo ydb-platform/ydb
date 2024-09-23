@@ -6,7 +6,7 @@ select i_item_id
       ,i_class
       ,i_current_price
       ,sum(ss_ext_sales_price) as itemrevenue
-      ,sum(ss_ext_sales_price)*100::numeric/sum(sum(ss_ext_sales_price)) over
+      ,sum(ss_ext_sales_price)*100/sum(sum(ss_ext_sales_price)) over
           (partition by i_class) as revenueratio
 from
 	{{store_sales}}
@@ -25,10 +25,10 @@ group by
         ,i_class
         ,i_current_price
 order by
-	i_category
-        ,i_class
-        ,i_item_id
-        ,i_item_desc
-        ,revenueratio;
+	i_category nulls first
+        ,i_class nulls first
+        ,i_item_id nulls first
+        ,i_item_desc nulls first
+        ,revenueratio nulls first;
 
 -- end query 1 in stream 0 using template ../query_templates/query98.tpl

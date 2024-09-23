@@ -434,11 +434,15 @@ bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hin
     return true;
 }
 
-bool ISource::CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const {
+bool ISource::AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& grouingColumn) {
     Y_UNUSED(columns);
-    Y_UNUSED(hint);
+    Y_UNUSED(grouingColumn);
     ctx.Error() << "Source not support grouping hint";
     return false;
+}
+
+size_t ISource::GetGroupingColumnsCount() const {
+    return 0;
 }
 
 TNodePtr ISource::BuildFilter(TContext& ctx, const TString& label) {
@@ -853,6 +857,11 @@ TNodePtr ISource::BuildSort(TContext& ctx, const TString& label) {
 
 TNodePtr ISource::BuildCleanupColumns(TContext& ctx, const TString& label) {
     Y_UNUSED(ctx);
+    Y_UNUSED(label);
+    return nullptr;
+}
+
+TNodePtr ISource::BuildGroupingColumns(const TString& label) {
     Y_UNUSED(label);
     return nullptr;
 }

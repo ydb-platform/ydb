@@ -56,6 +56,6 @@ $ws =
        > case when ss1.store_sales > 0 then ss2.store_sales/ss1.store_sales else null end
     and case when ws2.web_sales > 0 then ws3.web_sales/ws2.web_sales else null end
        > case when ss2.store_sales > 0 then ss3.store_sales/ss2.store_sales else null end
- order by ss1.d_year;
+ order by ss1.ca_county;
 
 -- end query 1 in stream 0 using template query31.tpl

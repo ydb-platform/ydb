@@ -72,3 +72,7 @@ class TestYamlConfigTransformations(object):
     @pytest.mark.parametrize('args', [[], ["--deprecated"]])
     def test_basic(self, binary, args):
         return self.execute_test("ydb/library/yaml_config/ut_transform/configs", binary[1], args)
+
+    @pytest.mark.parametrize('binary', [('dump', dump_bin()), ('dump_ds_init', dump_ds_init_bin())], ids=lambda binary: binary[0])
+    def test_simplified(self, binary):
+        return self.execute_test("ydb/library/yaml_config/ut_transform/simplified_configs", binary[1])

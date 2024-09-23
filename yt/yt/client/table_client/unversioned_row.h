@@ -439,8 +439,7 @@ void ValidateClientDataRow(
 void ValidateDuplicateAndRequiredValueColumns(
     TUnversionedRow row,
     const TTableSchema& schema,
-    const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer);
+    const TNameTableToSchemaIdMapping& idMapping);
 
 //! Checks that #row contains write lock for non-key columns and returns true if any non-key columns encountered.
 bool ValidateNonKeyColumnsAgainstLock(
@@ -449,8 +448,7 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     const TNameTablePtr& nameTable,
-    const std::vector<int>& columnIndexToLockIndex,
-    bool allowSharedWriteLocks);
+    const std::vector<int>& columnIndexToLockIndex);
 
 //! Checks that #key is a valid client-side key. Throws on failure.
 /*! The components must pass #ValidateKeyValue check. */
@@ -658,6 +656,13 @@ public:
         GetHeader()->Count = count;
     }
 
+    void PushBack(TUnversionedValue value)
+    {
+        ui32 count = GetCount();
+        SetCount(count + 1);
+        Begin()[count] = value;
+    }
+
     TUnversionedValue& operator[] (ui32 index)
     {
         YT_ASSERT(index < GetHeader()->Count);
@@ -814,7 +819,6 @@ public:
     {
         return End();
     }
-
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
@@ -986,4 +990,13 @@ struct THash<NYT::NTableClient::TUnversionedRow>
     {
         return NYT::NTableClient::TDefaultUnversionedRowHash()(row);
     }
+};
+
+template <class T>
+    requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedRow>
+struct NYT::TFormatArg<T>
+    : public NYT::TFormatArgBase
+{
+    static constexpr auto FlagSpecifiers
+        = TFormatArgBase::ExtendFlags</*Hot*/ true, 1, std::array{'k'}>();
 };

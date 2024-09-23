@@ -40,7 +40,7 @@ public:
     TVector<size_t> Results;
 
     TTestDeferredQueue(TRopeArena& arena)
-        : TDeferredItemQueueBase<TTestDeferredQueue>(arena, ::GType)
+        : TDeferredItemQueueBase<TTestDeferredQueue>(arena, ::GType, true)
     {}
 };
 
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
             // create initial memory merger
             for (ui8 i = 0; i < 6; ++i) {
                 if (mem >> i & 1) {
-                    TRope buf = TDiskBlob::Create(fullDataSize, i + 1, 6, TRope(parts[i]), arena);
+                    TRope buf = TDiskBlob::Create(fullDataSize, i + 1, 6, TRope(parts[i]), arena, true);
                     TDiskBlob blob(&buf, NMatrix::TVectorType::MakeOneHot(i, 6), GType, TLogoBlobID(0, 0, 0, 0, parts[i].GetSize(), 0));
                     expm.Add(blob);
                 }
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
             if (expm.Empty()) {
                 item.BlobId = -1;
             } else {
-                item.BlobId = GetResMapId(expm.CreateDiskBlob(arena));
+                item.BlobId = GetResMapId(expm.CreateDiskBlob(arena, true));
             }
             item.BlobParts = expm.GetDiskBlob().GetParts();
 
@@ -104,14 +104,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
                 TDiskBlobMerger m;
                 for (ui8 i = 0; i < 6; ++i) {
                     if (mask >> i & 1) {
-                        TRope buf = TDiskBlob::Create(fullDataSize, i + 1, 6, TRope(parts[i]), arena);
+                        TRope buf = TDiskBlob::Create(fullDataSize, i + 1, 6, TRope(parts[i]), arena, true);
                         TDiskBlob blob(&buf, NMatrix::TVectorType::MakeOneHot(i, 6), GType, TLogoBlobID(0, 0, 0, 0, parts[i].GetSize(), 0));
                         m.Add(blob);
                         expm.Add(blob);
                     }
                 }
 
-                TRope buf = m.CreateDiskBlob(arena);
+                TRope buf = m.CreateDiskBlob(arena, true);
                 Y_ABORT_UNLESS(buf);
                 item.DiskData.emplace_back(GetResMapId(buf), m.GetDiskBlob().GetParts());
 
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
                     TDiskBlobMergerWithMask mx;
                     mx.SetFilterMask(v);
                     mx.Add(expm.GetDiskBlob());
-                    item.Expected = GetResMapId(mx.CreateDiskBlob(arena));
+                    item.Expected = GetResMapId(mx.CreateDiskBlob(arena, true));
 
                     items.push_back(item);
                 }

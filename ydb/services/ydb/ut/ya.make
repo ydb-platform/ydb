@@ -18,16 +18,16 @@ SRCS(
     ydb_index_table_ut.cpp
     ydb_import_ut.cpp
     ydb_ut.cpp
-    ydb_client_certs_ut.cpp
+    ydb_register_node_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
-    cert_gen.cpp
     ydb_query_ut.cpp
     ydb_ldap_login_ut.cpp
+    ydb_object_storage_ut.cpp
 )
 
 PEERDIR(
@@ -38,8 +38,12 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
+    ydb/core/tx/datashard/ut_common
     ydb/core/grpc_services/base
     ydb/core/testlib
+    ydb/core/security
+    ydb/core/wrappers/ut_helpers
+    ydb/library/backup
     ydb/library/yql/minikql/dom
     ydb/library/yql/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
@@ -48,6 +52,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
+    ydb/public/lib/ydb_cli/dump
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_coordination
     ydb/public/sdk/cpp/client/ydb_export

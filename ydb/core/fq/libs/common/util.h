@@ -6,6 +6,7 @@
 #include <google/protobuf/repeated_field.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 #include <library/cpp/iterator/mapped.h>
 #include <util/generic/string.h>
@@ -77,5 +78,21 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection);
 TString RemoveDatabaseFromStr(TString str, const TString& substr);
 
 NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& databasePath);
+
+template<typename TExecutable>
+TMaybe<NYql::TIssues> GetIssuesFromYdbStatus(const TExecutable& executable, const NYdb::TAsyncStatus& future) {
+    try {
+        auto status = future.GetValue();
+        if (status.IsSuccess()) {
+            return {};
+        }
+        NYql::TIssues issues;
+        issues.AddIssues(executable->Issues);
+        issues.AddIssues(executable->InternalIssues);
+        return issues;
+    } catch (...) {
+        return NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}};
+    }
+}
 
 }  // namespace NFq

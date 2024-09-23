@@ -157,11 +157,6 @@ SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4;
 <sql-statement>
 SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:30: Error: A_Expr_Kind unsupported value: 5
-    	SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2;
-	                             ^
 <sql-statement>
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b;
@@ -184,11 +179,6 @@ SELECT NULLIF(a.i,b.i) AS "NULLIF(a.i,b.i)",
   NULLIF(b.i, 4) AS "NULLIF(b.i,4)"
   FROM CASE_TBL a, CASE2_TBL b;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:8: Error: A_Expr_Kind unsupported value: 5
-    	SELECT NULLIF(a.i,b.i) AS "NULLIF(a.i,b.i)",
-	       ^
 <sql-statement>
 SELECT *
   FROM CASE_TBL a, CASE2_TBL b

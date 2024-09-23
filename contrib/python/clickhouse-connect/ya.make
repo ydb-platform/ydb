@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.7.0)
+VERSION(0.7.12)
 
 LICENSE(Apache-2.0)
 
@@ -78,6 +78,7 @@ PY_SRCS(
     clickhouse_connect/driver/tools.py
     clickhouse_connect/driver/transform.py
     clickhouse_connect/driver/types.py
+    clickhouse_connect/driver/tzutil.py
     clickhouse_connect/driverc/__init__.py
     clickhouse_connect/entry_points.py
     clickhouse_connect/json_impl.py

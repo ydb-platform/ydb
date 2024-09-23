@@ -33,7 +33,7 @@ static void WalkImpl(
 {
     onElement(*walkContext, descriptor);
     walkContext->Stack.push_back(descriptor);
-    auto g = Finally([&]() {
+    auto g = Finally([&] {
         walkContext->Stack.pop_back();
     });
     const auto metatype = descriptor.GetType()->GetMetatype();
@@ -99,7 +99,7 @@ const T& VerifiedCast(const F& from)
 
 TLogicalType::TLogicalType(ELogicalMetatype type)
     : Metatype_(type)
-{}
+{ }
 
 const TSimpleLogicalType& TLogicalType::AsSimpleTypeRef() const
 {
@@ -286,6 +286,12 @@ TString ToString(const TLogicalType& logicalType)
     YT_ABORT();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec)
+{
+    // TODO(arkady-e1ppa): Optimize and express ToString using this.
+    FormatValue(builder, ToString(logicalType), spec);
+}
+
 void PrintTo(ELogicalMetatype metatype, std::ostream* os)
 {
     *os << ToString(metatype);
@@ -368,7 +374,7 @@ std::optional<ESimpleLogicalValueType> TOptionalLogicalType::Simplify() const
 size_t TOptionalLogicalType::GetMemoryUsage() const
 {
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
-        // All optionals of simple logical types are signletons and therefore we assume they use no space.
+        // All optionals of simple logical types are singletons and therefore we assume they use no space.
         return 0;
     } else {
         return sizeof(*this) + Element_->GetMemoryUsage();
@@ -401,7 +407,7 @@ TSimpleLogicalType::TSimpleLogicalType(ESimpleLogicalValueType element)
 
 size_t TSimpleLogicalType::GetMemoryUsage() const
 {
-    // All simple logical types are signletons and therefore we assume they use no space.
+    // All simple logical types are singletons and therefore we assume they use no space.
     return 0;
 }
 
@@ -801,7 +807,7 @@ int TDictLogicalType::GetTypeComplexity() const
 void TDictLogicalType::ValidateNode(const TWalkContext&) const
 {
     TComplexTypeFieldDescriptor descriptor("<dict-key>", GetKey());
-    Walk(descriptor, [](const TWalkContext&, const TComplexTypeFieldDescriptor& descriptor) {
+    Walk(descriptor, [] (const TWalkContext&, const TComplexTypeFieldDescriptor& descriptor) {
         const auto& logicalType = descriptor.GetType();
 
         // NB. We intentionally list all metatypes and simple types here.
@@ -835,6 +841,10 @@ void TDictLogicalType::ValidateNode(const TWalkContext&) const
                     case ESimpleLogicalValueType::Timestamp:
                     case ESimpleLogicalValueType::Interval:
                     case ESimpleLogicalValueType::Uuid:
+                    case ESimpleLogicalValueType::Date32:
+                    case ESimpleLogicalValueType::Datetime64:
+                    case ESimpleLogicalValueType::Timestamp64:
+                    case ESimpleLogicalValueType::Interval64:
                         return;
                 }
                 YT_ABORT();
@@ -1418,6 +1428,11 @@ bool IsComparable(const TLogicalTypePtr& type)
                 case ESimpleLogicalValueType::Void:
 
                 case ESimpleLogicalValueType::Uuid:
+
+                case ESimpleLogicalValueType::Date32:
+                case ESimpleLogicalValueType::Datetime64:
+                case ESimpleLogicalValueType::Timestamp64:
+                case ESimpleLogicalValueType::Interval64:
                     return true;
 
                 case ESimpleLogicalValueType::Any:
@@ -1458,34 +1473,39 @@ using TV3TypeName = std::variant<ESimpleLogicalValueType, ELogicalMetatype, TV3V
 
 static const std::pair<ESimpleLogicalValueType, TString> V3SimpleLogicalValueTypeEncoding[] =
 {
-    {ESimpleLogicalValueType::Null,      "null"},
-    {ESimpleLogicalValueType::Int64,     "int64"},
-    {ESimpleLogicalValueType::Uint64,    "uint64"},
-    {ESimpleLogicalValueType::Double,    "double"},
-    {ESimpleLogicalValueType::Float,     "float"},
-    {ESimpleLogicalValueType::Boolean,   "bool"},  // NB. diff
-    {ESimpleLogicalValueType::String,    "string"},
-    {ESimpleLogicalValueType::Any,       "yson"}, // NB. diff
-    {ESimpleLogicalValueType::Json,      "json"},
-    {ESimpleLogicalValueType::Int8,      "int8"},
-    {ESimpleLogicalValueType::Uint8,     "uint8"},
+    {ESimpleLogicalValueType::Null,         "null"},
+    {ESimpleLogicalValueType::Int64,        "int64"},
+    {ESimpleLogicalValueType::Uint64,       "uint64"},
+    {ESimpleLogicalValueType::Double,       "double"},
+    {ESimpleLogicalValueType::Float,        "float"},
+    {ESimpleLogicalValueType::Boolean,      "bool"},  // NB. diff
+    {ESimpleLogicalValueType::String,       "string"},
+    {ESimpleLogicalValueType::Any,          "yson"}, // NB. diff
+    {ESimpleLogicalValueType::Json,         "json"},
+    {ESimpleLogicalValueType::Int8,         "int8"},
+    {ESimpleLogicalValueType::Uint8,       "uint8"},
 
-    {ESimpleLogicalValueType::Int16,     "int16"},
-    {ESimpleLogicalValueType::Uint16,    "uint16"},
+    {ESimpleLogicalValueType::Int16,       "int16"},
+    {ESimpleLogicalValueType::Uint16,      "uint16"},
 
-    {ESimpleLogicalValueType::Int32,     "int32"},
-    {ESimpleLogicalValueType::Uint32,    "uint32"},
+    {ESimpleLogicalValueType::Int32,       "int32"},
+    {ESimpleLogicalValueType::Uint32,      "uint32"},
 
-    {ESimpleLogicalValueType::Utf8,      "utf8"},
+    {ESimpleLogicalValueType::Utf8,        "utf8"},
 
-    {ESimpleLogicalValueType::Date,      "date"},
-    {ESimpleLogicalValueType::Datetime,  "datetime"},
-    {ESimpleLogicalValueType::Timestamp, "timestamp"},
-    {ESimpleLogicalValueType::Interval,  "interval"},
+    {ESimpleLogicalValueType::Date,        "date"},
+    {ESimpleLogicalValueType::Datetime,    "datetime"},
+    {ESimpleLogicalValueType::Timestamp,   "timestamp"},
+    {ESimpleLogicalValueType::Interval,    "interval"},
 
-    {ESimpleLogicalValueType::Void,      "void"},
+    {ESimpleLogicalValueType::Void,        "void"},
 
-    {ESimpleLogicalValueType::Uuid,      "uuid"},
+    {ESimpleLogicalValueType::Uuid,        "uuid"},
+
+    {ESimpleLogicalValueType::Date32,      "date32"},
+    {ESimpleLogicalValueType::Datetime64,  "datetime64"},
+    {ESimpleLogicalValueType::Timestamp64, "timestamp64"},
+    {ESimpleLogicalValueType::Interval64,  "interval64"},
 };
 static_assert(std::size(V3SimpleLogicalValueTypeEncoding) == TEnumTraits<ESimpleLogicalValueType>::GetDomainSize());
 
@@ -1688,7 +1708,7 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
     if (node->GetType() == NYTree::ENodeType::String) {
         auto typeNameString = node->AsString()->GetValue();
         auto typeName = FromTypeV3(typeNameString);
-        std::visit([&](const auto& arg) {
+        std::visit([&] (const auto& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
                 wrapper.LogicalType = SimpleLogicalType(arg);
@@ -1710,7 +1730,7 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
     auto mapNode = node->AsMap();
     auto typeNameString = mapNode->GetChildValueOrThrow<TString>("type_name");
     auto typeName = FromTypeV3(typeNameString);
-    std::visit([&](const auto& typeName) {
+    std::visit([&] (const auto& typeName) {
         using T = std::decay_t<decltype(typeName)>;
         if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
             wrapper.LogicalType = SimpleLogicalType(typeName);
@@ -1821,7 +1841,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     if ((*cursor)->GetType() == EYsonItemType::StringValue) {
         auto typeNameString = (*cursor)->UncheckedAsString();
         auto typeName = FromTypeV3(typeNameString);
-        std::visit([&](const auto& arg) {
+        std::visit([&] (const auto& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
                 type = SimpleLogicalType(arg);
@@ -1933,7 +1953,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
         THROW_ERROR_EXCEPTION("\"type_name\" is required");
     }
 
-    type = std::visit([&](const auto& typeName) {
+    type = std::visit([&] (const auto& typeName) {
         using T = std::decay_t<decltype(typeName)>;
         if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
             return SimpleLogicalType(typeName);
@@ -2175,8 +2195,7 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClien
             return CombineHashes(
                 CombineHashes(
                     static_cast<size_t>(logicalType.AsDecimalTypeRef().GetPrecision()),
-                    static_cast<size_t>(logicalType.AsDecimalTypeRef().GetScale())
-                ),
+                    static_cast<size_t>(logicalType.AsDecimalTypeRef().GetScale())),
                 typeHash);
         case ELogicalMetatype::Optional:
             return CombineHashes((*this)(*logicalType.AsOptionalTypeRef().GetElement()), typeHash);
@@ -2194,15 +2213,13 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(const NYT::NTableClien
             return CombineHashes(
                 CombineHashes(
                     (*this)(*logicalType.AsDictTypeRef().GetKey()),
-                    (*this)(*logicalType.AsDictTypeRef().GetValue())
-                ),
+                    (*this)(*logicalType.AsDictTypeRef().GetValue())),
                 typeHash);
         case ELogicalMetatype::Tagged:
             return CombineHashes(
                 CombineHashes(
                     THash<TString>()(logicalType.AsTaggedTypeRef().GetTag()),
-                    (*this)(*logicalType.AsTaggedTypeRef().GetElement())
-                ),
+                    (*this)(*logicalType.AsTaggedTypeRef().GetElement())),
                 typeHash);
     }
     YT_ABORT();

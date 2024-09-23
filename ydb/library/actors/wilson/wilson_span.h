@@ -126,16 +126,7 @@ namespace NWilson {
         }
 
         TSpan& operator =(const TSpan&) = delete;
-
-        TSpan& operator =(TSpan&& other) {
-            if (this != &other) {
-                if (Y_UNLIKELY(*this)) {
-                    EndError("TSpan instance incorrectly overwritten");
-                }
-                Data = std::exchange(other.Data, nullptr);
-            }
-            return *this;
-        }
+        TSpan& operator=(TSpan&& other);
 
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;

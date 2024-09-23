@@ -73,6 +73,7 @@
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
+                                                        "Scan": "Parallel",
                                                         "Table": "base_table_types_script_script/TableTypes"
                                                     }
                                                 ],

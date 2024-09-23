@@ -141,6 +141,8 @@ public:
 
     bool CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current);
 
+    static NKikimrConfig::TCurrentCompatibilityInfo MakeCurrent();
+
     NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId) const;
     NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId,
             const NKikimrConfig::TCurrentCompatibilityInfo* current) const;

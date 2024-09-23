@@ -18,7 +18,7 @@ If consistency or freshness requirement for data read by a transaction can be re
 * *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 * *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
 
-The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../reference/ydb-sdk/recipes/tx-control.md).
+The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../recipes/ydb-sdk/tx-control.md).
 
 ## YQL language {#language-yql}
 
@@ -31,9 +31,9 @@ Listed below are the features and limitations of YQL support in {{ ydb-short-nam
 * Multi-statement transactions (transactions made up of a sequence of YQL statements) are supported. Transactions may interact with client software, or in other words, client interactions with the database might look as follows: `BEGIN; make a SELECT; analyze the SELECT results on the client side; ...; make an UPDATE; COMMIT`. We should note that if the transaction body is fully formed before accessing the database, it will be processed more efficiently.
 * {{ ydb-short-name }} does not support transactions that combine DDL and DML queries. The conventional [ACID]{% if lang == "en" %}(https://en.wikipedia.org/wiki/ACID){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/ACID){% endif %}  notion of a transactions is applicable specifically to DML queries, that is, queries that change data. DDL queries must be idempotent, meaning repeatable if an error occurs. If you need to manipulate a schema, each manipulation is transactional, while a set of manipulations is not.
 * YQL implementation used in {{ ydb-short-name }} employs the [Optimistic Concurrency Control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism. If an entity is affected during a transaction, optimistic blocking is applied. When the transaction is complete, the mechanism verifies that the locks have not been invalidated. For the user, locking optimism means that when transactions are competing with one another, the one that finishes first wins. Competing transactions fail with the `Transaction locks invalidated` error.
-* All changes made during the transaction accumulate in the database server memory and are applied when the transaction completes. If the locks are not invalidated, all the changes accumulated are committed atomically; if at least one lock is invalidated, none of the changes are committed. The above model involves certain restrictions: changes made by a single transaction must fit inside available memory, and a transaction "doesn't see" its changes.
+* All changes made during the transaction accumulate in the database server memory and are applied when the transaction completes. If the locks are not invalidated, all the changes accumulated are committed atomically; if at least one lock is invalidated, none of the changes are committed. The above model involves certain restrictions: changes made by a single transaction must fit inside the available memory.
 
-A transaction should be formed in such a way so that the first part of the transaction only reads data, while the second part of the transaction only changes data. The query structure then looks as follows:
+For efficient execution, a transaction should be formed so that the first part of the transaction only reads data, while the second part of the transaction only changes data. The query structure then looks as follows:
 
 ```yql
        SELECT ...;

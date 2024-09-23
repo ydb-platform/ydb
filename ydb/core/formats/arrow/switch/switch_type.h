@@ -2,9 +2,14 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/yassert.h>
+
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
 
 namespace NKikimr::NArrow {
 
@@ -117,7 +122,7 @@ bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
  * @return Result of execution of callback or false if the type typeId is not supported.
  */
 template <typename TFunc>
-bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
+[[nodiscard]] bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return callback(TTypeWrapper<arrow::BooleanType>());
@@ -131,6 +136,7 @@ bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callba
         case NScheme::NTypeIds::Uint16:
             return callback(TTypeWrapper<arrow::UInt16Type>());
         case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Date32:
             return callback(TTypeWrapper<arrow::Int32Type>());
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Uint32:
@@ -160,12 +166,35 @@ bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callba
         case NScheme::NTypeIds::Decimal:
             return callback(TTypeWrapper<arrow::Decimal128Type>());
 
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            return callback(TTypeWrapper<arrow::Int64Type>());
+
         case NScheme::NTypeIds::PairUi64Ui64:
         case NScheme::NTypeIds::ActorId:
         case NScheme::NTypeIds::StepOrderId:
             break; // Deprecated types
 
         case NScheme::NTypeIds::Pg:
+            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc())) {
+                case INT2OID:
+                    return callback(TTypeWrapper<arrow::Int16Type>());
+                case INT4OID:
+                    return callback(TTypeWrapper<arrow::Int32Type>());
+                case INT8OID:
+                    return callback(TTypeWrapper<arrow::Int64Type>());
+                case FLOAT4OID:
+                    return callback(TTypeWrapper<arrow::FloatType>());
+                case FLOAT8OID:
+                    return callback(TTypeWrapper<arrow::DoubleType>());
+                case BYTEAOID:
+                    return callback(TTypeWrapper<arrow::BinaryType>());
+                case TEXTOID:
+                    return callback(TTypeWrapper<arrow::StringType>());
+                default:
+                    break;
+            }
             break; // TODO: support pg types
     }
     return false;
@@ -187,6 +216,10 @@ inline bool IsPrimitiveYqlType(const NScheme::TTypeInfo& typeInfo) {
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Interval:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
             return true;
         default:
             break;
@@ -227,7 +260,8 @@ bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>&
 }
 
 template <typename T>
-bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+    Y_DEBUG_ABORT_UNLESS(builder.type()->id() == array.type_id());
     return SwitchType(array.type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;

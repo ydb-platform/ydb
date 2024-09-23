@@ -1,3 +1,5 @@
+#pragma once
+
 #include "dq_opt.h"
 
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -17,6 +19,7 @@ void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContex
 void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx);
 void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx);
+void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 double ComputePredicateSelectivity(const NNodes::TExprBase& input, const std::shared_ptr<TOptimizerStatistics>& stats);
 bool NeedCalc(NNodes::TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input);

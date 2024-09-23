@@ -23,6 +23,7 @@
 #include "orc/OrcFile.hh"
 #include "orc/Reader.hh"
 
+#include "ColumnReader.hh"
 #include "Timezone.hh"
 #include "TypeImpl.hh"
 
@@ -31,11 +32,11 @@ namespace orc {
   class RowReaderImpl;
 
   /**
-  * StripeStream Implementation
-  */
+   * StripeStream Implementation
+   */
 
-  class StripeStreamsImpl: public StripeStreams {
-  private:
+  class StripeStreamsImpl : public StripeStreams {
+   private:
     const RowReaderImpl& reader;
     const proto::StripeInformation& stripeInfo;
     const proto::StripeFooter& footer;
@@ -45,28 +46,25 @@ namespace orc {
     const Timezone& writerTimezone;
     const Timezone& readerTimezone;
 
-  public:
+   public:
     StripeStreamsImpl(const RowReaderImpl& reader, uint64_t index,
-                      const proto::StripeInformation& stripeInfo,
-                      const proto::StripeFooter& footer,
-                      uint64_t stripeStart,
-                      InputStream& input,
-                      const Timezone& writerTimezone,
+                      const proto::StripeInformation& stripeInfo, const proto::StripeFooter& footer,
+                      uint64_t stripeStart, InputStream& input, const Timezone& writerTimezone,
                       const Timezone& readerTimezone);
 
     virtual ~StripeStreamsImpl() override;
 
     virtual const std::vector<bool> getSelectedColumns() const override;
 
-    virtual proto::ColumnEncoding getEncoding(uint64_t columnId
-                                              ) const override;
+    virtual proto::ColumnEncoding getEncoding(uint64_t columnId) const override;
 
-    virtual std::unique_ptr<SeekableInputStream>
-    getStream(uint64_t columnId,
-              proto::Stream_Kind kind,
-              bool shouldStream) const override;
+    virtual std::unique_ptr<SeekableInputStream> getStream(uint64_t columnId,
+                                                           proto::Stream_Kind kind,
+                                                           bool shouldStream) const override;
 
     MemoryPool& getMemoryPool() const override;
+
+    ReaderMetrics* getReaderMetrics() const override;
 
     const Timezone& getWriterTimezone() const override;
 
@@ -79,25 +77,27 @@ namespace orc {
     bool isDecimalAsLong() const override;
 
     int32_t getForcedScaleOnHive11Decimal() const override;
+
+    const SchemaEvolution* getSchemaEvolution() const override;
   };
 
- /**
-  * StreamInformation Implementation
-  */
+  /**
+   * StreamInformation Implementation
+   */
 
-  class StreamInformationImpl: public StreamInformation {
-  private:
+  class StreamInformationImpl : public StreamInformation {
+   private:
     StreamKind kind;
     uint64_t column;
     uint64_t offset;
     uint64_t length;
-  public:
-    StreamInformationImpl(uint64_t _offset,
-                          const proto::Stream& stream
-                          ): kind(static_cast<StreamKind>(stream.kind())),
-                             column(stream.column()),
-                             offset(_offset),
-                             length(stream.length()) {
+
+   public:
+    StreamInformationImpl(uint64_t _offset, const proto::Stream& stream)
+        : kind(static_cast<StreamKind>(stream.kind())),
+          column(stream.column()),
+          offset(_offset),
+          length(stream.length()) {
       // PASS
     }
 
@@ -120,9 +120,9 @@ namespace orc {
     }
   };
 
- /**
- * StripeInformation Implementation
- */
+  /**
+   * StripeInformation Implementation
+   */
 
   class StripeInformationImpl : public StripeInformation {
     uint64_t offset;
@@ -135,27 +135,24 @@ namespace orc {
     CompressionKind compression;
     uint64_t blockSize;
     mutable std::unique_ptr<proto::StripeFooter> stripeFooter;
+    ReaderMetrics* metrics;
     void ensureStripeFooterLoaded() const;
-  public:
 
-    StripeInformationImpl(uint64_t _offset,
-                          uint64_t _indexLength,
-                          uint64_t _dataLength,
-                          uint64_t _footerLength,
-                          uint64_t _numRows,
-                          InputStream* _stream,
-                          MemoryPool& _memory,
-                          CompressionKind _compression,
-                          uint64_t _blockSize
-                          ) : offset(_offset),
-                              indexLength(_indexLength),
-                              dataLength(_dataLength),
-                              footerLength(_footerLength),
-                              numRows(_numRows),
-                              stream(_stream),
-                              memory(_memory),
-                              compression(_compression),
-                              blockSize(_blockSize) {
+   public:
+    StripeInformationImpl(uint64_t _offset, uint64_t _indexLength, uint64_t _dataLength,
+                          uint64_t _footerLength, uint64_t _numRows, InputStream* _stream,
+                          MemoryPool& _memory, CompressionKind _compression, uint64_t _blockSize,
+                          ReaderMetrics* _metrics)
+        : offset(_offset),
+          indexLength(_indexLength),
+          dataLength(_dataLength),
+          footerLength(_footerLength),
+          numRows(_numRows),
+          stream(_stream),
+          memory(_memory),
+          compression(_compression),
+          blockSize(_blockSize),
+          metrics(_metrics) {
       // PASS
     }
 
@@ -174,7 +171,7 @@ namespace orc {
       return indexLength;
     }
 
-    uint64_t getDataLength()const override {
+    uint64_t getDataLength() const override {
       return dataLength;
     }
 
@@ -191,29 +188,25 @@ namespace orc {
       return static_cast<uint64_t>(stripeFooter->streams_size());
     }
 
-    std::unique_ptr<StreamInformation> getStreamInformation(uint64_t streamId
-                                                            ) const override;
+    std::unique_ptr<StreamInformation> getStreamInformation(uint64_t streamId) const override;
 
     ColumnEncodingKind getColumnEncoding(uint64_t colId) const override {
       ensureStripeFooterLoaded();
-      return static_cast<ColumnEncodingKind>(stripeFooter->
-                                             columns(static_cast<int>(colId))
-                                             .kind());
+      return static_cast<ColumnEncodingKind>(stripeFooter->columns(static_cast<int>(colId)).kind());
     }
 
     uint64_t getDictionarySize(uint64_t colId) const override {
       ensureStripeFooterLoaded();
-      return static_cast<ColumnEncodingKind>(stripeFooter->
-                                             columns(static_cast<int>(colId))
-                                             .dictionarysize());
+      return static_cast<ColumnEncodingKind>(
+          stripeFooter->columns(static_cast<int>(colId)).dictionary_size());
     }
 
     const std::string& getWriterTimezone() const override {
       ensureStripeFooterLoaded();
-      return stripeFooter->writertimezone();
+      return stripeFooter->writer_timezone();
     }
   };
 
-}
+}  // namespace orc
 
 #endif

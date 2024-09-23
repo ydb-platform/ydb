@@ -9,13 +9,15 @@
 #include "ydb_connector_actor.h"
 
 #include <ydb/core/fq/libs/compute/common/pinger.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
 
 namespace NFq {
 
 struct TActorFactory : public IActorFactory {
-    TActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& counters)
+    TActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters)
         : Params(params)
-        , Counters(counters)
+        , ServiceCounters(serviceCounters)
+        , FailedStatusCodeCounters(failedStatusCodeCounters)
     {}
 
     std::unique_ptr<NActors::IActor> CreatePinger(const NActors::TActorId& parent) const override {
@@ -28,7 +30,7 @@ struct TActorFactory : public IActorFactory {
             parent,
             Params.Config.GetPinger(),
             Params.Deadline,
-            Counters,
+            ServiceCounters,
             Params.CreatedAt,
             true
         ));
@@ -40,20 +42,20 @@ struct TActorFactory : public IActorFactory {
 
     std::unique_ptr<NActors::IActor> CreateInitializer(const NActors::TActorId& parent,
                                                        const NActors::TActorId& pinger) const override {
-        return CreateInitializerActor(Params, parent, pinger, Counters);
+        return CreateInitializerActor(Params, parent, pinger, ServiceCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateExecuter(const NActors::TActorId &parent,
                                                     const NActors::TActorId &connector,
                                                     const NActors::TActorId &pinger) const override {
-        return CreateExecuterActor(Params, parent, connector, pinger, Counters);
+        return CreateExecuterActor(Params, CreateStatProcessor()->GetStatsMode(), parent, connector, pinger, ServiceCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateStatusTracker(const NActors::TActorId &parent,
                                                          const NActors::TActorId &connector,
                                                          const NActors::TActorId &pinger,
                                                          const NYdb::TOperation::TOperationId& operationId) const override {
-        return CreateStatusTrackerActor(Params, parent, connector, pinger, operationId, Counters);
+        return CreateStatusTrackerActor(Params, parent, connector, pinger, operationId, CreateStatProcessor(), ServiceCounters, FailedStatusCodeCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateResultWriter(const NActors::TActorId& parent,
@@ -61,13 +63,13 @@ struct TActorFactory : public IActorFactory {
                                                         const NActors::TActorId& pinger,
                                                         const NKikimr::NOperationId::TOperationId& operationId,
                                                         bool operationEntryExpected) const override {
-        return CreateResultWriterActor(Params, parent, connector, pinger, operationId, operationEntryExpected, Counters);
+        return CreateResultWriterActor(Params, parent, connector, pinger, operationId, operationEntryExpected, ServiceCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateResourcesCleaner(const NActors::TActorId& parent,
                                                             const NActors::TActorId& connector,
                                                             const NYdb::TOperation::TOperationId& operationId) const override {
-        return CreateResourcesCleanerActor(Params, parent, connector, operationId, Counters);
+        return CreateResourcesCleanerActor(Params, parent, connector, operationId, ServiceCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateFinalizer(const NFq::TRunActorParams& params,
@@ -75,23 +77,28 @@ struct TActorFactory : public IActorFactory {
                                                      const NActors::TActorId& pinger,
                                                      NYdb::NQuery::EExecStatus execStatus,
                                                      FederatedQuery::QueryMeta::ComputeStatus status) const override {
-        return CreateFinalizerActor(params, parent, pinger, execStatus, status, Counters);
+        return CreateFinalizerActor(params, parent, pinger, execStatus, status, ServiceCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateStopper(const NActors::TActorId& parent,
                                                    const NActors::TActorId& connector,
                                                    const NActors::TActorId& pinger,
                                                    const NYdb::TOperation::TOperationId& operationId) const override {
-        return CreateStopperActor(Params, parent, connector, pinger, operationId, Counters);
+        return CreateStopperActor(Params, parent, connector, pinger, operationId, CreateStatProcessor(), ServiceCounters);
+    }
+
+    std::unique_ptr<IPlanStatProcessor> CreateStatProcessor() const {
+        return NFq::CreateStatProcessor(GetStatViewName(Params));
     }
 
 private:
     NFq::TRunActorParams Params;
-    ::NYql::NCommon::TServiceCounters Counters;
+    ::NYql::NCommon::TServiceCounters ServiceCounters;
+    NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
 };
 
-IActorFactory::TPtr CreateActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& counters) {
-    return MakeIntrusive<TActorFactory>(params, counters);
+IActorFactory::TPtr CreateActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters) {
+    return MakeIntrusive<TActorFactory>(params, serviceCounters, failedStatusCodeCounters);
 }
 
 }

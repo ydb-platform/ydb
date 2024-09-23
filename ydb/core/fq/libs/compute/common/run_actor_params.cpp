@@ -56,7 +56,9 @@ TRunActorParams::TRunActorParams(
     const TString& executionId,
     const TString& operationId,
     const NFq::NConfig::TYdbStorageConfig& computeConnection,
-    TDuration resultTtl
+    TDuration resultTtl,
+    std::map<TString, Ydb::TypedValue>&& queryParameters,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -109,6 +111,8 @@ TRunActorParams::TRunActorParams(
     , OperationId(operationId, true)
     , ComputeConnection(computeConnection)
     , ResultTtl(resultTtl)
+    , QueryParameters(std::move(queryParameters))
+    , S3ActorsFactory(std::move(s3ActorsFactory))
     {
     }
 
@@ -134,6 +138,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " OperationId: " << (params.OperationId.GetKind() != Ydb::TOperationId::UNUSED ? ProtoToString(params.OperationId) : "<empty>")
                 << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
                 << " ResultTtl: " << params.ResultTtl
+                << " QueryParameters: " << params.QueryParameters.size()
                 << "}";
 }
 

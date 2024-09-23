@@ -15,14 +15,16 @@
 """
 # pylint:disable=protected-access
 import sys
-from types import MethodType
-from types import FunctionType
 import weakref
+from types import FunctionType
+from types import MethodType
+from typing import Union
 
+from zope.interface import ro
 from zope.interface._compat import _use_c_impl
 from zope.interface.exceptions import Invalid
 from zope.interface.ro import ro as calculate_ro
-from zope.interface import ro
+
 
 __all__ = [
     # Most of the public API from this module is directly exported
@@ -797,6 +799,12 @@ class InterfaceClass(_InterfaceClassBase):
                 '__qualname__',
                 # __annotations__: PEP 3107 (Python 3.0+)
                 '__annotations__',
+                # __static_attributes__: Python 3.13a6+
+                # https://github.com/python/cpython/pull/115913
+                '__static_attributes__',
+                # __firstlineno__: Python 3.13b1+
+                # https://github.com/python/cpython/pull/118475
+                '__firstlineno__',
             )
             and aval is not _decorator_non_return
         }
@@ -940,6 +948,14 @@ class InterfaceClass(_InterfaceClassBase):
 
     def __reduce__(self):
         return self.__name__
+
+    def __or__(self, other):
+        """Allow type hinting syntax: Interface | None."""
+        return Union[self, other]
+
+    def __ror__(self, other):
+        """Allow type hinting syntax: None | Interface."""
+        return Union[other, self]
 
 Interface = InterfaceClass("Interface", __module__='zope.interface')
 # Interface is the only member of its own SRO.
@@ -1121,8 +1137,9 @@ def _wire():
 # pylint:disable=wrong-import-position
 from zope.interface.declarations import implementedBy
 from zope.interface.declarations import providedBy
-from zope.interface.exceptions import InvalidInterface
 from zope.interface.exceptions import BrokenImplementation
+from zope.interface.exceptions import InvalidInterface
+
 
 # This ensures that ``Interface`` winds up in the flattened()
 # list of the immutable declaration. It correctly overrides changed()

@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/event_filter.h>
@@ -44,12 +45,14 @@ namespace NKikimr {
 
     namespace NBackpressure {
 
+
         enum class EQueueClientType : ui32 {
             None,
             ReplJob,
             DSProxy,
             VDiskLoad,
             VPatch,
+            Balancing,
         };
 
         inline const char *EQueueClientType2String(EQueueClientType t) {
@@ -58,7 +61,8 @@ namespace NKikimr {
                 case EQueueClientType::ReplJob:     return "ReplJob";
                 case EQueueClientType::DSProxy:     return "DSProxy";
                 case EQueueClientType::VDiskLoad:   return "VDiskLoad";
-                case EQueueClientType::VPatch:   return "VPatch";
+                case EQueueClientType::VPatch:      return "VPatch";
+                case EQueueClientType::Balancing:   return "Balancing";
             }
 
             Y_ABORT("unexpected EQueueClientType");
@@ -108,6 +112,11 @@ namespace NKikimr {
                         Identifier = 0;
                         break;
 
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kBalancingVDiskId:
+                        Type = EQueueClientType::Balancing;
+                        Identifier = msgQoS.GetBalancingVDiskId();
+                        break;
+
                     default:
                         Y_ABORT("unexpected case");
                 }
@@ -140,6 +149,10 @@ namespace NKikimr {
 
                     case EQueueClientType::VPatch:
                         msgQoS->SetVPatchVDiskId(Identifier);
+                        break;
+
+                    case EQueueClientType::Balancing:
+                        msgQoS->SetBalancingVDiskId(Identifier);
                         break;
                 }
             }
@@ -2952,11 +2965,11 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvUpdateGroupInfo : TEventLocal<TEvUpdateGroupInfo, EvUpdateGroupInfo> {
-        const ui32 GroupId;
+        const TGroupId GroupId;
         const ui32 GroupGeneration;
         std::optional<NKikimrBlobStorage::TGroupInfo> GroupInfo;
 
-        TEvUpdateGroupInfo(ui32 groupId, ui32 groupGeneration, std::optional<NKikimrBlobStorage::TGroupInfo> groupInfo)
+        TEvUpdateGroupInfo(TGroupId groupId, ui32 groupGeneration, std::optional<NKikimrBlobStorage::TGroupInfo> groupInfo)
             : GroupId(groupId)
             , GroupGeneration(groupGeneration)
             , GroupInfo(std::move(groupInfo))
@@ -3110,4 +3123,14 @@ namespace NKikimr {
 
     struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvMinHugeBlobSizeUpdate
+    ////////////////////////////////////////////////////////////////////////////
+    class TEvMinHugeBlobSizeUpdate : public TEventLocal<TEvMinHugeBlobSizeUpdate, TEvBlobStorage::EvMinHugeBlobSizeUpdate> {
+    public:
+        ui32 MinREALHugeBlobInBytes;
+
+        TEvMinHugeBlobSizeUpdate(ui32 minREALHugeBlobInBytes) : MinREALHugeBlobInBytes(minREALHugeBlobInBytes) {  
+        };
+    };
 } // NKikimr

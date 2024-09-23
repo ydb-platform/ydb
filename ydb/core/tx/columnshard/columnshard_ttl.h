@@ -65,10 +65,13 @@ public:
         PathTtls.erase(pathId);
     }
 
-    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) const {
+    bool AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) const {
         for (auto& [pathId, descr] : PathTtls) {
-            eviction[pathId].Ttl = Convert(descr);
+            if (!eviction[pathId].Add(Convert(descr))) {
+                return false;
+            }
         }
+        return true;
     }
 
     const THashSet<TString>& TtlColumns() const { return Columns; }

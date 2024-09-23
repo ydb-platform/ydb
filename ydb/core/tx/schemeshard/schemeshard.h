@@ -337,6 +337,20 @@ struct TEvSchemeShard {
             Record.SetPathId(pathId.LocalPathId);
             Record.SetPathOwnerId(pathId.OwnerId);
         }
+
+        // TEventPreSerializedPB::ToString() calls TEventPreSerializedPB::GetRecord()
+        // which reconstructs full message by deserializing PreSerializedData.
+        // That could be expensive for NKikimrScheme::TEvDescribeSchemeResult (e.g.
+        // table with huge number of partitions).
+        // Override ToString() to avoid unintentional message reconstruction.
+        TString ToString() const override {
+            TStringStream str;
+            str << ToStringHeader()
+                << " PreSerializedData size# " << PreSerializedData.size()
+                << " Record# " << Record.ShortDebugString()
+            ;
+            return str.Str();
+        }
     };
 
     struct TEvDescribeSchemeResultBuilder : TEvDescribeSchemeResult {

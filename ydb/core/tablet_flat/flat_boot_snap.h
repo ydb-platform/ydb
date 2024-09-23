@@ -12,6 +12,7 @@
 
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <ydb/core/util/pb.h>
+#include <util/string/builder.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -70,7 +71,7 @@ namespace NBoot {
         void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
-            Y_ABORT_UNLESS(ok);
+            Y_VERIFY_S(ok, "Failed to parse snapshot " << snap.Lead);
 
             bool huge = (body.size() > 10*1024*1024);
 
@@ -142,8 +143,14 @@ namespace NBoot {
 
             blobs.reserve(Proto.SchemeInfoBodiesSize());
 
-            for (const auto &one : Proto.GetSchemeInfoBodies())
+            for (const auto &one : Proto.GetSchemeInfoBodies()) {
                 blobs.emplace_back(LogoBlobIDFromLogoBlobID(one));
+                const auto& blob = blobs.back();
+                const auto* channel = Logic->Info->ChannelInfo(blob.Channel());
+                if (channel && blob.Generation() < channel->LatestEntry()->FromGeneration) {
+                    Logic->Result().ShouldSnapshotScheme = true;
+                }
+            }
 
             NPageCollection::TGroupBlobsByCookie chop(blobs);
 

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.18.1)
+VERSION(3.20.3)
 
-ORIGINAL_SOURCE(mirror://pypi/p/protobuf/protobuf-3.18.1.tar.gz)
+ORIGINAL_SOURCE(mirror://pypi/p/protobuf/protobuf-3.20.3.tar.gz)
 
 PEERDIR(
     contrib/libs/protobuf
@@ -64,6 +64,7 @@ PY_SRCS(
     google/protobuf/descriptor_pool.py
     google/protobuf/internal/__init__.py
     google/protobuf/internal/api_implementation.py
+    google/protobuf/internal/builder.py
     google/protobuf/internal/containers.py
     google/protobuf/internal/decoder.py
     google/protobuf/internal/encoder.py

@@ -42,6 +42,7 @@ SRCS(
     event_local.h
     event_pb.cpp
     event_pb.h
+    events.cpp
     events.h
     events_undelivered.cpp
     executelater.h
@@ -75,7 +76,9 @@ SRCS(
     mailbox.h
     mailbox_queue_revolving.h
     mailbox_queue_simple.h
+    mon.cpp
     mon.h
+    mon_stats.cpp
     mon_stats.h
     monotonic.cpp
     monotonic.h

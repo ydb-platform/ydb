@@ -1,7 +1,9 @@
 PY3TEST()
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=false)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner.inc)
 
 PEERDIR(

@@ -128,6 +128,7 @@ public:
 
     void SetGridFactor(std::function<int(const TString&)> gridFactor);
     void SetWindowSize(int windowSize);
+    void SetProducerCollectionBatchSize(int batchSize);
     void ProcessRegistrations();
     void Collect(IInvokerPtr offloadInvoker = GetSyncInvoker());
     void ReadSensors(
@@ -152,6 +153,8 @@ public:
     const TProfiler& GetSelfProfiler() const;
 
     NProto::TSensorDump DumpSensors();
+    NProto::TSensorDump DumpSensors(std::vector<TTagId> extraTags);
+    NProto::TSensorDump DumpSensors(const std::optional<TString>& host, const THashMap<TString, TString>& instanceTags);
 
 private:
     i64 Iteration_ = 0;

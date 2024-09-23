@@ -558,7 +558,7 @@
         "ColumnsAdded": [
             {
                 "ColumnId": 1,
-                "ColumnName": "Timestamp",
+                "ColumnName": "Index",
                 "ColumnType": "Uint64"
             },
             {
@@ -570,6 +570,11 @@
                 "ColumnId": 3,
                 "ColumnName": "Operation",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "OperationTimestamp",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -578,7 +583,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -647,6 +653,16 @@
                 "ColumnId": 9,
                 "ColumnName": "Location",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "Name",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "BecomeUpOnRestart",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -661,7 +677,9 @@
                     5,
                     6,
                     8,
-                    9
+                    9,
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

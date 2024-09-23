@@ -60,9 +60,21 @@ struct TJsonVDiskRequestHelper<TEvGetLogoBlobRequest, TEvGetLogoBlobResponse>  {
     }
 
     static TString GetAdditionalParameters() {
-        return R"___({"name":"from","in":"query","description":"blob identifier, inclusive lower bound for getting range, default is minimal blob id","type":"string"},
-                     {"name":"to","in":"query","description":"blob identifier, inclusive upper bound for getting range, default is maximal blob id","required":false,"type":"string"},
-                     {"name":"internals","in":"query","description":"return ingress of each blob","required":false,"type":"boolean"},
+        return R"___(
+            - name: from
+              in: query
+              description: blob identifier, inclusive lower bound for getting range, default is minimal blob id
+              type: string
+            - name: to
+              in: query
+              description: blob identifier, inclusive upper bound for getting range, default is maximal blob id
+              required: false
+              type: string
+            - name: internals
+              in: query
+              description: return ingress of each blob
+              required: false
+              type: boolean
         )___";
     }
 };
@@ -71,14 +83,14 @@ struct TJsonVDiskRequestHelper<TEvGetLogoBlobRequest, TEvGetLogoBlobResponse>  {
 template <>
 struct TJsonRequestSummary<TJsonGetBlob> {
     static TString GetSummary() {
-        return "\"Get blob from VDisk\"";
+        return "Get blob from VDisk";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonGetBlob> {
     static TString GetDescription() {
-        return "\"Get blob from VDisk\"";
+        return "Get blob from VDisk";
     }
 };
 

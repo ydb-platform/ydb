@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="cms/common.css"></link>
     <link rel="stylesheet" href="cms/cms.css"></link>
     <link rel="stylesheet" href="cms/sentinel.css"></link>
+    <script language="javascript" type="text/javascript" src="cms/ext/myers-diff/myers_diff.js"></script>
     <script language="javascript" type="text/javascript" src="cms/common.js"></script>
     <script language="javascript" type="text/javascript" src="cms/nanotable.js"></script>
     <script language="javascript" type="text/javascript" src="cms/enums.js"></script>
@@ -41,18 +42,18 @@
     <div class="container"><h2>Cluster Management System</h2>
       <div id="enums-error" class="error"></div>
       <div id="proto-types-error" class="error"></div>
-      <ul class="nav nav-tabs">
+      <ul class="nav nav-tabs" id="cms-nav">
         <li class="nav-item">
-          <a class="nav-link active" href="#configs" data-toggle="tab">Configs</a>
+          <a class="nav-link active" href="#yaml-config" data-toggle="tab">YAML Config</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#console-log" data-toggle="tab">Configs Audit Log</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#configs" data-toggle="tab">Configs</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#validators" data-toggle="tab">Validators</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#console-log" data-toggle="tab">Console Log</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#yaml-config" data-toggle="tab">YAML Config</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#cms-log" data-toggle="tab">CMS Log</a>
@@ -67,21 +68,7 @@
         </li>
       </ul>
       <div class="tab-content" style="padding-top: 10px">
-        <div id="configs" class="tab-pane fade in active show">
-          <div id="yaml-configs-enabled-warning" style="display: none" class="yaml-box mb-2">
-            <div class="p-3 px-4" id="yaml-heading-zero">
-              <div class="mb-0 py-1">
-                <div class="d-inline">
-                  <b>YAML config is enabled on this cluster. These configs won't take effect.</b>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div id="configs-error" class="error"></div>
-          <div id="configs-success" class="success"></div>
-          <div id="config-items"></div>
-        </div>
-        <div id="yaml-config" class="tab-pane fade">
+        <div id="yaml-config" class="tab-pane fade in active show">
           <div id="yaml-config-error" class="error"></div>
           <div id="volatile-yaml-config-error" class="error"></div>
           <div class="yaml-floater">
@@ -361,6 +348,20 @@
               </div>
             </div>
           </div>
+        </div>
+        <div id="configs" class="tab-pane fade">
+          <div id="yaml-configs-enabled-warning" style="display: none" class="yaml-box mb-2">
+            <div class="p-3 px-4" id="yaml-heading-zero">
+              <div class="mb-0 py-1">
+                <div class="d-inline">
+                  <b>YAML config is enabled on this cluster. These configs won't take effect.</b>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="configs-error" class="error"></div>
+          <div id="configs-success" class="success"></div>
+          <div id="config-items"></div>
         </div>
         <div id="validators" class="tab-pane fade">
           <div id="validators-error" class="error"></div>

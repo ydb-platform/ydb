@@ -152,7 +152,7 @@ void zstd_module_init(PyObject *m) {
     PyObject *features = NULL;
     PyObject *feature = NULL;
     unsigned zstd_ver_no = ZSTD_versionNumber();
-    unsigned our_hardcoded_version = 10505;
+    unsigned our_hardcoded_version = 10506;
     if (ZSTD_VERSION_NUMBER != our_hardcoded_version ||
         zstd_ver_no != our_hardcoded_version) {
         PyErr_Format(

@@ -137,4 +137,16 @@ inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
     return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
 }
 
+void PrepareVariadicArraySlow(FunctionCallInfoBaseData& callInfo, const NPg::TProcDesc& desc);
+void FreeVariadicArray(FunctionCallInfoBaseData& callInfo, ui32 originalArgs);
+
+inline bool PrepareVariadicArray(FunctionCallInfoBaseData& callInfo, const NPg::TProcDesc& desc) {
+    if (!desc.VariadicArgType || desc.VariadicArgType == desc.VariadicType) {
+        return false;
+    }
+
+    PrepareVariadicArraySlow(callInfo, desc);
+    return true;
+}
+
 }

@@ -22,6 +22,11 @@ TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeInd
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYsonStructBase::TYsonStructBase()
+{
+    TYsonStructRegistry::Get()->OnBaseCtorCalled();
+}
+
 IMapNodePtr TYsonStructBase::GetLocalUnrecognized() const
 {
     return LocalUnrecognized_;
@@ -46,16 +51,16 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, node, postprocess, setDefaults, path);
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
 }
 
 void TYsonStructBase::Load(
     TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
     Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
 }
@@ -98,7 +103,7 @@ void TYsonStructBase::Save(IOutputStream* output) const
 
 void TYsonStructBase::Postprocess(const TYPath& path)
 {
-    Meta_->Postprocess(this, path);
+    Meta_->PostprocessStruct(this, path);
 }
 
 void TYsonStructBase::SetDefaults()
@@ -144,10 +149,16 @@ void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
 
 void TYsonStruct::InitializeRefCounted()
 {
+    TYsonStructRegistry::Get()->OnFinalCtorCalled();
     if (!TYsonStructRegistry::InitializationInProgress()) {
         SetDefaults();
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_THREAD_LOCAL(IYsonStructMeta*, CurrentlyInitializingYsonMeta, nullptr);
+YT_DEFINE_THREAD_LOCAL(i64, YsonMetaRegistryDepth, 0);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -158,7 +169,21 @@ TYsonStructRegistry* TYsonStructRegistry::Get()
 
 bool TYsonStructRegistry::InitializationInProgress()
 {
-    return CurrentlyInitializingMeta_ != nullptr;
+    return CurrentlyInitializingYsonMeta() != nullptr;
+}
+
+void TYsonStructRegistry::OnBaseCtorCalled()
+{
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        ++YsonMetaRegistryDepth();
+    }
+}
+
+void TYsonStructRegistry::OnFinalCtorCalled()
+{
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        --YsonMetaRegistryDepth();
+    }
 }
 
 TYsonStructRegistry::TForbidCachedDynamicCastGuard::TForbidCachedDynamicCastGuard(TYsonStructBase* target)

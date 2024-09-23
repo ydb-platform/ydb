@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 SRCS(
     random/common_ops_ut.cpp
     random/easy_ut.cpp

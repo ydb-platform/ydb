@@ -82,6 +82,7 @@
                                                                                     "pkxx (-\u221e, +\u221e)",
                                                                                     "pkyy (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/coalesce-and-join.test_plan/yy"
                                                                             }
                                                                         ],
@@ -113,6 +114,7 @@
                                                                 "ReadRanges": [
                                                                     "pkxx (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/coalesce-and-join.test_plan/xx"
                                                             }
                                                         ],

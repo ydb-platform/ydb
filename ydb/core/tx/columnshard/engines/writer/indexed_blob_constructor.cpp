@@ -13,7 +13,7 @@ TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const
 {
     auto blobs = Buffer.GroupIntoBlobs();
     for (auto&& b : blobs) {
-        auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlobData(), action));
+        auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.ExtractBlobData(), action));
         b.InitBlobId(task.GetBlobId());
     }
 }
@@ -73,6 +73,19 @@ std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "error_splitting")("size", sumSize)("count", result.size());
         }
     }
+    return result;
+}
+
+TString TWritingBlob::ExtractBlobData() {
+    AFL_VERIFY(BlobSize);
+    AFL_VERIFY(!Extracted);
+    Extracted = true;
+    TString result;
+    result.reserve(BlobSize);
+    for (auto&& i : BlobData) {
+        result.append(i);
+    }
+    BlobData.clear();
     return result;
 }
 

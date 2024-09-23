@@ -8,19 +8,19 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_THREAD_LOCAL(IInvoker*) CurrentInvoker;
+YT_DEFINE_THREAD_LOCAL(IInvoker*, CurrentInvoker);
 
 IInvoker* GetCurrentInvoker()
 {
-    if (CurrentInvoker) {
-        return CurrentInvoker;
+    if (CurrentInvoker()) {
+        return CurrentInvoker();
     }
     return GetSyncInvoker().Get();
 }
 
 void SetCurrentInvoker(IInvoker* invoker)
 {
-    CurrentInvoker = invoker;
+    CurrentInvoker() = invoker;
 }
 
 TCurrentInvokerGuard::TCurrentInvokerGuard(IInvoker* invoker)
@@ -32,7 +32,7 @@ TCurrentInvokerGuard::TCurrentInvokerGuard(IInvoker* invoker)
     , Active_(true)
     , SavedInvoker_(std::move(invoker))
 {
-    std::swap(GetTlsRef(CurrentInvoker), SavedInvoker_);
+    std::swap(CurrentInvoker(), SavedInvoker_);
 }
 
 void TCurrentInvokerGuard::Restore()
@@ -41,7 +41,7 @@ void TCurrentInvokerGuard::Restore()
         return;
     }
     Active_ = false;
-    CurrentInvoker = std::move(SavedInvoker_);
+    CurrentInvoker() = std::move(SavedInvoker_);
 }
 
 TCurrentInvokerGuard::~TCurrentInvokerGuard()

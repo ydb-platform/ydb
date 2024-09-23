@@ -69,3 +69,9 @@
 #else
     #error Unsupported compiler
 #endif
+
+#if defined(_unix_)
+    #define YT_ATTRIBUTE_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#else
+    #define YT_ATTRIBUTE_NO_UNIQUE_ADDRESS
+#endif

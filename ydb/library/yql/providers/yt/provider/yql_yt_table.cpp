@@ -7,6 +7,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/udf/tz/udf_tz.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -16,6 +17,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/interface/serialize.h>
 
 #include <util/stream/output.h>
 #include <util/stream/str.h>
@@ -899,8 +901,14 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash, ctx)) {
+    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash | EYtSettingType::ColumnGroups, ctx)) {
         return false;
+    }
+
+    if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
+        if (!ValidateColumnGroups(*setting, *node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>(), ctx)) {
+            return false;
+        }
     }
 
     return true;
@@ -961,6 +969,15 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
         }
     }
     return *this;
+}
+
+NYT::TNode TYtOutTableInfo::GetColumnGroups() const {
+    if (Settings) {
+        if (auto setting = NYql::GetSetting(Settings.Ref(), EYtSettingType::ColumnGroups)) {
+            return NYT::NodeFromYsonString(setting->Tail().Content());
+        }
+    }
+    return {};
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1957,8 +1974,8 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
                 valMax = static_cast<i64>(std::numeric_limits<i64>::max());
                 break;
             case EDataSlot::Date32:
-                valMin = static_cast<i64>(MIN_DATE32);
-                valMax = static_cast<i64>(MAX_DATE32);
+                valMin = MIN_DATE32;
+                valMax = MAX_DATE32;
                 break;
             case EDataSlot::Datetime64:
                 valMin = MIN_DATETIME64;
@@ -2772,7 +2789,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtPath::CallableName()));
         return false;
     }
-    if (!EnsureArgsCount(node, 4, ctx)) {
+    if (!EnsureMinMaxArgsCount(node, 4, 5, ctx)) {
         return false;
     }
 
@@ -2805,6 +2822,10 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
+    if (node.ChildrenSize() > TYtPath::idx_AdditionalAttributes && !EnsureAtom(*node.Child(TYtPath::idx_AdditionalAttributes), ctx)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -2824,6 +2845,9 @@ void TYtPathInfo::Parse(TExprBase node) {
 
     if (path.Stat().Maybe<TYtStat>()) {
         Stat = MakeIntrusive<TYtTableStatInfo>(path.Stat().Ptr());
+    }
+    if (path.AdditionalAttributes().Maybe<TCoAtom>()) {
+        AdditionalAttributes = path.AdditionalAttributes().Cast().Value();
     }
 }
 
@@ -2845,11 +2869,19 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
     }
+    if (AdditionalAttributes) {
+        pathBuilder.AdditionalAttributes<TCoAtom>()
+            .Value(*AdditionalAttributes, TNodeFlags::MultilineContent)
+        .Build();
+    }
 
     return pathBuilder.Done();
 }
 
 void TYtPathInfo::FillRichYPath(NYT::TRichYPath& path) const {
+    if (AdditionalAttributes) {
+        DeserializeRichYPathAttrs(*AdditionalAttributes, path);
+    }
     if (Columns) {
         // Should have the same criteria as in TYtPathInfo::GetCodecSpecNode()
         bool useAllColumns = !Table->RowSpec; // Always use all columns for YAMR format

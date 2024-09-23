@@ -45,17 +45,14 @@ SRCS(
     converter.h
     custom_registry.cpp
     input_stream.h
-    merging_sorted_input_stream.cpp
-    merging_sorted_input_stream.h
-    one_batch_input_stream.h
     permutations.cpp
     program.cpp
     replace_key.cpp
     size_calcer.cpp
-    sort_cursor.h
     ssa_program_optimizer.cpp
     special_keys.cpp
     simple_arrays_cache.cpp
+    process_columns.cpp
 )
 
 END()

@@ -23,8 +23,8 @@
 |Балансировка среди всех нод всех локального ДЦ|\+|\+|\+|?|\-|\-|\-||
 |**Credentials providers**|||||||||
 |Anonymous (по умолчанию)|\+|\+|\+|\+|\+|\+|\+|\+|
-|Static (user - password)|\+|\+|\+|\+|\-|\-|\-|\+|
-|Token: IAM, OAuth|\+|\+|\+|\+|\+|\+|\+|\+|
+|Static (user - password)|\+|\+|\+|\+|\-|\-|\+|\+|
+|Token: IAM, Access token|\+|\+|\+|\+|\+|\+|\+|\+|
 |Service account (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\-|\+|
 |Metadata (Yandex.Cloud specific)|\+|\+|\+|\+|\+|\+|\+|\+|
 |**Работа с сессиями Table-сервиса**|||||||||
@@ -130,7 +130,7 @@
 |\* environ|?|?|\+|\+|\+|\-|\-|\+|
 |\* metadata|?|?|\+|\+|\+|\+|\+|\+|
 |\* service_account|?|?|\+|\+|\+|\-|\-|\+|
-|\* static (username \+ password)|?|?|\+|\+|\+|\+|\-|\+|
+|\* static (username \+ password)|?|?|\+|\+|\+|\+|\+|\+|
 |Basic (series)|\+|?|\+|\+|\+|\+|\+|\+|
 |Bulk Upsert|\+/-|?|\+|\+|\+|\-|\-|\+|
 |Containers (Struct,Variant,List,Tuple)|\-|?|\+|\-|\-|\-|\+|\-|

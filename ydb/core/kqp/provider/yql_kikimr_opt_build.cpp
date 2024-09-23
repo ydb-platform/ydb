@@ -91,6 +91,7 @@ struct TKiExploreTxResults {
     TVector<TExprBase> Sync;
     TVector<TKiQueryBlock> QueryBlocks;
     bool HasExecute;
+    bool HasErrors;
 
     THashSet<const TExprNode*> GetSyncSet() const {
         THashSet<const TExprNode*> syncSet;
@@ -280,10 +281,11 @@ struct TKiExploreTxResults {
     }
 
     TKiExploreTxResults()
-        : HasExecute(false) {}
+        : HasExecute(false)
+        , HasErrors(false) {}
 };
 
-bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& types, bool estimateReadSize = true) {
+bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& types, bool estimateReadSize, bool* hasErrors = nullptr) {
     if (node.Ref().ChildrenSize() <= 1) {
         return false;
     }
@@ -294,12 +296,17 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
         auto dataSourceProviderIt = types.DataSourceMap.find(dataSourceCategory);
         if (dataSourceProviderIt != types.DataSourceMap.end()) {
             if (auto* dqIntegration = dataSourceProviderIt->second->GetDqIntegration()) {
-                if (dqIntegration->CanRead(*node.Ptr(), ctx) &&
-                    (!estimateReadSize || dqIntegration->EstimateReadSize(
+                if (!dqIntegration->CanRead(*node.Ptr(), ctx)) {
+                    if (!node.Ref().IsCallable(ConfigureName) && hasErrors) {
+                        *hasErrors = true;
+                    }
+                    return false;
+                }
+                if (!estimateReadSize || dqIntegration->EstimateReadSize(
                         TDqSettings::TDefault::DataSizePerJob,
                         TDqSettings::TDefault::MaxTasksPerStage,
                         {node.Raw()},
-                        ctx))) {
+                        ctx)) {
                     return true;
                 }
             }
@@ -388,7 +395,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         return result;
     }
 
-    if (IsDqRead(node, ctx, types)) {
+    if (IsDqRead(node, ctx, types, true, &txRes.HasErrors)) {
         txRes.Ops.insert(node.Raw());
         TExprNode::TPtr worldChild = node.Raw()->ChildPtr(0);
         return ExploreTx(TExprBase(worldChild), ctx, dataSink, txRes, tablesData, types);
@@ -507,6 +514,20 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
         txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
+        if (!del.ReturningColumns().Empty()) {
+            txRes.AddResult(
+                Build<TResWrite>(ctx, del.Pos())
+                .World(del.World())
+                .DataSink<TResultDataSink>().Build()
+                .Key<TCoKey>().Build()
+                .Data<TKiReturningList>()
+                    .Update(node)
+                    .Columns(del.ReturningColumns())
+                    .Build()
+                .Settings().Build()
+                .Done());
+        }
+
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, del.Pos(), ctx));
         return result;
     }
@@ -661,9 +682,8 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             if (!ExploreTx(child, ctx, dataSink, txRes, tablesData, types)) {
                 return false;
             }
-
-            return true;
         }
+        return true;
     }
 
     if (node.Maybe<TResWrite>() ||
@@ -834,10 +854,57 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     auto settings = NCommon::ParseCommitSettings(commit, ctx);
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
 
+    TNodeOnNodeOwnedMap replaces;
+    VisitExpr(node.Ptr(), [&replaces](const TExprNode::TPtr& input) -> bool {
+        if (input->IsCallable("PgTableContent")) {
+            TPgTableContent content(input);
+            if (content.Table() == "pg_tables") {
+                replaces[input.Get()] = nullptr;
+            }
+        }
+        return true;
+    });
+    if (!replaces.empty()) {
+        TExprNode::TPtr path = ctx.NewCallable(node.Pos(), "String", { ctx.NewAtom(node.Pos(), "/Root/.sys/pg_tables") });
+        auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
+        auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
+
+        for (auto& [key, _] : replaces) {
+            auto ydbSysTableRead = Build<TCoRead>(ctx, node.Pos())
+                .World<TCoWorld>().Build()
+                .DataSource<TCoDataSource>()
+                    .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
+                    .FreeArgs()
+                        .Add(ctx.NewAtom(node.Pos(), "db"))
+                    .Build()
+                .Build()
+                .FreeArgs()
+                    .Add(newKey)
+                    .Add(ctx.NewCallable(node.Pos(), "Void", {}))
+                    .Add(ctx.NewList(node.Pos(), {}))
+                .Build()
+            .Done().Ptr();
+
+            auto readData = Build<TCoRight>(ctx, node.Pos())
+                .Input(ydbSysTableRead)
+            .Done().Ptr();
+            replaces[key] = readData;
+        }
+        ctx.Step
+            .Repeat(TExprStep::ExprEval)
+            .Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), replaces);
+        return res;
+    }
+
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
-    if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types)) {
-        return node.Ptr();
+    if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
+        return txExplore.HasErrors ? nullptr : node.Ptr();
     }
 
     if (txExplore.HasExecute) {

@@ -2,21 +2,14 @@ from __future__ import annotations
 
 import socket
 from abc import abstractmethod
+from collections.abc import Callable, Collection, Mapping
 from contextlib import AsyncExitStack
 from io import IOBase
 from ipaddress import IPv4Address, IPv6Address
 from socket import AddressFamily
-from typing import (
-    Any,
-    Callable,
-    Collection,
-    Mapping,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from types import TracebackType
+from typing import Any, Tuple, TypeVar, Union
 
-from .._core._tasks import create_task_group
 from .._core._typedattr import (
     TypedAttributeProvider,
     TypedAttributeSet,
@@ -29,7 +22,21 @@ IPAddressType = Union[str, IPv4Address, IPv6Address]
 IPSockAddrType = Tuple[str, int]
 SockAddrType = Union[IPSockAddrType, str]
 UDPPacketType = Tuple[bytes, IPSockAddrType]
+UNIXDatagramPacketType = Tuple[bytes, str]
 T_Retval = TypeVar("T_Retval")
+
+
+class _NullAsyncContextManager:
+    async def __aenter__(self) -> None:
+        pass
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        return None
 
 
 class SocketAttribute(TypedAttributeSet):
@@ -70,9 +77,9 @@ class _SocketProvider(TypedAttributeProvider):
 
         # Provide local and remote ports for IP based sockets
         if self._raw_socket.family in (AddressFamily.AF_INET, AddressFamily.AF_INET6):
-            attributes[
-                SocketAttribute.local_port
-            ] = lambda: self._raw_socket.getsockname()[1]
+            attributes[SocketAttribute.local_port] = (
+                lambda: self._raw_socket.getsockname()[1]
+            )
             if peername is not None:
                 remote_port = peername[1]
                 attributes[SocketAttribute.remote_port] = lambda: remote_port
@@ -100,8 +107,8 @@ class UNIXSocketStream(SocketStream):
         Send file descriptors along with a message to the peer.
 
         :param message: a non-empty bytestring
-        :param fds: a collection of files (either numeric file descriptors or open file or socket
-            objects)
+        :param fds: a collection of files (either numeric file descriptors or open file
+            or socket objects)
         """
 
     @abstractmethod
@@ -131,9 +138,11 @@ class SocketListener(Listener[SocketStream], _SocketProvider):
         handler: Callable[[SocketStream], Any],
         task_group: TaskGroup | None = None,
     ) -> None:
-        async with AsyncExitStack() as exit_stack:
+        from .. import create_task_group
+
+        async with AsyncExitStack() as stack:
             if task_group is None:
-                task_group = await exit_stack.enter_async_context(create_task_group())
+                task_group = await stack.enter_async_context(create_task_group())
 
             while True:
                 stream = await self.accept()
@@ -148,13 +157,38 @@ class UDPSocket(UnreliableObjectStream[UDPPacketType], _SocketProvider):
     """
 
     async def sendto(self, data: bytes, host: str, port: int) -> None:
-        """Alias for :meth:`~.UnreliableObjectSendStream.send` ((data, (host, port)))."""
+        """
+        Alias for :meth:`~.UnreliableObjectSendStream.send` ((data, (host, port))).
+
+        """
         return await self.send((data, (host, port)))
 
 
 class ConnectedUDPSocket(UnreliableObjectStream[bytes], _SocketProvider):
     """
     Represents an connected UDP socket.
+
+    Supports all relevant extra attributes from :class:`~SocketAttribute`.
+    """
+
+
+class UNIXDatagramSocket(
+    UnreliableObjectStream[UNIXDatagramPacketType], _SocketProvider
+):
+    """
+    Represents an unconnected Unix datagram socket.
+
+    Supports all relevant extra attributes from :class:`~SocketAttribute`.
+    """
+
+    async def sendto(self, data: bytes, path: str) -> None:
+        """Alias for :meth:`~.UnreliableObjectSendStream.send` ((data, path))."""
+        return await self.send((data, path))
+
+
+class ConnectedUNIXDatagramSocket(UnreliableObjectStream[bytes], _SocketProvider):
+    """
+    Represents a connected Unix datagram socket.
 
     Supports all relevant extra attributes from :class:`~SocketAttribute`.
     """

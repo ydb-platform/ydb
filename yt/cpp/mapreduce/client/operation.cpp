@@ -753,10 +753,11 @@ void BuildUserJobFluently(
         })
         .Item("profilers")
             .BeginList()
-            .DoFor(userJobSpec.JobProfilers_, [&] (TFluentList list, const auto& jobProfiler) {
-                list.Item().Value(BuildJobProfilerSpec(jobProfiler));
-            })
-            .EndList();
+                .DoFor(userJobSpec.JobProfilers_, [&] (TFluentList list, const auto& jobProfiler) {
+                    list.Item().Value(BuildJobProfilerSpec(jobProfiler));
+                })
+            .EndList()
+        .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
 template <typename T>

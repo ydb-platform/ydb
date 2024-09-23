@@ -164,8 +164,9 @@ public:
             case FederatedQuery::ConnectionSetting::kObjectStorage:
             case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-                return true;
+            case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
+                return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
             case FederatedQuery::ConnectionSetting::kMonitoring:
             case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:

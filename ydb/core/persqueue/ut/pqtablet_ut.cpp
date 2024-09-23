@@ -29,10 +29,11 @@ namespace NHelpers {
 
 struct TTxOperation {
     ui32 Partition;
-    TString Consumer;
-    ui64 Begin = 0;
-    ui64 End = 0;
+    TMaybe<TString> Consumer;
+    TMaybe<ui64> Begin;
+    TMaybe<ui64> End;
     TString Path;
+    TMaybe<ui32> SupportivePartition;
 };
 
 struct TConfigParams {
@@ -74,6 +75,7 @@ struct TGetOwnershipRequestParams {
     TMaybe<ui32> Partition;
     TMaybe<ui64> MsgNo;
     TMaybe<ui64> WriteId;
+    TMaybe<bool> NeedSupportivePartition;
     TMaybe<TString> Owner; // o
     TMaybe<ui64> Cookie;
 };
@@ -306,10 +308,15 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         for (auto& txOp : params.TxOps) {
             auto* operation = body->MutableOperations()->Add();
             operation->SetPartitionId(txOp.Partition);
-            operation->SetBegin(txOp.Begin);
-            operation->SetEnd(txOp.End);
-            operation->SetConsumer(txOp.Consumer);
+            if (txOp.Begin.Defined()) {
+                operation->SetBegin(*txOp.Begin);
+                operation->SetEnd(*txOp.End);
+                operation->SetConsumer(*txOp.Consumer);
+            }
             operation->SetPath(txOp.Path);
+            if (txOp.SupportivePartition.Defined()) {
+                operation->SetSupportivePartition(*txOp.SupportivePartition);
+            }
 
             partitions.insert(txOp.Partition);
         }
@@ -341,7 +348,9 @@ void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionR
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT_EQUAL(*matcher.Status, event->Record.GetStatus());
+        UNIT_ASSERT_EQUAL_C(*matcher.Status, event->Record.GetStatus(),
+                            "expected: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(*matcher.Status) <<
+                            ", received " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()));
     }
 }
 
@@ -549,6 +558,9 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequ
     }
     if (params.WriteId.Defined()) {
         request->SetWriteId(*params.WriteId);
+    }
+    if (params.NeedSupportivePartition.Defined()) {
+        request->SetNeedSupportivePartition(*params.NeedSupportivePartition);
     }
     if (params.Cookie.Defined()) {
         request->SetCookie(*params.Cookie);
@@ -1281,13 +1293,14 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
+                     .NeedSupportivePartition=true,
                      .Owner="-=[ 0wn3r ]=-",
                      .Cookie=4},
                      {.Cookie=4,
                      .Status=NMsgBusProxy::MSTATUS_OK});
 
     SendProposeTransactionRequest({.TxId=txId,
-                                  .TxOps={{.Partition=partitionId, .Path="/topic"}},
+                                  .TxOps={{.Partition=partitionId, .Path="/topic", .SupportivePartition=100'000}},
                                   .WriteId=writeId});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});

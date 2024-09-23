@@ -4,7 +4,6 @@ RECURSE(
     dq
     minikql
     parser
-    protos
     providers
     public
     sql

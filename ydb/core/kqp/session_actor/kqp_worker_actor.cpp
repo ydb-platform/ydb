@@ -99,7 +99,7 @@ public:
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-        const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig
+        const TQueryServiceConfig& queryServiceConfig, const TGUCSettings::TPtr& gUCSettings
         )
         : Owner(owner)
         , SessionId(sessionId)
@@ -109,10 +109,10 @@ public:
         , Counters(counters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , QueryServiceConfig(queryServiceConfig)
-        , MetadataProviderConfig(metadataProviderConfig)
         , CreationTime(TInstant::Now())
         , QueryId(0)
         , ShutdownState(std::nullopt)
+        , GUCSettings(gUCSettings)
     {
         Y_ABORT_UNLESS(ModuleResolverState);
         Y_ABORT_UNLESS(ModuleResolverState->ModuleResolver);
@@ -181,14 +181,14 @@ public:
         QueryState->RequestEv.reset(ev->Release().Release());
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
-            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
+            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
-            QueryState->RequestEv->GetUserToken(), Settings.ApplicationName, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
+            QueryState->RequestEv->GetUserToken(), GUCSettings, Settings.ApplicationName, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -1083,7 +1083,6 @@ private:
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKikimrConfiguration::TPtr Config;
     TQueryServiceConfig QueryServiceConfig;
-    TMetadataProviderConfig MetadataProviderConfig;
     TInstant CreationTime;
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
@@ -1091,6 +1090,7 @@ private:
     THolder<TKqpQueryState> QueryState;
     THolder<TKqpCleanupState> CleanupState;
     std::optional<TSessionShutdownState> ShutdownState;
+    TGUCSettings::TPtr GUCSettings;
 };
 
 } // namespace
@@ -1099,11 +1099,11 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig
+    const TQueryServiceConfig& queryServiceConfig, const TGUCSettings::TPtr& gUCSettings
     )
 {
     return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
-                               moduleResolverState, counters, queryServiceConfig, metadataProviderConfig);
+                               moduleResolverState, counters, queryServiceConfig, gUCSettings);
 }
 
 } // namespace NKqp

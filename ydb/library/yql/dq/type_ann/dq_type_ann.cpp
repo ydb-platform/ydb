@@ -139,7 +139,17 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             if (TDqConnection::Match(input.Get())) {
                 TDqConnection conn(input);
                 if (TDqStageSettings::Parse(conn.Output().Stage()).WideChannels) {
-                    argType = conn.Output().Stage().Program().Ref().GetTypeAnn();
+                    if (TDqCnStreamLookup::Match(input.Get())) {
+                        auto narrowType = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
+                        YQL_ENSURE(narrowType->GetKind() == ETypeAnnotationKind::Struct);
+                        TTypeAnnotationNode::TListType items;
+                        for(const auto& item: narrowType->Cast<TStructExprType>()->GetItems()) {
+                            items.push_back(item->GetItemType());
+                        }
+                        argType = ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(items));
+                    } else {
+                        argType = conn.Output().Stage().Program().Ref().GetTypeAnn();
+                    }
                 }
             }
         }
@@ -421,7 +431,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 10, ctx)) {
         return nullptr;
     }
 
@@ -495,7 +505,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > 6U) {
+    if (input->ChildrenSize() > 9U) {
         for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
             if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
                 ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
@@ -565,6 +575,29 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     input->SetTypeAnn(resultType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto cnStreamLookup = TDqCnStreamLookup(input);
+    auto leftInputType = GetDqConnectionType(TDqConnection(input), ctx);
+    if (!leftInputType) {
+        return TStatus::Error;
+    }
+    const auto leftRowType = GetSeqItemType(leftInputType);
+    const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
+    const auto outputRowType = GetDqJoinResultType<true>(
+        input->Pos(),
+        *leftRowType->Cast<TStructExprType>(),
+        cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
+        *rightRowType->Cast<TStructExprType>(),
+        cnStreamLookup.RightLabel().StringValue(),
+        cnStreamLookup.JoinType().StringValue(),
+        cnStreamLookup.JoinKeys(),
+        ctx
+    );
+    //TODO (YQ-2068) verify lookup parameters
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
     return TStatus::Ok;
 }
 
@@ -753,7 +786,24 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (!EnsurePersistableType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }
-    if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
+
+    if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
+        if (!EnsureTupleTypeSize(replicateInput->Pos(), inputItemType, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+
+        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
+            return TStatus::Error;
+        }
+    } else if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }
     const TTypeAnnotationNode* lambdaInputFlowType = ctx.MakeType<TFlowExprType>(inputItemType);
@@ -979,6 +1029,9 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (TDqCnMap::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
             }
+            if (TDqCnStreamLookup::Match(input.Get())) {
+                return AnnotateDqCnStreamLookup(input, ctx);
+            }
 
             if (TDqCnBroadcast::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
@@ -995,7 +1048,7 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (TDqCnMerge::Match(input.Get())) {
                 return AnnotateDqCnMerge(input, ctx);
             }
-
+            
             if (TDqReplicate::Match(input.Get())) {
                 return AnnotateDqReplicate(input, ctx);
             }
@@ -1082,6 +1135,9 @@ bool IsTypeSupportedInMergeCn(EDataSlot type) {
         case EDataSlot::Datetime64:
         case EDataSlot::Timestamp64:
         case EDataSlot::Interval64:
+        case EDataSlot::TzDate32:
+        case EDataSlot::TzDatetime64:
+        case EDataSlot::TzTimestamp64:
             return false;
     }
     return false;

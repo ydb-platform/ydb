@@ -6,7 +6,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
-#include <ydb/core/blobstorage/vdisk/handoff/handoff_delegate.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 
@@ -64,7 +63,6 @@ namespace NKikimr {
         const TBlobStorageGroupType GType;
 
         TIntrusivePtr<TLocalRecoveryInfo> LocalRecoveryInfo;
-        TIntrusivePtr<THandoffDelegate> Handoff;
 
         // Actors we are working with
         TGuardedActorID SkeletonID;
@@ -90,7 +88,6 @@ namespace NKikimr {
         }
 
         TDb(TIntrusivePtr<TVDiskConfig> cfg,
-            TIntrusivePtr<TBlobStorageGroupInfo> info,
             const TVDiskContextPtr &vctx);
         ~TDb();
 

@@ -20,7 +20,7 @@ private:
     YDB_READONLY(EType, Type, EType::Undefined);
     IConstructor() = default;
 protected:
-    virtual TConclusion<TOperatorContainer> DoCreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const = 0;
+    virtual TConclusion<std::shared_ptr<IOperator>> DoCreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardStatisticsProto::TConstructorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TConstructorContainer& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonData) = 0;
@@ -39,8 +39,12 @@ public:
         return DoDeserializeFromJson(jsonData);
     }
 
-    TConclusion<TOperatorContainer> CreateOperator(const NSchemeShard::TOlapSchema& currentSchema) const {
-        return DoCreateOperator(currentSchema);
+    TConclusion<TOperatorContainer> CreateOperator(const TString& name, const NSchemeShard::TOlapSchema& currentSchema) const {
+        auto result = DoCreateOperator(currentSchema);
+        if (!result) {
+            return result.GetError();
+        }
+        return TOperatorContainer(name, result.DetachResult());
     }
 
     TString GetClassName() const {

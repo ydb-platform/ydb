@@ -20,10 +20,10 @@ message TTableServiceConfig {
             optional TRetrySettings SubscriberSettings = 2;
             optional TRetrySettings ExchangerSettings = 3;
         }
-        optional uint32 ComputeActorsCount = 1 [default = 1000];
+        optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
-        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 31457280];   // 30 MB
+        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 524288];   // 512 KB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
@@ -42,6 +42,7 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
+        optional uint64 ReasonableSpillingTreshold = 22 [default = 104857600]; // 100 MiB
     }
 
     message TSpillingServiceConfig {
@@ -224,7 +225,7 @@ message TTableServiceConfig {
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
-    optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
+    optional bool EnableKqpDataQueryStreamLookup = 31 [default = true];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
@@ -273,9 +274,24 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = false];
+    optional bool EnableOlapSink = 55 [default = true];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
+    optional bool EnableCreateTableAs = 57 [default = true];
 
-    optional bool EnableCreateTableAs = 57 [default = false];
+    optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
+    optional bool OldLookupJoinBehaviour = 59 [default = false];
+
+    optional bool EnableOltpSink = 60 [default = false];
+
+    enum EBlockChannelsMode {
+        BLOCK_CHANNELS_SCALAR = 0;
+        BLOCK_CHANNELS_AUTO = 1;
+        BLOCK_CHANNELS_FORCE = 2;
+    }
+    optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_SCALAR];
+
+    optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
+
+    optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 };

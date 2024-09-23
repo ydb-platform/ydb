@@ -83,6 +83,7 @@
                                                                                     "tt2_id (-\u221e, +\u221e)",
                                                                                     "joincol (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join4.test_plan/tt2"
                                                                             }
                                                                         ],
@@ -116,6 +117,7 @@
                                                                     "tt1_id (-\u221e, +\u221e)",
                                                                     "joincol (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/join4.test_plan/tt1"
                                                             }
                                                         ],

@@ -524,7 +524,7 @@ public:
     static constexpr char ActorName[] = "S3_WRITE_ACTOR";
 private:
     void CommitState(const NDqProto::TCheckpoint&) final {};
-    void LoadState(const NDqProto::TSinkState&) final {};
+    void LoadState(const TSinkState&) final {};
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;

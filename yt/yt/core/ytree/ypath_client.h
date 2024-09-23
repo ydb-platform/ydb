@@ -25,6 +25,8 @@ public:
     //! This simplifies correlating requests with responses within a batch.
     DEFINE_BYREF_RW_PROPERTY(std::any, Tag);
 
+    DEFINE_BYREF_RW_PROPERTY(std::vector<TSharedRef>, Attachments);
+
 public:
     NRpc::TRequestId GetRequestId() const override;
     NRpc::TRealmId GetRealmId() const override;
@@ -81,7 +83,6 @@ protected:
         bool mutating);
 
     NRpc::NProto::TRequestHeader Header_;
-    std::vector<TSharedRef> Attachments_;
 
     virtual TSharedRef SerializeBody() const = 0;
 };
@@ -199,19 +200,12 @@ protected:
 // it would be TYPathBuf, but for now it breaks the advantages for CoW of the
 // TString. Rethink it if and when YT will try to use std::string or non-CoW
 // TString everywhere.
-#ifdef YT_USE_VANILLA_PROTOBUF
+using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPath>;
 
-TYPath GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
-TYPath GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 
-#else
-
-const TYPath& GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
-const TYPath& GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
-
-#endif
-
-void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPath path);
+void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header);
 

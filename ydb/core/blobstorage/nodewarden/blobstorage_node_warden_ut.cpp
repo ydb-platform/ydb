@@ -885,6 +885,48 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     CUSTOM_UNIT_TEST(ObtainTenantKeyDifferentPin) {
         TestObtainTenantKey("pin1", "pin2");
     }
+
+    Y_UNIT_TEST(TestReceivedPDiskRestartNotAllowed) {
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        runtime.Start();
+
+        ui32 nodeId = 1;
+        ui32 pdiskId = 1337;
+        ui64 cookie = 555;
+
+        auto &appData = runtime.GetNode(1)->AppData;
+        appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
+
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+
+        IActor* ac = CreateBSNodeWarden(nodeWardenConfig.Release());
+
+        TActorId nodeWarden = runtime.Register(ac, nodeId);
+
+        auto fakeBSC = runtime.AllocateEdgeActor(nodeId);
+
+        TActorId pdiskActorId = runtime.AllocateEdgeActor(nodeId);
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
+
+        runtime.RegisterService(pdiskServiceId, pdiskActorId);
+
+        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId), 0, cookie), nodeId);
+
+        auto responseEvent = new TEvBlobStorage::TEvControllerConfigResponse();
+
+        auto res = responseEvent->Record.MutableResponse();
+        res->SetSuccess(false);
+        res->SetErrorDescription("Fake error");
+        runtime.Send(new IEventHandle(nodeWarden, fakeBSC, responseEvent, 0, 1), nodeId);
+
+        auto evPtr = runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvAskWardenRestartPDiskResult>(pdiskActorId);
+        auto restartPDiskEv = evPtr->Get();
+
+        UNIT_ASSERT(!restartPDiskEv->RestartAllowed);
+        UNIT_ASSERT_STRINGS_EQUAL("Fake error", restartPDiskEv->Details);
+
+        UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
+    }
 }
 
 } // namespace NBlobStorageNodeWardenTest

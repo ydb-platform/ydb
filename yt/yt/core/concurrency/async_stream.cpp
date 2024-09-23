@@ -393,7 +393,7 @@ IAsyncZeroCopyInputStreamPtr CreateZeroCopyAdapter(
     size_t blockSize)
 {
     YT_VERIFY(underlyingStream);
-    return New<TZeroCopyInputStreamAdapter>(underlyingStream, blockSize);
+    return New<TZeroCopyInputStreamAdapter>(std::move(underlyingStream), blockSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -450,7 +450,7 @@ private:
 
 IAsyncInputStreamPtr CreateCopyingAdapter(IAsyncZeroCopyInputStreamPtr underlyingStream)
 {
-    return New<TCopyingInputStreamAdapter>(underlyingStream);
+    return New<TCopyingInputStreamAdapter>(std::move(underlyingStream));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -570,7 +570,7 @@ private:
 
 IAsyncZeroCopyOutputStreamPtr CreateZeroCopyAdapter(IAsyncOutputStreamPtr underlyingStream)
 {
-    return New<TZeroCopyOutputStreamAdapter>(underlyingStream);
+    return New<TZeroCopyOutputStreamAdapter>(std::move(underlyingStream));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -711,7 +711,7 @@ IAsyncZeroCopyInputStreamPtr CreatePrefetchingAdapter(
     IAsyncZeroCopyInputStreamPtr underlyingStream,
     size_t windowSize)
 {
-    return New<TPrefetchingInputStreamAdapter>(underlyingStream, windowSize);
+    return New<TPrefetchingInputStreamAdapter>(std::move(underlyingStream), windowSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -839,7 +839,7 @@ IAsyncZeroCopyInputStreamPtr CreateBufferingAdapter(
     IAsyncInputStreamPtr underlyingStream,
     size_t windowSize)
 {
-    return New<TBufferingInputStreamAdapter>(underlyingStream, windowSize);
+    return New<TBufferingInputStreamAdapter>(std::move(underlyingStream), windowSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1017,15 +1017,14 @@ private:
 IAsyncZeroCopyInputStreamPtr CreateConcurrentAdapter(
     IAsyncZeroCopyInputStreamPtr underlyingStream)
 {
-    return New<TConcurrentInputStreamAdapter>(underlyingStream);
+    return New<TConcurrentInputStreamAdapter>(std::move(underlyingStream));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB(levysotsky): Doesn't close the output stream.
 void PipeInputToOutput(
-    IAsyncZeroCopyInputStreamPtr input,
-    IAsyncOutputStreamPtr output)
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncOutputStreamPtr& output)
 {
     while (true) {
         auto asyncBlock = input->Read();

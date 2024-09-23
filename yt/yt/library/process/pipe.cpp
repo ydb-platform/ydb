@@ -16,7 +16,7 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = PipesLogger;
+static constexpr auto& Logger = PipesLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -64,10 +64,10 @@ IConnectionReaderPtr TNamedPipe::CreateAsyncReader()
     return CreateInputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this));
 }
 
-IConnectionWriterPtr TNamedPipe::CreateAsyncWriter()
+IConnectionWriterPtr TNamedPipe::CreateAsyncWriter(bool useDeliveryFence)
 {
     YT_VERIFY(!Path_.empty());
-    return CreateOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_);
+    return CreateOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_, useDeliveryFence);
 }
 
 TString TNamedPipe::GetPath() const
@@ -208,11 +208,20 @@ void TPipe::CloseWriteFD()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TPipe& pipe)
+void FormatValue(TStringBuilderBase* builder, const TPipe& pipe, TStringBuf spec)
 {
-    return Format("{ReadFD: %v, WriteFD: %v}",
-        pipe.GetReadFD(),
-        pipe.GetWriteFD());
+    // TODO(arkady-e1ppa): We format pipe twice
+    // (pipe itself and its serialization)
+    // This is probably redundant.
+    // Check if it is later and remove
+    // the second step.
+    FormatValue(
+        builder,
+        Format(
+            "{ReadFD: %v, WriteFD: %v}",
+            pipe.GetReadFD(),
+            pipe.GetWriteFD()),
+        spec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

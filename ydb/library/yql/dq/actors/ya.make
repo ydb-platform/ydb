@@ -15,7 +15,7 @@ END()
 
 RECURSE(
     compute
-    protos
+    input_transforms
     spilling
     task_runner
 )

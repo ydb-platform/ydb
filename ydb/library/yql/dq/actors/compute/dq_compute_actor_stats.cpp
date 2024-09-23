@@ -9,6 +9,7 @@ namespace NDq {
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
     if (stats.CollectBasic()) {
         proto.SetBytes(stats.Bytes);
+        proto.SetDecompressedBytes(stats.DecompressedBytes);
         proto.SetRows(stats.Rows);
         proto.SetChunks(stats.Chunks);
         proto.SetSplits(stats.Splits);

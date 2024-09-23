@@ -207,7 +207,7 @@ config:
 
 ### !remove
 
-**Область применения:** YAML sequence element под !inherit:\<key\>
+**Область применения:** YAML sequence element под `!inherit:<key>`
 **Действие:** удалить элемент с соотвествующим ключом.
 **Пример:**
 
@@ -242,6 +242,7 @@ config:
 ```
 ||
 |#
+
 ### !append
 
 **Область применения:** [YAML sequence](https://yaml.org/spec/1.2.2/#sequence)

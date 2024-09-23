@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
@@ -74,6 +75,22 @@ namespace NKikimr::NKqp {
         return settings;
     }
 
+    std::shared_ptr<TDatabaseAsyncResolverMock> MakeDatabaseAsyncResolver(EProviderType providerType) {
+        std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
+
+        switch (providerType) {
+            case EProviderType::ClickHouse:
+                // We test access to managed databases only on the example of ClickHouse
+                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
+                databaseAsyncResolverMock->AddClickHouseCluster();
+                break;
+            default:
+                break;
+        }
+
+        return databaseAsyncResolverMock;
+    }
+
     Y_UNIT_TEST_SUITE(GenericFederatedQuery) {
         void TestSelectAllFields(EProviderType providerType) {
             // prepare mock
@@ -124,15 +141,12 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -161,15 +175,15 @@ namespace NKikimr::NKqp {
             MATCH_RESULT_WITH_INPUT(colData, resultSet, GetUint16);
         }
 
-        Y_UNIT_TEST(PostgreSQLLocal) {
+        Y_UNIT_TEST(PostgreSQLOnPremSelectAll) {
             TestSelectAllFields(EProviderType::PostgreSQL);
         }
 
-        Y_UNIT_TEST(ClickHouseManaged) {
+        Y_UNIT_TEST(ClickHouseManagedSelectAll) {
             TestSelectAllFields(EProviderType::ClickHouse);
         }
 
-        Y_UNIT_TEST(YdbManaged) {
+        Y_UNIT_TEST(YdbManagedSelectAll) {
             TestSelectAllFields(EProviderType::Ydb);
         }
 
@@ -220,15 +234,12 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -256,7 +267,7 @@ namespace NKikimr::NKqp {
             }
         }
 
-        Y_UNIT_TEST(PostgreSQLSelectConstant) {
+        Y_UNIT_TEST(PostgreSQLOnPremSelectConstant) {
             TestSelectConstant(EProviderType::PostgreSQL);
         }
 
@@ -315,15 +326,12 @@ namespace NKikimr::NKqp {
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -416,21 +424,18 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
-                        MakeArray<arrow::StringBuilder>("data_column", colData, arrow::utf8()),
+                        MakeArray<arrow::BinaryBuilder>("data_column", colData, arrow::binary()),
                         MakeArray<arrow::Int32Builder>("filtered_column", filterColumnData, arrow::int32())),
                         NewSuccess());
             // clang-format on
 
             // prepare database resolver mock
-            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
-            if (providerType == EProviderType::ClickHouse) {
-                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
-                databaseAsyncResolverMock->AddClickHouseCluster();
-            }
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
 
             CreateExternalDataSource(providerType, kikimr);
 

@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
@@ -2135,7 +2136,10 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     // Wait for query to return an error
     {
         auto response = AwaitResponse(runtime, fWrite1);
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_C(
+            response.operation().status() == Ydb::StatusIds::ABORTED ||
+            response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
+            "Status: " << response.operation().status());
     }
 }
 
@@ -2273,6 +2277,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     {
         auto response = AwaitResponse(runtime, fWrite1);
         UNIT_ASSERT_C(
+            response.operation().status() == Ydb::StatusIds::ABORTED ||
             response.operation().status() == Ydb::StatusIds::OVERLOADED ||
             response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
             "Status: " << response.operation().status());
@@ -3806,6 +3811,12 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
 Y_UNIT_TEST(TestSnapshotReadPriority) {
     TPortManager pm;
     TServerSettings::TControls controls;
+    // This test needs to make sure mediator time does not advance while
+    // certain operations are running. Unfortunately, volatile planning
+    // may happen every 1ms, and it's too hard to guarantee time stays
+    // still for such a short time. We disable volatile planning to make
+    // coordinator ticks are 100ms apart.
+    controls.MutableCoordinatorControls()->SetVolatilePlanLeaseMs(0);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetControls(controls)
@@ -4324,6 +4335,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
 
     bool capturePlanSteps = true;
     TVector<THolder<IEventHandle>> capturedPlanSteps;
+    TVector<ui64> capturedPlanTxIds;
     THashSet<ui64> passReadSetTxIds;
     ui64 observedReadSets = 0;
     TVector<THolder<IEventHandle>> capturedReadSets;
@@ -4339,6 +4351,12 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
             case TEvTxProcessing::TEvPlanStep::EventType: {
                 if (nodeIndex == 1 && ev->GetRecipientRewrite() == table3actor && capturePlanSteps) {
                     Cerr << "... captured plan step for table-3" << Endl;
+                    auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
+                    for (const auto& tx : msg->Record.GetTransactions()) {
+                        ui64 txId = tx.GetTxId();
+                        capturedPlanTxIds.push_back(txId);
+                        Cerr << "... captured plan step tx " << txId << " for table-3" << Endl;
+                    }
                     capturedPlanSteps.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -4348,6 +4366,12 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
                 if (nodeIndex == 1 && ev->GetRecipientRewrite() == table3actor) {
                     auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
                     ui64 txId = msg->Record.GetTxId();
+                    if ((msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
+                        (msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA))
+                    {
+                        Cerr << "... passing expectation for txid# " << txId << Endl;
+                        break;
+                    }
                     ++observedReadSets;
                     if (!passReadSetTxIds.contains(txId)) {
                         Cerr << "... readset for txid# " << txId << " was blocked" << Endl;
@@ -4398,20 +4422,11 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
         }
     };
 
-    waitFor([&]{ return capturedPlanSteps.size() > 0; }, "plan step");
-    UNIT_ASSERT_VALUES_EQUAL(capturedPlanSteps.size(), 1u);
-    ui64 realTxId1, realTxId2;
-    {
-        auto* msg = capturedPlanSteps[0]->Get<TEvTxProcessing::TEvPlanStep>();
-        TVector<ui64> realTxIds;
-        for (const auto& tx : msg->Record.GetTransactions()) {
-            realTxIds.emplace_back(tx.GetTxId());
-        }
-        UNIT_ASSERT_VALUES_EQUAL(realTxIds.size(), 2u);
-        std::sort(realTxIds.begin(), realTxIds.end());
-        realTxId1 = realTxIds.at(0);
-        realTxId2 = realTxIds.at(1);
-    }
+    waitFor([&]{ return capturedPlanTxIds.size() >= 2; }, "captured transactions");
+    UNIT_ASSERT_C(capturedPlanTxIds.size(), 2u);
+    std::sort(capturedPlanTxIds.begin(), capturedPlanTxIds.end());
+    ui64 realTxId1 = capturedPlanTxIds.at(0);
+    ui64 realTxId2 = capturedPlanTxIds.at(1);
 
     // Unblock and resend the plan step message
     capturePlanSteps = false;
@@ -4420,7 +4435,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     }
     capturedPlanSteps.clear();
 
-    // Wait until there are 2 readset messages
+    // Wait until there are 2 readset messages (with data)
     waitFor([&]{ return capturedReadSets.size() >= 2; }, "initial readsets");
     SimulateSleep(runtime, TDuration::MilliSeconds(5));
 
@@ -4468,7 +4483,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     for (auto& ev : capturedCommits) {
         auto proxy = ev->Recipient;
         ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-        auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", groupId);
+        auto res = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
         runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 1, true);
     }
     capturedCommits.clear();

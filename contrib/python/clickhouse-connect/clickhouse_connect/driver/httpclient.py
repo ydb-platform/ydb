@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import re
@@ -21,7 +22,7 @@ from clickhouse_connect.driver.compression import available_compression
 from clickhouse_connect.driver.exceptions import DatabaseError, OperationalError, ProgrammingError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
-    default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_reset
+    default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.query import QueryResult, QueryContext, quote_identifier, bind_query
@@ -67,7 +68,8 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
-                 apply_server_timezone: Optional[Union[str, bool]] = True):
+                 apply_server_timezone: Optional[Union[str, bool]] = None,
+                 show_clickhouse_errors: Optional[bool] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -113,7 +115,7 @@ class HttpClient(Client):
         self._read_format = self._write_format = 'Native'
         self._transform = NativeTransform()
 
-        # There is use cases when client need to disable timeouts.
+        # There are use cases when the client needs to disable timeouts.
         if connect_timeout is not None:
             connect_timeout = coerce_int(connect_timeout)
         if send_receive_timeout is not None:
@@ -146,7 +148,8 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
-                         apply_server_timezone=apply_server_timezone)
+                         apply_server_timezone=apply_server_timezone,
+                         show_clickhouse_errors=show_clickhouse_errors)
         self.params = self._validate_settings(ch_settings)
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
@@ -164,14 +167,13 @@ class HttpClient(Client):
             self.params[key] = str_value
 
     def get_client_setting(self, key) -> Optional[str]:
-        values = self.params.get(key)
-        return values[0] if values else None
+        return self.params.get(key)
 
     def _prep_query(self, context: QueryContext):
         final_query = super()._prep_query(context)
         if context.is_insert:
             return final_query
-        return f'{final_query}\n FORMAT {self._write_format}'
+        return f'{final_query}\n FORMAT {self._read_format}'
 
     def _query_with_context(self, context: QueryContext) -> QueryResult:
         headers = {}
@@ -356,8 +358,11 @@ class HttpClient(Client):
             response.close()
 
         if err_content:
-            err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-            err_str = f':{err_str}\n {err_msg}'
+            if self.show_clickhouse_errors:
+                err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
+                err_str = f':{err_str}\n {err_msg}'
+            else:
+                err_str = 'The ClickHouse server returned an error.'
         raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
 
     def _raw_request(self,
@@ -398,7 +403,7 @@ class HttpClient(Client):
             kwargs['fields'] = fields
         else:
             kwargs['body'] = data
-        check_conn_reset(self.http)
+        check_conn_expiration(self.http)
         query_session = final_params.get('session_id')
         while True:
             attempts += 1
@@ -436,24 +441,36 @@ class HttpClient(Client):
             else:
                 self._error_handler(response)
 
-    def ping(self):
-        """
-        See BaseClient doc_string for this method
-        """
-        try:
-            response = self.http.request('GET', f'{self.url}/ping', timeout=3)
-            return 200 <= response.status < 300
-        except HTTPError:
-            logger.debug('ping failed', exc_info=True)
-            return False
-
     def raw_query(self, query: str,
                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                  settings: Optional[Dict[str, Any]] = None, fmt: str = None,
-                  use_database: bool = True, external_data: Optional[ExternalData] = None) -> bytes:
+                  settings: Optional[Dict[str, Any]] = None,
+                  fmt: str = None,
+                  use_database: bool = True,
+                  external_data: Optional[ExternalData] = None) -> bytes:
         """
         See BaseClient doc_string for this method
         """
+        body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
+        return self._raw_request(body, params, fields=fields).data
+
+    def raw_stream(self, query: str,
+                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                   settings: Optional[Dict[str, Any]] = None,
+                   fmt: str = None,
+                   use_database: bool = True,
+                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+        """
+        See BaseClient doc_string for this method
+        """
+        body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
+        return self._raw_request(body, params, fields=fields, stream=True)
+
+    def _prep_raw_query(self, query: str,
+                        parameters: Optional[Union[Sequence, Dict[str, Any]]],
+                        settings: Optional[Dict[str, Any]],
+                        fmt: str,
+                        use_database: bool,
+                        external_data: Optional[ExternalData]):
         final_query, bind_params = bind_query(query, parameters, self.server_tz)
         if fmt:
             final_query += f'\n FORMAT {fmt}'
@@ -469,7 +486,18 @@ class HttpClient(Client):
         else:
             body = final_query
             fields = None
-        return self._raw_request(body, params, fields=fields).data
+        return body, params, fields
+
+    def ping(self):
+        """
+        See BaseClient doc_string for this method
+        """
+        try:
+            response = self.http.request('GET', f'{self.url}/ping', timeout=3)
+            return 200 <= response.status < 300
+        except HTTPError:
+            logger.debug('ping failed', exc_info=True)
+            return False
 
     def close(self):
         if self._owns_pool_manager:

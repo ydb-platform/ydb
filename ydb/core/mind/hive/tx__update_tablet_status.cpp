@@ -33,7 +33,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
 
-    bool IsGoodStatusForPostpone() const {
+    bool IsGoodStatusForPenalties() const {
         switch (Status) {
             case TEvLocal::TEvTabletStatus::StatusBootFailed:
                 switch (Reason) {
@@ -93,6 +93,10 @@ public:
                     SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
                 }
                 tablet->ActorsToNotifyOnRestart.clear();
+                for (const TActorId& actor : Self->ActorsWaitingToMoveTablets) {
+                    SideEffects.Send(actor, new TEvPrivate::TEvCanMoveTablets());
+                }
+                Self->ActorsWaitingToMoveTablets.clear();
                 if (tablet->GetLeader().IsDeleting()) {
                     tablet->SendStopTablet(SideEffects);
                     return true;
@@ -123,6 +127,7 @@ public:
                 }
                 tablet->ActorsToNotify.clear();
                 db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();
+                tablet->FailedNodeId = 0;
             } else {
                 if (Local) {
                     SideEffects.Send(Local, new TEvLocal::TEvDeadTabletAck(std::make_pair(TabletId, FollowerId), Generation));
@@ -133,7 +138,7 @@ public:
                         return true;
                     }
                     if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriod()) >= Self->GetTabletRestartsMaxCount()) {
-                        if (IsGoodStatusForPostpone()) {
+                        if (IsGoodStatusForPenalties()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
                             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
                                 << " postponed start until " << leader.PostponedStart);
@@ -147,6 +152,13 @@ public:
                             db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(0),
                                                                             NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(leader.KnownGeneration),
                                                                             NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
+
+                            // tablet booted successfully, we may actually cut history now
+                            leader.WasAliveSinceCutHistory = true;
+                            for (const auto& entry : leader.DeletedHistory) {
+                                db.Table<Schema::TabletChannelGen>().Key(TabletId, entry.Channel, entry.Entry.FromGeneration).Delete();
+                            }
+                            leader.DeletedHistory.clear();
                         } else {
                             db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(tablet->AsFollower().FollowerGroup.Id),
@@ -154,6 +166,9 @@ public:
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                         }
                         tablet->InitiateStop(SideEffects);
+                    }
+                    if (IsGoodStatusForPenalties()) {
+                        tablet->FailedNodeId = Local.NodeId();
                     }
                 }
                 switch (tablet->GetLeader().State) {
@@ -181,7 +196,6 @@ public:
                 default:
                     break;
                 };
-                tablet->PreferredNodeId = 0;
             }
             tablet->GetLeader().TryToBoot();
         }

@@ -3449,11 +3449,6 @@ select 1.000000000123 ^ (-2147483648);
 <sql-statement>
 select coalesce(nullif(0.9999999999 ^ 23300000000000, 0), 0) as rounds_to_zero;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
-    	select coalesce(nullif(0.9999999999 ^ 23300000000000, 0), 0) as rounds_to_zero;
-	                ^
 <sql-statement>
 select round(((1 - 1.500012345678e-1000) ^ 1.45e1003) * 1e1000);
 </sql-statement>
@@ -3467,11 +3462,6 @@ select 0.5678 ^ (-85);
 <sql-statement>
 select coalesce(nullif(0.9999999999 ^ 70000000000000, 0), 0) as underflows;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
-    	select coalesce(nullif(0.9999999999 ^ 70000000000000, 0), 0) as underflows;
-	                ^
 <sql-statement>
 -- negative base to integer powers
 select (-1.0) ^ 2147483646;
@@ -3587,19 +3577,9 @@ select exp('-inf'::numeric);
 <sql-statement>
 select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
-    	select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
-	                ^
 <sql-statement>
 select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
-    	select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
-	                ^
 <sql-statement>
 -- cases that used to generate inaccurate results
 select exp(32.999);

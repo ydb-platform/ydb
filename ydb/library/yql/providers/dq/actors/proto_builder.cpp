@@ -59,9 +59,14 @@ bool TProtoBuilder::CanBuildResultSet() const {
     return ResultType->GetKind() == TType::EKind::Struct;
 }
 
-TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, ui64 maxBytesLimit) {
+TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, ui64 maxBytesLimit, ui64 maxRowsLimit, bool* truncated) {
+    if (truncated) {
+        *truncated = false;
+    }
+    
     TThrowingBindTerminator t;
     ui64 size = 0;
+    ui64 count = 0;
     TStringStream out;
     NYson::TYsonWriter writer((IOutputStream*)&out);
     writer.OnBeginList();
@@ -71,11 +76,16 @@ TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, 
         writer.OnListItem();
         writer.OnRaw(rowYson);
         size += rowYson.size();
-        return size <= maxBytesLimit;
+        ++count;
+        return size <= maxBytesLimit && count <= maxRowsLimit;
     });
 
     if (!full) {
-        ythrow yexception() << "Too big yson result size: " << size << " > " << maxBytesLimit;
+        if (!truncated) {
+            ythrow yexception() << "Too big yson result size: " << size << " > " << maxBytesLimit;
+        } else {
+            *truncated = true;
+        }
     }
 
     writer.OnEndList();

@@ -16,7 +16,8 @@ TDataProviderInitializer GetPgDataProviderInitializer() {
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
         const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter
+        THiddenQueryAborter hiddenAborter,
+        const TQContext& qContext
     ) {
         Y_UNUSED(userName);
         Y_UNUSED(sessionId);
@@ -27,6 +28,7 @@ TDataProviderInitializer GetPgDataProviderInitializer() {
         Y_UNUSED(progressWriter);
         Y_UNUSED(operationOptions);
         Y_UNUSED(hiddenAborter);
+        Y_UNUSED(qContext);
 
         auto state = MakeIntrusive<TPgState>();
         state->Types = typeCtx.Get();

@@ -275,12 +275,11 @@ private:
         bool isSameDataSource) const {
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
 
-        context.SS->PersistPath(db, externalTable->PathId);
 
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
-            context.SS->PersistACL(db, externalTable);
         }
+        context.SS->PersistPath(db, externalTable->PathId);
 
         if (!isSameDataSource) {
             context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);

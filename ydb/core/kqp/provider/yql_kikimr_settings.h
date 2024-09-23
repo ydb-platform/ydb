@@ -8,6 +8,7 @@
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EIndexAutoChooseMode : int;
+    enum TTableServiceConfig_EBlockChannelsMode : int;
 }
 
 namespace NYql {
@@ -49,6 +50,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseLlvm;
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
+    NCommon::TConfSetting<TString, false> OverrideStatistics;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -113,7 +115,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         this->SetValidClusters(clusters);
 
         if (defaultCluster) {
-            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG);
+            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
         }
 
         // Init settings from config
@@ -130,7 +132,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     {
         this->SetValidClusters(TVector<TString>{cluster});
 
-        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG);
+        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
         this->Dispatch(defaultSettings);
         this->Dispatch(NCommon::ALL_CLUSTERS, settings);
 
@@ -161,6 +163,12 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 ExtractPredicateRangesLimit = 0;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
+    ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool OldLookupJoinBehaviour = true;
+    bool EnableOlapSink = false;
+    bool EnableOltpSink = false;
+    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
+    bool EnableSpillingGenericQuery = false;
 };
 
 }

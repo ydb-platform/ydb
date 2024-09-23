@@ -83,6 +83,10 @@ message Type {
         TZ_DATE        = 0x0034;
         TZ_DATETIME    = 0x0035;
         TZ_TIMESTAMP   = 0x0036;
+        DATE32         = 0x0040;
+        DATETIME64     = 0x0041;
+        TIMESTAMP64    = 0x0042;
+        INTERVAL64     = 0x0043;
         STRING         = 0x1001;
         UTF8           = 0x1200;
         YSON           = 0x1201;

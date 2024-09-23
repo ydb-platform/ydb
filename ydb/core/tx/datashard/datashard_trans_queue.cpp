@@ -452,7 +452,7 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId, std::vector<std:
 // all planned transactions.
 // NOTE: DeadlineQueue no longer contains planned transactions.
 ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize,
-        TVector<ui64>& outdatedTxs, std::vector<std::unique_ptr<IEventHandle>>& replies)
+        TVector<ui64>& outdatedTxs)
 {
     using Schema = TDataShard::Schema;
 
@@ -492,21 +492,22 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
     for (const auto& pr : erasedDeadlines) {
         DeadlineQueue.erase(pr);
     }
-    for (ui64 txId : outdatedTxs) {
-        RemoveTxInFly(txId, &replies);
-    }
+
+    // We don't call RemoveTxInFly to give caller a chance to work with them
+    // Caller is expected to call RemoveTxInFly on all outdated txs
 
     Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size());
     return ECleanupStatus::Success;
 }
 
-bool TTransQueue::CleanupVolatile(ui64 txId, std::vector<std::unique_ptr<IEventHandle>>& replies) {
+bool TTransQueue::CleanupVolatile(ui64 txId) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end() && it->second->HasVolatilePrepareFlag() && !it->second->GetStep()) {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Cleaning up volatile tx " << txId << " ahead of time");
 
-        RemoveTxInFly(txId, &replies);
+        // We don't call RemoveTxInFly to give caller a chance to work with the operation
+        // Caller must call RemoveTxInFly on the transaction
 
         Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, 1);
         return true;

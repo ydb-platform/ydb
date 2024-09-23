@@ -24,6 +24,10 @@ ADDINCL(
     GLOBAL contrib/restricted/abseil-cpp
 )
 
+IF (OS_ANDROID)
+    LDFLAGS(-llog)
+ENDIF()
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

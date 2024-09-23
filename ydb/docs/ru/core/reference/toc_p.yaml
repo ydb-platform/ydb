@@ -1,0 +1,41 @@
+items:
+- name: YQL
+  include: 
+    mode: link
+    path: ../yql/toc_p.yaml
+- name: Совместимость с PostgreSQL
+  include:
+    mode: link
+    path: ../postgresql/toc_p.yaml
+- name: Встроенный UI
+  include:
+    mode: link
+    path: embedded-ui/toc_p.yaml
+- name: Интеграции
+  include: 
+    mode: link
+    path: ../integrations/toc_p.yaml
+- name: YDB CLI
+  include:
+    mode: link
+    path: ydb-cli/toc_p.yaml
+- name: YDB SDK
+  include:
+    mode: link
+    path: ydb-sdk/toc_p.yaml
+- name: Kafka API
+  include:
+    mode: link
+    path: kafka-api/toc_p.yaml
+- name: YDB DStool
+  include:
+    mode: link
+    path: ydb-dstool/toc_p.yaml
+- name: ydbops
+  include:
+    mode: link
+    path: ydbops/toc_p.yaml
+- name: Observability
+  include:
+    mode: link
+    path: observability/toc_p.yaml

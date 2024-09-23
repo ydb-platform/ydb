@@ -3,6 +3,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr {
@@ -17,23 +18,27 @@ struct TStatHyperLogLog {
     // TODO:
 };
 
-// TODO: other stats
+struct TStatCountMinSketch {
+    std::shared_ptr<TCountMinSketch> CountMin;
+};
+
 enum EStatType {
     SIMPLE = 0,
     HYPER_LOG_LOG = 1,
-    // TODO...
+    COUNT_MIN_SKETCH = 2,
 };
 
 struct TRequest {
-    EStatType StatType;
     TPathId PathId;
-    std::optional<TString> ColumnName; // not used for simple stat
+    std::optional<ui32> ColumnTag; // not used for simple stat
 };
 
 struct TResponse {
     bool Success = true;
     TRequest Req;
-    std::variant<TStatSimple, TStatHyperLogLog> Statistics;
+    TStatSimple Simple;
+    TStatHyperLogLog HyperLogLog;
+    TStatCountMinSketch CountMinSketch;
 };
 
 struct TEvStatistics {
@@ -61,10 +66,23 @@ struct TEvStatistics {
         EvSaveStatisticsQueryResponse,
         EvLoadStatisticsQueryResponse,
 
+        EvScanTable,
+        EvScanTableResponse,
+
+        EvDeleteStatisticsQueryResponse,
+
+        EvScanTableAccepted,
+        EvGetScanStatus,
+        EvGetScanStatusResponse,
+
+        EvStatisticsRequest,
+        EvStatisticsResponse,
+
         EvEnd
     };
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
+        EStatType StatType;
         std::vector<TRequest> StatRequests;
     };
 
@@ -72,7 +90,7 @@ struct TEvStatistics {
         bool Success = true;
         std::vector<TResponse> StatResponses;
     };
-    
+
     struct TEvConfigureAggregator : public TEventPB<
         TEvConfigureAggregator,
         NKikimrStat::TEvConfigureAggregator,
@@ -146,9 +164,58 @@ struct TEvStatistics {
         EvLoadStatisticsQueryResponse>
     {
         bool Success = true;
-        TMaybe<TString> Data;
+        ui64 Cookie = 0;
+        std::optional<TString> Data;
     };
 
+    struct TEvDeleteStatisticsQueryResponse : public TEventLocal<
+        TEvDeleteStatisticsQueryResponse,
+        EvDeleteStatisticsQueryResponse>
+    {
+        bool Success = true;
+    };
+
+    struct TEvScanTable : public TEventPB<
+        TEvScanTable,
+        NKikimrStat::TEvScanTable,
+        EvScanTable>
+    {};
+
+    struct TEvScanTableAccepted : public TEventPB<
+        TEvScanTableAccepted,
+        NKikimrStat::TEvScanTableAccepted,
+        EvScanTableAccepted>
+    {};
+
+    struct TEvScanTableResponse : public TEventPB<
+        TEvScanTableResponse,
+        NKikimrStat::TEvScanTableResponse,
+        EvScanTableResponse>
+    {};
+
+    struct TEvGetScanStatus : public TEventPB<
+        TEvGetScanStatus,
+        NKikimrStat::TEvGetScanStatus,
+        EvGetScanStatus>
+    {};
+
+    struct TEvGetScanStatusResponse : public TEventPB<
+        TEvGetScanStatusResponse,
+        NKikimrStat::TEvGetScanStatusResponse,
+        EvGetScanStatusResponse>
+    {};
+
+    struct TEvStatisticsRequest : public TEventPB<
+        TEvStatisticsRequest,
+        NKikimrStat::TEvStatisticsRequest,
+        EvStatisticsRequest>
+    {};
+
+    struct TEvStatisticsResponse : public TEventPB<
+        TEvStatisticsResponse,
+        NKikimrStat::TEvStatisticsResponse,
+        EvStatisticsResponse>
+    {};
 };
 
 } // NStat

@@ -132,7 +132,7 @@ class TIncrRestoreChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
+        return CreateBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {

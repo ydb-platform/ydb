@@ -26,6 +26,7 @@ SRCS(
     change_record_cdc_serializer.cpp
     change_sender.cpp
     change_sender_async_index.cpp
+    change_sender_base.cpp
     change_sender_cdc_stream.cpp
     change_sender_incr_restore.cpp
     check_commit_writes_tx_unit.cpp

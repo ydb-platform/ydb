@@ -27,7 +27,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
             queryResultIndex = result.GetQueryResultIndex();
         }
 
-        TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder,
+        TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder, &resultMeta.ColumnHints,
             queryResultIndex);
     }
 }

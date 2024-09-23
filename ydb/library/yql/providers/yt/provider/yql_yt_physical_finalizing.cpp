@@ -62,6 +62,7 @@ public:
         TNodeSet neverCombine;
         TNodeSet lefts;
         TNodeMap<TString> commits;
+        TExprNode::TListType publishNodes;
 
         bool enableChunkCombining = IsChunkCombiningEnabled();
 
@@ -113,6 +114,7 @@ public:
             else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
                 auto publish = maybePublish.Cast();
                 visitedOutParents.insert(publish.Input().Raw());
+                publishNodes.push_back(publish.Ptr());
                 for (auto out: publish.Input()) {
                     storeDep(out, publish.Raw(), nullptr, nullptr);
                 }
@@ -164,69 +166,21 @@ public:
 
         const auto disableOptimizers = State_->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
 
-        if (!disableOptimizers.contains("MergePublish")) {
-            for (auto& c: commits) {
-                THashMap<TString, TVector<const TExprNode*>> groupedPublishesByDst;
-                VisitExprByFirst(*c.first, [&](const TExprNode& node) {
-                    if (auto maybePub = TMaybeNode<TYtPublish>(&node)) {
-                        auto pub = maybePub.Cast();
-                        if (pub.DataSink().Cluster().Value() == c.second && !NYql::HasSetting(pub.Settings().Ref(), EYtSettingType::MonotonicKeys)) {
-                            groupedPublishesByDst[TString{pub.Publish().Name().Value()}].push_back(&node);
-                        }
-                    } else if (auto maybeCommit = TMaybeNode<TCoCommit>(&node)) {
-                        if (auto maybeSink = maybeCommit.DataSink().Maybe<TYtDSink>()) {
-                            // Stop traversing when got another commit on the same cluster
-                            return maybeSink.Cast().Cluster().Value() != c.second || &node == c.first;
-                        }
-                    }
-                    return true;
-                });
-                TVector<TString> dstTables;
-                for (auto& grp: groupedPublishesByDst) {
-                    if (grp.second.size() > 1) {
-                        dstTables.push_back(grp.first);
-                    }
-                }
-                if (dstTables.size() > 1) {
-                    ::Sort(dstTables);
-                }
-                for (auto& tbl: dstTables) {
-                    auto& grp = groupedPublishesByDst[tbl];
-                    while (grp.size() > 1) {
-                        TNodeOnNodeOwnedMap replaceMap;
-                        // Optimize only two YtPublish nodes at once to properly update world dependencies
-                        auto last = TYtPublish(grp[0]);
-                        auto prev = TYtPublish(grp[1]);
-                        if (last.World().Raw() != prev.Raw()) {
-                            // Has extra dependencies. Don't merge
-                            grp.erase(grp.begin());
-                            continue;
-                        }
-
-                        auto mode = NYql::GetSetting(last.Settings().Ref(), EYtSettingType::Mode);
-                        YQL_ENSURE(mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Append);
-                        YQL_ENSURE(!NYql::HasSetting(last.Settings().Ref(), EYtSettingType::Initial));
-
-                        replaceMap.emplace(grp[0],
-                            Build<TYtPublish>(ctx, grp[0]->Pos())
-                                .InitFrom(prev)
-                                .Input()
-                                    .Add(prev.Input().Ref().ChildrenList())
-                                    .Add(last.Input().Ref().ChildrenList())
-                                .Build()
-                                .Done().Ptr()
-                        );
-                        replaceMap.emplace(grp[1], prev.World().Ptr());
-
-                        YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-MergePublish";
-                        return RemapExpr(input, output, replaceMap, ctx, TOptimizeExprSettings(State_->Types));
-                    }
-                }
-                ProcessedMergePublish.insert(c.first->UniqueId());
+        TStatus status = TStatus::Ok;
+        if (!disableOptimizers.contains("UnorderedPublishTarget")) {
+            status = UnorderedPublishTarget(input, output, publishNodes, ctx);
+            if (status.Level != TStatus::Ok) {
+                return status;
             }
         }
 
-        TStatus status = TStatus::Ok;
+        if (!disableOptimizers.contains("MergePublish")) {
+            status = MergePublish(input, output, commits, ctx);
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+        }
+
         if (!disableOptimizers.contains("BypassMergeBeforeLength")) {
             status = BypassMergeBeforeLength(input, output, opDeps, lefts, ctx);
             if (status.Level != TStatus::Ok) {
@@ -608,6 +562,113 @@ private:
         }
         return TStatus::Ok;
     }
+
+    TStatus UnorderedPublishTarget(TExprNode::TPtr input, TExprNode::TPtr& output, const TExprNode::TListType& publishNodes, TExprContext& ctx) {
+        TNodeOnNodeOwnedMap replaceMap;
+        for (auto n: publishNodes) {
+            auto publish = TYtPublish(n);
+
+            auto cluster = publish.DataSink().Cluster().StringValue();
+            auto pubTableInfo = TYtTableInfo(publish.Publish());
+            if (auto commitEpoch = pubTableInfo.CommitEpoch.GetOrElse(0)) {
+                const TYtTableDescription& nextDescription = State_->TablesData->GetTable(cluster, pubTableInfo.Name, commitEpoch);
+                YQL_ENSURE(nextDescription.RowSpec);
+                if (nextDescription.RowSpecSortReady && !nextDescription.RowSpec->IsSorted()) {
+                    bool modified = false;
+                    TVector<TYtOutput> outs;
+                    for (auto out: publish.Input()) {
+                        if (!IsUnorderedOutput(out) && TYqlRowSpecInfo(GetOutTable(out).Cast<TYtOutTable>().RowSpec()).IsSorted()) {
+                            outs.push_back(Build<TYtOutput>(ctx, out.Pos())
+                                .InitFrom(out)
+                                .Mode()
+                                    .Value(ToString(EYtSettingType::Unordered))
+                                .Build()
+                                .Done());
+                            modified = true;
+                        } else {
+                            outs.push_back(out);
+                        }
+                    }
+                    if (modified) {
+                        replaceMap[publish.Raw()] = Build<TYtPublish>(ctx, publish.Pos())
+                            .InitFrom(publish)
+                            .Input()
+                                .Add(outs)
+                            .Build()
+                            .Done().Ptr();
+                    }
+                }
+            }
+        }
+        if (!replaceMap.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-UnorderedPublishTarget";
+            return RemapExpr(input, output, replaceMap, ctx, TOptimizeExprSettings(State_->Types));
+        }
+        return TStatus::Ok;
+    }
+
+    TStatus MergePublish(TExprNode::TPtr input, TExprNode::TPtr& output, const TNodeMap<TString>& commits, TExprContext& ctx) {
+        for (auto& c: commits) {
+            THashMap<TString, TVector<const TExprNode*>> groupedPublishesByDst;
+            VisitExprByFirst(*c.first, [&](const TExprNode& node) {
+                if (auto maybePub = TMaybeNode<TYtPublish>(&node)) {
+                    auto pub = maybePub.Cast();
+                    if (pub.DataSink().Cluster().Value() == c.second && !NYql::HasSetting(pub.Settings().Ref(), EYtSettingType::MonotonicKeys)) {
+                        groupedPublishesByDst[TString{pub.Publish().Name().Value()}].push_back(&node);
+                    }
+                } else if (auto maybeCommit = TMaybeNode<TCoCommit>(&node)) {
+                    if (auto maybeSink = maybeCommit.DataSink().Maybe<TYtDSink>()) {
+                        // Stop traversing when got another commit on the same cluster
+                        return maybeSink.Cast().Cluster().Value() != c.second || &node == c.first;
+                    }
+                }
+                return true;
+            });
+            TVector<TString> dstTables;
+            for (auto& grp: groupedPublishesByDst) {
+                if (grp.second.size() > 1) {
+                    dstTables.push_back(grp.first);
+                }
+            }
+            if (dstTables.size() > 1) {
+                ::Sort(dstTables);
+            }
+            for (auto& tbl: dstTables) {
+                auto& grp = groupedPublishesByDst[tbl];
+                while (grp.size() > 1) {
+                    TNodeOnNodeOwnedMap replaceMap;
+                    // Optimize only two YtPublish nodes at once to properly update world dependencies
+                    auto last = TYtPublish(grp[0]);
+                    auto prev = TYtPublish(grp[1]);
+                    if (last.World().Raw() != prev.Raw()) {
+                        // Has extra dependencies. Don't merge
+                        grp.erase(grp.begin());
+                        continue;
+                    }
+
+                    auto mode = NYql::GetSetting(last.Settings().Ref(), EYtSettingType::Mode);
+                    YQL_ENSURE(mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Append);
+                    YQL_ENSURE(!NYql::HasSetting(last.Settings().Ref(), EYtSettingType::Initial));
+
+                    replaceMap.emplace(grp[0],
+                        Build<TYtPublish>(ctx, grp[0]->Pos())
+                            .InitFrom(prev)
+                            .Input()
+                                .Add(prev.Input().Ref().ChildrenList())
+                                .Add(last.Input().Ref().ChildrenList())
+                            .Build()
+                            .Done().Ptr()
+                    );
+                    replaceMap.emplace(grp[1], prev.World().Ptr());
+
+                    YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-MergePublish";
+                    return RemapExpr(input, output, replaceMap, ctx, TOptimizeExprSettings(State_->Types));
+                }
+            }
+            ProcessedMergePublish.insert(c.first->UniqueId());
+        }
+        return TStatus::Ok;
+    };
 
     TStatus OptimizeFieldSubsetForMultiUsage(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
         TVector<std::pair<const TOpDeps::value_type*, THashSet<TString>>> matchedOps;

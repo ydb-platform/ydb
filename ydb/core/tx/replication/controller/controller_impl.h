@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -83,6 +84,8 @@ private:
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
@@ -103,6 +106,8 @@ private:
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void ProcessCreateStreamQueue(const TActorContext& ctx);
+    void ProcessDropStreamQueue(const TActorContext& ctx);
 
     // local transactions
     class TTxInitSchema;
@@ -177,6 +182,13 @@ private:
 
     bool ProcessQueuesScheduled = false;
     static constexpr ui32 ProcessBatchLimit = 100;
+
+    // create stream limiter
+    TDeque<TActorId> RequestedCreateStream;
+    THashSet<TActorId> InflightCreateStream;
+    // drop stream limiter
+    TDeque<TActorId> RequestedDropStream;
+    THashSet<TActorId> InflightDropStream;
 
 }; // TController
 

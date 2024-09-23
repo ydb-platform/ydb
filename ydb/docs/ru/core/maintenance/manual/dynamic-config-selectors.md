@@ -61,6 +61,7 @@ selector_config:
 Может принимать любые значения, или быть не задан.
 
 Пример:
+
 ```yaml
 dynamic:
   type: string
@@ -73,6 +74,7 @@ host_name:
 Может принимать значения из списка `values`, или быть не задан.
 
 Пример:
+
 ```yaml
 flavour:
   type: enum
@@ -107,6 +109,7 @@ selector: {}
 Данный оператор позволяет выбирать узлы с значением лейблов из списка.
 
 Следующий селектор выберет все узлы, где лейбл `label1` равен `value1` **или** `value2`:
+
 ```yaml
 selector:
   label1:
@@ -143,6 +146,7 @@ selector:
 #|
 || Изначальная конфигурация | Переопределение | Результирующая конфигурация ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -150,13 +154,17 @@ config:
     second_entry: 2
     third_entry: 3
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
     second_entry: 100
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -164,6 +172,7 @@ config:
     second_entry: 100
     third_entry: 3
 ```
+
 ||
 |#
 
@@ -176,6 +185,7 @@ config:
 #|
 || Изначальная конфигурация | Переопределение | Результирующая конфигурация ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -186,7 +196,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -196,7 +208,9 @@ config:
     - abc: 3
       value: 40
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -208,6 +222,7 @@ config:
     - abc: 3
       value: 40
 ```
+
 ||
 |#
 
@@ -220,6 +235,7 @@ config:
 #|
 || Изначальная конфигурация | Переопределение | Результирующая конфигурация ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -230,7 +246,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -238,7 +256,9 @@ config:
     - !remove
       abc: 1
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -246,6 +266,7 @@ config:
     - abc: 2
       value: 10
 ```
+
 ||
 |#
 
@@ -258,6 +279,7 @@ config:
 #|
 || Изначальная конфигурация | Переопределение | Результирующая конфигурация ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -268,7 +290,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -278,7 +302,9 @@ config:
     - abc: 3
       value: 40
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -293,6 +319,7 @@ config:
     - abc: 3
       value: 40
 ```
+
 ||
 |#
 

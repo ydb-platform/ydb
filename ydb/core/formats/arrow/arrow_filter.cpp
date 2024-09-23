@@ -575,8 +575,10 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
 }
 
 TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize) const {
-    if ((IsTotalAllowFilter() || IsTotalDenyFilter()) && !Filter.size()) {
-        return TIterator(reverse, expectedSize, LastValue);
+    if (IsTotalAllowFilter()) {
+        return TIterator(reverse, expectedSize, true);
+    } else if (IsTotalDenyFilter()) {
+        return TIterator(reverse, expectedSize, false);
     } else {
         AFL_VERIFY(expectedSize == Size())("expected", expectedSize)("size", Size())("reverse", reverse);
         return TIterator(reverse, Filter, GetStartValue(reverse));

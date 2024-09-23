@@ -39,6 +39,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   Topic client ([source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) requires the {{ ydb-short-name }} driver for work. It handles topics and manages read and write sessions.
 
   App code snippet for driver initialization:
+
   ```cpp
   auto driverConfig = TDriverConfig()
       .SetEndpoint(opts.Endpoint)
@@ -63,6 +64,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   The {{ ydb-short-name }} transport lets the app and {{ ydb-short-name }} interact at the transport layer. The transport must exist during the {{ ydb-short-name }} access lifecycle and be initialized before creating a client.
 
   App code snippet for transport initialization:
+
   ```java
   try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
           .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
@@ -70,6 +72,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
       // Use YDB transport
   }
   ```
+
   In this example `CloudAuthHelper.getAuthProviderFromEnviron()` helper method is used which retrieves auth token from environment variables.
   For example, `YDB_ACCESS_TOKEN_CREDENTIALS`.
   For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
@@ -77,6 +80,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   Topic client ([source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) uses {{ ydb-short-name }} transport and handles all topics topic operations, manages read and write sessions.
 
   App code snippet for creating a client:
+
   ```java
   try (TopicClient topicClient = TopicClient.newClient(transport)
                 .setCompressionExecutor(compressionExecutor)
@@ -84,6 +88,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
     // Use topic client
   }
   ```
+
   Both provided examples use ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
   It allows to automatically close  client and transport on leaving this block, considering both classes extends `AutoCloseable`.
 
@@ -112,6 +117,7 @@ The topic path is mandatory. Other parameters are optional.
       .CreateTopic("my-topic", settings)  // returns TFuture<TStatus>
       .GetValueSync();
   ```
+
 - Go
 
    For a full list of supported parameters, see the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
@@ -513,7 +519,6 @@ Only connections with matching [producer and message group](../../concepts/topic
      ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
      ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
      ])
-
    ```
 
 - Java (sync)
@@ -1001,24 +1006,25 @@ Topic can have several Consumers and for each of them server stores its own read
 
   To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 
-   ```go
-   reader, err := db.Topic().StartReader("my-consumer", topicoptions.ReadTopic("my-topic"))
-   if err != nil {
-       return err
-   }
-   ```
+  ```go
+  reader, err := db.Topic().StartReader("my-consumer", topicoptions.ReadTopic("my-topic"))
+  if err != nil {
+      return err
+  }
+  ```
 
 - Python
 
   To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 
-   ```python
-   reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
-   ```
+  ```python
+  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
+  ```
 
 - Java (sync)
 
   Reader settings initialization:
+
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
@@ -1031,6 +1037,7 @@ Topic can have several Consumers and for each of them server stores its own read
   ```
 
   Sync reader creation:
+
   ```java
   SyncReader reader = topicClient.createSyncReader(settings);
   ```
@@ -1038,11 +1045,14 @@ Topic can have several Consumers and for each of them server stores its own read
   After a reader is created, it has to be initialized. Sync reader has two methods for this:
 
   - `init()`: non-blocking, launches initialization in background and does not wait for it to finish.
+
     ```java
     reader.init();
     ```
+
   - `initAndWait()`: blocking, launches initialization and waits for it to finish.
     If an error occurs during this process, exception will be thrown.
+
     ```java
     try {
         reader.initAndWait();
@@ -1056,6 +1066,7 @@ Topic can have several Consumers and for each of them server stores its own read
 - Java (async)
 
   Reader settings initialization:
+
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
@@ -1069,14 +1080,17 @@ Topic can have several Consumers and for each of them server stores its own read
 
   For async reader, `ReadEventHandlersSettings` also have to be provided with an implementation of `ReadEventHandler`.
   It describes how events should be handled during reading.
+
   ```java
   ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
       .setEventHandler(new Handler())
       .build();
   ```
+
   Optionally, an executor for message handling can be also provided in `ReadEventHandlersSettings`.
   To implement a Handler, default abstract class `AbstractReadEventHandler` can be used.
   It is enough to override the `onMessages` method that describes message handling. Implementation example:
+
   ```java
   private class Handler extends AbstractReadEventHandler {
       @Override
@@ -1096,6 +1110,7 @@ Topic can have several Consumers and for each of them server stores its own read
   ```
 
   Async reader creation and initialization:
+
   ```java
   AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
   // Init in background
@@ -1470,6 +1485,7 @@ Instead of committing messages, the client application may track reading progres
   Additionally, there is a `commitOffset` parameter that tells the server to consider all messages with lesser offsets [committed](#commit).
 
   Setting handler example:
+
   ```cpp
   settings.EventHandlers_.StartPartitionSessionHandler(
       [](TReadSessionEvent::TStartPartitionSessionEvent& event) {
@@ -1478,6 +1494,7 @@ Instead of committing messages, the client application may track reading progres
       }
   );
   ```
+
   In the code above,`GetOffsetToReadFrom` is part of the example, not SDK. Use your own method to provide the correct starting offset for a partition with a given partition id.
 
   Also, `TReadSessionSettings` has a `ReadFromTimestamp` setting for reading only messages newer than the given timestamp. This setting is intended to skip some messages, not for precise reading start positioning. Several first-received messages may still have timestamps less than the specified one.
@@ -1566,6 +1583,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
                   .build())
           .build();
   ```
+
   In this case, reading progress on the server will be lost on partition session restart.
   To avoid reading from the beginning each time, starting offsets should be set on each partition session start:
 
@@ -1649,6 +1667,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
           .setTransaction(transaction)
           .build());
   ```
+
   A message received this way will be automatically committed with the provided transaction and shouldn't be committed directly.
   The `receive` method sends the `sendUpdateOffsetsInTransaction` request on the server to link the message offset with this transaction and blocks until a response is received.
 

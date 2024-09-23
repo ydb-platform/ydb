@@ -448,7 +448,8 @@ public:
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
-                   // Not tmp index impl tables can be created only as part of create index
+                    // Not tmp index impl tables can be created only as part of create index
+                    // tmp index impl tables created multiple times during index construction
                     if (!NTableIndex::IsTmpImplTable(name)) {
                         checks
                             .IsUnderCreating(NKikimrScheme::StatusNameConflict)
@@ -563,14 +564,18 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+            .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+            .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+            .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+        };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,
             schema,
             *typeRegistry,
             limits,
             *domainInfo,
-            context.SS->EnableTablePgTypes,
-            context.SS->EnableTableDatetime64,
+            featureFlags,
             errStr,
             LocalSequences);
 

@@ -15,6 +15,7 @@ This load test runs 5 types of load:
 ## Load test initialization {#init}
 
 To get started, create tables and populate them with data:
+
 ```bash
 {{ ydb-cli }} workload stock init [init options...]
 ```
@@ -330,7 +331,9 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 ```bash
 {{ ydb-cli }} workload stock run put-same-order -s 5 -t 5 -p 1000 --quiet
 ```
+
 Possible result:
+
 ```text
 Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 16          3.2 67      3       855     1407    1799    1799
@@ -341,7 +344,9 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 ```bash
 {{ ydb-cli }} workload stock run rand-user-hist -s 5 -t 10 --print-timestamp
 ```
+
 Possible result:
+
 ```text
 Elapsed Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
 1          1046 0       0       7       16      25      50      2022-02-08T17:47:26Z

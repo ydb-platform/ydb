@@ -63,6 +63,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -1162,6 +1163,11 @@ private:
                     Issues.AddIssue(TIssue(ex.message()));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
+                } catch (const TCodeLineException& ex) {
+                    LOG_CORO_D(ex.what());
+                    Issues.AddIssue(ex.GetRawMessage());
+                    FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
+                    RetryStuff->Cancel();
                 }
             }
         } catch (const TS3ReadAbort&) {
@@ -2190,7 +2196,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                 auto memberType = extraStructType->GetMemberType(i);
                 std::shared_ptr<arrow::DataType> dataType;
 
-                YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
+                YQL_ENSURE(ConvertArrowType(memberType, dataType, true), "Unsupported arrow type");
                 THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional())));
                 readSpec->ColumnReorder.push_back(i);
                 readSpec->RowSpec.emplace(memberName, memberType);

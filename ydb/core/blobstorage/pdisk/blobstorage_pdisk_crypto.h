@@ -11,7 +11,14 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////
 
 class TPDiskHashCalculator : public THashCalculator {
+    bool UseT1ha0Hasher;
+
 public:
+    // T1ha0 hash is default for current version, but old hash is used to test backward compatibility
+    TPDiskHashCalculator(bool useT1ha0Hasher = true)
+        : UseT1ha0Hasher(useT1ha0Hasher)
+    {}
+
     ui64 OldHashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
             const ui32 sectorSize) {
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&sectorOffset, sizeof sectorOffset);
@@ -39,7 +46,11 @@ public:
 
     ui64 HashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
             const ui32 sectorSize) {
-        return T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize);
+        if (UseT1ha0Hasher) {
+            return T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize);
+        } else {
+            return OldHashSector(sectorOffset, magic, sector, sectorSize);
+        }
     }
 
     bool CheckSectorHash(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,

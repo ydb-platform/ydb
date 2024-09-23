@@ -35,6 +35,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
@@ -569,13 +570,18 @@ public:
         return copy;
     }
 
+    struct TCreateAlterDataFeatureFlags {
+        bool EnableTablePgTypes;
+        bool EnableTableDatetime64;
+        bool EnableParameterizedDecimal;
+    };
+
     static TAlterDataPtr CreateAlterData(
         TPtr source,
         NKikimrSchemeOp::TTableDescription& descr,
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
-        bool pgTypesEnabled,
-        bool datetime64TypesEnabled,
+        const TCreateAlterDataFeatureFlags& featureFlags,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -958,6 +964,8 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         THashSet<ui32> ParentPartitionIds;
         THashSet<ui32> ChildPartitionIds;
 
+        TShardIdx ShardIdx;
+
         void SetStatus(const TActorContext& ctx, ui32 value) {
             if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
@@ -1151,6 +1159,8 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTopicStats Stats;
 
     void AddPartition(TShardIdx shardIdx, TTopicTabletInfo::TTopicPartitionInfo* partition) {
+        partition->ShardIdx = shardIdx;
+
         TTopicTabletInfo::TPtr& pqShard = Shards[shardIdx];
         if (!pqShard) {
             pqShard.Reset(new TTopicTabletInfo());
@@ -2462,6 +2472,20 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
+    void FinishAlter() {
+        Y_ABORT_UNLESS(AlterData);
+
+        AlterVersion = AlterData->AlterVersion;
+        Mode = AlterData->Mode;
+        Format = AlterData->Format;
+        VirtualTimestamps = AlterData->VirtualTimestamps;
+        ResolvedTimestamps = AlterData->ResolvedTimestamps;
+        AwsRegion = AlterData->AwsRegion;
+        State = AlterData->State;
+
+        AlterData.Reset();
+    }
+
     ui64 AlterVersion = 1;
     EMode Mode;
     EFormat Format;
@@ -3107,7 +3131,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void MakeTop(ui64 k) {
             Y_ASSERT(k > 0);
             auto kth = Rows.begin() + k - 1;
-            // TODO(mbkkt) use floyd rivest 
+            // TODO(mbkkt) use floyd rivest
             std::nth_element(Rows.begin(), kth, Rows.end());
             Rows.erase(kth + 1, Rows.end());
             Y_ASSERT(kth->P < MaxProbability);
@@ -3383,6 +3407,7 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
 
     ui64 AlterVersion = 0;
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {

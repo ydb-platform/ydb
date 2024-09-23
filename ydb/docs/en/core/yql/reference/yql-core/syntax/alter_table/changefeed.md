@@ -8,6 +8,7 @@
 
 `ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])`: Adds a [changefeed](../../../../concepts/cdc) with the specified name and options.
 
+
 ## Changefeed options {#changefeed-options}
 
 * `MODE`: Operation mode. Specifies what to write to a changefeed each time table data is altered.

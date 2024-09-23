@@ -106,7 +106,6 @@ public:
     }
 
     void Bootstrap() override {
-        ClusterInfo.SetVersion(Viewer->GetCapabilityVersion("/viewer/cluster"));
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
         PDisksResponse = RequestBSControllerPDisks();
@@ -484,6 +483,9 @@ private:
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
             (*ClusterInfo.MutableMapNodeStates())[NKikimrWhiteboard::EFlag_Name(node.SystemState.GetSystemState())]++;
+            for (const TString& role : node.SystemState.GetRoles()) {
+                (*ClusterInfo.MutableMapNodeRoles())[role]++;
+            }
         }
 
         for (auto& [tabletId, tabletState] : mergedTabletState) {
@@ -733,6 +735,7 @@ private:
     }
 
     void ReplyAndPassAway() override {
+        ClusterInfo.SetVersion(Viewer->GetCapabilityVersion("/viewer/cluster"));
         for (const auto& problem : Problems) {
             ClusterInfo.AddProblems(problem);
         }

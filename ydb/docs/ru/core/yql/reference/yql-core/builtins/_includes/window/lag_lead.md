@@ -4,14 +4,14 @@
 
 ### Сигнатура
 
-```
+```yql
 LEAD(T[,Int32])->T?
 LAG(T[,Int32])->T?
 ```
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
    int_value - LAG(int_value) OVER w AS int_value_diff
 FROM my_table

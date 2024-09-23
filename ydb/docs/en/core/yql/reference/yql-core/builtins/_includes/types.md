@@ -168,8 +168,12 @@ SELECT FormatType(VoidType()); -- Void
 ## OptionalItemType, ListItemType and StreamItemType {#optionalitemtype}
 
 {% if feature_codegen %} If a type is passed to these functions, then they perform {% else %}Perform{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#listtype): return the item type based on its container type.
+
 {% if feature_codegen %}
-If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle), and [StreamTypeHandle](#list-stream-typehandle): they return the handle of the element type based on the type handle of its container.{% endif %}
+
+If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle), and [StreamTypeHandle](#list-stream-typehandle): they return the handle of the element type based on the type handle of its container.
+
+{% endif %}
 
 ### Examples
 
@@ -245,8 +249,12 @@ FormatType(CallableArgumentType(
 ## VariantUnderlyingType {#variantunderlyingtype}
 
 {% if feature_codegen %}If a type is passed to this function, then it {% else %}Performs{% endif %} an action reverse to [VariantType](#varianttype): it returns the underlying type based on the variant type.
+
 {% if feature_codegen %}
-If a type handle is passed to this function, it performs the action reverse to [VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type.{% endif %}
+
+If a type handle is passed to this function, it performs the action reverse to [VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type.
+
+{% endif %}
 
 ### Examples
 
@@ -364,7 +372,7 @@ Getting the name of the PostgreSQL type from the type handle passed to the argum
 
 #### Examples
 
-``` yql
+```yql
 SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
 ```
 
@@ -374,7 +382,7 @@ Builds a type handle based on the passed name of the PostgreSQL type. Inverse fu
 
 #### Examples
 
-``` yql
+```yql
 SELECT FormatType(PgTypeHandle("int4")); -- pgint4
 ```
 

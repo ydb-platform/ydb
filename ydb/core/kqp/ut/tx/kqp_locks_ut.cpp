@@ -240,6 +240,71 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
                 return issue.GetMessage().Contains("/Root/Test");
             }), commitResult.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(MixedTxFail) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+
+        auto client = kikimr->GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/DataShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32 NOT NULL,
+                    Col3 String,
+                    PRIMARY KEY (Col1, Col2)
+                ) WITH (STORE = ROW);
+                CREATE TABLE `/Root/ColumnShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32 NOT NULL,
+                    Col3 String,
+                    PRIMARY KEY (Col1, Col2)
+                ) WITH (STORE = COLUMN);
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (1u, 1, "row"), (1u, 2, "row"), (1u, 3, "row"), (2u, 3, "row");
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, 1, "row"), (1u, 2, "row"), (1u, 3, "row"), (2u, 3, "row");
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto writeSession = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"sql(
+            SELECT * FROM `/Root/DataShard`;
+        )sql", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto tx = result.GetTransaction();
+
+        result = writeSession.ExecuteQuery(R"sql(
+            INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (2u, 1, "test");
+        )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"sql(
+            INSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES (2u, 1, "test");
+        )sql", NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Transaction locks invalidated. Table: `/Root/DataShard`", result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

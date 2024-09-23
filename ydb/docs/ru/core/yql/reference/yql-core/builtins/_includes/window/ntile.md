@@ -4,13 +4,13 @@
 
 ### Сигнатура
 
-```
+```yql
 NTILE(Uint64)->Uint64
 ```
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     NTILE(10) OVER w AS group_num
 FROM my_table

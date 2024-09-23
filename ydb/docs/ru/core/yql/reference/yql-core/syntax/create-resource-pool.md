@@ -1,26 +1,20 @@
 # CREATE RESOURCE POOL
 
-`CREATE RESOURCE POOL` создаёт [resource pool](../../../../concepts/gloassary#resource-pool).
+`CREATE RESOURCE POOL` создаёт [resource pool](../../../../concepts/gloassary#resource-pool.md).
 
 ## Синтаксис
 
-```sql
-CREATE RESOURCE POOL <имя>
-WITH ( <имя_параметра> [= <значение_параметра>] [, ... ] )
+```yql
+CREATE RESOURCE POOL <name>
+WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 ```
 
-### Параметры {#параметры}
-* `имя` - имя создаваемого resource pool. Должно быть уникально. Не допускается запись в виде пути (т.е. не должно содержать `/`).
-* `WITH ( <имя_параметра> [= <значение_параметра>] [, ... ] )` позволяет задать значения параметров, определяющих поведение resource pool. Поддерживаются следующие опции:
-    * `CONCURRENT_QUERY_LIMIT` (Int) - опциональное поле, которое задает число параллельно выполняющихся запросов в resource pool. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, MAX_INT32]
-    * `QUEUE_SIZE` (Int) - опциональное поле, которое задает размер очереди ожидания. Всего в системе в один момент времени может находиться не больше чем `CONCURRENT_QUERY_LIMIT + QUEUE_SIZE` запросов. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, MAX_INT32]
-    * `DATABASE_LOAD_CPU_THRESHOLD` (Int) - опциональное поле, порог загрузки cpu всей базы данных после которого запросы больше не отправляются на выполнение, а ожидают в очереди. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, 100]
-    * `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` (Double) - опциональное поле, которое задает процент доступной памяти на ноде запросом в этом пуле. Если значение -1, то работает ограничение максимальной доступной памяти на ноде между всеми запросами. Допустимые значения: -1, [0, 100]
-    * `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` (Double) - опциональное поле, которое задает процент доступного CPU всеми запросами на ноде в этом пуле. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, 100]
-    * `QUERY_CPU_LIMIT_PERCENT_PER_NODE` (Double) - опциональное поле, которое задает процент доступного CPU на запрос в пуле на ноде. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, 100]
-    * `RESOURCE_WEIGHT` (Int) - опциональное поле, которое задает веса распределения ресурсов между пулами. Если значение -1, то веса выключены. Допустимые значения: -1, [0, MAX_INT32]
+### Параметры {#paramters}
+* `name` - имя создаваемого resource pool. Должно быть уникально. Не допускается запись в виде пути (т.е. не должно содержать `/`).
+* `WITH ( <parameter_name> [= <parameter_value>] [, ... ] )` позволяет задать значения параметров, определяющих поведение resource pool. Поддерживаются следующие опции:
+{% include [x](_includes/resource_pool_parameters.md) %}
 
-## Замечания {#замечания}
+## Замечания {#remark}
 
 Запросы всегда выполняются в каком-то resource pool. По умолчанию все запросы отправляются в `default` resource pool, который создается по умолчанию. Этот resource pool нельзя удалить, он всегда существует в системе.
 
@@ -28,11 +22,16 @@ WITH ( <имя_параметра> [= <значение_параметра>] [, 
 
 ## Разрешения
 
-Требуется разрешение `CREATE TABLE` на директорию `.metadata/workload_manager/pools`
+Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `CREATE TABLE` на директорию `.metadata/workload_manager/pools`
 
-## Примеры {#примеры}
+Пример выдачи такого разрешения:
+```yql
+GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
+```
 
-```sql
+## Примеры {#examples}
+
+```yql
 CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=1000,
@@ -47,5 +46,6 @@ CREATE RESOURCE POOL olap WITH (
 
 ## См. также
 
+* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
 * [ALTER RESOURCE POOL](alter-resource-pool.md)
 * [DROP RESOURCE POOL](drop-resource-pool.md)

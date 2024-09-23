@@ -1,29 +1,23 @@
 # ALTER RESOURCE POOL
 
-`ALTER RESOURCE POOL` изменяет определение [resource pool](../../../../concepts/gloassary#resource-pool).
+`ALTER RESOURCE POOL` изменяет определение [resource pool](../../../../concepts/gloassary#resource-pool.md).
 
 ### Параметры
-* `CONCURRENT_QUERY_LIMIT` (Int) - опциональное поле, которое задает число параллельно выполняющихся запросов в resource pool. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, MAX_INT32]
-* `QUEUE_SIZE` (Int) - опциональное поле, которое задает размер очереди ожидания. Всего в системе в один момент времени может находиться не больше чем `CONCURRENT_QUERY_LIMIT + QUEUE_SIZE` запросов. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, MAX_INT32]
-* `DATABASE_LOAD_CPU_THRESHOLD` (Int) - опциональное поле, порог загрузки cpu всей базы данных после которого запросы больше не отправляются на выполнение, а ожидают в очереди. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, 100]
-* `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` (Double) - опциональное поле, которое задает процент доступной памяти на ноде запросом в этом пуле. Если значение -1, то работает ограничение максимальной доступной памяти на ноде между всеми запросами. Допустимые значения: -1, [0, 100]
-* `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` (Double) - опциональное поле, которое задает процент доступного CPU всеми запросами на ноде в этом пуле. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, 100]
-* `QUERY_CPU_LIMIT_PERCENT_PER_NODE` (Double) - опциональное поле, которое задает процент доступного CPU на запрос в пуле на ноде. Если значение -1, то ограничений нет. Допустимые значения: -1, [0, 100]
-* `RESOURCE_WEIGHT` (Int) - опциональное поле, которое задает веса распределения ресурсов между пулами. Если значение -1, то веса выключены. Допустимые значения: -1, [0, MAX_INT32]
+{% include [x](_includes/resource_pool_parameters.md) %}
 
 ## Изменение параметров
 
 Синтаксис для изменения любого параметра resource pool выглядит следующим образом:
 
-```sql
-ALTER RESOURCE POOL <имя> SET (<key> = <value>);
+```yql
+ALTER RESOURCE POOL <name> SET (<key> = <value>);
 ```
 
-```<key>``` — имя параметра, ```<value>``` — его новое значение.
+`<key>` — имя параметра, `<value>` — его новое значение.
 
 Например, такая команда включит ограничение на число параллельных запросов равным 100:
 
-```sql
+```yql
 ALTER RESOURCE POOL olap SET (CONCURRENT_QUERY_LIMIT = "100");
 ```
 
@@ -31,23 +25,29 @@ ALTER RESOURCE POOL olap SET (CONCURRENT_QUERY_LIMIT = "100");
 
 Команда для сброса параметра resource pool выглядит следующим образом:
 
-```sql
-ALTER RESOURCE POOL <имя> RESET (<key>);
+```yql
+ALTER RESOURCE POOL <name> RESET (<key>);
 ```
 
 ```<key>``` — имя параметра.
 
 Например, такая команда сбросит настройки `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` для resource pool:
 
-```sql
+```yql
 ALTER RESOURCE POOL olap RESET (TOTAL_CPU_LIMIT_PERCENT_PER_NODE);
 ```
 
 ## Разрешения
 
-Требуется разрешение `ALTER SCHEMA` на resource pool в директории `.metadata/workload_manager/pools`
+Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALTER SCHEMA` на resource pool в директории `.metadata/workload_manager/pools`
+
+Пример выдачи такого разрешения:
+```yql
+GRANT 'ALTER SCHEMA' ON `.metadata/workload_manager/pools/olap_pool` TO `user1@domain`;
+```
 
 ## См. также
 
+* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL](create-resource-pool.md)
 * [DROP RESOURCE POOL](drop-resource-pool.md)

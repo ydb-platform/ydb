@@ -4,31 +4,37 @@
 
 ## Синтаксис
 
-```sql
-DROP RESOURCE POOL <имя>
+```yql
+DROP RESOURCE POOL <name>
 ```
 
 ### Параметры
 
-* `имя` - имя resource pool, подлежащего удалению.
+* `name` - имя resource pool, подлежащего удалению.
 
-## Замечания {#замечания}
+## Замечания {#remarks}
 
-* `имя` - не должно содержать в себе символ `/`, оно не привязано к иерархии схемы
+* `name` - не должно содержать в себе символ `/`, оно не привязано к иерархии схемы
 
 ## Разрешения
 
-Требуется разрешение `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`
+Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`
+
+Пример выдачи такого разрешения:
+```yql
+GRANT 'REMOVE SCHEMA`' ON `.metadata/workload_manager/pools` TO `user1@domain`;
+```
 
 ## Примеры
 
 Следующая команда удалит resource pool olap:
 
-```sql
+```yql
 DROP RESOURCE POOL olap;
 ```
 
 ## См. также
 
+* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL](create-resource-pool.md)
 * [ALTER RESOURCE POOL](alter-resource-pool.md)

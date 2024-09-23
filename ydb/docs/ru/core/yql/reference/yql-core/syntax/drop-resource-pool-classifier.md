@@ -4,31 +4,37 @@
 
 ## Синтаксис
 
-```sql
-DROP RESOURCE POOL CLASSIFIER <имя>
+```yql
+DROP RESOURCE POOL CLASSIFIER <name>
 ```
 
 ### Параметры
 
-* `имя` - имя resource pool classifier, подлежащего удалению.
+* `name` - имя resource pool classifier, подлежащего удалению.
 
-## Замечания {#замечания}
+## Замечания {#remarks}
 
-* `имя` - не должно содержать в себе запрещенные символы для схемных объектов, но оно не привязано к иерархии схемы
+* `name` - не должно содержать в себе запрещенные символы для схемных объектов, но оно не привязано к иерархии схемы
 
 ## Разрешения
 
-Требуется разрешение `ALL` на базу данных
+Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALL` на базу данных
+
+Пример выдачи такого разрешения:
+```yql
+GRANT 'ALL' ON `/my_db` TO `user1@domain`;
+```
 
 ## Примеры
 
 Следующая команда удалит resource pool classifier с именем olap_classifier:
 
-```sql
+```yql
 DROP RESOURCE POOL CLASSIFIER olap_classifier;
 ```
 
 ## См. также
 
+* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
 * [ALTER RESOURCE POOL CLASSIFIER](alter-resource-pool-classifier.md)

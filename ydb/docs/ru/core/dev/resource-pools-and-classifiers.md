@@ -1,11 +1,11 @@
-# Resource pool и resource pool classifier
+# Управление потреблением ресурсов
 
-Описание этих сущностей может быть найдено в [resource pool](../concepts/glossary#resource-pool) и [resource pool classifier](../concepts/glossary#resource-pool-classifier)
+Описание этих сущностей может быть найдено в [resource pool](../concepts/glossary.md#resource-pool) и [resource pool classifier](../concepts/glossary#resource-pool-classifier.md)
 
 ## Создание resource pool
 
 В примере ниже приведен синтаксис для создания отдельного resource pool в котором будут выполняться аналитический запросы.
-```sql
+```yql
 CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=10,
     QUEUE_SIZE=1000,
@@ -16,7 +16,7 @@ CREATE RESOURCE POOL olap WITH (
 )
 ```
 
-Ознакомиться с параметрами resource pool можно [здесь](../yql/reference/yql-core/syntax/create-resource-pool#параметры)
+Ознакомиться с параметрами resource pool можно [здесь](../yql/reference/yql-core/syntax/create-resource-pool.md#parameters)
 
 Рассмотрим на примере выше что же на самом деле означают эти параметры и как они будут влиять на распределение ресурсов. Допустим в базе данных {{ ydb-short-name }} выделено 10 узлов по 10 vCPU. В сумме в такой базе данных 100 vCPU. Тогда на одном хосте для resource pool с именем `olap` будет выделено `10vCPU*TOTAL_CPU_LIMIT_PERCENT_PER_NODE/100=10vCPU*0.7=7vCPU`. В сумме при равномерном распределении ресурсов на всю базу данных будет выделено `7vCPU*10(узлов)=70vCPU`. На один запрос в этом resource pool будет выделено `10vCPU*TOTAL_CPU_LIMIT_PERCENT_PER_NODE/100*QUERY_CPU_LIMIT_PERCENT_PER_NODE/100=10vCPU*0.7*0.5=3.5vCPU`. Что касается `RESOURCES_WEIGHT`, то он начинает работать только в случае переподписки и когда число пулов в системе > 1, подробное описание этого параметра приведено ниже. Перейдем к рассмотрению `CONCURRENT_QUERY_LIMIT`, допустим что в resource pool `olap` работают уже 9 запросов, тогда при появлении нового запроса он сразу же перейдет в состояние выполнения параллельно с другими 9-ю запросами. Теперь в пуле уже работает 10 запросов, если же в resource pool будет отправлен 11-й запрос, то он не начнет выполняться, он будет отправлен в очередь ожидания. Когда хотя бы 1 из 10 выполняющихся запросов завершит свое выполнение, то из очереди будет извлечен 11-й запрос и отправлен на выполнение незамедлительно. Если же в очереди уже находится `QUEUE_SIZE=1000` элементов, то при отправке на выполнение 1001-ого запроса будет получена ошибка и запрос не будет выполнен. На число параллельно выполняемых запросов влияет не только `CONCURRENT_QUERY_LIMIT`, но еще и `DATABASE_LOAD_CPU_THRESHOLD`
 
@@ -29,7 +29,7 @@ CREATE RESOURCE POOL olap WITH (
 
 Даже если ни одного resource pool не было создано, то в системе всегда существует `default` resource pool, который не может быть удален. Любой запрос который выполняется в системе всегда выполняется в каком-то пуле, не бывает ситуации когда resource pool не принадлежит никакому resource pool. По умолчанию настройки `default` resource pool выглядят следующим образом:
 
-```sql
+```yql
 CREATE RESOURCE POOL default WITH (
     CONCURRENT_QUERY_LIMIT=-1,
     QUEUE_SIZE=-1,
@@ -51,16 +51,16 @@ CREATE RESOURCE POOL default WITH (
 
 ## Управление ACL на resource pool
 
-Для создания/изменения/удаления resource pool необходимо выдать права доступа в соответствии с разрешениями описанными в [SQL](../yql/reference/yql-core/syntax/create-resource-pool). Например, для возможности создания resource pool нужно иметь `CREATE TABLE` на директорию `.metadata/workload_manager/pools`
+Для создания/изменения/удаления resource pool необходимо выдать права доступа в соответствии с разрешениями описанными в [SQL](../yql/reference/yql-core/syntax/create-resource-pool.md). Например, для возможности создания resource pool нужно иметь `CREATE TABLE` на директорию `.metadata/workload_manager/pools`
 
-```sql
+```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
 ```
 
 ## Создание resource pool classifier
 
 В примере ниже приведен пример классификатора запросов, который отправляет запросы от всех пользователей в resource pool с именем `olap`
-```sql
+```yql
 CREATE RESOURCE POOL CLASSIFIER olap_classifier
 WITH (
     RESOURCE_POOL = 'olap',
@@ -75,7 +75,7 @@ WITH (
 
 На использование resource pool classifier нет ограничений, они глобальны на всю базу данных и доступны всем пользователям. Для возможности создавать/удалять/изменять resource pool classifier необходимо иметь `ALL` на всю базу.
 
-```sql
+```yql
 GRANT ALL ON `/my_db` TO user1;
 ```
 
@@ -83,7 +83,7 @@ GRANT ALL ON `/my_db` TO user1;
 
 ## Порядок выбора классификаторов в случае конфликтов
 
-```sql
+```yql
 CREATE RESOURCE POOL CLASSIFIER olap1_classifier
 WITH (
     RESOURCE_POOL = 'olap1',
@@ -97,7 +97,7 @@ WITH (
 );
 ```
 
-Допустим у нас есть два resource pool classifier которые имеют конфликтующее условия. В этом случае один пользователь `user1@domain` подходит под два resource pool: `olap1`, `olap2`. Если в системе до этого не существовало ни одного resource pool classifier, то `olap1` выдается `RANK=1000`, а `olap2` выдается `RANK=2000`. Так как у `olap1` `RANK` выше чем у `olap2`, то он и буден выбран. В системе не может существовать два resource pool classifier с одинаковым `RANK` поэтому эта схема позволяет однозначно определить какой resource pool будет выбран в случае конфликтующих условий.
+Допустим у нас есть два классификатора пулов ресурсов которые имеют конфликтующее условия. В этом случае один пользователь `user1@domain` подходит под два пула ресурсов: `olap1`, `olap2`. Если в системе до этого не существовало ни одного классификатора пулов ресурсов, то `olap1` выдается `RANK=1000`, а `olap2` выдается `RANK=2000`. Классификаторы пулов ресурсов с меньшим значением имеют более высокий приоритет. В данном примере, так как у `olap1` `RANK` более приоритетный чем у `olap2`, то он и буден выбран. В системе не может существовать два классификатора пула ресурсов с одинаковым `RANK` поэтому эта схема позволяет однозначно определить какой пул ресурсов будет выбран в случае конфликтующих условий.
 
 ## Пример CEO resource pool
 
@@ -128,9 +128,16 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 ### План запроса
 
-В плане запроса можно найти полезные аттрибуты для диагностики работы с resource pool. Пример такой информации приведен ниже
+Подробную информацию о планах запросов можно найти на странице [структура планов запросов](../yql/query_plans.md). Для получения информации о пуле запросов нужно запустить команду с форматом `json-unicode`. Пример команды:
+
+```bash
+ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
+```
+
+В плане запроса результаты выше приведенной команды можно найти полезные аттрибуты для диагностики работы с пулом ресурсов. Пример такой информации приведен ниже
 ```json
-{
+"Node Type" : "Query",
+"Stats" : {
   "TotalDurationUs": 28795,
   "ProcessCpuTimeUs": 45,
   "Compilation": {
@@ -140,7 +147,8 @@ CREATE RESOURCE POOL the_ceo WITH (
   },
   "ResourcePoolId": "default",
   "QueuedTimeUs": 0
-}
+},
+"PlanNodeType" : "Query"
 ```
 
 Полезные аттрибуты:
@@ -150,31 +158,8 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 ### Метрики
 
-Существуют полезные метрики для отслеживания загруженности resource pool, эти метрики находятся в service `resource_pool`:
-    - `AverageLoadPercentage` - средняя загрузка базы данных, по этой метрики работает `DATABASE_LOAD_CPU_THRESHOLD`
-    - `InFlightLimit` - лимит на число одновременно работающих запросов
-    - `GlobalInFly` - текущее число одновременно работающих запросов. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`
-    - `QueueSizeLimit` - размер очереди
-    - `GlobalDelayedRequests` - количество запросов ожидающих в очереди на выполнение. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`
+Информацию о метриках пулов ресурсов можно найти в [справке по метрикам](../reference/observability/metrics/index.md#resource_pools)
 
 ### Системные таблицы
 
-#### .sys/resource_pools
-
-В этой таблице можно найти информацию о настройках resource pool
-
-Колонка | Тип | Значение
---- | --- | ---
-name | Utf8 | имя resource pool
-config | JsonDocument | настройки resource pool
-acl | JsonDocument | настройки ACL
-
-#### .sys/resource_pools_classifiers
-
-В этой таблице можно найти информацию о настройках resource pools classifiers
-
-Колонка | Тип | Значение
---- | --- | ---
-name | Utf8 | имя resource pool classifier
-rank | Int64 | rank resource pool classifier который влияет на приоритет выбора resource pool classifier
-config | JsonDocument | настройки resource pool classifier
+Информация о системных таблицах связанных с пулами ресурсов и классификаторами пулов ресурсов можно найти на странице [системных таблиц базы данных](system-views.md#resource_pools)

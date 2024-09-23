@@ -1,18 +1,19 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_record.h"
-#include "change_sender_base.h"
+#include "change_sender_table_base.h"
 #include "datashard_impl.h"
 
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <util/generic/maybe.h>
 
@@ -210,7 +211,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return CreateBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
+        return CreateTableChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {

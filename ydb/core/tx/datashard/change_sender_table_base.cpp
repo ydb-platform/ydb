@@ -1,16 +1,18 @@
-#include "change_sender_base.h"
+#include "change_sender_table_base.h"
 #include "datashard_impl.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/change_exchange/change_sender.h>
+#include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NDataShard {
 
-class TBaseChangeSenderShard: public TActorBootstrapped<TBaseChangeSenderShard> {
+class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
-                << "[BaseChangeSenderShard]"
+                << "[TableChangeSenderShard]"
                 << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
                 << "[" << ShardId << "]"
                 << SelfId() /* contains brackets */ << " ";
@@ -280,7 +282,7 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_PARTITION;
     }
 
-    TBaseChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
+    TTableChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
             const TPathId& indexTablePathId, const TMap<TTag, TTag>& tagMap)
         : Parent(parent)
         , DataShard(dataShard)
@@ -323,16 +325,16 @@ private:
     ui32 Attempt = 0;
     TDuration Delay = TDuration::MilliSeconds(10);
 
-}; // TBaseChangeSenderShard
+}; // TTableChangeSenderShard
 
-IActor* CreateBaseChangeSenderShard(
+IActor* CreateTableChangeSenderShard(
     const TActorId& parent,
     const TDataShardId& dataShard,
     ui64 shardId,
     const TPathId& indexTablePathId,
     const TMap<TTag, TTag>& tagMap)
 {
-    return new TBaseChangeSenderShard(parent, dataShard, shardId, indexTablePathId, tagMap);
+    return new TTableChangeSenderShard(parent, dataShard, shardId, indexTablePathId, tagMap);
 }
 
 } // namespace NKikimr::NDataShard

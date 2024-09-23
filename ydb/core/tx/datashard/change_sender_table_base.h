@@ -2,10 +2,8 @@
 
 #include "change_exchange_helpers.h"
 
-#include <ydb/core/tx/scheme_cache/helpers.h>
-#include <ydb/core/change_exchange/change_sender.h>
-#include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
 
 namespace NKikimr::NDataShard {
 
@@ -311,7 +309,7 @@ struct TSchemeChecksMixin
 
 };
 
-IActor* CreateBaseChangeSenderShard(
+IActor* CreateTableChangeSenderShard(
     const TActorId& parent,
     const TDataShardId& dataShard,
     ui64 shardId,

@@ -35,6 +35,6 @@ DROP RESOURCE POOL CLASSIFIER olap_classifier;
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
+* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
 * [ALTER RESOURCE POOL CLASSIFIER](alter-resource-pool-classifier.md)

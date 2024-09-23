@@ -2,8 +2,7 @@
 
 `ALTER RESOURCE POOL CLASSIFIER` изменяет определение [resource pool classifier](../../../../concepts/gloassary#resource-pool-classifier.md).
 
-### Параметры
-
+## Параметры
 {% include [x](_includes/resource_pool_classifier_parameters.md) %}
 
 ## Изменение параметров
@@ -49,6 +48,6 @@ GRANT 'ALL' ON `/my_db` TO `user1@domain`;
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
+* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
 * [DROP RESOURCE POOL CLASSIFIER](drop-resource-pool-classifier.md)

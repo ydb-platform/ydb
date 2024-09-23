@@ -2,7 +2,7 @@
 
 `ALTER RESOURCE POOL` изменяет определение [resource pool](../../../../concepts/gloassary#resource-pool.md).
 
-### Параметры
+## Параметры
 {% include [x](_includes/resource_pool_parameters.md) %}
 
 ## Изменение параметров
@@ -48,6 +48,6 @@ GRANT 'ALTER SCHEMA' ON `.metadata/workload_manager/pools/olap_pool` TO `user1@d
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
+* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL](create-resource-pool.md)
 * [DROP RESOURCE POOL](drop-resource-pool.md)

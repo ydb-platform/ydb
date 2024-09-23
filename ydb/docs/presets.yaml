@@ -18,6 +18,8 @@ default:
   feature_federated_queries: true
 #  feature_topic_settings_reset: true
 #  feature_logbroker: true
+  feature_resource_pool: true
+  feature_resource_pool_classifier: true
   feature_view: true
   feature_async_replication: true
   ydb: YDB

@@ -45,6 +45,6 @@ GRANT 'ALL' ON `/my_db` TO `user1@domain`;
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
+* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
 * [ALTER RESOURCE POOL CLASSIFIER](alter-resource-pool-classifier.md)
 * [DROP RESOURCE POOL CLASSIFER](drop-resource-pool-classifier.md)

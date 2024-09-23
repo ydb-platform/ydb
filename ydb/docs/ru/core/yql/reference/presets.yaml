@@ -28,8 +28,6 @@ ydb:
   feature_group_by_rollup_cube: true
   feature_window_functions: true
   feature_bulk_tables: false
-  feature_resource_pool: true
-  feature_resource_pool_classifier: true
 
 yt:
   backend_name: YT

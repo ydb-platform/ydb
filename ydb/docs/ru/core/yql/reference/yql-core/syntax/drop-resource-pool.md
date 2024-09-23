@@ -35,6 +35,6 @@ DROP RESOURCE POOL olap;
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
+* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
 * [CREATE RESOURCE POOL](create-resource-pool.md)
 * [ALTER RESOURCE POOL](alter-resource-pool.md)

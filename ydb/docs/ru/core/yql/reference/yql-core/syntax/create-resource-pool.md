@@ -46,6 +46,6 @@ CREATE RESOURCE POOL olap WITH (
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../../dev/resource-pools-and-classifiers.md)
+* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
 * [ALTER RESOURCE POOL](alter-resource-pool.md)
 * [DROP RESOURCE POOL](drop-resource-pool.md)

@@ -487,7 +487,7 @@ namespace NActors {
                 ExecutorPool->ScheduleActivation(capturedActivation);
             }
             if (!activation) {
-                break;
+                return {IsSharedThread, wasWorking};
             }
             executeActivation(activation, false);
         }

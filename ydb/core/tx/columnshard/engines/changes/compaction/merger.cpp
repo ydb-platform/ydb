@@ -76,7 +76,8 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     TMergingContext mergingContext(batchResults, Batches);
 
     for (auto&& [columnId, columnData] : columnsData) {
-        if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
+        if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID &&
+            (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableInsertWriteIdSpecialColumnCompatibility())) {
             continue;
         }
         const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);

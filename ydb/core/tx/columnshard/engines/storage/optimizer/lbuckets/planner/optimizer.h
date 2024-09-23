@@ -1090,7 +1090,7 @@ public:
 
     void Actualize(const TInstant currentInstant) {
         RemoveBucketFromRating(LeftBucket);
-        LeftBucket->Actualize(currentInstant);
+        Y_UNUSED(LeftBucket->Actualize(currentInstant));
         AddBucketToRating(LeftBucket);
         for (auto&& i : Buckets) {
             const i64 rating = i.second->GetWeight();

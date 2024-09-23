@@ -715,6 +715,8 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
 {
     Config = newConfig;
 
+    PQ_LOG_D("Apply new config " << Config.ShortDebugString());
+
     ui32 cacheSize = CACHE_SIZE;
     if (Config.HasCacheSize()) {
         cacheSize = Config.GetCacheSize();
@@ -1630,6 +1632,30 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
     Y_ABORT_UNLESS(topicConverter->IsValid(), "%s", topicConverter->GetReason().c_str());
 }
 
+void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const
+{
+    Y_ABORT_UNLESS(cfg.HasVersion());
+    const int curConfigVersion = cfg.GetVersion();
+
+    // set rr generation for provided read rules
+    THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
+    for (const auto& c : Config.GetConsumers()) {
+        existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
+    }
+
+    for (auto& c : *cfg.MutableConsumers()) {
+        auto it = existed.find(c.GetName());
+        ui64 generation = 0;
+        if (it != existed.end() && it->second.first == c.GetVersion()) {
+            generation = it->second.second;
+        } else {
+            generation = curConfigVersion;
+        }
+        c.SetGeneration(generation);
+        cfg.AddReadRuleGenerations(generation);
+    }
+}
+
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
     const auto& record = ev->GetRecord();
@@ -1642,7 +1668,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     NKikimrPQ::TPQTabletConfig cfg = record.GetTabletConfig();
 
     Y_ABORT_UNLESS(cfg.HasVersion());
-    int curConfigVersion = cfg.GetVersion();
+    const int curConfigVersion = cfg.GetVersion();
 
     if (curConfigVersion == oldConfigVersion) { //already applied
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
@@ -1741,25 +1767,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     Migrate(cfg);
 
-    // set rr generation for provided read rules
-    {
-        THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
-        for (const auto& c : Config.GetConsumers()) {
-            existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
-        }
-
-        for (auto& c : *cfg.MutableConsumers()) {
-            auto it = existed.find(c.GetName());
-            ui64 generation = 0;
-            if (it != existed.end() && it->second.first == c.GetVersion()) {
-                generation = it->second.second;
-            } else {
-                generation = curConfigVersion;
-            }
-            c.SetGeneration(generation);
-            cfg.AddReadRuleGenerations(generation);
-        }
-    }
+    UpdateReadRuleGenerations(cfg);
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
                 << " Config update version " << cfg.GetVersion() << "(current " << Config.GetVersion() << ") received from actor " << sender
@@ -3724,6 +3732,10 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         case NKikimrPQ::TTransaction::UNKNOWN:
             tx.OnProposeTransaction(event, GetAllowedStep(),
                                     TabletID());
+
+            if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
+                UpdateReadRuleGenerations(tx.TabletConfig);
+            }
 
             if (tx.WriteId.Defined()) {
                 const TWriteId& writeId = *tx.WriteId;

@@ -1621,7 +1621,7 @@
       auto events = ReadSession->GetEvents(topicSettings);
 
       for (auto& event : events) {
-          // обработать событие и записать результаты в строковую таблицу
+          // обработать событие и записать результаты в таблицу
       }
 
       NYdb::NTable::TCommitTxSettings commitSettings;

@@ -57,7 +57,7 @@ private:
         }
     }
 
-    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx) const override {
+    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx, bool extraTypes) const override {
         try {
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
@@ -66,7 +66,7 @@ private:
                 TNullOutput null;
                 auto mkqlType = NCommon::BuildType(*type, typeBuilder, null);
                 std::shared_ptr<arrow::DataType> arrowType;
-                if (!ConvertArrowType(mkqlType, arrowType)) {
+                if (!ConvertArrowType(mkqlType, arrowType, extraTypes)) {
                     return EStatus::NOT_FOUND;
                 }
             }

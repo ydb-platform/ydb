@@ -283,8 +283,15 @@ struct TConverterTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<IBlockItemConverter>&&) {
+        if (isOptional) {
+            return std::make_unique<TResourceBlockItemConverter<true>>();
+        } else {
+            return std::make_unique<TResourceBlockItemConverter<false>>();
+        }
+    }
+
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
-        Y_UNUSED(isOptional);
         if (isOptional) {
             return std::make_unique<TResourceBlockItemConverter<true>>();
         } else {

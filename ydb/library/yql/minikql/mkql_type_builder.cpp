@@ -1507,7 +1507,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     }
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, bool extraTypes) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
     if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
@@ -1528,7 +1528,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
 
         // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
-        if (!ConvertArrowType(previousType, innerArrowType)) {
+        if (!ConvertArrowType(previousType, innerArrowType, extraTypes)) {
             return false;
         }
 
@@ -1550,7 +1550,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
             auto memberType = structType->GetMemberType(i);
-            if (!ConvertArrowType(memberType, childType)) {
+            if (!ConvertArrowType(memberType, childType, extraTypes)) {
                 return false;
             }
             members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
@@ -1560,13 +1560,27 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         return true;
     }
 
+    if (extraTypes) {
+        if (unpacked->IsList()) {
+            auto listType = AS_TYPE(TListType, unpacked);
+            std::shared_ptr<arrow::DataType> childType;
+            auto itemType = listType->GetItemType();
+            if (!ConvertArrowType(itemType, childType, extraTypes)) {
+                return false;
+            }
+            type = std::make_shared<arrow::ListType>(std::make_shared<arrow::Field>("item", childType, itemType->IsOptional()));
+            return true;
+        }
+    }
+
+
     if (unpacked->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, unpacked);
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
             auto elementType = tupleType->GetElementType(i);
-            if (!ConvertArrowType(elementType, childType)) {
+            if (!ConvertArrowType(elementType, childType, extraTypes)) {
                 return false;
             }
 
@@ -2404,6 +2418,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return result;
     }
 
+    if (type->IsList()) {
+        return sizeof(NYql::NUdf::TUnboxedValue);
+    }
+
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
         size_t result = 0;
@@ -2506,6 +2524,11 @@ struct TComparatorTraits {
         return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
     }
 
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<NYql::NUdf::IBlockItemComparator>&& inner) {
+        Y_UNUSED(isOptional, inner);
+        ythrow yexception() << "Comparator not implemented for block list: ";
+    }
+
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Comparator not implemented for block resources: ";
@@ -2536,6 +2559,11 @@ struct THasherTraits {
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
+    }
+
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<NYql::NUdf::IBlockItemHasher>&& inner) {
+        Y_UNUSED(isOptional, inner);
+        ythrow yexception() << "Hasher not implemented for list";
     }
 
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {

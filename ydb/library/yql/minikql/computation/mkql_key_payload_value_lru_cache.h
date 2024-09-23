@@ -88,7 +88,7 @@ public:
 
     // Perform garbage collection, O(1) amortized, but O(n) one-time
     void Prune(const std::chrono::time_point<std::chrono::steady_clock>& now) {
-        while(Tick(now)) {
+        while (Tick(now)) {
         }
     }
 

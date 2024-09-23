@@ -43,9 +43,9 @@ jobs:
       uses: ./.github/actions/s3cmd
       with:
         s3_bucket: "ydb-builds"
-        s3_endpoint: vars.AWS_ENDPOINT
-        s3_key_id: secrets.AWS_KEY_ID
-        s3_key_secret: secrets.AWS_KEY_VALUE
+        s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+        s3_key_id: ${{ secrets.AWS_KEY_ID }}
+        s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
     
     - name: sync results to s3 and publish links
       shell: bash

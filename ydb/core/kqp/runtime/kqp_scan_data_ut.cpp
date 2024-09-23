@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         namespace NTypeIds = NScheme::NTypeIds;
         struct TTestCase {
             NUdf::TUnboxedValue Value;
-            NScheme::TTypeId Type;
+            NScheme::TTypeInfo Type;
             std::pair<ui64, ui64> ExpectedSizes;
         };
         TString pattern = "This string has 26 symbols";
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Utf8        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Yson        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Json        , {16, 8 } },
-            {NUdf::TUnboxedValuePod(            ), NTypeIds::Decimal     , {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType::Default(), {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Date        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Datetime    , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Timestamp   , {16, 8 } },
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Datetime64  , {16, 8 } },
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Timestamp64 , {16, 8 } },
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Interval64  , {16, 8 } },
-            {NUdf::TUnboxedValuePod(decimalVal  ), NTypeIds::Decimal     , {16, 16} },
+            {NUdf::TUnboxedValuePod(decimalVal  ), NScheme::TDecimalType::Default(), {16, 16} },
             {NUdf::TUnboxedValuePod::Embedded("12charecters"), NTypeIds::String , {16, 12 } },
             {NUdf::TUnboxedValuePod::Embedded("foooo"), NTypeIds::String , {16, 8 } },
             {NUdf::TUnboxedValuePod::Embedded("FOOD!"), NTypeIds::Utf8   , {16, 8 } },

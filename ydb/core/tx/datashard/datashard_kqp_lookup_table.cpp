@@ -41,7 +41,7 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
             );
         } else {
             auto dataTypeId = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
-            MKQL_ENSURE_S(dataTypeId == columnType->GetTypeId(), "Key column type mismatch, column: " << name);
+            MKQL_ENSURE_S(dataTypeId.GetTypeId() == columnType->GetTypeId(), "Key column type mismatch, column: " << name);
         }
     }
 }

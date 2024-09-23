@@ -32,12 +32,17 @@ NScheme::TTypeInfo UnwrapPgTypeFromStruct(const TStructType& structType, ui32 in
     return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(type->GetTypeId()));
 }
 
-NUdf::TDataTypeId UnwrapDataTypeFromStruct(const TStructType& structType, ui32 index) {
-    if (structType.GetMemberType(index)->GetKind() == TType::EKind::Optional) {
-        auto type = AS_TYPE(TDataType, AS_TYPE(TOptionalType, structType.GetMemberType(index))->GetItemType());
-        return type->GetSchemeType();
+NScheme::TTypeInfo UnwrapDataTypeFromStruct(const TStructType& structType, ui32 index) {
+    const TDataType* dataType = structType.GetMemberType(index)->GetKind() == TType::EKind::Optional ?
+        AS_TYPE(TDataType, AS_TYPE(TOptionalType, structType.GetMemberType(index))->GetItemType()) :
+        AS_TYPE(TDataType, structType.GetMemberType(index));
+    
+    if (dataType->GetSchemeType() == NScheme::NTypeIds::Decimal) {
+        const TDataDecimalType* dataDecimalType = static_cast<const TDataDecimalType*>(dataType);
+        auto [precision, scale] = dataDecimalType->GetParams();
+        return NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));        
     } else {
-        return AS_TYPE(TDataType, structType.GetMemberType(index))->GetSchemeType();
+        return NScheme::TTypeInfo(dataType->GetSchemeType()); 
     }
 }
 

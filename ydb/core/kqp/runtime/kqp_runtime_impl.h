@@ -15,7 +15,7 @@ struct TKqpRangePartition {
 
 TTableId ParseTableId(const NMiniKQL::TRuntimeNode& node);
 
-NUdf::TDataTypeId UnwrapDataTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
+NScheme::TTypeInfo UnwrapDataTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
 NScheme::TTypeInfo UnwrapPgTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
 bool StructHoldsPgType(const NMiniKQL::TStructType& structType, ui32 index);
 

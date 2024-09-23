@@ -218,7 +218,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
                 rowTypeMods[i] = result.Typmod;
             }
         } else {
-            rowTypes[i] = NScheme::TTypeInfo(NKqp::UnwrapDataTypeFromStruct(*rowType, i));
+            rowTypes[i] = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
         }
     }
 

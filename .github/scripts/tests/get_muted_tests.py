@@ -187,31 +187,6 @@ def read_file(path):
         return line_list
         
 
-def download_file(url, local_filename):
-    """
-    Downloads a file from the given URL and saves it locally.
-
-    :param url: URL of the file
-    :param local_filename: Name to save the file locally
-    :return: Name of the locally saved file
-    """
-    try:
-        # Perform an HTTP GET request
-        with requests.get(url, stream=True) as response:
-            response.raise_for_status()  # Raise an exception for HTTP errors
-            # Open the file for writing in binary mode
-            with open(local_filename, 'wb') as file:
-                # Save the file in chunks (to avoid loading the entire file into memory)
-                for chunk in response.iter_content(chunk_size=8192):
-                    file.write(chunk)
-        print(f"Downloaded file to {local_filename}")
-        return local_filename
-    except requests.exceptions.RequestException as e:
-        print(f"Error downloading file: {e}")
-        return None
-
-
-
 def write_to_file(text, file):
     #os.remove(file)
     os.makedirs(os.path.dirname(file), exist_ok=True)
@@ -249,33 +224,29 @@ def to_str(data):
     else:
         raise ValueError("Unsupported type")
     
-def get_mute_details(args):
+def mute_applier(args):
     output_path = args.output_folder
-    use_all_tests_s3_file = args.use_all_tests_s3_file
 
 
     all_tests_file = os.path.join(output_path, '3_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '3_all_muted_tests.txt')
      
-    if use_all_tests_s3_file:
-        download_file(use_all_tests_s3_file, all_tests_file)
-        all_tests = read_file(os.path.join(repo_path,all_tests_file))
+
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print(
+            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
+        )
+        return 1
     else:
-        if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-            print(
-                "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-            )
-            return 1
-        else:
-            # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-            # So, set up it locally
-            os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-                "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-            ]
-        if args.job_id and args.branch:
-            all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch)
-        else:
-            all_tests= get_all_tests(path=all_tests_file,branch=args.branch)
+        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
+        # So, set up it locally
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
+            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+        ]
+    if args.job_id and args.branch:
+        all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch)
+    else:
+        all_tests= get_all_tests(path=all_tests_file,branch=args.branch)
 
     if all_tests == 1:
         return 1
@@ -287,16 +258,16 @@ def get_mute_details(args):
 
     if args.mode == 'upload_muted_tests':
         for test in all_tests:
-            testsuite = to_str(test[0])
-            testcase = to_str(test[1])
+            testsuite = to_str(test['suite_folder'])
+            testcase = to_str(test['test_name'])
             test['branch'] = 'main'
             test['is_muted'] = int(mute_check(testsuite, testcase))
                 
         upload_muted_tests(all_tests)
     elif args.mode == 'get_mute_details':
         for test in all_tests:
-            testsuite = to_str(test[0])
-            testcase = to_str(test[1])
+            testsuite = to_str(test['suite_folder'])
+            testcase = to_str(test['test_name'])
             if mute_check(testsuite, testcase):
                 muted_tests.append(testsuite + ' ' + testcase + '\n')
    
@@ -310,6 +281,7 @@ def get_mute_details(args):
         added_texts, removed_texts = extract_diff_lines(muted_ya_path)
         write_to_file('\n'.join(added_texts), added_lines_file)
         write_to_file('\n'.join(removed_texts), removed_lines_file)
+        
         #checking added lines
         mute_check = YaMuteCheck()
         mute_check.load(added_lines_file)
@@ -317,8 +289,8 @@ def get_mute_details(args):
         added_muted_tests=[]
         print("New muted tests captured")
         for test in all_tests:
-            testsuite = test[0]
-            testcase = test[1]
+            testsuite = to_str(test['suite_folder'])
+            testcase = to_str(test['test_name'])
             if mute_check(testsuite, testcase):
                 added_muted_tests.append(testsuite + ' '+ testcase + '\n')
                 
@@ -330,8 +302,8 @@ def get_mute_details(args):
         removed_muted_tests=[]
         print("Unmuted tests captured")
         for test in all_tests:
-            testsuite = test[0]
-            testcase = test[1]
+            testsuite = to_str(test['suite_folder'])
+            testcase = to_str(test['test_name'])
             if mute_check(testsuite, testcase):
                 removed_muted_tests.append(testsuite + ' '+ testcase + '\n')
         
@@ -349,15 +321,15 @@ def get_mute_details(args):
         print(f"All tests have been written to {all_tests_file}.")
         print(f"All mutes tests have been written to {all_muted_tests_file}.")
         print(f"Added lines have been written to {added_lines_file}.")
+        print(f"New muted tests have been written to {added_lines_file_muted}.")
         print(f"Removed lines have been written to {removed_lines_file}.")
+        print(f"Unmuted tests have been written to {removed_lines_file_muted}.")
         
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
     
-    parser.add_argument('--use_all_tests_s3_file', 
-        help='pass s3 file url to use it as all test base')
     parser.add_argument('--output_folder',
         type=str, 
         default=repo_path + '.github/config/mute_info/'  , 
@@ -383,4 +355,4 @@ if __name__ == "__main__":
         help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')    
     args = parser.parse_args()
 
-    get_mute_details(args)
+    mute_applier(args)

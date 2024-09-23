@@ -59,7 +59,7 @@ public:
                     usedSchemaVersions.insert(rowset.GetValue<Schema::IndexPortions::SchemaVersion>());
                     if (!rowset.Next()) {
                         break;
-                }
+                    }
                 }
             }
         }

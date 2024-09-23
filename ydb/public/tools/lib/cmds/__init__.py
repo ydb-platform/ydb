@@ -351,7 +351,7 @@ def deploy(arguments):
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
-        binary_paths=[arguments.ydb_binary_path],
+        binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
         output_path=recipe.generate_data_path(),
         pdisk_store_path=pdisk_store_path,
         domain_name='local',

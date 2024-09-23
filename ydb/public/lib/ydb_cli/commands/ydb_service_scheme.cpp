@@ -331,7 +331,7 @@ namespace {
     void PrintMain(const NTopic::TTopicDescription& topicDescription) {
         Cout << Endl << "Main:";
         Cout << Endl << "RetentionPeriod: " << topicDescription.GetRetentionPeriod().Hours() << " hours";
-        if (topicDescription.GetRetentionStorageMb().Defined()) {
+        if (topicDescription.GetRetentionStorageMb().has_value()) {
             Cout << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
         }
         Cout << Endl << "PartitionsCount: " << topicDescription.GetTotalPartitionsCount();

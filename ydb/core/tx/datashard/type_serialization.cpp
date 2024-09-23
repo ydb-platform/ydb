@@ -3,7 +3,7 @@
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 

@@ -795,7 +795,6 @@ NTable::TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTabl
             }
             sequenceDescription = std::move(currentSequenceDescription);
         }
-        break;
         LOG_DEBUG("AddColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder, std::move(sequenceDescription)));
     }
 

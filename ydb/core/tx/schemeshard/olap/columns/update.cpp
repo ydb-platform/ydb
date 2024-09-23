@@ -263,7 +263,7 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         }
         if (diffColumn.GetColumnFamilyId().has_value()) {
             if (IsKeyColumn()) {
-                auto columnFamily = columnFamilies.GetById(diffColumn.GetColumnFamilyId().value());
+                auto columnFamily = columnFamilies.GetByIdVerified(diffColumn.GetColumnFamilyId().value());
                 errors.AddError(NKikimrScheme::StatusSchemeError,
                     TStringBuilder() << "Cannot alter column family `" << columnFamily->GetName() << "` for PK column `" << GetName() << "`");
                 return false;

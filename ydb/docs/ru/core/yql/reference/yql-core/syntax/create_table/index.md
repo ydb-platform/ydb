@@ -66,30 +66,30 @@ WITH (
 
 - Создание строковой таблицы
 
-{% if feature_column_container_type %}
+  {% if feature_column_container_type %}
 
-```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    d "List<List<Int32>>"
-    PRIMARY KEY (a, b)
-  );
-  ```
+  ```yql
+    CREATE TABLE <table_name> (
+      a Uint64,
+      b Uint64,
+      c Float,
+      d "List<List<Int32>>"
+      PRIMARY KEY (a, b)
+    );
+    ```
 
-{% else %}
+  {% else %}
 
-```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    PRIMARY KEY (a, b)
-  );
-  ```
+  ```yql
+    CREATE TABLE <table_name> (
+      a Uint64,
+      b Uint64,
+      c Float,
+      PRIMARY KEY (a, b)
+    );
+    ```
 
-{% endif %}
+  {% endif %}
 
 
   {% if feature_column_container_type == true %}

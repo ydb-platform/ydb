@@ -45,12 +45,12 @@ UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com'
 
 Тип | Максимальное значение | Тип значения
 ----- | ----- | -----
-`SmallSerial` | $2^15–1$ | `Int16`
-`Serial2` | $2^15–1$ | `Int16`
-`Serial` | $2^31–1$ | `Int32`
-`Serial4` | $2^31–1$ | `Int32`
-`Serial8` | $2^63–1$ | `Int64`
-`BigSerial` | $2^63–1$ | `Int64`
+`SmallSerial` | $2^{15}–1$ | `Int16`
+`Serial2` | $2^{15}–1$ | `Int16`
+`Serial` | $2^{31}–1$ | `Int32`
+`Serial4` | $2^{31}–1$ | `Int32`
+`Serial8` | $2^{63}–1$ | `Int64`
+`BigSerial` | $2^{63}–1$ | `Int64`
 
 При переполнении `Sequence` на вставке будет возвращаться ошибка:
 

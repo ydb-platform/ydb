@@ -2425,6 +2425,13 @@ class Cuda(object):
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
 
+        if self.cuda_version.value.startswith('10.'):
+            emit('NVCC_STD_VER', '17')
+        elif self.cuda_version.value.startswith('11.'):
+            emit('NVCC_STD_VER', '17')
+        else:
+            emit('NVCC_STD_VER', '20')
+
     def print_macros(self):
         mtime = ' '
         custom_pid = ' '

@@ -10,6 +10,7 @@
 namespace NKikimr::NChangeExchange {
 
 void TChangeSender::LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
+    ++UninitSenders;
     auto res = senders.emplace(partitionId, TSender{});
     Y_ABORT_UNLESS(res.second);
 
@@ -27,6 +28,7 @@ void TChangeSender::RegisterSender(ui64 partitionId) {
 
     Y_ABORT_UNLESS(!sender.ActorId);
     sender.ActorId = ActorOps->RegisterWithSameMailbox(SenderFactory->CreateSender(partitionId));
+    --UninitSenders;
 }
 
 void TChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {

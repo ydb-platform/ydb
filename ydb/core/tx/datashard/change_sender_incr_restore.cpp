@@ -3,117 +3,41 @@
 #include "change_record.h"
 #include "change_sender_table_base.h"
 #include "datashard_impl.h"
+#include "incr_restore_scan.h"
 
 #include <ydb/core/change_exchange/change_sender.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
-#include <ydb/core/tx/scheme_cache/helpers.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <util/generic/maybe.h>
 
 namespace NKikimr::NDataShard {
 
-using ESenderType = TEvChangeExchange::ESenderType;
-
-template <typename TDerived>
-class TResolveIndexState
-    : virtual public NSchemeCache::TSchemeCacheHelpers
-{
-    DEFINE_STATE_INTRO;
-
-public:
-    void ResolveIndex() {
-        auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->IndexPathId, TNavigate::OpList));
-
-        AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        AsDerived()->Become(&TDerived::StateResolveIndex);
-    }
-
-    STATEFN(State) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            sFunc(TEvents::TEvWakeup, ResolveIndex);
-        default:
-            return AsDerived()->StateBase(ev);
-        }
-    }
-
-private:
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const auto& result = ev->Get()->Request;
-
-        LOG_D("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
-
-        if (!AsDerived()->CheckNotEmpty(result)) {
-            return;
-        }
-
-        if (!AsDerived()->CheckEntriesCount(result, 1)) {
-            return;
-        }
-
-        const auto& entry = result->ResultSet.at(0);
-
-        if (!AsDerived()->CheckTableId(entry, AsDerived()->IndexPathId)) {
-            return;
-        }
-
-        if (!AsDerived()->CheckEntrySucceeded(entry)) {
-            return;
-        }
-
-        if (!AsDerived()->CheckEntryKind(entry, TNavigate::KindIndex)) {
-            return;
-        }
-
-        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            LOG_D("Index is planned to drop, waiting for the EvRemoveSender command");
-
-            return AsDerived()->OnIndexUnderRemove();
-        }
-
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
-        const auto& indexTable = entry.ListNodeEntry->Children.at(0);
-
-        Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
-        AsDerived()->TargetTablePathId = indexTable.PathId;
-
-        AsDerived()->NextState(TStateTag{});
-    }
-};
-
-class TAsyncIndexChangeSenderMain
-    : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
+class TIncrRestoreChangeSenderMain
+    : public TActorBootstrapped<TIncrRestoreChangeSenderMain>
     , public NChangeExchange::TChangeSender
     , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderPathResolver
     , public NChangeExchange::IChangeSenderFactory
-    , private TSchemeChecksMixin<TAsyncIndexChangeSenderMain>
-    , private TResolveUserTableState<TAsyncIndexChangeSenderMain>
-    , private TResolveIndexState<TAsyncIndexChangeSenderMain>
-    , private TResolveTargetTableState<TAsyncIndexChangeSenderMain>
-    , private TResolveKeysState<TAsyncIndexChangeSenderMain>
+    , private TSchemeChecksMixin<TIncrRestoreChangeSenderMain>
+    , private TResolveUserTableState<TIncrRestoreChangeSenderMain>
+    , private TResolveTargetTableState<TIncrRestoreChangeSenderMain>
+    , private TResolveKeysState<TIncrRestoreChangeSenderMain>
 {
     friend struct TSchemeChecksMixin;
 
     USE_STATE(ResolveUserTable);
-    USE_STATE(ResolveIndex);
     USE_STATE(ResolveTargetTable);
     USE_STATE(ResolveKeys);
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
-                << "[AsyncIndexChangeSenderMain]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                << "[IncrRestoreChangeSenderMain]"
+                << "[" << GetChangeSenderIdentity() << "]" // maybe better add something else
                 << SelfId() /* contains brackets */ << " ";
         }
 
@@ -128,7 +52,6 @@ class TAsyncIndexChangeSenderMain
 
     bool IsResolving() const override {
         return IsResolveUserTableState()
-            || IsResolveIndexState()
             || IsResolveTargetTableState()
             || IsResolveKeysState();
     }
@@ -136,8 +59,6 @@ class TAsyncIndexChangeSenderMain
     TStringBuf CurrentStateName() const {
         if (IsResolveUserTableState()) {
             return "ResolveUserTable";
-        } else if (IsResolveIndexState()) {
-            return "ResolveIndex";
         } else if (IsResolveTargetTableState()) {
             return "ResolveTargetTable";
         } else if (IsResolveKeysState()) {
@@ -148,25 +69,15 @@ class TAsyncIndexChangeSenderMain
     }
 
     void OnRetry(TResolveTargetTableState::TStateTag) {
-        ResolveIndex();
+        ResolveTargetTable();
     }
 
     void OnRetry(TResolveKeysState::TStateTag) {
-        ResolveIndex();
-    }
-
-    void OnIndexUnderRemove() {
-        RemoveRecords();
-        KillSenders();
-
-        Become(&TThis::StatePendingRemove);
+        ResolveTargetTable();
     }
 
     void NextState(TResolveUserTableState::TStateTag) {
-        ResolveIndex();
-    }
-
-    void NextState(TResolveIndexState::TStateTag) {
+        Y_ABORT_UNLESS(MainColumnToTag.contains("__ydb_incrBackupImpl_deleted"));
         ResolveTargetTable();
     }
 
@@ -175,6 +86,10 @@ class TAsyncIndexChangeSenderMain
     }
 
     void NextState(TResolveKeysState::TStateTag) {
+        if (!FirstServe) {
+            FirstServe = true;
+            Send(ChangeServer, new TEvIncrementalRestoreScan::TEvServe());
+        }
         Serve();
     }
 
@@ -203,7 +118,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     void Resolve() override {
-        ResolveIndex();
+        ResolveTargetTable();
     }
 
     bool IsResolved() const override {
@@ -232,6 +147,10 @@ class TAsyncIndexChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
+
+        if (NoMoreData && IsAllSendersReadyOrUninit()) {
+            Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
@@ -247,13 +166,13 @@ class TAsyncIndexChangeSenderMain
         PassAway();
     }
 
-    void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+    void Handle(TEvIncrementalRestoreScan::TEvNoMoreData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        RemoveRecords(std::move(ev->Get()->Records));
-    }
+        NoMoreData = true;
 
-    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        RenderHtmlPage(DataShard.TabletId, ev, ctx);
+        if (IsAllSendersReadyOrUninit()) {
+            Send(ChangeServer, new TEvIncrementalRestoreScan::TEvFinished());
+        }
     }
 
     void PassAway() override {
@@ -263,15 +182,15 @@ class TAsyncIndexChangeSenderMain
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_MAIN;
+        return NKikimrServices::TActivity::CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN;
     }
 
-    explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
+    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& targetPathId)
         : TActorBootstrapped()
-        , TChangeSender(this, this, this, this, dataShard.ActorId)
-        , IndexPathId(indexPathId)
+        , TChangeSender(this, this, this, this, changeServerActor)
         , DataShard(dataShard)
         , UserTableId(userTableId)
+        , TargetTablePathId(targetPathId)
         , TargetTableVersion(0)
     {
     }
@@ -282,46 +201,38 @@ public:
 
     STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvIncrementalRestoreScan::TEvNoMoreData, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvForgetRecords, Handle);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
-            HFunc(NMon::TEvRemoteHttpInfo, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
-    STFUNC(StatePendingRemove) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
-            hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
-            HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
     TPathId GetChangeSenderIdentity() const override final {
-        return IndexPathId;
+        return TargetTablePathId;
     }
 
 private:
-    const TPathId IndexPathId;
     const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
 
     THashMap<TString, TTag> MainColumnToTag;
-    TMap<TTag, TTag> TagMap; // from main to index
+    TMap<TTag, TTag> TagMap; // from incrBackupTable to targetTable
 
     TPathId TargetTablePathId;
     ui64 TargetTableVersion;
     THolder<TKeyDesc> KeyDesc;
-}; // TAsyncIndexChangeSenderMain
+    bool NoMoreData = false;
+    bool FirstServe = false;
+}; // TIncrRestoreChangeSenderMain
 
-IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {
-    return new TAsyncIndexChangeSenderMain(dataShard, userTableId, indexPathId);
+IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& restoreTargetPathId) {
+    return new TIncrRestoreChangeSenderMain(changeServerActor, dataShard, userTableId, restoreTargetPathId);
 }
 
-}
+} // namespace NKikimr::NDataShard

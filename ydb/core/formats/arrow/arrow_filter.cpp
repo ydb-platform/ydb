@@ -1,5 +1,5 @@
 #include "arrow_filter.h"
-#include "switch_type.h"
+#include "switch/switch_type.h"
 #include "common/container.h"
 #include "common/adapter.h"
 

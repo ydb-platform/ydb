@@ -1,6 +1,6 @@
 #include "meta.h"
 #include "checker.h"
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>

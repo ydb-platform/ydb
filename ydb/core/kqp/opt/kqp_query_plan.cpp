@@ -1945,6 +1945,9 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
         }
     }
 
+    if (!planMap.contains("Node Type")) {
+        return {};
+    }
     const auto typeName = planMap.at("Node Type").GetStringSafe();
     if (redundantNodes.contains(typeName) || typeName.find("Precompute") != TString::npos) {
         return children;
@@ -1953,167 +1956,235 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     return {plan};
 }
 
-NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan, 
-    int operatorIndex, 
-    const THashMap<int, NJson::TJsonValue>& planIndex,
-    const THashMap<TString, NJson::TJsonValue>& precomputes,
-    int& nodeCounter) {
+struct TQueryPlanReconstructor {
+    TQueryPlanReconstructor(
+        const THashMap<int, NJson::TJsonValue>& planIndex,
+        const THashMap<TString, NJson::TJsonValue>& precomputes
+    ) 
+        : PlanIndex(planIndex)
+        , Precomputes(precomputes)
+        , NodeIDCounter(0)
+        , Budget(10'000)
+    {}
 
-    int currentNodeId = nodeCounter++;
+    NJson::TJsonValue Reconstruct(
+        const NJson::TJsonValue& plan,
+        int operatorIndex
+    ) {
+        int currentNodeId = NodeIDCounter++;
 
-    NJson::TJsonValue result;
-    result["PlanNodeId"] = currentNodeId;
+        NJson::TJsonValue result;
+        result["PlanNodeId"] = currentNodeId;
 
-    if (plan.GetMapSafe().contains("PlanNodeType")) {
-        result["PlanNodeType"] = plan.GetMapSafe().at("PlanNodeType").GetStringSafe();
-    }
-
-    if (plan.GetMapSafe().contains("Stats") && operatorIndex==0) {
-        result["Stats"] = plan.GetMapSafe().at("Stats");
-    }
-
-    if (!plan.GetMapSafe().contains("Operators")) {
-        NJson::TJsonValue planInputs;
-
-        result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
-
-        if (plan.GetMapSafe().contains("CTE Name")) {
-            auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
-            if (precomputes.contains(precompute)) {
-                planInputs.AppendValue(ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter));
-            }
+        if (--Budget <= 0) {
+            YQL_CLOG(DEBUG, ProviderKqp) << "Can't build the plan - recursion depth has been exceeded!";
+            return result;
         }
 
-        if (!plan.GetMapSafe().contains("Plans")) {
+        if (plan.GetMapSafe().contains("PlanNodeType")) {
+            result["PlanNodeType"] = plan.GetMapSafe().at("PlanNodeType").GetStringSafe();
+        }
+
+        if (plan.GetMapSafe().contains("Stats") && operatorIndex==0) {
+            result["Stats"] = plan.GetMapSafe().at("Stats");
+        }
+
+        if (plan.GetMapSafe().at("Node Type") == "TableLookupJoin" && plan.GetMapSafe().contains("Table")) {
+            result["Node Type"] = "LookupJoin";
+            NJson::TJsonValue newOps;
+            NJson::TJsonValue op;
+
+            op["Name"] = "LookupJoin";
+            op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+
+            newOps.AppendValue(std::move(op));
+            result["Operators"] = std::move(newOps);
+
+            NJson::TJsonValue newPlans;
+
+            NJson::TJsonValue lookupPlan;
+            lookupPlan["Node Type"] = "TableLookup";
+            lookupPlan["PlanNodeType"] = "TableLookup";
+
+            NJson::TJsonValue lookupOps;
+            NJson::TJsonValue lookupOp;
+
+            lookupOp["Name"] = "TableLookup";
+            lookupOp["Columns"] = plan.GetMapSafe().at("Columns");
+            lookupOp["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+            lookupOp["Table"] = plan.GetMapSafe().at("Table");
+
+            if (plan.GetMapSafe().contains("E-Cost")) {
+                lookupOp["E-Cost"] = plan.GetMapSafe().at("E-Cost");
+            }
+            if (plan.GetMapSafe().contains("E-Rows")) {
+                lookupOp["E-Rows"] = plan.GetMapSafe().at("E-Rows");
+            }
+            if (plan.GetMapSafe().contains("E-Size")) {
+                lookupOp["E-Size"] = plan.GetMapSafe().at("E-Size");
+            }
+
+            lookupOps.AppendValue(std::move(lookupOp));
+            lookupPlan["Operators"] = std::move(lookupOps);
+
+            newPlans.AppendValue(Reconstruct(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
+
+            newPlans.AppendValue(std::move(lookupPlan));
+
+            result["Plans"] = std::move(newPlans);
+
+            return result;
+        }
+
+        if (!plan.GetMapSafe().contains("Operators")) {
+            NJson::TJsonValue planInputs;
+
+            result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
+
+            if (plan.GetMapSafe().contains("CTE Name")) {
+                auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
+                if (Precomputes.contains(precompute)) {
+                    planInputs.AppendValue(Reconstruct(Precomputes.at(precompute), 0));
+                }
+            }
+
+            if (!plan.GetMapSafe().contains("Plans")) {
+                result["Plans"] = std::move(planInputs);
+                return result;
+            }
+
+            if (plan.GetMapSafe().at("Node Type").GetStringSafe() == "TableLookup") {
+                NJson::TJsonValue newOps;
+                NJson::TJsonValue op;
+
+                op["Name"] = "TableLookup"; 
+                op["Columns"] = plan.GetMapSafe().at("Columns");
+                op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+                op["Table"] = plan.GetMapSafe().at("Table");
+
+                if (plan.GetMapSafe().contains("E-Cost")) {
+                    op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
+                } 
+                if (plan.GetMapSafe().contains("E-Rows")) {
+                    op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
+                }
+                if (plan.GetMapSafe().contains("E-Size")) {
+                    op["E-Size"] = plan.GetMapSafe().at("E-Size");
+                }
+
+                newOps.AppendValue(std::move(op));
+
+                result["Operators"] = std::move(newOps);
+                return result;
+            }
+
+            for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+                if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
+                    auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
+                    if (Precomputes.contains(precompute)) {
+                        planInputs.AppendValue(Reconstruct(Precomputes.at(precompute), 0));
+                    }
+                } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
+                    planInputs.AppendValue(Reconstruct(p, 0));
+                }
+            }
             result["Plans"] = planInputs;
             return result;
         }
 
-        if (plan.GetMapSafe().at("Node Type").GetStringSafe() == "TableLookup") {
-            NJson::TJsonValue newOps;
-            NJson::TJsonValue op;
-
-            op["Name"] = "TableLookup"; 
-            op["Columns"] = plan.GetMapSafe().at("Columns");
-            op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
-            op["Table"] = plan.GetMapSafe().at("Table");
-
-            if (plan.GetMapSafe().contains("E-Cost")) {
-                op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
-            } 
-            if (plan.GetMapSafe().contains("E-Rows")) {
-                op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
-            }
-            if (plan.GetMapSafe().contains("E-Size")) {
-                op["E-Size"] = plan.GetMapSafe().at("E-Size");
+        if (plan.GetMapSafe().contains("CTE Name") && plan.GetMapSafe().at("Node Type").GetStringSafe() == "ConstantExpr") {
+            auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
+            if (!Precomputes.contains(precompute)) {
+                result["Node Type"] = plan.GetMapSafe().at("Node Type");
+                return result;
             }
 
-            newOps.AppendValue(op);
-
-            result["Operators"] = newOps;
-            return result;
+            return Reconstruct(Precomputes.at(precompute), 0);
         }
 
-        for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
-            if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
-                auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
-                if (precomputes.contains(precompute)) {
-                    planInputs.AppendValue(ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter));
+        auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
+        auto op = ops[operatorIndex];
+
+        TVector<NJson::TJsonValue> planInputs;
+
+        auto opName = op.GetMapSafe().at("Name").GetStringSafe();
+
+        THashSet<ui32> processedExternalOperators;
+        THashSet<ui32> processedInternalOperators;
+        for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {
+
+            if (opInput.GetMapSafe().contains("ExternalPlanNodeId")) {
+                auto inputPlanKey = opInput.GetMapSafe().at("ExternalPlanNodeId").GetIntegerSafe();
+
+                if (processedExternalOperators.contains(inputPlanKey)) {
+                    continue;
                 }
-            } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                planInputs.AppendValue(ReconstructQueryPlanRec(p, 0, planIndex, precomputes, nodeCounter));
+                processedExternalOperators.insert(inputPlanKey);
+
+                auto inputPlan = PlanIndex.at(inputPlanKey);
+                planInputs.push_back( Reconstruct(inputPlan, 0) );
+            } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
+                auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
+
+                if (processedInternalOperators.contains(inputPlanId)) {
+                    continue;
+                }
+                processedInternalOperators.insert(inputPlanId);
+
+                planInputs.push_back( Reconstruct(plan, inputPlanId) );
             }
         }
-        result["Plans"] = planInputs;
+
+        if (op.GetMapSafe().contains("Inputs")) {
+            op.GetMapSafe().erase("Inputs");
+        }
+
+        if (op.GetMapSafe().contains("Input") 
+            || op.GetMapSafe().contains("ToFlow") 
+            || op.GetMapSafe().contains("Member")
+            || op.GetMapSafe().contains("AssumeSorted")
+            || op.GetMapSafe().contains("Iterator")) {
+
+            TString maybePrecompute = "";
+            if (op.GetMapSafe().contains("Input")) {
+                maybePrecompute = op.GetMapSafe().at("Input").GetStringSafe();
+            } else if (op.GetMapSafe().contains("ToFlow")) {
+                maybePrecompute = op.GetMapSafe().at("ToFlow").GetStringSafe();
+            } else if (op.GetMapSafe().contains("Member")) {
+                maybePrecompute = op.GetMapSafe().at("Member").GetStringSafe();
+            } else if (op.GetMapSafe().contains("AssumeSorted")) {
+                maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
+            } else if (op.GetMapSafe().contains("Iterator")) {
+                maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
+            }
+
+            if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
+                planInputs.push_back(Reconstruct(Precomputes.at(maybePrecompute), 0));
+            }
+        }
+
+        result["Node Type"] = std::move(opName);
+        NJson::TJsonValue newOps;
+        newOps.AppendValue(std::move(op));
+        result["Operators"] = std::move(newOps);
+
+        if (!planInputs.empty()){
+            NJson::TJsonValue plans;
+            for(auto&& i : planInputs) {
+                plans.AppendValue(std::move(i));
+            }
+            result["Plans"] = std::move(plans);
+        }
+
         return result;
     }
 
-    if (plan.GetMapSafe().contains("CTE Name") && plan.GetMapSafe().at("Node Type").GetStringSafe() == "ConstantExpr") {
-        auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
-        if (!precomputes.contains(precompute)) {
-            result["Node Type"] = plan.GetMapSafe().at("Node Type");
-            return result;
-        }
-
-        return ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter);
-    }
-
-    auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
-    auto op = ops[operatorIndex];
-
-    TVector<NJson::TJsonValue> planInputs;
-
-    auto opName = op.GetMapSafe().at("Name").GetStringSafe();
-
-    THashSet<ui32> processedExternalOperators;
-    THashSet<ui32> processedInternalOperators;
-    for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {
-
-        if (opInput.GetMapSafe().contains("ExternalPlanNodeId")) {
-            auto inputPlanKey = opInput.GetMapSafe().at("ExternalPlanNodeId").GetIntegerSafe();
-
-            if (processedExternalOperators.contains(inputPlanKey)) {
-                continue;
-            }
-            processedExternalOperators.insert(inputPlanKey);
-
-            auto inputPlan = planIndex.at(inputPlanKey);
-            planInputs.push_back( ReconstructQueryPlanRec(inputPlan, 0, planIndex, precomputes, nodeCounter));
-        } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
-            auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
-
-            if (processedInternalOperators.contains(inputPlanId)) {
-                continue;
-            }
-            processedInternalOperators.insert(inputPlanId);
-
-            planInputs.push_back( ReconstructQueryPlanRec(plan, inputPlanId, planIndex, precomputes, nodeCounter));
-        }
-    }
-
-    if (op.GetMapSafe().contains("Inputs")) {
-        op.GetMapSafe().erase("Inputs");
-    }
-
-    if (op.GetMapSafe().contains("Input") 
-        || op.GetMapSafe().contains("ToFlow") 
-        || op.GetMapSafe().contains("Member")
-        || op.GetMapSafe().contains("AssumeSorted")
-        || op.GetMapSafe().contains("Iterator")) {
-
-        TString maybePrecompute = "";
-        if (op.GetMapSafe().contains("Input")) {
-            maybePrecompute = op.GetMapSafe().at("Input").GetStringSafe();
-        } else if (op.GetMapSafe().contains("ToFlow")) {
-            maybePrecompute = op.GetMapSafe().at("ToFlow").GetStringSafe();
-        } else if (op.GetMapSafe().contains("Member")) {
-            maybePrecompute = op.GetMapSafe().at("Member").GetStringSafe();
-        } else if (op.GetMapSafe().contains("AssumeSorted")) {
-            maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
-        } else if (op.GetMapSafe().contains("Iterator")) {
-            maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
-        }
-
-        if (precomputes.contains(maybePrecompute) && planInputs.empty()) {
-            planInputs.push_back(ReconstructQueryPlanRec(precomputes.at(maybePrecompute), 0, planIndex, precomputes, nodeCounter));
-        }
-    }
-
-    result["Node Type"] = opName;
-    NJson::TJsonValue newOps;
-    newOps.AppendValue(op);
-    result["Operators"] = newOps;
-
-    if (planInputs.size()){
-        NJson::TJsonValue plans;
-        for( auto i : planInputs) {
-            plans.AppendValue(i);
-        }
-        result["Plans"] = plans;
-    }
-
-    return result;
-}
+private:
+    const THashMap<int, NJson::TJsonValue>& PlanIndex;
+    const THashMap<TString, NJson::TJsonValue>& Precomputes;
+    ui32 NodeIDCounter;
+    i32 Budget; // Prevent bugs with inf recursion 
+};
 
 double ComputeCpuTimes(NJson::TJsonValue& plan) {
     double currCpuTime = 0;
@@ -2209,8 +2280,7 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
 
     BuildPlanIndex(plan, planIndex, precomputes);
 
-    int nodeCounter = 0;
-    plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
+    plan = TQueryPlanReconstructor(planIndex, precomputes).Reconstruct(plan, 0);
 
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);

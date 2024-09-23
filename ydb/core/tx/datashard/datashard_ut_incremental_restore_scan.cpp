@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             runtime.GrabEdgeEventRethrow<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(edgeActor);
         }
 
-        // there is a race here between noMoreData an all senders is ready or unint right now
+        // there is a race here between noMoreData and all senders is ready or unint right now
 
         {
             auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();

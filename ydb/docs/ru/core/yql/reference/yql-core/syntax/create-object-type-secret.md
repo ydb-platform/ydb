@@ -2,17 +2,18 @@
 
 {% note warning %}
 
-Текущий систаксис работы с секретами является временным, в будущих релизах {{ydb-full-name}} он будет изменен.
+Текущий синтаксис работы с секретами является временным, в будущих релизах {{ydb-full-name}} он будет изменен.
 
 {% endnote %}
-
 
 Для создания [секрета](../../../concepts/datamodel/secrets.md) используется следующий SQL-запрос:
 
 ```yql
-CREATE OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
+CREATE OBJECT <secret_name> (TYPE SECRET) WITH value="<secret_value>";
 ```
+
 Где:
+
 * `secret_name` - имя секрета.
 * `secret_value` - содержимое секрета.
 
@@ -21,5 +22,5 @@ CREATE OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 Следующий запрос создает секрет с именем `MySecretName` и значением `MySecretData`.
 
 ```yql
-CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
+CREATE OBJECT MySecretName (TYPE SECRET) WITH value="MySecretData";
 ```

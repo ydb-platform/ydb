@@ -15,18 +15,25 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
-    auto keyBatch = TColumnOperator().VerifyIfAbsent().Adapt(batch, sortingKey).DetachResult();
-    auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns());
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique) {
+    std::optional<i64> count;
+    for (auto&& i : keyColumns) {
+        AFL_VERIFY(i);
+        if (!count) {
+            count = i->length();
+        } else {
+            AFL_VERIFY(*count == i->length());
+        }
+    }
+    AFL_VERIFY(count);
     std::vector<TRawReplaceKey> points;
-    points.reserve(keyBatch->num_rows());
-
-    for (int i = 0; i < keyBatch->num_rows(); ++i) {
-        points.push_back(TRawReplaceKey(keyColumns.get(), i));
+    points.reserve(*count);
+    for (int i = 0; i < *count; ++i) {
+        points.push_back(TRawReplaceKey(&keyColumns, i));
     }
 
     bool haveNulls = false;
-    for (auto& column : *keyColumns) {
+    for (auto& column : keyColumns) {
         if (HasNulls(column)) {
             haveNulls = true;
             break;
@@ -36,11 +43,9 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     if (haveNulls) {
         std::sort(points.begin(), points.end());
     } else {
-        std::sort(points.begin(), points.end(),
-            [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-                return a.CompareNotNull(b) == std::partial_ordering::less;
-            }
-        );
+        std::sort(points.begin(), points.end(), [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
+            return a.CompareNotNull(b) == std::partial_ordering::less;
+        });
     }
 
     arrow::UInt64Builder builder;
@@ -76,6 +81,12 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     std::shared_ptr<arrow::UInt64Array> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
+}
+
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+    auto keyBatch = TColumnOperator().VerifyIfAbsent().Adapt(batch, sortingKey).DetachResult();
+    return MakeSortPermutation(keyBatch->columns(), andUnique);
 }
 
 namespace {

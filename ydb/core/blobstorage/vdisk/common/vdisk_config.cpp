@@ -43,7 +43,7 @@ namespace NKikimr {
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
-        AddHeader = true;
+        AddHeader = false;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);

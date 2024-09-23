@@ -3,6 +3,7 @@
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
 [{{team.kovalenko.name}}]({{ team.kovalenko.profile }}) ({{ team.kovalenko.position }}) поделился клиентским опытом использования {{ ydb-short-name }}. В докладе:
+
 * Что такое {{ ydb-short-name }}.
 * {{ ydb-short-name }} как Serverless-платформа.
 * За что клиенты выбирают {{ ydb-short-name }}.

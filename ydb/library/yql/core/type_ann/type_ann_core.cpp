@@ -479,7 +479,9 @@ namespace NTypeAnnImpl {
         }
 
         for (auto& import : imports) {
-            RegisterResolvedImport(*import);
+            if (import->Modules) {
+                RegisterResolvedImport(*import);
+            }
         }
 
         return true;

@@ -55,9 +55,6 @@ public:
         , Position(position)
     {
         Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
-        for (auto&& i : *Columns) {
-            Types.emplace_back(i->type_id());
-        }
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
@@ -66,9 +63,6 @@ public:
         , Position(position)
     {
         Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
-        for (auto&& i : *Columns) {
-            Types.emplace_back(i->type_id());
-        }
     }
 
     template<typename T>
@@ -127,17 +121,13 @@ public:
     template<typename T>
     std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-
         return TComparator::TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     template<typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        Y_DEBUG_ABORT_UNLESS(Types[column] == Column(column).type_id());
-        Y_DEBUG_ABORT_UNLESS(Types.size() == Size());
-
-        return TComparator::ConcreteTypedCompare<false>(Types[column], Column(column), Position, key.Column(keyColumn), key.Position);
+        return TComparator::TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     ui64 Size() const {
@@ -226,7 +216,6 @@ public:
 
 private:
     TArrayVecPtr Columns = nullptr;
-    std::vector<arrow::Type::type> Types;
     ui64 Position = 0;
 
 };

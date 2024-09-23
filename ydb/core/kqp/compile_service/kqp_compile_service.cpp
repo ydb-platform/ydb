@@ -43,6 +43,7 @@ public:
         auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
         if (!queryIt.second) {
             EraseByUid(compileResult->Uid);
+            QueryIndex.erase(query);
         }
         Y_ENSURE(queryIt.second);
     }
@@ -600,7 +601,7 @@ private:
         const auto& query = ev->Get()->Query;
         LWTRACK(KqpCompileServiceHandleRequest,
             ev->Get()->Orbit,
-            query ? query->UserSid : 0);
+            query ? query->UserSid : "");
 
         try {
             PerformRequest(ev, ctx);
@@ -702,7 +703,7 @@ private:
 
         LWTRACK(KqpCompileServiceEnqueued,
             ev->Get()->Orbit,
-            ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
+            ev->Get()->Query ? ev->Get()->Query->UserSid : "");
 
         TKqpCompileSettings compileSettings(
             request.KeepInCache,
@@ -787,6 +788,12 @@ private:
             auto query = request.Query ? *request.Query : *compileResult->Query;
             if (compileResult) {
                 query.UserSid = compileResult->Query->UserSid;
+                if (query != *compileResult->Query) {
+                    LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "queryId in recompile request and queryId in cache are different"
+                      << ", queryId in request: " << query.SerializeToString()
+                      << ", queryId in cache: " << compileResult->Query->SerializeToString()
+                    );
+                }
             }
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,
@@ -1123,7 +1130,7 @@ private:
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
             orbit,
-            query ? query->UserSid : 0,
+            query ? query->UserSid : "",
             compileResult->Issues.ToString());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"

@@ -1335,7 +1335,7 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        Y_ABORT("multipart operations are handled before, also they require transaction details");
+        return {CreateInitializeBuildIndexImplTable(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 

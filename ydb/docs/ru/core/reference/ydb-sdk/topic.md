@@ -54,6 +54,7 @@
   В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
 
   Фрагмент кода приложения для создания клиента:
+
   ```cpp
   TTopicClient topicClient(driver);
   ```
@@ -226,7 +227,6 @@
 
   Полный список настроек можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
 
-
   ```java
   topicClient.alterTopic(topicPath, AlterTopicSettings.newBuilder()
                   .addAddConsumer(Consumer.newBuilder()
@@ -287,7 +287,6 @@
   Для получения информации о топике используется метод `describeTopic`.
 
   Полный список полей описания можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
-
 
   ```java
   Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
@@ -376,6 +375,7 @@
 - Java (sync)
 
   Инициализация настроек писателя:
+
   ```java
   String producerAndGroupID = "group-id";
   WriterSettings settings = WriterSettings.newBuilder()
@@ -386,6 +386,7 @@
   ```
 
   Создание синхронного писателя:
+
   ```java
   SyncWriter writer = topicClient.createSyncWriter(settings);
   ```
@@ -526,7 +527,6 @@
     ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
     ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
     ])
-
   ```
 
 - Java (sync)
@@ -802,7 +802,6 @@
   if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
       session->Write(std::move(event.ContinuationToken), std::move(message));
   }
-
   ```
 
 - Java
@@ -846,6 +845,19 @@
 ### Запись в транзакции {#write-tx}
 
 {% list tabs %}
+
+- C++
+
+  Для записи в топик в транзакции необходимо передать ссылку на объект транзакции в метод `Write` сессии записи:
+
+  ```c++
+    auto tableSession = tableClient.GetSession().GetValueSync().GetSession();
+    auto transaction = tableSession.BeginTransaction().GetValueSync().GetTransaction();
+    NYdb::NTopic::TWriteMessage writeMessage("message");
+
+    topicSession->Write(std::move(writeMessage), transaction);
+    transaction.Commit().GetValueSync();
+  ```
 
 - Java (sync)
 
@@ -1063,6 +1075,7 @@
 - Java (async)
 
   Инициализация настроек читателя
+
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
@@ -1106,6 +1119,7 @@
   ```
 
   Создание и инициализация асинхронного читателя:
+
   ```java
   AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
   // Init in background
@@ -1193,7 +1207,7 @@
 
 - C++
 
-  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
+  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TEndPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
 
   Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
 
@@ -1449,6 +1463,7 @@
 - Java (async)
 
   В обработчике `onMessage` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
+
   ```java
   @Override
   public void onMessages(DataReceivedEvent event) {
@@ -1666,6 +1681,7 @@
           .setTransaction(transaction)
           .build());
   ```
+
   Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
   Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
@@ -1681,7 +1697,7 @@
 
   ```java
   @Override
-  public void onMessages(DataReceivedEvent event) {
+    public void onMessages(DataReceivedEvent event) {
       for (Message message : event.getMessages()) {
           // creating a session in the table service
           Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
@@ -1714,7 +1730,7 @@
   }
   ```
 
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 
@@ -1868,5 +1884,53 @@
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+{% endlist %}
+
+### Поддержка автомасштабирования топиков {#autoscaling}
+
+{% list tabs %}
+
+- C++
+
+  SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся в параметрах создания сессии чтения. По умолчанию используется режим совместимости.
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(true); // full support is enabled
+
+  // or
+
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(false); // compatibility mode is enabled
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  В режиме полной поддержки, когда все сообщения из партиции будут прочитаны, придёт событие `TEndPartitionSessionEvent`. После получения этого события в партиции больше не появится новых сообщений для чтения. Чтобы продолжить чтение из дочерних партиций, необходимо вызвать `Confirm()`, тем самым подтвердив, что приложение готово принимать сообщения из дочерних партиций. Если сообщения из всех партиций обрабатываются в одном потоке, то `Confirm()` можно вызвать сразу после получения `TEndPartitionSessionEvent`. Если обработка сообщений из разных партиций осуществляется в разных потоках, то следует завершить обработку сообщений, например, выполнить накопившийся батч, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого вызвать `Confirm()`.
+
+  После получения `TEndPartitionSessionEvent` и обработки всех сообщений рекомендуется всегда сразу подтверждать их обработку (коммит). Это позволит сбалансировать чтение дочерних партиций между разными сессиями чтения, что приведёт к равномерному распределению нагрузки по всем читателям.
+
+  Фрагмент цикла событий может выглядеть так:
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(true);
+
+  auto readSession = topicClient.CreateReadSession(settings);
+
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* endPartitionSessionEvent = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+      endPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
+  В режиме совместимости отсутствует явный сигнал о завершении чтения из партиции, и сервер будет пытаться эвристически определить, что клиент обработал партицию до конца. Это может привести к задержке между завершением чтения из исходной партиции и началом чтения из её дочерних партиций.
+
+  Если клиент подтверждает обработку сообщений (коммит), то сигналом завершения обработки сообщений из партиции будет подтверждение обработки последнего сообщения этой партиции. В случае, если клиент не подтверждает обработку сообщений, сервер будет периодически прерывать чтение из партиции и переключаться на чтение в другой сессии (если существуют другие сессии, готовые обрабатывать партицию). Это будет продолжаться до тех пор, пока чтение не [начнётся](#client-commit) с конца партиции.
+
+  Рекомендуется проверять корректность обработки мягкого прерывания чтения: клиент должен обработать полученные сообщения, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого вызывать `Confirm()` для события `TStopPartitionSessionEvent`.
 
 {% endlist %}

@@ -38,6 +38,7 @@ is compiled similarly to a statement reading from a subquery:
 ```yql
 SELECT * FROM (SELECT * FROM underlying_table);
 ```
+
 but with an additional overhead of loading data from the schema object `a_view`.
 
 Please note that if you execute the same query over and over again, like:

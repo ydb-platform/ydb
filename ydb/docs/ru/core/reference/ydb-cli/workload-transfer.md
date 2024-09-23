@@ -9,9 +9,11 @@
 Перед запуском нагрузки необходимо инициализировать тестовое окружение. Для этого можно использовать команду `{{ ydb-cli }} workload transfer topic-to-table init`. Она создаст топик и таблицу с нужными параметрами.
 
 Общий вид команды:
+
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table init [options...]
 ```
+
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` - параметры подкоманды.
 
@@ -34,9 +36,11 @@
 После выполнения подкоманды `init` будут созданы таблица, топик и читатели. Имена читателей создаются по правилу `${CONSUMER_PREFIX}-${INDEX}`. Значение `${INDEX}` — это целое число от 0 и до значения параметра `--consumers` минус 1.
 
 Например, команда
+
 ```bash
 {{ ydb-cli }} --profile quickstart workload transfer topic-to-table init --consumers 2 --topic-partitions 143 --table-partitions 237
 ```
+
 создаст топик `transfer-topic` с 2 читателями и 143 партициями и таблицу `transfer-table` с 237 партициями. Имена читателей `workload-consumer-0` и `workload-consumer-1`.
 
 ## Запуск нагрузочного теста {#run}
@@ -69,6 +73,7 @@
 ```
 
 Параметры подкоманды:
+
 Имя параметра              | Описание параметра          | Значение по умолчанию
 ---|---|---
 `--seconds`, `-s`          | Продолжительность теста в секундах            | `60`
@@ -130,7 +135,6 @@ Window  Write speed     Write time      Inflight        Read speed      Topic ti
 * `Lag time` — процентиль времени задержки сообщений в мс.
 * `Read speed` — скорость чтения сообщений читателями. В сообщениях в секунду и в мегабайтах в секунду.
 * `Select time`, `Upsert time`, `Commit time` — процентиль времени выполнения операций Select, Upsert, Commit в мс.
-<!-- * `Full time` — процентиль времени полной обработки сообщения, от записи писателем до чтения читателем в мс. -->
 
 ## Удаление тестового окружения {#clean}
 
@@ -141,6 +145,7 @@ Window  Write speed     Write time      Inflight        Read speed      Topic ti
 ```bash
 {{ ydb-cli }} [global options...] workload transfer topic-to-table clean [options...]
 ```
+
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` - параметры подкоманды.
 

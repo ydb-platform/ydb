@@ -2,7 +2,7 @@
 
 #include <google/protobuf/message.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include <ydb/library/yql/parser/proto_ast/common.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -1335,6 +1335,7 @@ namespace NSQLTranslationV1 {
         }
     };
 
+
     struct TCreateTopicParameters {
         TVector<TTopicConsumerDescription> Consumers;
         TTopicSettings TopicSettings;
@@ -1351,6 +1352,44 @@ namespace NSQLTranslationV1 {
 
     struct TDropTopicParameters {
         bool MissingOk;
+    };
+
+    struct TCreateBackupCollectionParameters {
+        std::map<TString, TDeferredAtom> Settings;
+
+        bool Database;
+        TVector<TDeferredAtom> Tables;
+
+        bool ExistingOk;
+    };
+
+    struct TAlterBackupCollectionParameters {
+        enum class EDatabase {
+            Unchanged,
+            Add,
+            Drop,
+        };
+
+        std::map<TString, TDeferredAtom> Settings;
+        std::set<TString> SettingsToReset;
+
+        EDatabase Database = EDatabase::Unchanged;
+        TVector<TDeferredAtom> TablesToAdd;
+        TVector<TDeferredAtom> TablesToDrop;
+
+        bool MissingOk;
+    };
+
+    struct TDropBackupCollectionParameters {
+        bool MissingOk;
+    };
+
+    struct TBackupParameters {
+        bool Incremental = false;
+    };
+
+    struct TRestoreParameters {
+        TString At;
     };
 
     TString IdContent(TContext& ctx, const TString& str);
@@ -1487,6 +1526,23 @@ namespace NSQLTranslationV1 {
                               TScopedStatePtr scoped);
     TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                             TScopedStatePtr scoped);
+
+    TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+        const TCreateBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildAlterBackupCollection(TPosition pos, const TString& id,
+        const TAlterBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
+        const TDropBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
+
+    TNodePtr BuildBackup(TPosition pos, const TString& id,
+        const TBackupParameters& params,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildRestore(TPosition pos, const TString& id,
+        const TRestoreParameters& params,
+        const TObjectOperatorContext& context);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

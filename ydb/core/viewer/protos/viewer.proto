@@ -334,6 +334,7 @@ message TClusterInfo {
     repeated string Versions = 46;
     map<string, uint32> MapVersions = 47;
     map<string, uint32> MapNodeStates = 48;
+    map<string, uint32> MapNodeRoles = 49;
     repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 50;
     repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
     uint64 Hosts = 60;

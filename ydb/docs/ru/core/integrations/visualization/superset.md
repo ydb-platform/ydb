@@ -4,19 +4,18 @@ Apache Superset — это современная платформа для ан
 
 [Режим совместимости с PostgreSQL в {{ ydb-short-name }}](../../postgresql/intro.md) позволяет использовать [Apache Superset](https://superset.apache.org/) для выполнения запросов и визуализации данных из {{ ydb-short-name }}. В этом случае Apache Superset работает с {{ ydb-short-name }} как с PostgreSQL.
 
+{% include [../../postgresql/_includes/alert_preview.md](../../postgresql/_includes/alert_preview.md) %}
 
 ## Создание подключения к {{ ydb-short-name }} {#add-database-connection}
 
 Чтобы создать подключение к {{ ydb-short-name }} из Apache Superset с использованием сетевого протокола PostgreSQL, выполните следующие шаги:
 
 1. В верхнем меню Apache Superset наведите курсор на **Settings** и выберите в выпадающем списке пункт **Database Connections**.
-
 1. Нажмите кнопку **+ DATABASE**.
 
     Откроется окно мастера **Connect a database**.
 
 1. На первом шаге мастера нажмите кнопку **PostgreSQL**.
-
 1. На втором шаге мастера введите данные для подключения к {{ ydb-short-name }} в следующие поля:
 
     * **HOST** — [эндпоинт](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение.
@@ -29,7 +28,6 @@ Apache Superset — это современная платформа для ан
     ![](_assets/superset-ydb-connection-details.png =400x)
 
 1. Нажмите кнопку **CONNECT**.
-
 1. Нажмите кнопку **FINISH**, чтобы сохранить подключение.
 
 ## Создание набора данных (dataset) {#create-dataset}
@@ -37,9 +35,7 @@ Apache Superset — это современная платформа для ан
 Чтобы создать набор данных из таблицы {{ ydb-short-name }}, выполните следующие шаги:
 
 1. В верхнем меню Apache Superset наведите курсор на кнопку **+** и выберите в выпадающем списке пункт **SQL query**.
-
 1. В выпадающем списке **DATABASE** выберите подключение к {{ ydb-short-name }}.
-
 1. В выпадающем меню **SCHEMA** выберите `public`.
 
     {% note alert %}
@@ -77,6 +73,7 @@ Apache Superset — это современная платформа для ан
 Теперь давайте создадим пример диаграммы с использованием набора данных из таблицы `episodes`, которая описана в [Туториале по YQL](../../dev/yql-tutorial/index.md).
 
 Таблица `episodes` содержит следующие колонки:
+
 * series_id;
 * season_id;
 * episode_id;
@@ -88,19 +85,13 @@ Apache Superset — это современная платформа для ан
 Чтобы создать диаграмму, выполните следующие шаги:
 
 1. В верхнем меню Apache Superset наведите курсор на **+** и выберите в выпадающем списке пункт **Chart**.
-
 1. В выпадающем списке **Choose a dataset**, выберите набор данных из таблицы `episodes`.
-
 1. На панели **Choose chart type**, выберите тип диаграммы `Pie chart`.
-
 1. Нажмите кнопку **CREATE NEW CHART**.
-
 1. На панели **Query** настройте диаграмму:
 
     * В выпадающем списке **DIMENSIONS** выберите колонку `season_id`.
-
     * В поле **METRIC** введите функцию `COUNT(title)`.
-
     * В поле **FILTERS** введите фильтр `series_id in (2)`.
 
 1. Нажмите кнопку **CREATE CHART**.
@@ -114,5 +105,4 @@ Apache Superset — это современная платформа для ан
     Откроется диалоговое окно **Save chart**.
 
 1. В открывшемся окне **Save chart** в поле **CHART NAME** введите наименование диаграммы.
-
 1. Нажмите кнопку **SAVE**.

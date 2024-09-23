@@ -6,11 +6,12 @@
 
 ```yql
 CREATE ASYNC REPLICATION <name>
-FOR remote_path AS local_path [, another_remote_path AS another_local_path]
+FOR <remote_path> AS <local_path> [, <another_remote_path> AS <another_local_path>]
 WITH (option = value [, ...])
 ```
 
 где:
+
 * `name` — имя экземпляра асинхронной репликации.
 * `remote_path` — относительный или абсолютный путь до исходной таблицы или директории в базе-источнике.
 * `local_path` — относительный или абсолютный путь до целевой таблицы или директории в текущей базе.
@@ -22,8 +23,11 @@ WITH (option = value [, ...])
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
 
   * С помощью [токена](../../../recipes/ydb-sdk/auth-access-token.md):
+
     * `TOKEN_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего токен.
+
   * С помощью [логина и пароля](../../../recipes/ydb-sdk/auth-static.md):
+
     * `USER` — имя пользователя.
     * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
 

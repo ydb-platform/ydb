@@ -747,6 +747,7 @@ public:
     THttpOutgoingResponsePtr CreateResponseString(TStringBuf data);
     THttpOutgoingResponsePtr CreateResponseBadRequest(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 400
     THttpOutgoingResponsePtr CreateResponseNotFound(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 404
+    THttpOutgoingResponsePtr CreateResponseTooManyRequests(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 429
     THttpOutgoingResponsePtr CreateResponseServiceUnavailable(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 503
     THttpOutgoingResponsePtr CreateResponseGatewayTimeout(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 504
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message);

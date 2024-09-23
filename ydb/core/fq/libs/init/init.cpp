@@ -17,6 +17,7 @@
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/data_plane.h>
 #include <ydb/core/fq/libs/rate_limiter/quoter_service/quoter_service.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 
@@ -44,10 +45,6 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
-#include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
-#include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.h>
-#include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
-#include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
 
@@ -157,7 +154,6 @@ void Init(
 
     TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
         NYql::GetCommonDqFactory(),
-        NYql::GetDqYdbFactory(yqSharedResources->UserSpaceYdbDriver),
         NKikimr::NMiniKQL::GetYqlFactory()
     };
 
@@ -165,8 +161,7 @@ void Init(
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
 
     NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
-        NYql::CreateCommonDqTaskTransformFactory(),
-        NYql::CreateYdbDqTaskTransformFactory()
+        NYql::CreateCommonDqTaskTransformFactory()
     });
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
@@ -193,6 +188,18 @@ void Init(
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
+    if (protoConfig.GetRowDispatcher().GetEnabled()) {
+        auto rowDispatcher = NFq::NewRowDispatcherService(
+            protoConfig.GetRowDispatcher(),
+            protoConfig.GetCommon(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            credentialsFactory,
+            tenant,
+            yqCounters->GetSubgroup("subsystem", "row_dispatcher"));
+        actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
+    }
+
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
@@ -201,7 +208,6 @@ void Init(
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
-        RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());

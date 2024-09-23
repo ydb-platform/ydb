@@ -11,7 +11,7 @@
 
 ## Примеры
 
-``` yql
+```yql
 SELECT /*+ unique() */ * FROM Input;
 SELECT /*+ distinct() */ * FROM Input;
 

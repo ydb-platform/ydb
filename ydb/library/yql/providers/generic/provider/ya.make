@@ -32,6 +32,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/random_provider
     library/cpp/time_provider
+    ydb/core/fq/libs/common
     ydb/core/fq/libs/result_formatter
     ydb/library/yql/ast
     ydb/library/yql/core

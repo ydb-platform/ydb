@@ -4,7 +4,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     BITCAST(100000ul AS Uint32),     -- 100000
     BITCAST(100000ul AS Int16),      -- -31072

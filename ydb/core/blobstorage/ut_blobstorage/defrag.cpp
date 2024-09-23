@@ -11,7 +11,7 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
     const TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(groups.front());
     env.Sim(TDuration::Minutes(5));
 
-    const ui32 dataLen = 512 * 1024;
+    const ui32 dataLen = 512 * 1024 + 1;
     const TString data(dataLen, 'x');
     ui32 index = 0;
 
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
                         const TEvDefragRewritten* msg = ev->Get<TEvDefragRewritten>();
                         UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenRecs, 18);
-                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenBytes, 9961567);
+                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenBytes, 9961491);
                     }
                     return true;
                 case TEvBlobStorage::EvRestoreCorruptedBlob:

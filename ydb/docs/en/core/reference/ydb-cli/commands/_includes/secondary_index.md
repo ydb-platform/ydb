@@ -84,6 +84,7 @@ Returned value:
 ```
 
 Deleting the index-building details (use the actual operation id):
+
 ```bash
 {{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```

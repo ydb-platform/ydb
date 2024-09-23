@@ -233,7 +233,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Send " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, NChangeExchange::TEvChangeExchange::TEvRecords::New<TChangeRecord>(std::move(records)));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
         size_t forgotten = 0;

@@ -31,7 +31,7 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
 }
 
 using TArrowConvertFailedCallback = std::function<void(TType*)>;
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, bool extraTypes = false, const TArrowConvertFailedCallback& = {});
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
 template<NUdf::EDataSlot slot>

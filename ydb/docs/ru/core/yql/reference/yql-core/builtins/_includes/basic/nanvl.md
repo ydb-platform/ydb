@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 NANVL(Float, Float)->Float
 NANVL(Double, Double)->Double
 ```
@@ -18,7 +18,7 @@ NANVL(Double, Double)->Double
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   NANVL(double_column, 0.0)
 FROM my_table;

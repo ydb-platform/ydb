@@ -1,0 +1,75 @@
+AioTestList: {
+    DurationSeconds: 60
+    RequestSize: 4096
+    QueueDepth: 4
+    ReadProportion: 1.0
+}
+AioTestList: {
+    DurationSeconds: 60
+    RequestSize: 4096
+    QueueDepth: 4
+    ReadProportion: 0.0
+}
+TrimTestList: {
+    DurationSeconds: 60
+    RequestSize: 2097152
+}
+PDiskTestList: {
+    PDiskTestList: {
+        PDiskReadLoad: {
+            Tag: 1
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId: {
+                GroupID: 1
+                GroupGeneration: 5
+                Ring: 1
+                Domain: 1
+                VDisk: 1
+            }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            DurationSeconds: 120
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightReads: 64
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+    PDiskTestList: {
+        PDiskReadLoad: {
+            Tag: 3
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId: {
+                GroupID: 1
+                GroupGeneration: 5
+                Ring: 1
+                Domain: 1
+                VDisk: 1
+            }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            DurationSeconds: 120
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightReads: 64
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+}
+DriveEstimatorTest: {}

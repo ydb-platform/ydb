@@ -772,6 +772,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.ModuleLang.value,
         df.BinaryPath.stripped,
         df.TestRunnerBin.value,
+        df.DockerImage.value,
     )
 )
 def onadd_pytest_bin(fields, unit, *args):
@@ -831,6 +832,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestClasspathOrigins.value,
         df.TestClasspathDeps.value,
         df.TestJar.value,
+        df.DockerImage.value,
     )
 )
 def onjava_test(fields, unit, *args):
@@ -911,6 +913,7 @@ def onrun(unit, *args):
         df.TestName.filename_without_pkg_ext,
         df.TestedProjectName.path_filename_basename_without_pkg_ext,
         df.BinaryPath.stripped_without_pkg_ext,
+        df.DockerImage.value,
     )
 )
 def onsetup_exectest(fields, unit, *args):
@@ -1144,6 +1147,7 @@ def clang_tidy(fields, unit, *args):
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def unittest_py(fields, unit, *args):
@@ -1177,6 +1181,7 @@ def unittest_py(fields, unit, *args):
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def gunittest(fields, unit, *args):
@@ -1211,6 +1216,7 @@ def gunittest(fields, unit, *args):
         df.TestPartition.value,
         df.ModuleLang.value,
         df.BenchmarkOpts.value,
+        df.DockerImage.value,
     )
 )
 def g_benchmark(fields, unit, *args):
@@ -1244,6 +1250,7 @@ def g_benchmark(fields, unit, *args):
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def go_test(fields, unit, *args):
@@ -1277,6 +1284,7 @@ def go_test(fields, unit, *args):
         df.TestData.from_macro_args_and_unit,
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
+        df.DockerImage.value,
     )
 )
 def boost_test(fields, unit, *args):
@@ -1312,6 +1320,7 @@ def boost_test(fields, unit, *args):
         df.FuzzDicts.value,
         df.FuzzOpts.value,
         df.Fuzzing.value,
+        df.DockerImage.value,
     )
 )
 def fuzz_test(fields, unit, *args):
@@ -1348,6 +1357,7 @@ def fuzz_test(fields, unit, *args):
         df.TestPartition.value,
         df.ModuleLang.value,
         df.BenchmarkOpts.value,
+        df.DockerImage.value,
     )
 )
 def y_benchmark(fields, unit, *args):
@@ -1412,6 +1422,7 @@ def coverage_extractor(fields, unit, *args):
         df.TestPartition.value,
         df.GoBenchTimeout.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def go_bench(fields, unit, *args):

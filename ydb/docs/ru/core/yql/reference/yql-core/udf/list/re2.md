@@ -2,7 +2,7 @@
 
 ## Список функций
 
-```
+```yql
 Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
 Re2::Match(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool
 Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct<_1:String?,foo:String?,...>
@@ -50,8 +50,8 @@ SELECT
 
 Например, следующие два запроса эквивалентны (в том числе по эффективности вычислений):
 
-* ```$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");```
-* ```SELECT "aaabccc" REGEXP "b+";```
+* `$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");`
+* `SELECT "aaabccc" REGEXP "b+";`
 
 ## Re2::Capture {#capture}
 

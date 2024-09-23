@@ -22,5 +22,8 @@ items:
     href: cluster/common_scheme_ydb.md
   - name: Disk subsystem of a cluster
     href: cluster/distributed_storage.md
+- { name: Asynchronous replication,               href: async-replication.md, when: feature_async_replication }
 - name: Federated query
   include: { path: federated_query/toc_p.yaml, mode: link }
+- name: Query optimizer
+  href: optimizer.md

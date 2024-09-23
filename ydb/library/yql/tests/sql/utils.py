@@ -6,23 +6,23 @@ import yatest.common
 
 from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import contrib.ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
-DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
+DATA_PATH = yatest.common.source_path('contrib/ydb/library/yql/tests/sql/suites')
 try:
-    SQLRUN_PATH = yatest.common.binary_path('ydb/library/yql/tools/sql2yql/sql2yql')
+    SQLRUN_PATH = yatest.common.binary_path('contrib/ydb/library/yql/tools/sql2yql/sql2yql')
 except BaseException:
     SQLRUN_PATH = None
 
 try:
-    YQLRUN_PATH = yatest.common.binary_path('ydb/library/yql/tools/yqlrun/yqlrun')
+    YQLRUN_PATH = yatest.common.binary_path('contrib/ydb/library/yql/tools/yqlrun/yqlrun')
 except BaseException:
     YQLRUN_PATH = None
 
 def get_sql_flags():
     gateway_config = gateways_config_pb2.TGatewaysConfig()
 
-    with open(yatest.common.source_path('ydb/library/yql/cfg/tests/gateways.conf')) as f:
+    with open(yatest.common.source_path('contrib/ydb/library/yql/cfg/tests/gateways.conf')) as f:
         text_format.Merge(f.read(), gateway_config)
 
     if yql_get_param('SQL_FLAGS'):
@@ -110,6 +110,7 @@ def validate_cfg(result):
     for r in result:
         assert r[0] in (
             "in",
+            "in2",
             "out",
             "udf",
             "providers",

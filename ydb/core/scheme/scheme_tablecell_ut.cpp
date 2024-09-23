@@ -86,11 +86,11 @@ Y_UNIT_TEST_SUITE(Scheme) {
         cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal)));
         types.push_back(TTypeInfo(NTypeIds::Float));
         cells.push_back(TCell());
-        types.push_back(TTypeInfo(NTypeIds::Decimal));
+        types.push_back(TTypeInfo(NScheme::TDecimalType::Default()));
         cells.push_back(TCell((const char*)&intVal, sizeof(ui64)));
         types.push_back(TTypeInfo(NTypeIds::Uint64));
         cells.push_back(TCell());
-        types.push_back(TTypeInfo(NTypeIds::Decimal));
+        types.push_back(TTypeInfo(NScheme::TDecimalType::Default()));
         cells.push_back(TCell());
         types.push_back(TTypeInfo(NTypeIds::Uint8));
         cells.push_back(TCell(bigStrVal, sizeof(bigStrVal)));
@@ -401,7 +401,9 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
         TArrayRef<const NScheme::TTypeId> yqlIds(NScheme::NTypeIds::YqlIds);
         for (NScheme::TTypeId typeId : yqlIds) {
-            NScheme::TTypeInfo typeInfo(typeId);
+            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Decimal ? 
+                NScheme::TTypeInfo(NScheme::TDecimalType::Default()) : 
+                NScheme::TTypeInfo(typeId);
             switch (typeId) {
             case NScheme::NTypeIds::Int8:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(i8)));

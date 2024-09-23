@@ -95,7 +95,14 @@ namespace NKikimr::NDataStreams::V1 {
             return {};
         }
 
-        void SetParents(::Ydb::DataStreams::V1::Shard* shard, const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartition& partition) {
+        void SetShardProperties(::Ydb::DataStreams::V1::Shard* shard,
+                                const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartition& partition,
+                                const bool autoPartitioningEnabled,
+                                const size_t allShardsCount,
+                                const std::map<ui64, std::pair<ui64, ui64>>& offsets) {
+            shard->set_shard_id(GetShardName(partition.GetPartitionId()));
+
+
             const auto& parents = partition.GetParentPartitionIds();
             if (parents.size() > 0) {
                 shard->set_parent_shard_id(GetShardName(parents[0]));
@@ -103,9 +110,7 @@ namespace NKikimr::NDataStreams::V1 {
             if (parents.size() > 1) {
                 shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
             }
-        }
 
-        void SetRange(const bool autoPartitioningEnabled, ::Ydb::DataStreams::V1::Shard* shard, const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartition& partition, size_t allShardsCount) {
             auto* rangeProto = shard->mutable_hash_key_range();
             if (autoPartitioningEnabled) {
                 NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound()
@@ -119,9 +124,7 @@ namespace NKikimr::NDataStreams::V1 {
                 rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
                 rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
             }
-        }
 
-        void SetSequence(const std::map<ui64, std::pair<ui64, ui64>>& offsets, ::Ydb::DataStreams::V1::Shard* shard, const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartition& partition) {
             auto it = offsets.find(partition.GetPartitionId());
             if (it != offsets.end()) {
                 auto* rangeProto = shard->mutable_sequence_number_range();
@@ -883,11 +886,7 @@ namespace NKikimr::NDataStreams::V1 {
                     break;
                 } else {
                     auto* shard = description.add_shards();
-                    shard->set_shard_id(shardName);
-
-                    SetParents(shard, partition);
-                    SetRange(NPQ::SplitMergeEnabled(pqConfig), shard, partition, PQGroup.GetPartitions().size());
-                    SetSequence(StartEndOffsetsPerPartition, shard, partition);
+                    SetShardProperties(shard, partition, NPQ::SplitMergeEnabled(pqConfig), PQGroup.GetPartitions().size(), StartEndOffsetsPerPartition);
                 }
             }
         }
@@ -1991,13 +1990,7 @@ namespace NKikimr::NDataStreams::V1 {
     void TListShardsActor::SendResponse(const TActorContext& ctx) {
         Ydb::DataStreams::V1::ListShardsResult result;
         for (auto& shard : Shards) {
-            auto awsShard = result.Addshards();
-
-            awsShard->set_shard_id(GetShardName(shard.GetPartitionId()));
-
-            SetParents(awsShard, shard);
-            SetRange(AutoPartitioningEnabled, awsShard, shard, AllShardsCount);
-            SetSequence(StartEndOffsetsPerPartition, awsShard, shard);
+            SetShardProperties(result.Addshards(), shard, AutoPartitioningEnabled, AllShardsCount, StartEndOffsetsPerPartition);
         }
         if (LeftToRead > 0) {
             TNextToken token(StreamName, NextToken.GetAlreadyRead() + Shards.size(), MaxResults, TInstant::Now().MilliSeconds());

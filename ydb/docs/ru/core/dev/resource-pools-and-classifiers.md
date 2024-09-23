@@ -16,7 +16,7 @@ CREATE RESOURCE POOL olap WITH (
 )
 ```
 
-Ознакомиться с параметрами resource pool можно [здесь](../yql/reference/yql-core/syntax/create-resource-pool.md#parameters)
+Ознакомиться с параметрами resource pool можно [здесь](../yql/reference/syntax/create-resource-pool.md#parameters)
 
 Рассмотрим на примере выше что же на самом деле означают эти параметры и как они будут влиять на распределение ресурсов. Допустим в базе данных {{ ydb-short-name }} выделено 10 узлов по 10 vCPU. В сумме в такой базе данных 100 vCPU. Тогда на одном хосте для resource pool с именем `olap` будет выделено `10vCPU*TOTAL_CPU_LIMIT_PERCENT_PER_NODE/100=10vCPU*0.7=7vCPU`. В сумме при равномерном распределении ресурсов на всю базу данных будет выделено `7vCPU*10(узлов)=70vCPU`. На один запрос в этом resource pool будет выделено `10vCPU*TOTAL_CPU_LIMIT_PERCENT_PER_NODE/100*QUERY_CPU_LIMIT_PERCENT_PER_NODE/100=10vCPU*0.7*0.5=3.5vCPU`. Что касается `RESOURCES_WEIGHT`, то он начинает работать только в случае переподписки и когда число пулов в системе > 1, подробное описание этого параметра приведено ниже. Перейдем к рассмотрению `CONCURRENT_QUERY_LIMIT`, допустим что в resource pool `olap` работают уже 9 запросов, тогда при появлении нового запроса он сразу же перейдет в состояние выполнения параллельно с другими 9-ю запросами. Теперь в пуле уже работает 10 запросов, если же в resource pool будет отправлен 11-й запрос, то он не начнет выполняться, он будет отправлен в очередь ожидания. Когда хотя бы 1 из 10 выполняющихся запросов завершит свое выполнение, то из очереди будет извлечен 11-й запрос и отправлен на выполнение незамедлительно. Если же в очереди уже находится `QUEUE_SIZE=1000` элементов, то при отправке на выполнение 1001-ого запроса будет получена ошибка и запрос не будет выполнен. На число параллельно выполняемых запросов влияет не только `CONCURRENT_QUERY_LIMIT`, но еще и `DATABASE_LOAD_CPU_THRESHOLD`
 
@@ -51,7 +51,7 @@ CREATE RESOURCE POOL default WITH (
 
 ## Управление ACL на resource pool
 
-Для создания/изменения/удаления resource pool необходимо выдать права доступа в соответствии с разрешениями описанными в [SQL](../yql/reference/yql-core/syntax/create-resource-pool.md). Например, для возможности создания resource pool нужно иметь `CREATE TABLE` на директорию `.metadata/workload_manager/pools`
+Для создания/изменения/удаления resource pool необходимо выдать права доступа в соответствии с разрешениями описанными в [SQL](../yql/reference/syntax/create-resource-pool.md). Например, для возможности создания resource pool нужно иметь `CREATE TABLE` на директорию `.metadata/workload_manager/pools`
 
 ```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;

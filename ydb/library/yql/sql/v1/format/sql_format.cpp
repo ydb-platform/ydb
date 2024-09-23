@@ -943,6 +943,18 @@ private:
         VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
     }
 
+    void VisitBackup(const TRule_backup_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_backup_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitRestore(const TRule_restore_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_restore_stmt::GetDescriptor(), msg);
+    }
+
     void VisitUse(const TRule_use_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -1549,11 +1561,27 @@ private:
 
         NewLine();
         PushCurrentIndent();
-        Visit(msg.GetRule_alter_backup_collection_actions3().GetRule_alter_backup_collection_action1());
-        for (const auto& action : msg.GetRule_alter_backup_collection_actions3().GetBlock2()) {
-            Visit(action.GetToken1()); // comma
-            NewLine();
-            Visit(action.GetRule_alter_backup_collection_action2());
+        switch (msg.GetBlock3().Alt_case()) {
+        case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
+            Visit(msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetRule_alter_backup_collection_action1());
+            for (const auto& action : msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetBlock2()) {
+                Visit(action.GetToken1()); // comma
+                NewLine();
+                Visit(action.GetRule_alter_backup_collection_action2());
+            }
+            break;
+        }
+        case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
+            Visit(msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetRule_alter_backup_collection_entry1());
+            for (const auto& entry : msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetBlock2()) {
+                Visit(entry.GetToken1()); // comma
+                NewLine();
+                Visit(entry.GetRule_alter_backup_collection_entry2());
+            }
+            break;
+        }
+        default:
+            ythrow yexception() << "Alt is not supported";
         }
 
         PopCurrentIndent();
@@ -2821,7 +2849,9 @@ TStaticData::TStaticData()
         {TRule_analyze_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAnalyze)},
         {TRule_create_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePoolClassifier)},
         {TRule_alter_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePoolClassifier)},
-        {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)}
+        {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)},
+        {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
+        {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
@@ -2872,7 +2902,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -2935,7 +2965,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {

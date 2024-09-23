@@ -2,9 +2,9 @@
 
 It lets you combine multiple data sources (subqueries or tables) by equality of values in the specified columns or expressions (the `JOIN` keys).
 
-**Syntax**
+## Syntax
 
-```sql
+```yql
 SELECT ...    FROM table_1
 -- first JOIN step:
   <Join_Type> JOIN table_2 <Join_Condition>
@@ -27,7 +27,7 @@ Since columns in YQL are identified by their names, and you can't have two colum
 
 {% endnote %}
 
-## Types of join (Join_Type)
+## Types of join
 
 * `INNER` <span style="color: gray;">(default)</span>: Rows from joined subqueries that don't match any rows on the other side won't be included in the result.
 * `LEFT`: If there's no value in the right subquery, it adds a row to the result with column values from the left subquery, using `NULL` in columns from the right subquery
@@ -38,7 +38,7 @@ Since columns in YQL are identified by their names, and you can't have two colum
 * `CROSS`: A full Cartesian product of two tables without specifying key columns and no explicit `ON/USING`.
 * `EXCLUSION`: Both sides minus the intersection.
 
-![](../_assets/join-YQL-06.png)
+![JOIN](../_assets/join-YQL-06.png)
 
 {% note info %}
 
@@ -46,7 +46,7 @@ Since columns in YQL are identified by their names, and you can't have two colum
 
 {% endnote %}
 
-## Conditions for joining (Join_Condition)
+## Conditions for joining
 
 For `CROSS JOIN`, no join condition is specified. The result includes the Cartesian product of the left and right subquery, meaning it combines everything with everything. The number of rows in the resulting subquery is the product of the number of rows in the left and right subqueries.
 
@@ -55,21 +55,21 @@ For any other JOIN types, specify the condition using one of the two methods:
 1. `USING (column_name)`. Used if both the left and right subqueries share a column whose equality of values is a join condition.
 2. `ON (equality_conditions)`. Lets you set a condition of equality for column values or expressions over columns in the left and right subqueries or use several such conditions combined by `and`.
 
-**Examples:**
+### Examples
 
-```sql
+```yql
 SELECT    a.value as a_value, b.value as b_value
 FROM      a_table AS a
 FULL JOIN b_table AS b USING (key);
 ```
 
-```sql
+```yql
 SELECT    a.value as a_value, b.value as b_value
 FROM      a_table AS a
 FULL JOIN b_table AS b ON a.key = b.key;
 ```
 
-```sql
+```yql
 SELECT     a.value as a_value, b.value as b_value, c.column2
 FROM       a_table AS a
 CROSS JOIN b_table AS b
@@ -97,9 +97,9 @@ INNER JOIN b_table VIEW b_index_ref AS b ON a.ref = b.ref;
 If the statement filters data in addition to `JOIN`, we recommend wrapping the criteria that would return `true` for most of the rows in the `LIKELY(...)` function call. If your assumption that positive values prevail for the criteria is correct, such a hint might speed up your subquery. `LIKELY` can be useful when the predicate calculation is a resource-intensive operation and JOIN significantly reduces the number of rows.
 
 In front of any data source for `JOIN`, you can add the `ANY` keyword to suppress duplicate `JOIN` keys on the given side. In this case, only one row is left from the set of rows with the same `JOIN` key value (no matter which one, that's why the keyword is called `ANY`).
-This syntax is different from that used in [ClickHouse]{% if lang == "en" %}(https://clickhouse.com/docs/en/sql-reference/statements/select/join/){% endif %}{% if lang == "ru" %}(https://clickhouse.tech/docs/ru/sql-reference/statements/select/join/){% endif %}, where `ANY` is placed before the `JOIN` type and applies to the right side only.
+This syntax is different from that used in [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/select/join/), where `ANY` is placed before the `JOIN` type and applies to the right side only.
 
-Request
+Query:
 
 ```yql
 $t1 = AsList(

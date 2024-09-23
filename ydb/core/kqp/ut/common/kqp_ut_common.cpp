@@ -123,6 +123,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
+    ServerSettings->FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
@@ -134,6 +135,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+
+    if (!settings.FeatureFlags.HasEnableOlapCompression()) {
+        ServerSettings->SetEnableOlapCompression(true);
+    }
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -1340,26 +1345,30 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
 }
 
-NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt) {
+NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
     if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
         auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
-        if (opName.find("Join") != TString::npos || opName.find("Union") != TString::npos ) {
+        if (
+            opName.find("Join") != TString::npos || 
+            opName.find("Union") != TString::npos ||
+            (opName.find("Filter") != TString::npos && params.IncludeFilters)
+        ) {
             NJson::TJsonValue newChildren;
 
             for (auto c : opt.GetMapSafe().at("Plans").GetArraySafe()) {
-                newChildren.AppendValue(SimplifyPlan(c));
+                newChildren.AppendValue(SimplifyPlan(c, params));
             }
 
             opt["Plans"] = newChildren;
             return opt;
         }
-        else if (opName.find("Table") != TString::npos ) {
+        else if (opName.find("Table") != TString::npos) {
             return opt;
         }
     }
 
     auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
-    return SimplifyPlan(firstPlan);
+    return SimplifyPlan(firstPlan, params);
 }
 
 bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
@@ -1394,7 +1403,7 @@ bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValu
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(optimized, &optRoot, true);
-    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
     
     NJson::TJsonValue refRoot;
     NJson::ReadJsonTree(reference, &refRoot, true);
@@ -1403,11 +1412,18 @@ bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
 }
 
 /* Temporary solution to canonize tests */
-NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt, const TGetPlanParams& params) {
     NJson::TJsonValue res;
+
+    if (!opt.GetMapSafe().contains("Plans") && !params.IncludeTables) {
+        return res;
+    }
 
     auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
     res["op_name"] = op.GetMapSafe().at("Name").GetStringSafe();
+    if (params.IncludeOptimizerEstimation && op.GetMapSafe().contains("E-Rows")) {
+        res["e-size"] = op.GetMapSafe().at("E-Rows").GetStringSafe();
+    }
 
 
     if (!opt.GetMapSafe().contains("Plans")) {
@@ -1416,17 +1432,17 @@ NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
     }
     
     auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
-    for (size_t i = 0; i< subplans.size(); ++i) {
-        res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i]));
+    for (size_t i = 0; i < subplans.size(); ++i) {
+        res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i], params));
     }
     return res;
 }
 
-NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan) {
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params) {
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
-    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
-    return GetDetailedJoinOrderImpl(SimplifyPlan(optRoot));
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), params);
+    return GetDetailedJoinOrderImpl(optRoot, params);
 }
 
 NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
@@ -1448,8 +1464,8 @@ NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
 NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
-    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
-    return GetJoinOrderImpl(SimplifyPlan(optRoot));
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
+    return GetJoinOrderImpl(optRoot);
 }
 
 

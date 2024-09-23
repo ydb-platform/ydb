@@ -1753,6 +1753,18 @@ TRuntimeNode TProgramBuilder::BlockXor(TRuntimeNode first, TRuntimeNode second) 
     return BuildBlockLogical(__func__, first, second);
 }
 
+TRuntimeNode TProgramBuilder::BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMod(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
+TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode second) {
+    return BuildBlockDecimalBinary(__func__, first, second);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
@@ -2754,6 +2766,32 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
 
     const auto itemType = NewDataType(NUdf::TDataType<bool>::Id, isOpt1 || isOpt2);
     auto outputType = NewBlockType(itemType, GetResultShape({firstType, secondType}));
+
+    TCallableBuilder callableBuilder(Env, callableName, outputType);
+    callableBuilder.Add(first);
+    callableBuilder.Add(second);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    bool isOpt1, isOpt2;
+    auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
+    UnpackOptionalData(secondType->GetItemType(), isOpt2);
+
+    MKQL_ENSURE(leftDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id, "Requires decimal args.");
+
+    const auto& lParams = static_cast<TDataDecimalType*>(leftDataType)->GetParams();
+
+    auto [precision, scale] = lParams;
+
+    TType* outputType = TDataDecimalType::Create(precision, scale, Env);
+    if (isOpt1 || isOpt2) {
+        outputType = TOptionalType::Create(outputType, Env);
+    }
+    outputType = NewBlockType(outputType, TBlockType::EShape::Many);
 
     TCallableBuilder callableBuilder(Env, callableName, outputType);
     callableBuilder.Add(first);
@@ -5854,8 +5892,9 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
-    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode dict,
+    EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+    const TArrayRef<const ui32>& leftKeyDrops
 ) {
     if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5864,6 +5903,11 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
                 joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly,
                 "Unsupported join kind");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
+    for (const auto& drop : leftKeyDrops) {
+        MKQL_ENSURE(leftKeySet.contains(drop),
+                    "Only key columns has to be specified in drop column set");
+    }
 
     TRuntimeNode::TList leftKeyColumnsNodes;
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
@@ -5872,7 +5916,23 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
             return NewDataLiteral(idx);
         });
 
-    auto returnJoinItems = ValidateBlockFlowType(flow.GetStaticType(), false);
+    TRuntimeNode::TList leftKeyDropsNodes;
+    leftKeyDropsNodes.reserve(leftKeyDrops.size());
+    std::transform(leftKeyDrops.cbegin(), leftKeyDrops.cend(),
+        std::back_inserter(leftKeyDropsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    const auto leftStreamItems = ValidateBlockStreamType(stream.GetStaticType(), false);
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    TVector<TType*> returnJoinItems;
+    for (size_t i = 0; i < leftStreamItems.size(); i++) {
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        returnJoinItems.push_back(leftStreamItems[i]);
+    }
+
     const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
     const auto payloadItemType = payloadType->IsList()
                                ? AS_TYPE(TListType, payloadType)->GetItemType()
@@ -5890,7 +5950,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
                                 : NewOptionalType(payloadItem);
             dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
         }
-        // Block length column has to be the last column in wide block flow item,
+        // Block length column has to be the last column in wide block stream item,
         // so all contents of the dict payload should be appended to the resulting
         // wide type before the block size column.
         const auto blockLenPos = std::prev(returnJoinItems.end());
@@ -5900,13 +5960,14 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
         // optimizers for join types that don't require the right (i.e. dict) part.
         MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
     }
-    TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
+    TType* returnJoinType = NewStreamType(NewMultiType(returnJoinItems));
 
     TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(stream);
     callableBuilder.Add(dict);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(leftKeyDropsNodes));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

@@ -13,14 +13,9 @@
 namespace NActors {
     class TChunkSerializer;
     class IActor;
-    class ISerializerToStream {
-    public:
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-    };
-
+    
     class IEventBase
-        : TNonCopyable,
-          public ISerializerToStream {
+        : TNonCopyable {
     protected:
         // for compatibility with virtual actors
         virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
@@ -380,4 +375,32 @@ namespace NActors {
         typedef TEventHandle<TEventType> THandle;
         typedef typename THandle::TPtr TPtr;
     };
+
+#define DEFINE_SIMPLE_LOCAL_EVENT(eventType, header)                    \
+    TString ToStringHeader() const override {                           \
+        return TString(header);                                         \
+    }                                                                   \
+    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
+        Y_ABORT("Local event " #eventType " is not serializable");       \
+    }                                                                   \
+    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+        Y_ABORT("Local event " #eventType " has no load method");        \
+    }                                                                   \
+    bool IsSerializable() const override {                              \
+        return false;                                                   \
+    }
+
+#define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
+    TString ToStringHeader() const override {                           \
+        return TString(header);                                         \
+    }                                                                   \
+    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
+        return true;                                                    \
+    }                                                                   \
+    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+        return new eventType();                                         \
+    }                                                                   \
+    bool IsSerializable() const override {                              \
+        return true;                                                    \
+    }
 }

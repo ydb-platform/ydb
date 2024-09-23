@@ -198,7 +198,7 @@ TString THelper::GetTestTableSchema() const {
     return sb;
 }
 
-void THelper::CreateSchemaOlapTableWithStore(const TString tableSchema, TString tableName /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
+void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector<TString> tableNames /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
     TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
     CreateTestOlapStore(sender, Sprintf(R"(
             Name: "%s"
@@ -213,19 +213,21 @@ void THelper::CreateSchemaOlapTableWithStore(const TString tableSchema, TString 
 
     const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
 
-    TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
-        Name: "%s"
-        ColumnShardCount: %d
-        Sharding {
-            HashSharding {
-                Function: %s
-                Columns: %s
-            }
-        })", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str()));
+    for (const TString& tableName : tableNames) {
+        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            Sharding {
+                HashSharding {
+                    Function: %s
+                    Columns: %s
+                }
+            })", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str()));
+    }
 }
 
-void THelper::CreateOlapTableWithStore(TString tableName /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
-    CreateSchemaOlapTableWithStore(GetTestTableSchema(), tableName, storeName, storeShardsCount, tableShardsCount);
+void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTable"}*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
+        CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
 }
 
 // Clickbench table

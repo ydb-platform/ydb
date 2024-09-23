@@ -31,6 +31,45 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", GetPortionIdVerified());
     FullValidation();
 
+    if (BlobIdxs.size()) {
+        auto itRecord = Records.begin();
+        auto itIndex = Indexes.begin();
+        auto itBlobIdx = BlobIdxs.begin();
+        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
+            if (itRecord->GetAddress() < itIndex->GetAddress()) {
+                AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+                itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+                ++itRecord;
+                ++itBlobIdx;
+            } else if (itIndex->GetAddress() < itRecord->GetAddress()) {
+                if (itIndex->HasBlobData()) {
+                    ++itIndex;
+                    continue;
+                }
+                AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+                itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+                ++itIndex;
+                ++itBlobIdx;
+            } else {
+                AFL_VERIFY(false);
+            }
+        }
+        for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
+            AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+            itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+        }
+        for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
+            if (itIndex->HasBlobData()) {
+                continue;
+            }
+            AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+            itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+            ++itBlobIdx;
+        }
+        AFL_VERIFY(itRecord == Records.end());
+        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
+    }
+
     result.Indexes = Indexes;
     result.Records = Records;
     result.BlobIds = BlobIds;
@@ -67,22 +106,6 @@ void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContex
 
 const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord&& record) {
     Y_ABORT_UNLESS(record.ColumnId);
-    std::optional<ui32> maxChunk;
-    for (auto&& i : Records) {
-        if (i.ColumnId == record.ColumnId) {
-            if (!maxChunk) {
-                maxChunk = i.Chunk;
-            } else {
-                Y_ABORT_UNLESS(*maxChunk + 1 == i.Chunk);
-                maxChunk = i.Chunk;
-            }
-        }
-    }
-    if (maxChunk) {
-        AFL_VERIFY(*maxChunk + 1 == record.Chunk)("max", *maxChunk)("record", record.Chunk);
-    } else {
-        AFL_VERIFY(0 == record.Chunk)("record", record.Chunk);
-    }
     Records.emplace_back(std::move(record));
     return Records.back();
 }

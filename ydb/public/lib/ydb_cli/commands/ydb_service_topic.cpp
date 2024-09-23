@@ -46,7 +46,7 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("disabled", NTopic::EAutoPartitioningStrategy::Disabled),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up", NTopic::EAutoPartitioningStrategy::ScaleUp),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up-and-down", NTopic::EAutoPartitioningStrategy::ScaleUpAndDown),
-            std::pair<TString, NTopic::EAutoPartitioningStrategy>("puased", NTopic::EAutoPartitioningStrategy::Paused),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("paused", NTopic::EAutoPartitioningStrategy::Paused),
         };
 
         THashMap<NTopic::EAutoPartitioningStrategy, TString> AutoscaleStrategiesDescriptions = {
@@ -304,8 +304,7 @@ namespace {
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
-            .StoreResult(&MaxActivePartitions_)
-            .DefaultValue(1);
+            .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
     }
 
@@ -326,18 +325,21 @@ namespace {
         auto autoscaleSettings = NTopic::TAutoPartitioningSettings(
         GetAutoPartitioningStrategy() ? *GetAutoPartitioningStrategy() : NTopic::EAutoPartitioningStrategy::Disabled,
         GetAutoPartitioningStabilizationWindowSeconds() ? TDuration::Seconds(*GetAutoPartitioningStabilizationWindowSeconds()) : TDuration::Seconds(0),
-        GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0,
-        GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0);
+        GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0,
+        GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0);
 
-        settings.PartitioningSettings(MinActivePartitions_, MaxActivePartitions_, autoscaleSettings);
+        ui32 finalMaxActivePartitions = MaxActivePartitions_.Defined() ? *MaxActivePartitions_
+                                      : autoscaleSettings.GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled ? MinActivePartitions_ + 50
+                                      : MinActivePartitions_;
+
+        settings.PartitioningSettings(MinActivePartitions_, finalMaxActivePartitions, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
         auto codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        if (!codecs.empty()) {
+            settings.SetSupportedCodecs(codecs);
         }
-        settings.SetSupportedCodecs(codecs);
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());
@@ -543,11 +545,10 @@ namespace {
             consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
         }
 
-        TVector<NTopic::ECodec> codecs = GetCodecs();
-        if (codecs.empty()) {
-            codecs.push_back(NTopic::ECodec::RAW);
+        auto codecs = GetCodecs();
+        if (!codecs.empty()) {
+            consumerSettings.SetSupportedCodecs(codecs);
         }
-        consumerSettings.SetSupportedCodecs(codecs);
         consumerSettings.SetImportant(IsImportant_);
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
@@ -609,7 +610,7 @@ namespace {
         config.Opts->AddLongOption("partition-stats", "Show partition statistics")
             .StoreTrue(&ShowPartitionStats_);
         config.Opts->SetFreeArgsNum(1);
-        AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+        AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 
@@ -894,7 +895,6 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
-            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }
@@ -907,7 +907,7 @@ namespace {
         Codec_ = ::NYdb::NConsoleClient::ParseCodec(CodecStr_, AllowedCodecs_);
     }
 
-    NTopic::ECodec TCommandWithCodec::GetCodec() const {
+    TMaybe<NTopic::ECodec> TCommandWithCodec::GetCodec() const {
         return Codec_;
     }
 
@@ -923,8 +923,8 @@ namespace {
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
                                     EMessagingFormat::SingleMessage,
-                                    //      EOutputFormat::JsonRawStreamConcat,
-                                    //      EOutputFormat::JsonRawArray,
+                                    //      EDataFormat::JsonRawStreamConcat,
+                                    //      EDataFormat::JsonRawArray,
                                 });
         AddAllowedCodecs(config, AllowedCodecs);
 
@@ -957,7 +957,9 @@ namespace {
 
     NTopic::TWriteSessionSettings TCommandTopicWrite::PrepareWriteSessionSettings() {
         NTopic::TWriteSessionSettings settings;
-        settings.Codec(GetCodec());
+        if (auto codec = GetCodec(); codec.Defined()) {
+            settings.Codec(*codec);
+        }
         settings.Path(TopicName);
 
         if (!MessageGroupId_.Defined()) {

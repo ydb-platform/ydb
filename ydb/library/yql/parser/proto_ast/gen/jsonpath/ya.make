@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-IF (CPP_PROTO)
+IF (GEN_PROTO)
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
     SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
     SET(jsonpath_grammar ${ARCADIA_ROOT}/ydb/library/yql/minikql/jsonpath/JsonPath.g)
@@ -23,11 +23,10 @@ IF (CPP_PROTO)
         CWD ${antlr_output}
     )
 
-    EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
-
     NO_COMPILER_WARNINGS()
 
     ADDINCL(
+        # TODO Please check RUN_ANTLR with version 3, but ADDINCL for version 4
         GLOBAL contrib/libs/antlr4_cpp_runtime/src
     )
 
@@ -48,5 +47,6 @@ ENDIF()
 
 SRCS(JsonPathParser.proto)
 
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 
 END()

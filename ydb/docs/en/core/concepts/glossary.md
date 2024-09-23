@@ -209,6 +209,10 @@ A **secret** is a sensitive piece of metadata that requires special handling. Fo
 
 Like in filesystems, a **folder** or **directory** is a container for other entities. In the case of {{ ydb-short-name }}, these entities can be [tables](#table) (including [external tables](#external-table)), [topics](#topic), other folders, etc.
 
+### Query optimizer {#optimizer}
+
+[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](optimizer.md) section.
+
 ## Advanced terminology {#advanced-terminology}
 
 This section explains terms that are useful to [{{ ydb-short-name }} contributors](../contributor/index.md) and users who want to get a deeper understanding of what's going on inside the system.

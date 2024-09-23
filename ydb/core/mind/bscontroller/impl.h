@@ -125,7 +125,7 @@ public:
 
     public:
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
-        NHPTimer::STime VDiskStatusTimestamp = GetCycleCountFast();
+        TMonotonic VDiskStatusTimestamp;
         bool IsReady = false;
         bool OnlyPhantomsRemain = false;
 
@@ -1416,6 +1416,11 @@ public:
             : NodeId(nodeInfo.NodeId)
             , Location(std::move(nodeInfo.Location))
         {}
+
+        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
+            : NodeId(node.GetNodeId())
+            , Location(node.GetLocation())
+        {}
     };
 
     class THostRecordMapImpl {
@@ -1428,6 +1433,15 @@ public:
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
                 HostIdToRecord.emplace(hostId, std::move(nodeInfo));
+            }
+        }
+
+        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config) {
+            for (const auto& item : config.GetAllNodes()) {
+                const THostId hostId(item.GetHost(), item.GetPort());
+                const TNodeId nodeId = item.GetNodeId();
+                NodeIdToHostId.emplace(nodeId, hostId);
+                HostIdToRecord.emplace(hostId, item);
             }
         }
 
@@ -1516,6 +1530,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
+    std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1787,6 +1802,7 @@ private:
 
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
+    void OnHostRecordsInitiate();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2308,11 +2324,11 @@ public:
 
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
-        NHPTimer::STime VDiskStatusTimestamp = GetCycleCountFast();
+        TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
-                std::map<TVSlotId, TStaticVSlotInfo>& prev)
+                std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
         {
@@ -2324,6 +2340,8 @@ public:
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
+            } else {
+                VDiskStatusTimestamp = mono;
             }
         }
     };

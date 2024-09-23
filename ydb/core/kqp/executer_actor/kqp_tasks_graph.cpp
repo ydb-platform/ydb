@@ -387,7 +387,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
         if (columnIt->second.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto& typeInfo = *keyColumnProto->MutableTypeInfo();
-            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetTypeDesc()));
+            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetPgTypeDesc()));
             typeInfo.SetPgTypeMod(columnIt->second.TypeMod);
         }
     }
@@ -409,7 +409,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
         if (columnIt->second.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto& typeInfo = *columnProto->MutableTypeInfo();
-            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetTypeDesc()));
+            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetPgTypeDesc()));
             typeInfo.SetPgTypeMod(columnIt->second.TypeMod);
         }
     }
@@ -1128,6 +1128,7 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
 
             if (lockTxId) {
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
+                input.Meta.StreamLookupSettings->SetLockNodeId(tasksGraph.GetMeta().LockNodeId);
             }
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {

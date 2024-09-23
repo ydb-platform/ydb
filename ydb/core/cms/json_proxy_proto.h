@@ -96,7 +96,7 @@ protected:
         NJson::TJsonValue json;
 
         if (settings) {
-            for (NLog::EComponent i = settings->MinVal; i < settings->MaxVal; i++) {
+            for (NLog::EComponent i = settings->MinVal; i <= settings->MaxVal; i++) {
                 auto name = settings->ComponentName(i);
                 if (!*name) {
                     continue;

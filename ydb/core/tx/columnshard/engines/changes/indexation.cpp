@@ -98,7 +98,7 @@ public:
         return UsageColumnIds;
     }
 
-    void AddChunkInfo(const TInsertedData& data, const TConstructionContext& context) {
+    void AddChunkInfo(const TCommittedData& data, const TConstructionContext& context) {
         AFL_VERIFY(!Finished);
         if (UsageColumnIds.size() == FullColumnsCount) {
             return;
@@ -143,7 +143,7 @@ public:
         return result;
     }
 
-    void AddChunkInfo(const NOlap::TInsertedData& data, const TConstructionContext& context) {
+    void AddChunkInfo(const NOlap::TCommittedData& data, const TConstructionContext& context) {
         ColumnsInfo.AddChunkInfo(data, context);
     }
 
@@ -151,7 +151,7 @@ public:
         return ColumnsInfo.HasDeletion();
     }
 
-    void AddBatch(const NOlap::TInsertedData& data, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
+    void AddBatch(const NOlap::TCommittedData& data, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
         AFL_VERIFY(ColumnsInfo.IsFinished());
         AFL_VERIFY(batch);
         Batches.emplace_back(batch, data.GetMeta().GetModificationType());
@@ -186,18 +186,18 @@ public:
         return Data;
     }
 
-    void AddChunkInfo(const NOlap::TInsertedData& inserted, const TConstructionContext& context) {
-        auto shardingFilterCommit = context.SchemaVersions.GetShardingInfoOptional(inserted.PathId, inserted.GetSnapshot());
-        auto it = Data.find(inserted.PathId);
+    void AddChunkInfo(const NOlap::TCommittedData& inserted, const TConstructionContext& context) {
+        auto shardingFilterCommit = context.SchemaVersions.GetShardingInfoOptional(inserted.GetPathId(), inserted.GetSnapshot());
+        auto it = Data.find(inserted.GetPathId());
         if (it == Data.end()) {
-            it = Data.emplace(inserted.PathId, TPathData(shardingFilterCommit, ResultSchema)).first;
+            it = Data.emplace(inserted.GetPathId(), TPathData(shardingFilterCommit, ResultSchema)).first;
         }
         it->second.AddChunkInfo(inserted, context);
         it->second.AddShardingInfo(shardingFilterCommit);
     }
 
-    void AddBatch(const NOlap::TInsertedData& inserted, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
-        auto it = Data.find(inserted.PathId);
+    void AddBatch(const NOlap::TCommittedData& inserted, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {
+        auto it = Data.find(inserted.GetPathId());
         AFL_VERIFY(it != Data.end());
         it->second.AddBatch(inserted, batch);
     }
@@ -244,9 +244,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
             blobSchema->AdaptBatchToSchema(*batch, resultSchema);
         }
-        IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot());
+        IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot(), (ui64)inserted.GetInsertWriteId());
 
-        auto& pathInfo = pathBatches.GetPathInfo(inserted.PathId);
+        auto& pathInfo = pathBatches.GetPathInfo(inserted.GetPathId());
 
         if (pathInfo.HasDeletion()) {
             IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);

@@ -15,7 +15,7 @@ namespace NKikimr::NMiniKQL {
 bool ConvertInputArrowType(TType* blockType, arrow::ValueDescr& descr) {
     auto asBlockType = AS_TYPE(TBlockType, blockType);
     descr.shape = asBlockType->GetShape() == TBlockType::EShape::Scalar ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
-    return ConvertArrowType(asBlockType->GetItemType(), descr.type);
+    return ConvertArrowType(asBlockType->GetItemType(), descr.type, true);
 }
 
 class TOutputTypeVisitor : public arrow::TypeVisitor

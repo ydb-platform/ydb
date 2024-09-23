@@ -92,8 +92,10 @@ public:
         auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
         if (!internalOp) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "removed tx operator");
+            return;
         }
-        NActors::TLogContextGuard lGuardTx = NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString());
+        NActors::TLogContextGuard lGuardTx =
+            NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())("int_this", (ui64)internalOp.get());
         if (!internalOp->CheckTxInfoForReply(*TxInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
             return;
@@ -143,11 +145,14 @@ private:
                 return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
             }
 
-            auto schema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema()->GetSchema();
-            auto ttlColumn = schema->GetFieldByName(columnName);
-            if (!ttlColumn) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
+            auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
+            auto schema = schemaSnapshot->GetSchema();
+            auto index = schemaSnapshot->GetColumnIdOptional(columnName);
+            if (!index) {
+                return TTxController::TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
             }
+            auto ttlColumn = schemaSnapshot->GetFieldByColumnIdVerified(*index);
 
             const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
             for (ui64 pathId : ttlBody.GetPathIds()) {

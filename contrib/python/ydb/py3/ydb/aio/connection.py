@@ -226,7 +226,7 @@ class Connection:
 
         await asyncio.wait_for(self._channel.channel_ready(), timeout=ready_timeout)
 
-    async def close(self, grace: float = None):
+    async def close(self, grace: float = 30):
         """
         Closes the underlying gRPC channel
         :param: grace: If a grace period is specified, this method wait until all active
@@ -238,11 +238,11 @@ class Connection:
 
         self.closing = True
 
-        if self.calls:
-            await asyncio.wait(self.calls.values(), timeout=grace)
-
         for callback in self._cleanup_callbacks:
             callback(self)
+
+        if self.calls:
+            await asyncio.wait(self.calls.values(), timeout=grace)
 
         await self.destroy()
 

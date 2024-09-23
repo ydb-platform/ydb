@@ -3,7 +3,6 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 
@@ -12,15 +11,14 @@
 
 namespace NKikimr::NEvWrite {
 
-using TEvWrite = TEvColumnShard::TEvWrite;
-using TEvWriteResult = TEvColumnShard::TEvWriteResult;
-
 class IShardsSplitter {
 public:
     using TPtr = std::shared_ptr<IShardsSplitter>;
     using TYdbConclusionStatus = TConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::SCHEME_ERROR>;
 
     class IEvWriteDataAccessor {
+    private:
+        YDB_READONLY(ui64, Size, 0);
     public:
         using TPtr = std::shared_ptr<IEvWriteDataAccessor>;
 
@@ -29,6 +27,11 @@ public:
         }
         virtual std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const = 0;
         virtual TString GetSerializedData() const = 0;
+        IEvWriteDataAccessor(const ui64 size)
+            : Size(size)
+        {
+
+        }
         virtual ~IEvWriteDataAccessor() {}
     };
 
@@ -37,7 +40,8 @@ public:
         using TPtr = std::shared_ptr<IShardInfo>;
         virtual ~IShardInfo() {}
 
-        virtual void Serialize(TEvWrite& evWrite) const = 0;
+        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const = 0;
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const = 0;
         virtual ui64 GetBytes() const = 0;
         virtual ui32 GetRowsCount() const = 0;
         virtual const TString& GetData() const = 0;
@@ -62,11 +66,19 @@ public:
 
     TYdbConclusionStatus SplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
         TableId = schemeEntry.TableId.PathId.LocalPathId;
+        AFL_VERIFY(schemeEntry.ColumnTableInfo);
+        AFL_VERIFY(schemeEntry.ColumnTableInfo->Description.HasSchema());
+        SchemaVersion = schemeEntry.ColumnTableInfo->Description.GetSchema().GetVersion();
+        AFL_VERIFY(SchemaVersion);
         return DoSplitData(schemeEntry, data);
     }
 
     ui64 GetTableId() const {
         return TableId;
+    }
+
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion;
     }
 
     const TFullSplitData& GetSplitData() const {
@@ -80,6 +92,7 @@ private:
     virtual TYdbConclusionStatus DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) = 0;
 
     ui64 TableId = 0;
+    ui64 SchemaVersion = 0;
 protected:
     std::optional<TFullSplitData> FullSplitData;
 };

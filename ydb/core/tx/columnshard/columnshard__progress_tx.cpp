@@ -15,6 +15,7 @@ private:
     std::optional<NOlap::TSnapshot> LastCompletedTx;
     std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
     std::optional<TMonotonic> StartExecution;
+    const TMonotonic ConstructionInstant = TMonotonic::Now();
 
 public:
     TTxProgressTx(TColumnShard* self)
@@ -95,7 +96,8 @@ public:
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
         }
         if (StartExecution) {
-            Self->GetProgressTxController().GetCounters().OnTxProgressDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
+            Self->GetProgressTxController().GetCounters().OnTxExecuteDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
+            Self->GetProgressTxController().GetCounters().OnTxLiveDuration(TxOperator->GetOpType(), TMonotonic::Now() - ConstructionInstant);
         }
         Self->SetupIndexation();
     }

@@ -42,9 +42,10 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool IsAnonymous = false;
     bool IsReplaced = false;
     TMaybe<bool> MonotonicKeys;
-    size_t WriteValidateCount = 0;
+    std::unordered_map<ui32, size_t> WriteValidateCount; // mutationId -> validate count
     TMaybe<TString> Hash;
     TString ColumnGroupSpec;
+    bool RowSpecSortReady = false;
 
     bool Fill(
         const TString& cluster, const TString& table, TExprContext& ctx,

@@ -34,9 +34,12 @@ TConclusionStatus TReadMetadata::Init(
 
     if (LockId) {
         for (auto&& i : CommittedBlobs) {
-            if (auto writeId = i.GetWriteIdOptional()) {
-                auto op = owner->GetOperationsManager().GetOperationVerified(*writeId);
-                AddWriteIdToCheck(*writeId, op->GetLockId());
+            if (!i.IsCommitted()) {
+                if (owner->HasLongTxWrites(i.GetInsertWriteId())) {
+                } else {
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i.GetInsertWriteId());
+                    AddWriteIdToCheck(i.GetInsertWriteId(), op->GetLockId());
+                }
             }
         }
     }
@@ -63,7 +66,7 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     for (auto&& i : indexInfo.GetPrimaryKeyColumns()) {
-        Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnId(i.first)).second);
+        Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnIdVerified(i.first)).second);
     }
     return result;
 }
@@ -119,10 +122,10 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
     }
 }
 
-bool TReadMetadata::IsMyUncommitted(const TWriteId writeId) const {
+bool TReadMetadata::IsMyUncommitted(const TInsertWriteId writeId) const {
     AFL_VERIFY(LockSharingInfo);
     auto it = ConflictedWriteIds.find(writeId);
-    AFL_VERIFY(it != ConflictedWriteIds.end());
+    AFL_VERIFY(it != ConflictedWriteIds.end())("write_id", writeId)("write_ids_count", ConflictedWriteIds.size());
     return it->second.GetLockId() == LockSharingInfo->GetLockId();
 }
 

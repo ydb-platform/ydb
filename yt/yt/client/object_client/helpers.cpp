@@ -21,6 +21,13 @@ bool IsScalarType(EObjectType type)
         type == EObjectType::BooleanNode;
 }
 
+bool IsSequoiaNode(NObjectClient::EObjectType type)
+{
+    return
+        type == EObjectType::SequoiaMapNode ||
+        type == EObjectType::SequoiaLink;
+}
+
 bool IsVersionedType(EObjectType type)
 {
     return
@@ -283,6 +290,13 @@ bool IsUploadTransactionType(EObjectType type)
     return
         type == EObjectType::UploadTransaction ||
         type == EObjectType::UploadNestedTransaction;
+}
+
+bool IsExternalizedTransactionType(EObjectType type)
+{
+    return
+        type == EObjectType::ExternalizedTransaction ||
+        type == EObjectType::ExternalizedNestedTransaction;
 }
 
 bool IsCompositeNodeType(EObjectType type)

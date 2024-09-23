@@ -186,25 +186,31 @@ namespace {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             ++Responses;
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
             } else {
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
             }
         }
 
         void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr ev) {
             ++Responses;
+            auto rec = ev->Get()->Record;
+            if (rec.GetStatus()  != NKikimrProto::OK) {
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB33, VDISKP(Ctx->VCtx, "MultiPut failed"), (Msg, ev->Get()->ToString()));
+                return;
+            }
+
             const auto& items = ev->Get()->Record.GetItems();
             for (const auto& item: items) {
                 if (item.GetStatus() != NKikimrProto::OK) {
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                    STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut item failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()), (Status, NKikimrProto::EReplyStatus_Name(item.GetStatus())), (Error, item.GetErrorReason()));
                     continue;
                 }
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(item.GetBlobID()));
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "MultiPut done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "MultiPut done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
             }
         }
 
@@ -228,6 +234,8 @@ namespace {
 
         void ReadPartsFromDisk() {
             Become(&TThis::StateRead);
+
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "ReadPartsFromDisk"), (Parts, Reader.GetPartsSize()));
 
             if (Reader.GetPartsSize() == 0) {
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to read. PassAway"));
@@ -255,7 +263,8 @@ namespace {
             if (ev->Get()->Tag != READ_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB17, VDISKP(Ctx->VCtx, "TimeoutRead"), (Requests, Reader.GetPartsSize()),  (Responses, Reader.GetResponses()));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB17, VDISKP(Ctx->VCtx, "ReadFromHandoffBatchTimeout"), (Requests, Reader.GetPartsSize()),  (Responses, Reader.GetResponses()));
+            Ctx->MonGroup.ReadFromHandoffBatchTimeout()++;
             SendPartsOnMain();
         }
 
@@ -273,6 +282,8 @@ namespace {
 
         void SendPartsOnMain() {
             Become(&TThis::StateSend);
+
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB29, VDISKP(Ctx->VCtx, "SendPartsOnMain"), (Parts, Reader.GetResult().size()));
 
             if (Reader.GetResult().empty()) {
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB18, VDISKP(Ctx->VCtx, "Nothing to send. PassAway"));
@@ -297,12 +308,14 @@ namespace {
             if (ev->Get()->Tag != SEND_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB19, VDISKP(Ctx->VCtx, "TimeoutSend"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB19, VDISKP(Ctx->VCtx, "SendOnMainBatchTimeout"));
+            Ctx->MonGroup.SendOnMainBatchTimeout()++;
             PassAway();
         }
 
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway"));
             TActorBootstrapped::PassAway();
         }
 

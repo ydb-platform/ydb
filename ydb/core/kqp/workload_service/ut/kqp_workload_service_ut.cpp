@@ -597,8 +597,9 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             return result.GetStatus() == EStatus::GENERIC_ERROR && errorString.Contains("You don't have access permissions for database Root");
         });
 
-        auto createResult = ydb->ExecuteQuery(R"(
+        auto createResult = ydb->ExecuteQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
                 RANK=20
             );
         )", settings);
@@ -614,18 +615,22 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
     }
 
-    TString CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
-        const TString& classifierId = "my_pool_classifier";
+    void CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierId, const TString& userSID, const TString& poolId) {
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=0
             );
             CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
                 RESOURCE_POOL=")" << poolId << R"(",
-                MEMBERNAME=")" << settings.UserSID_ << R"("
+                MEMBERNAME=")" << userSID << R"("
             );
         )");
+    }
 
+    TString CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
+        const TString& classifierId = "my_pool_classifier";
+        CreateSampleResourcePoolClassifier(ydb, classifierId, settings.UserSID_, poolId);
         return classifierId;
     }
 
@@ -650,7 +655,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestCreateResourcePoolClassifier) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
         CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
@@ -660,15 +665,15 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestAlterResourcePoolClassifier) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
         const TString& classifierId = CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
         WaitForFail(ydb, settings, poolId);
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            ALTER RESOURCE POOL CLASSIFIER )" << classifierId << R"( RESET (
-                RESOURCE_POOL
+            ALTER RESOURCE POOL CLASSIFIER )" << classifierId << R"( SET (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"("
             );
         )");
 
@@ -678,7 +683,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestDropResourcePoolClassifier) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
         const TString& classifierId = CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
@@ -694,7 +699,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestDropResourcePool) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
         CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
@@ -710,7 +715,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestResourcePoolClassifierRanks) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
         CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
@@ -720,6 +725,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
                 RANK="1",
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
                 MEMBERNAME=")" << settings.UserSID_ << R"("
             );
         )");
@@ -738,12 +744,49 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestExplicitPoolId) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
         CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
         WaitForFail(ydb, settings, poolId);
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID)));
+    }
+
+    Y_UNIT_TEST(TestMultiGroupClassification) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        auto settings = TQueryRunnerSettings().PoolId("");
+
+        const TString& poolId = "my_pool";
+        const TString& firstSID = "first@user";
+        const TString& secondSID = "second@user";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER first_classifier WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBERNAME=")" << firstSID << R"(",
+                RANK=1
+            );
+            CREATE RESOURCE POOL CLASSIFIER second_classifier WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                MEMBERNAME=")" << secondSID << R"(",
+                RANK=2
+            );
+        )");
+
+        WaitForFail(ydb, settings.GroupSIDs({firstSID}), poolId);
+        WaitForSuccess(ydb, settings.GroupSIDs({secondSID}));
+        WaitForFail(ydb, settings.GroupSIDs({firstSID, secondSID}), poolId);
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            ALTER RESOURCE POOL CLASSIFIER second_classifier SET (
+                RANK=0
+            );
+        )");
+
+        WaitForSuccess(ydb, settings.GroupSIDs({firstSID, secondSID}));
     }
 }
 

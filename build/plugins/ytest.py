@@ -772,6 +772,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.ModuleLang.value,
         df.BinaryPath.stripped,
         df.TestRunnerBin.value,
+        df.DockerImage.value,
     )
 )
 def onadd_pytest_bin(fields, unit, *args):
@@ -831,6 +832,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestClasspathOrigins.value,
         df.TestClasspathDeps.value,
         df.TestJar.value,
+        df.DockerImage.value,
     )
 )
 def onjava_test(fields, unit, *args):
@@ -911,6 +913,7 @@ def onrun(unit, *args):
         df.TestName.filename_without_pkg_ext,
         df.TestedProjectName.path_filename_basename_without_pkg_ext,
         df.BinaryPath.stripped_without_pkg_ext,
+        df.DockerImage.value,
     )
 )
 def onsetup_exectest(fields, unit, *args):
@@ -945,6 +948,68 @@ def onsetup_exectest(fields, unit, *args):
 def onsetup_run_python(unit):
     if unit.get("USE_ARCADIA_PYTHON") == "yes":
         unit.ondepends('contrib/tools/python')
+
+
+@_common.lazy
+def get_linter_configs(unit, config_paths):
+    rel_config_path = _common.rootrel_arc_src(config_paths, unit)
+    arc_config_path = unit.resolve_arc_path(rel_config_path)
+    abs_config_path = unit.resolve(arc_config_path)
+    with open(abs_config_path, 'r') as fd:
+        return list(json.load(fd).values())
+
+
+@df.with_fields(
+    (
+        df.LintName.value,
+        df.TestFiles.py_linter_files,
+        df.LintConfigs.value,
+        df.LintExtraParams.from_macro_args,
+        df.TestName.name_from_macro_args,
+        df.TestedProjectName.unit_name,
+        df.SourceFolderPath.normalized,
+        df.TestEnv.value,
+        df.UseArcadiaPython.value,
+        df.LintFileProcessingTime.from_macro_args,
+        df.Linter.value,
+        df.CustomDependencies.depends_with_linter,
+    )
+)
+def on_add_py_linter_check(fields, unit, *args):
+    if unit.get("TIDY") == "yes":
+        return
+
+    no_lint_value = _common.get_no_lint_value(unit)
+    if no_lint_value in ("none", "none_internal"):
+        return
+
+    unlimited = -1
+    keywords = {
+        "NAME": 1,
+        "LINTER": 1,
+        "DEPENDS": unlimited,
+        "FILES": unlimited,
+        "CONFIGS": unlimited,
+        "GLOBAL_RESOURCES": unlimited,
+        "FILE_PROCESSING_TIME": 1,
+        "EXTRA_PARAMS": unlimited,
+    }
+    _, spec_args = _common.sort_by_keywords(keywords, args)
+
+    global_resources = spec_args.get('GLOBAL_RESOURCES', [])
+    for resource in global_resources:
+        unit.onpeerdir(resource)
+    try:
+        dart_record = create_dart_record(fields, unit, (), spec_args)
+    except df.DartValueError as e:
+        if msg := str(e):
+            unit.message(['WARN', msg])
+        return
+    dart_record[df.ScriptRelPath.KEY] = 'custom_lint'
+
+    data = dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
 
 
 def on_add_linter_check(unit, *args):
@@ -1082,6 +1147,7 @@ def clang_tidy(fields, unit, *args):
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def unittest_py(fields, unit, *args):
@@ -1115,6 +1181,7 @@ def unittest_py(fields, unit, *args):
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def gunittest(fields, unit, *args):
@@ -1149,6 +1216,7 @@ def gunittest(fields, unit, *args):
         df.TestPartition.value,
         df.ModuleLang.value,
         df.BenchmarkOpts.value,
+        df.DockerImage.value,
     )
 )
 def g_benchmark(fields, unit, *args):
@@ -1182,6 +1250,7 @@ def g_benchmark(fields, unit, *args):
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def go_test(fields, unit, *args):
@@ -1215,6 +1284,7 @@ def go_test(fields, unit, *args):
         df.TestData.from_macro_args_and_unit,
         df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
+        df.DockerImage.value,
     )
 )
 def boost_test(fields, unit, *args):
@@ -1250,6 +1320,7 @@ def boost_test(fields, unit, *args):
         df.FuzzDicts.value,
         df.FuzzOpts.value,
         df.Fuzzing.value,
+        df.DockerImage.value,
     )
 )
 def fuzz_test(fields, unit, *args):
@@ -1286,6 +1357,7 @@ def fuzz_test(fields, unit, *args):
         df.TestPartition.value,
         df.ModuleLang.value,
         df.BenchmarkOpts.value,
+        df.DockerImage.value,
     )
 )
 def y_benchmark(fields, unit, *args):
@@ -1350,6 +1422,7 @@ def coverage_extractor(fields, unit, *args):
         df.TestPartition.value,
         df.GoBenchTimeout.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def go_bench(fields, unit, *args):

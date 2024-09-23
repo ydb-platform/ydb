@@ -109,6 +109,7 @@ protected:
 public:
     void Bootstrap() {
         try {
+            StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
                 prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
@@ -188,6 +189,12 @@ protected:
                     true,
                     false
         );
+
+        if (ComputeActorSpan) {
+            ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));
+            ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
+        }
+
         Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {
@@ -1049,8 +1056,14 @@ protected:
                     );
                 }
 
+                TStringBuilder reason = TStringBuilder() << "Task execution timeout ";
+                if (RuntimeSettings.Timeout) {
+                    reason << RuntimeSettings.Timeout->MilliSeconds() << "ms ";
+                }
+                reason << "exceeded, terminating after " << (TInstant::Now() - StartTime).MilliSeconds() << "ms";
+
                 State = NDqProto::COMPUTE_STATE_FAILURE;
-                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue("timeout exceeded")}, true);
+                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue(reason)}, true);
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1389,8 +1402,20 @@ protected:
     }
 
     void PollAsyncInput() {
+        if (!Running) {
+            CA_LOG_T("Skip polling inputs and sources because not running");
+            return;
+        }
+
+        CA_LOG_T("Poll inputs");
+        for (auto& [inputIndex, transform] : InputTransformsMap) {
+            if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+                ContinueExecute(*resume);
+            }
+        }
+
         // Don't produce any input from sources if we're about to save checkpoint.
-        if (!Running || (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
+        if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
             CA_LOG_T("Skip polling sources because of pending checkpoint");
             return;
         }
@@ -1398,13 +1423,6 @@ protected:
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
             if (auto resume =  source.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
-            }
-        }
-
-        CA_LOG_T("Poll inputs");
-        for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
                 ContinueExecute(*resume);
             }
         }
@@ -1928,6 +1946,7 @@ protected:
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
 private:
+    TInstant StartTime;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

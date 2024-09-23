@@ -29,6 +29,7 @@ struct TEvPrivate {
         EvFinishRequestInPool,
         EvResignPoolHandler,
         EvStopPoolHandler,
+        EvStopPoolHandlerResponse,
         EvCancelRequest,
         EvUpdatePoolSubscription,
 
@@ -128,13 +129,15 @@ struct TEvPrivate {
     };
 
     struct TEvPlaceRequestIntoPoolResponse : public NActors::TEventLocal<TEvPlaceRequestIntoPoolResponse, EvPlaceRequestIntoPoolResponse> {
-        TEvPlaceRequestIntoPoolResponse(const TString& database, const TString& poolId)
+        TEvPlaceRequestIntoPoolResponse(const TString& database, const TString& poolId, const TString& sessionId)
             : Database(database)
             , PoolId(poolId)
+            , SessionId(sessionId)
         {}
 
         const TString Database;
         const TString PoolId;
+        const TString SessionId;
     };
 
     struct TEvFinishRequestInPool : public NActors::TEventLocal<TEvFinishRequestInPool, EvFinishRequestInPool> {
@@ -171,6 +174,16 @@ struct TEvPrivate {
         {}
 
         const bool ResetCounters;
+    };
+
+    struct TEvStopPoolHandlerResponse : public NActors::TEventLocal<TEvStopPoolHandlerResponse, EvStopPoolHandlerResponse> {
+        TEvStopPoolHandlerResponse(const TString& database, const TString& poolId)
+            : Database(database)
+            , PoolId(poolId)
+        {}
+
+        const TString Database;
+        const TString PoolId;
     };
 
     struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {

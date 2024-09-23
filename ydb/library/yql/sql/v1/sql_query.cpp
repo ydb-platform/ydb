@@ -220,7 +220,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (rule.HasBlock2()) { // OR REPLACE
                 replaceIfExists = true;
                 Y_DEBUG_ABORT_UNLESS(
-                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) && 
+                    (IS_TOKEN(rule.GetBlock2().GetToken1().GetId(), OR) &&
                      IS_TOKEN(rule.GetBlock2().GetToken2().GetId(), REPLACE))
                 );
             }
@@ -1239,8 +1239,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TDeferredAtom> features;
-            ParseViewOptions(features, node.GetRule_with_table_settings4());
-            ParseViewQuery(features, node.GetRule_select_stmt6());
+            if (node.HasBlock4()) {
+                if (!ParseObjectFeatures(features, node.GetBlock4().GetRule_create_object_features1().GetRule_object_features2())) {
+                    return false;
+                }
+            }
+            if (!ParseViewQuery(features, node.GetRule_select_stmt6())) {
+                return false;
+            }
 
             const TString objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             constexpr const char* TypeId = "VIEW";
@@ -1386,16 +1392,28 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                  return false;
             }
 
+            bool database = false;
+            TVector<TDeferredAtom> tables;
+            if (node.HasBlock7()) {
+                 database = node.GetBlock7().GetRule_database_or_table_list1().has_alt_database_or_table_list1();
+                 if (node.GetBlock7().GetRule_database_or_table_list1().has_alt_database_or_table_list2()) {
+                     if (!ParseBackupCollectionTables(tables, node.GetBlock7().GetRule_database_or_table_list1().alt_database_or_table_list2().rule_table_list1())) {
+                         return false;
+                     }
+                 }
+            }
+
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
-                                 BuildCreateObjectOperation(Ctx.Pos(),
-                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                            typeId,
-                                                            false,
-                                                            false,
-                                                            std::move(kv),
-                                                            context));
+                                 BuildCreateBackupCollection(Ctx.Pos(),
+                                                             BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                             TCreateBackupCollectionParameters {
+                                                                .Settings = std::move(kv),
+                                                                .Database = database,
+                                                                .Tables = tables,
+                                                                .ExistingOk = false,
+                                                             },
+                                                             context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore49: {
@@ -1413,19 +1431,53 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TDeferredAtom> kv;
             std::set<TString> toReset;
-            if (!ParseBackupCollectionSettings(kv, toReset, node.GetRule_alter_backup_collection_actions3())) {
-                return false;
+
+            bool addDatabase = false;
+            bool dropDatabase = false;
+            TVector<TDeferredAtom> addTables;
+            TVector<TDeferredAtom> removeTables;
+
+            switch (node.GetBlock3().Alt_case()) {
+            case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
+                if (!ParseBackupCollectionSettings(kv, toReset, node.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1())) {
+                    return false;
+                }
+                break;
+            }
+            case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
+                if (!ParseBackupCollectionEntries(
+                        addDatabase,
+                        dropDatabase,
+                        addTables,
+                        removeTables,
+                        node.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1()))
+                {
+                    return false;
+                }
+                break;
+            }
+            case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET: {} // do nothing
             }
 
+            auto database = addDatabase ?
+                            TAlterBackupCollectionParameters::EDatabase::Add :
+                            dropDatabase ?
+                            TAlterBackupCollectionParameters::EDatabase::Drop :
+                            TAlterBackupCollectionParameters::EDatabase::Unchanged;
+
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
-                                 BuildAlterObjectOperation(Ctx.Pos(),
-                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                           typeId,
-                                                           std::move(kv),
-                                                           std::move(toReset),
-                                                           context));
+                                 BuildAlterBackupCollection(Ctx.Pos(),
+                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            TAlterBackupCollectionParameters {
+                                                                .Settings = std::move(kv),
+                                                                .SettingsToReset = std::move(toReset),
+                                                                .Database = database,
+                                                                .TablesToAdd = addTables,
+                                                                .TablesToDrop = removeTables,
+                                                                .MissingOk = false,
+                                                            },
+                                                            context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore50: {
@@ -1442,14 +1494,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-            constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
-                                 BuildDropObjectOperation(Ctx.Pos(),
-                                                          BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                          typeId,
-                                                          false,
-                                                          {},
-                                                          context));
+                                 BuildDropBackupCollection(Ctx.Pos(),
+                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                           TDropBackupCollectionParameters {
+                                                               .MissingOk = false,
+                                                           },
+                                                           context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore51: {
@@ -1465,7 +1516,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TVector<TString> columns;
             if (analyzeTable.HasBlock2()) {
-                auto columnsNode = 
+                auto columnsNode =
                     analyzeTable.GetBlock2().GetRule_column_list2();
 
                 if (columnsNode.HasRule_column_name1()) {
@@ -1546,6 +1597,62 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, {}, context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore55: {
+            // backup_stmt: BACKUP object_ref (INCREMENTAL)?;
+            auto& node = core.GetAlt_sql_stmt_core55().GetRule_backup_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref2().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref2().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            bool incremental = node.HasBlock3();
+
+            const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks,
+                                 BuildBackup(
+                                     Ctx.Pos(),
+                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TBackupParameters{
+                                         .Incremental = incremental,
+                                     },
+                                     context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore56: {
+            // restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
+            auto& node = core.GetAlt_sql_stmt_core56().GetRule_restore_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref2().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref2().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            TString at;
+            if (node.HasBlock3()) {
+                const TString stringValue = Ctx.Token(node.GetBlock3().GetToken2());
+                const auto unescaped = StringContent(Ctx, Ctx.Pos(), stringValue);
+                if (!unescaped) {
+                    return false;
+                }
+                at = unescaped->Content;
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks,
+                                 BuildRestore(
+                                     Ctx.Pos(),
+                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TRestoreParameters{
+                                         .At = at,
+                                     },
+                                     context));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:
@@ -2821,6 +2928,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansiimplicitcrossjoin") {
             Ctx.AnsiImplicitCrossJoin = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiImplicitCrossJoin");
+        } else if (normalizedPragma == "distinctoverwindow") {
+            Ctx.DistinctOverWindow = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DistinctOverWindow");
+        } else if (normalizedPragma == "disabledistinctoverwindow") {
+            Ctx.DistinctOverWindow = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverWindow");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

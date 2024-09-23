@@ -5,6 +5,7 @@
 #include <util/generic/size_literals.h>
 #include <util/string/split.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 
@@ -82,9 +83,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
-    REGISTER_SETTING(*this, OptCardinalityHints);
-    REGISTER_SETTING(*this, OptJoinAlgoHints);
-    REGISTER_SETTING(*this, OptJoinOrderHints);
+    REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
 

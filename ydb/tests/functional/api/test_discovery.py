@@ -15,6 +15,47 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 
+class TestDiscoveryExtEndpoint(object):
+    @classmethod
+    def setup_class(cls):
+        conf = KikimrConfigGenerator()
+        cls.ext_port = conf.port_allocator.get_node_port_allocator(0).ext_port
+        conf.clone_grpc_as_ext_endpoint(cls.ext_port)
+        cls.cluster = kikimr_cluster_factory(
+            configurator=conf
+        )
+        cls.cluster.start()
+        cls.database_name = '/Root/database'
+        cls.logger = logger.getChild(cls.__name__)
+        cls.cluster.create_database(
+            cls.database_name,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
+        cls.cluster.register_and_start_slots(cls.database_name, count=2)
+        cls.cluster.wait_tenant_up(cls.database_name)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, 'cluster'):
+            cls.cluster.stop()
+
+    def test_scenario(self):
+        ext_port = TestDiscoveryExtEndpoint.ext_port
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (self.cluster.nodes[1].host, ext_port), self.database_name)
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        driver = ydb.Driver(driver_config)
+        driver.wait(timeout=10)
+
+        endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
+
+        for slot in self.cluster.slots.values():
+            assert_that(slot.grpc_port in endpoint_ports)
+            assert_that(slot.grpc_port != ext_port)
+
+
 @six.add_metaclass(abc.ABCMeta)
 class AbstractTestDiscoveryFaultInjection(object):
     @classmethod

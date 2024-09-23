@@ -50,6 +50,8 @@ struct TEnvironmentSetup {
         const bool UseFakeConfigDispatcher = false;
         const float SlowDiskThreshold = 2;
         const float VDiskPredictedDelayMultiplier = 1;
+        const bool UseActorSystemTimeInBSQueue = true;
+        const ui32 MaxNumOfSlowDisks = 2;
     };
 
     const TSettings Settings;
@@ -365,7 +367,7 @@ struct TEnvironmentSetup {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
-                config->UseActorSystemTimeInBSQueue = true;
+                config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }
@@ -402,6 +404,8 @@ struct TEnvironmentSetup {
 
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                
 #undef ADD_ICB_CONTROL
 
                 {
@@ -814,8 +818,14 @@ struct TEnvironmentSetup {
     }
 
     void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,
-            NKikimrBlobStorage::EDecommitStatus decommitStatus) {
+            NKikimrBlobStorage::EDecommitStatus decommitStatus, bool force = false) {
         NKikimrBlobStorage::TConfigRequest request;
+        if (force) {
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreGroupSanityChecks(true);
+        }
         auto *cmd = request.AddCommand();
         auto *ds = cmd->MutableUpdateDriveStatus();
         ds->MutableHostKey()->SetNodeId(nodeId);

@@ -289,6 +289,7 @@ public:
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
+            tx->AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
                 << ". " << tx->ToString();
@@ -302,6 +303,7 @@ public:
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
+                tx->AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
                     if (!tx->PoolId.empty()) {

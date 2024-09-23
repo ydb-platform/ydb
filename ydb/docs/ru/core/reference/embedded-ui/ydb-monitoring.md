@@ -6,7 +6,7 @@
 
 Страница доступна по адресу:
 
-```
+```text
 http://<ендпоинт>:8765/monitoring/cluster
 ```
 
@@ -70,7 +70,7 @@ http://<ендпоинт>:8765/monitoring/cluster
 
 Страница доступна по адресу:
 
-```
+```text
 http://<ендпоинт>:8765/monitoring/node/<node-id>/
 ```
 
@@ -141,7 +141,7 @@ http://<ендпоинт>:8765/monitoring/node/<node-id>/
 
 ## Страница тенанта {#tenant_page}
 
-```
+```text
 http://<ендпоинт>:8765/monitoring/tenant/healthcheck?name=<tenant-path>
 ```
 

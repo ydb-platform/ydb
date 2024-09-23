@@ -6,7 +6,7 @@
 
 {% endif %}
 
-```sql
+```yql
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
@@ -20,6 +20,6 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 
 Переименование может использоваться для перемещения таблицы из одной директории внутри БД в другую, например:
 
-``` sql
+```yql
 ALTER TABLE `table1` RENAME TO `/backup/table1`;
 ```

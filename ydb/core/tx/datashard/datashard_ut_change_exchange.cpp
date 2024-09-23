@@ -2,10 +2,11 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
@@ -837,7 +838,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableTopicMessageMeta(true)
                 .SetEnableChangefeedInitialScan(true)
-                .SetEnableUuidAsPrimaryKey(true);
+                .SetEnableUuidAsPrimaryKey(true)
+                .SetEnableTablePgTypes(true)
+                .SetEnablePgSyntax(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -1247,6 +1250,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // get records
             {
+                WaitForDataRecords(client, shardIt);
+
                 auto res = client.GetRecords(shardIt).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(res.GetResult().records().size(), records.size());
@@ -1266,6 +1271,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 auto res = client.DeregisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
+        }
+
+        static void WaitForDataRecords(TDataStreamsClient& client, const TString& shardIt) {
+            int n = 0;
+            for (; n < 100; ++n) {
+                auto res = client.GetRecords(shardIt).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+                if (res.GetResult().records().size()) {
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_ASSERT_VALUES_UNEQUAL(n, 100);
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
@@ -1956,6 +1974,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"datetime64_value", "Datetime64", false, false},
                 {"timestamp64_value", "Timestamp64", false, false},
                 {"interval64_value", "Interval64", false, false},
+                {"pgint2_value", "pgint2", false, false},
+                {"pgint4_value", "pgint4", false, false},
+                {"pgint8_value", "pgint8", false, false},
+                {"pgfloat4_value", "pgfloat4", false, false},
+                {"pgfloat8_value", "pgfloat8", false, false},
+                {"pgbytea_value", "pgbytea", false, false},
+                {"pgtext_value", "pgtext", false, false},
             });
         TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
             R"(UPSERT INTO `/Root/Table` (key, int32_value) VALUES (1, -100500);)",
@@ -1981,6 +2006,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"(UPSERT INTO `/Root/Table` (key, datetime64_value) VALUES (21, CAST(1597235696 AS Datetime64));)",
             R"(UPSERT INTO `/Root/Table` (key, timestamp64_value) VALUES (22, CAST(1597235696123456 AS Timestamp64));)",
             R"(UPSERT INTO `/Root/Table` (key, interval64_value) VALUES (23, CAST(-300500 AS Interval64));)",
+            R"(UPSERT INTO `/Root/Table` (key, pgint2_value) VALUES (24, -42ps);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgint4_value) VALUES (25, -420p);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgint8_value) VALUES (26, -4200pb);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgfloat4_value) VALUES (27, 3.1415pf4);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgfloat8_value) VALUES (28, 2.718pf8);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgbytea_value) VALUES (29, 'lorem "ipsum"'pb);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgtext_value) VALUES (30, 'lorem "ipsum"'p);)",
         }, {
             R"({"key":[1],"update":{"int32_value":-100500}})",
             R"({"key":[2],"update":{"uint32_value":100500}})",
@@ -2005,6 +2037,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[21],"update":{"datetime64_value":1597235696}})",
             R"({"key":[22],"update":{"timestamp64_value":1597235696123456}})",
             R"({"key":[23],"update":{"interval64_value":-300500}})",
+            R"({"key":[24],"update":{"pgint2_value":"-42"}})",
+            R"({"key":[25],"update":{"pgint4_value":"-420"}})",
+            R"({"key":[26],"update":{"pgint8_value":"-4200"}})",
+            R"({"key":[27],"update":{"pgfloat4_value":"3.1415"}})",
+            R"({"key":[28],"update":{"pgfloat8_value":"2.718"}})",
+            R"({"key":[29],"update":{"pgbytea_value":"\\x6c6f72656d2022697073756d22"}})",
+            R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
         });
     }
 
@@ -2065,7 +2104,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return result;
     }
 
-    void WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
+    TVector<NJson::TJsonValue> WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
         while (true) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
             for (ui32 i = 0; i < std::min(records.size(), expected.size()); ++i) {
@@ -2075,7 +2114,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             if (records.size() >= expected.size()) {
                 UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expected.size(),
                     "Unexpected record: " << records.at(expected.size()).second);
-                break;
+                TVector<NJson::TJsonValue> values;
+                for (const auto& pr : records) {
+                    bool ok = NJson::ReadJsonTree(pr.second, &values.emplace_back());
+                    Y_ABORT_UNLESS(ok);
+                }
+                return values;
             }
 
             SimulateSleep(server, TDuration::Seconds(1));
@@ -3100,6 +3144,63 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(InitialScanEnqueuesZeroRecords) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetChangesQueueItemsLimit(2)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30),
+            (4, 40);
+        )");
+
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime, [&](auto& ev) {
+            ev->Get()->Record.MutableLimits()->SetBatchMaxRows(1);
+            return true;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        runtime.WaitFor("Scan request", [&]{ return blockScanRequest.size(); });
+        runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            ev->Get()->Record.MutableLimits()->SetBatchMaxRows(1);
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )");
+
+        blockScanRequest.Unblock().Stop();
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":100},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":200},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"update":{"value":300},"key":[3]})",
+            R"({"update":{"value":40},"key":[4]})",
+        });
+    }
+
     Y_UNIT_TEST(InitialScanRacyProgressAndDrop) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -3777,6 +3878,141 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
         });
+    }
+
+    Y_UNIT_TEST(ResolvedTimestampForDisplacedUpsert) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        SetSplitMergePartCountLimit(&runtime, -1);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithVirtualTimestamps(WithResolvedTimestamps(
+                TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+
+        Cerr << "... prepare" << Endl;
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+        });
+
+        KqpSimpleExec(runtime, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);
+            )");
+
+        auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1],"ts":"***"})",
+            R"({"resolved":"***"})",
+        });
+
+        // Take the final step
+        ui64 lastStep = records.back()["resolved"][0].GetUInteger();
+        Cerr << "... last heartbeat at " << lastStep << Endl;
+
+        const auto tableId = ResolveTableId(server, edgeActor, "/Root/Table");
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+        ui64 snapshotStep = lastStep + 3000 - 1;
+        ForwardToTablet(runtime, coordinator, edgeActor, new TEvTxProxy::TEvRequirePlanSteps(coordinator, snapshotStep));
+
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockedGranularUpdates(runtime,
+            [&](auto& ev) {
+                return ev->Get()->Record.GetLatestStep() > snapshotStep;
+            });
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> blockedUpdates(runtime,
+            [&](auto& ev) {
+                return ev->Get()->Record.GetTimeBarrier() > snapshotStep;
+            });
+
+        Cerr << "... performing a read from snapshot just before the next heartbeat" << Endl;
+        {
+            auto req = std::make_unique<TEvDataShard::TEvRead>();
+            {
+                auto& record = req->Record;
+                record.SetReadId(1);
+                record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+                record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+                record.AddColumns(1);
+                record.AddColumns(2);
+                record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                ui32 key = 1;
+                TVector<TCell> keys;
+                keys.push_back(TCell::Make(key));
+                req->Keys.push_back(TSerializedCellVec(TSerializedCellVec::Serialize(keys)));
+                record.MutableSnapshot()->SetStep(snapshotStep);
+                record.MutableSnapshot()->SetTxId(Max<ui64>());
+            }
+            ForwardToTablet(runtime, shards.at(0), edgeActor, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(edgeActor);
+            auto* res = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+            Cerr << "... read finished" << Endl;
+        }
+        for (int i = 0; i < 10; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        Cerr << "... starting upsert 1 (expected to displace)" << Endl;
+        auto upsert1 = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);
+            )");
+        for (int i = 0; i < 10; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        Cerr << "... starting upsert 2 (expected to displace)" << Endl;
+        auto upsert2 = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);
+            )");
+        for (int i = 0; i < 10; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        Cerr << "... unblocking updates" << Endl;
+        blockedGranularUpdates.Unblock().Stop();
+        blockedUpdates.Unblock().Stop();
+        for (int i = 0; i < 10; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        Cerr << "... checking the update is logged before the new resolved timestamp" << Endl;
+        records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1],"ts":"***"})",
+            R"({"resolved":"***"})",
+            R"({"update":{"value":20},"key":[2],"ts":"***"})",
+            R"({"update":{"value":30},"key":[3],"ts":"***"})",
+            R"({"resolved":"***"})",
+        });
+
+        TRowVersion resolved(0, 0);
+        for (auto& record : records) {
+            if (record.Has("resolved")) {
+                resolved.Step = record["resolved"][0].GetUInteger();
+                resolved.TxId = record["resolved"][1].GetUInteger();
+            }
+            if (record.Has("ts")) {
+                TRowVersion ts(
+                    record["ts"][0].GetUInteger(),
+                    record["ts"][1].GetUInteger());
+                UNIT_ASSERT_C(resolved < ts,
+                    "Record with ts " << ts << " after resolved " << resolved);
+            }
+        }
     }
 
 } // Cdc

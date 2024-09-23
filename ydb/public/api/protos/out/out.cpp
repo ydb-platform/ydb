@@ -42,3 +42,7 @@ Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Similarity, stream, value)
 Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::VectorType, stream, value) {
     stream << Ydb::Table::VectorIndexSettings::VectorType_Name(value);
 }
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::IndexBuildState_State, stream, value) {
+    stream << IndexBuildState_State_Name(value);
+}

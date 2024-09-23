@@ -184,7 +184,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         }
         phyColumn.SetNotNull(column->NotNull);
         if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-            phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetTypeDesc()));
+            phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetPgTypeDesc()));
         }
     }
 }
@@ -578,20 +578,22 @@ public:
             }
 
             THashMap<TString, int> columnOrder;
+            TColumnOrder order;
             columnOrder.reserve(kikimrProto.GetStruct().MemberSize());
             if (!txResult.GetColumnHints().empty()) {
                 YQL_ENSURE(txResult.GetColumnHints().size() == (int)kikimrProto.GetStruct().MemberSize());
                 for (int i = 0; i < txResult.GetColumnHints().size(); i++) {
                     const auto& hint = txResult.GetColumnHints().at(i);
-                    columnOrder[TString(hint)] = i;
+                    columnOrder[order.AddColumn(TString(hint))] = i;
                 }
             }
 
             int id = 0;
             for (const auto& column : kikimrProto.GetStruct().GetMember()) {
-                int bindingColumnId = columnOrder.count(column.GetName()) ? columnOrder.at(column.GetName()) : id++;
+                auto it = columnOrder.find(column.GetName());
+                int bindingColumnId = it != columnOrder.end() ? it->second : id++;
                 auto& columnMeta = resultMetaColumns->at(bindingColumnId);
-                columnMeta.Setname(column.GetName());
+                columnMeta.Setname(it != columnOrder.end() ? order.at(it->second).LogicalName : column.GetName());
                 ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
             }
         }
@@ -1050,7 +1052,7 @@ private:
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType, maxTasksPerStage);
+            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType, maxTasksPerStage, ctx);
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
         }
@@ -1077,7 +1079,7 @@ private:
 
                 if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
                     auto& typeInfo = *keyColumnProto->MutableTypeInfo();
-                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
+                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetPgTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
                 }
             }
@@ -1094,7 +1096,7 @@ private:
 
                 if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
                     auto& typeInfo = *columnProto->MutableTypeInfo();
-                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
+                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetPgTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
                 }
             }

@@ -402,7 +402,7 @@ namespace NKikimr {
                     NWilson::TTraceId traceId)
                 : Buffer(std::move(buffer))
                 , BlobId(blobId)
-                , HullStatus({NKikimrProto::UNKNOWN, 0, false})
+                , HullStatus({NKikimrProto::UNKNOWN, "", false})
                 , TraceId(std::move(traceId))
             {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -592,7 +592,7 @@ namespace NKikimr {
                         LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: ingress mismatch;"
                                 << " id# " << blobId
                                 << " Marker# BSVS07");
-                        info.HullStatus = {NKikimrProto::ERROR, 0, false};
+                        info.HullStatus = {NKikimrProto::ERROR, "", false};
                     } else {
                         info.Ingress = *ingressOpt;
                     }
@@ -716,7 +716,7 @@ namespace NKikimr {
                 info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinREALHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
-                info.HullStatus = {NKikimrProto::ERROR, 0, false};
+                info.HullStatus = {NKikimrProto::ERROR, "", false};
                 ReplyError({NKikimrProto::ERROR, ex.what(), 0, false}, ev, ctx, now);
                 return;
             }
@@ -1850,7 +1850,7 @@ namespace NKikimr {
             // check status
             if (ev->Get()->Status == NKikimrProto::OK) {
                 ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
-                Y_ABORT_UNLESS(MinREALHugeBlobInBytes); 
+                Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                     // send drop donor cmd to NodeWarden
@@ -2426,7 +2426,7 @@ namespace NKikimr {
                 TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(), nullptr, 0));
             }
         }
-        
+
         void PassAway() override {
             Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(
                 SelfId()
@@ -2552,6 +2552,10 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
+            if (VCtx->GroupId.GetRawId() == 0) {
+                // don't run balancing for the static group
+                return;
+            }
             if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }

@@ -525,6 +525,10 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& 
         request.set_include_partition_stats(true);
     }
 
+    if (settings.WithSetVal_) {
+        request.set_include_set_val(true);
+    }
+
     auto promise = NewPromise<TDescribeTableResult>();
 
     auto extractor = [promise, settings]

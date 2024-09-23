@@ -98,19 +98,33 @@ private:
     std::optional<TKeyBound> To_;
 };
 
+struct TSequenceDescription {
+    struct TSetVal {
+        int64_t NextValue;
+        bool NextUsed;
+    };
+    std::optional<TSetVal> SetVal;
+};
+
 struct TTableColumn {
     std::string Name;
     TType Type;
     std::string Family;
     std::optional<bool> NotNull;
+    std::optional<TSequenceDescription> SequenceDescription;
 
     TTableColumn() = default;
 
-    TTableColumn(std::string name, TType type, std::string family = std::string(), std::optional<bool> notNull = std::nullopt)
+    TTableColumn(std::string name,
+                 TType type,
+                 std::string family = std::string(),
+                 std::optional<bool> notNull = std::nullopt,
+                 std::optional<TSequenceDescription> sequenceDescription = std::nullopt)
         : Name(std::move(name))
         , Type(std::move(type))
         , Family(std::move(family))
         , NotNull(std::move(notNull))
+        , SequenceDescription(std::move(sequenceDescription))
     { }
 
     // Conversion from TColumn for API compatibility
@@ -634,7 +648,7 @@ private:
     TTableDescription();
     explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
-    void AddColumn(const std::string& name, const Ydb::Type& type, const std::string& family, std::optional<bool> notNull);
+    void AddColumn(const std::string& name, const Ydb::Type& type, const std::string& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription);
     void SetPrimaryKeyColumns(const std::vector<std::string>& primaryKeyColumns);
 
     // common
@@ -852,6 +866,7 @@ public:
     TTableBuilder& AddNonNullableColumn(const std::string& name, const TPgType& type, const std::string& family = std::string());
     TTableBuilder& SetPrimaryKeyColumns(const std::vector<std::string>& primaryKeyColumns);
     TTableBuilder& SetPrimaryKeyColumn(const std::string& primaryKeyColumn);
+    TTableBuilder& AddSerialColumn(const std::string& name, const EPrimitiveType& type, TSequenceDescription sequenceDescription, const std::string& family = std::string());
 
     // common
     TTableBuilder& AddSecondaryIndex(const TIndexDescription& indexDescription);
@@ -1627,6 +1642,7 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithKeyShardBoundary, false);
     FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
+    FLUENT_SETTING_DEFAULT(bool, WithSetVal, false);
 };
 
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {

@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
-import os
-import sys
+import argparse
 import json
-import subprocess
+import os
 import requests
+import subprocess
+import sys
 
-def get_diff(file_path):
-    # Get the pull request information from the environment variables
-    event_path = os.getenv('GITHUB_EVENT_PATH')
-    with open(event_path, 'r') as f:
-        event = json.load(f)
-
-    base_sha = event['pull_request']['base']['sha']
-    head_sha = event['pull_request']['head']['sha']
+def get_diff(base_sha, head_sha, file_path):
     print(f"base_sha: {base_sha}")
     print(f"head_sha: {head_sha}")
     print(f"file_path: {file_path}")
@@ -23,14 +17,12 @@ def get_diff(file_path):
         capture_output=True,
         text=True
     )
-
     if result.returncode != 0:
         raise RuntimeError(f"Error running git diff: {result.stderr}")
-    
     return result.stdout
 
-def extract_diff_lines(file_path):
-    diff = get_diff(file_path)
+def extract_diff_lines(base_sha, head_sha, file_path):
+    diff = get_diff(base_sha, head_sha, file_path)
     added_lines = []
     removed_lines = []
     for line in diff.splitlines():
@@ -44,18 +36,19 @@ def extract_diff_lines(file_path):
     print("\n".join(removed_lines))
     return added_lines, removed_lines
 
-def main(file_name):
-    added_lines, removed_lines = extract_diff_lines(file_name)
+def main(base_sha, head_sha, file_path):
+    added_lines, removed_lines = extract_diff_lines(base_sha, head_sha, file_path)
     if added_lines or removed_lines:
-        print(f"file {file_name} changed")
+        print(f"file {file_path} changed")
     else:
-        print(f"file {file_name} not changed")
+        print(f"file {file_path} not changed")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-
-        print("Usage: python get_diff.py <filename>")
-        sys.exit(1)
-
-    filename = sys.argv[1]
-    main(filename)
+    parser = argparse.ArgumentParser(
+        description="Returns added and removed lines for file compared by git diff in two commit sha's")
+    parser.add_argument('--base_sha', type=str, required= True)
+    parser.add_argument('--head_sha', type=str, required= True)
+    parser.add_argument('--file_path', type=str, required= True)
+    args = parser.parse_args()
+    
+    main(args.base_sha, args.head_sha, args.file_path)

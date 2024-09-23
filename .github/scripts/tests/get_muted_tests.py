@@ -251,7 +251,7 @@ def mute_applier(args):
             test['is_muted'] = int(mute_check(testsuite, testcase))
                 
         upload_muted_tests(all_tests)
-    elif args.mode == 'get_mute_details':
+    elif args.mode == 'get_mute_diff':
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
@@ -265,7 +265,7 @@ def mute_applier(args):
         removed_lines_file = os.path.join(output_path, '2_removed_mute_lines.txt')
         removed_lines_file_muted = os.path.join(output_path, '2_unmuted_tests.txt')
 
-        added_texts, removed_texts = extract_diff_lines(muted_ya_path)
+        added_texts, removed_texts = extract_diff_lines(args.base_sha, args.head_sha, muted_ya_path)
         write_to_file('\n'.join(added_texts), added_lines_file)
         write_to_file('\n'.join(removed_texts), removed_lines_file)
         
@@ -329,9 +329,14 @@ if __name__ == "__main__":
         default='main',
         help='branch for getting all tests')
     
-    get_mute_details_parser = subparsers.add_parser('get_mute_details',
+    get_mute_details_parser = subparsers.add_parser('get_mute_diff',
         help='apply mute rules for all tests in main extended by new tests from pr and collect new muted and unmuted')
-
+    get_mute_details_parser.add_argument('--base_sha', 
+        required= True, 
+        help='Base sha of PR')
+    get_mute_details_parser.add_argument('--head_sha', 
+        required= True, 
+        help='Head sha of PR')
     get_mute_details_parser.add_argument('--branch', 
         required= True,
         help='pass branch to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')

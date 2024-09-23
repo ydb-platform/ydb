@@ -8,7 +8,7 @@ import re
 import requests
 import sys
 import ydb
-from mute_utils import mute_target, pattern_to_re
+from mute_utils import pattern_to_re
 from get_file_diff import extract_diff_lines
 
 dir = os.path.dirname(__file__)
@@ -187,10 +187,7 @@ def upload_muted_tests(tests):
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
-        
+
         # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
@@ -230,20 +227,13 @@ def mute_applier(args):
         os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
-    if args.job_id and args.branch:
-        all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch)
-    else:
-        all_tests= get_all_tests(path=all_tests_file,branch=args.branch)
 
-    if all_tests == 1:
-        return 1
     #all muted
     mute_check = YaMuteCheck()
     mute_check.load(muted_ya_path)
-    muted_tests = []
-    print("All muted tests captured")
-
+    
     if args.mode == 'upload_muted_tests':
+        all_tests= get_all_tests(path=all_tests_file,branch=args.branch)
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
@@ -252,6 +242,8 @@ def mute_applier(args):
                 
         upload_muted_tests(all_tests)
     elif args.mode == 'get_mute_diff':
+        all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch)
+        muted_tests = []
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])

@@ -82,6 +82,12 @@ namespace NKqp {
         return ruleName;
     }
 
+    void TTestHelper::StartActualization(const TString& tableName) {
+        auto alterQuery = TStringBuilder() << "ALTER OBJECT `" << tableName << "` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     void TTestHelper::SetTiering(const TString& tableName, const TString& ruleName) {
         auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET (TIERING = '" << ruleName << "')";
         auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();

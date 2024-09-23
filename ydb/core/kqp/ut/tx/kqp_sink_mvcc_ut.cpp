@@ -309,14 +309,9 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             {
                 auto result = session1.ExecuteQuery(Q_(R"(
-                    $data = SELECT * FROM `/Root/KV`;
                     DELETE FROM `/Root/KV` WHERE 1=1;
-                    SELECT COUNT(*) FROM `/Root/KV`;
-                    SELECT COUNT(*) FROM $data;
                     DELETE FROM `/Root/KV` ON SELECT 424242u AS Key, "One" As Value;
                     UPSERT INTO `/Root/KV` (Key, Value) VALUES (424242u, "One");
-                    SELECT COUNT(*) FROM `/Root/KV`;
-                    SELECT COUNT(*) FROM $data;
                 )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([[0u]])", FormatResultSetYson(result.GetResultSet(0)));

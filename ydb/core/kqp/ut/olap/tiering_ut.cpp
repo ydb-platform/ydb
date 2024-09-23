@@ -53,6 +53,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         testHelper.SetTiering("/Root/olapStore/olapTable", tieringRule);
+        testHelper.StartActualization("/Root/olapStore");
         csController->WaitActualization(TDuration::Seconds(5));
 
         {

@@ -76,12 +76,12 @@ GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
 CREATE RESOURCE POOL CLASSIFIER olap_classifier
 WITH (
     RESOURCE_POOL = 'olap',
-    MEMBERNAME = 'all-users@well-known'
+    MEMBER_NAME = 'all-users@well-known'
 );
 ```
 
 *RESOURCE_POOL* - имя пула ресурсов в который будет отправлен запрос, удовлетворяющий требованиям заданным в классификаторе пула ресурсов
-*MEMBERNAME* - группа пользователей или пользователь, которые будут отправлены в *RESOURCE_POOL*
+*MEMBER_NAME* - группа пользователей или пользователь, которые будут отправлены в *RESOURCE_POOL*
 
 ## Управление ACL классификатора пула ресурсов
 
@@ -99,13 +99,13 @@ GRANT ALL ON `/my_db` TO user1;
 CREATE RESOURCE POOL CLASSIFIER olap1_classifier
 WITH (
     RESOURCE_POOL = 'olap1',
-    MEMBERNAME = 'user1@domain'
+    MEMBER_NAME = 'user1@domain'
 );
 
 CREATE RESOURCE POOL CLASSIFIER olap2_classifier
 WITH (
     RESOURCE_POOL = 'olap2',
-    MEMBERNAME = 'user1@domain'
+    MEMBER_NAME = 'user1@domain'
 );
 ```
 

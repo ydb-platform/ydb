@@ -28,7 +28,7 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 CREATE RESOURCE POOL CLASSIFIER olap_classifier WITH (
     RANK=1000,
     RESOURCE_POOL="olap",
-    MEMBERNAME="user1@domain"
+    MEMBER_NAME="user1@domain"
 )
 ```
 

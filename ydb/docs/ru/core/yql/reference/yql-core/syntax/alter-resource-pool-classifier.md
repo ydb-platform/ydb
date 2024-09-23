@@ -18,7 +18,7 @@ ALTER RESOURCE POOL CLASSIFIER <name> SET (<key> = <value>);
 Например, такая команда изменит пользователя для которого применяется правило:
 
 ```yql
-ALTER RESOURCE POOL CLASSIFIER olap_classifier SET (MEMBERNAME = "user2@domain");
+ALTER RESOURCE POOL CLASSIFIER olap_classifier SET (MEMBER_NAME = "user2@domain");
 ```
 
 ## Сброс параметров
@@ -31,10 +31,10 @@ ALTER RESOURCE POOL CLASSIFIER <name> RESET (<key>);
 
 `<key>` — имя параметра.
 
-Например, такая команда сбросит настройки `MEMBERNAME`:
+Например, такая команда сбросит настройки `MEMBER_NAME`:
 
 ```yql
-ALTER RESOURCE POOL CLASSIFIER olap_classifier RESET (MEMBERNAME);
+ALTER RESOURCE POOL CLASSIFIER olap_classifier RESET (MEMBER_NAME);
 ```
 
 ## Разрешения

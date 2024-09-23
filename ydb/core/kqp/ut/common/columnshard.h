@@ -87,6 +87,7 @@ public:
     void CreateTier(const TString& tierName);
     TString CreateTieringRule(const TString& tierName, const TString& columnName);
     void SetTiering(const TString& tableName, const TString& ruleName);
+    void StartActualization(const TString& tableName);
     void ResetTiering(const TString& tableName);
     void BulkUpsert(
         const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);

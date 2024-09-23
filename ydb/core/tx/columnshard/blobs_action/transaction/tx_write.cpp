@@ -23,7 +23,11 @@ bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     auto userData = batch.BuildInsertionUserData(*Self);
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    NOlap::TCommittedData commitData(userData, Self->GetLastPlannedSnapshot(), Self->Generation(), writeId);
+    ui64 mediatorStep = Self->MediatorTimeCastEntry->GetFrozenStep();
+    if (!mediatorStep) {
+        mediatorStep = Self->GetLastPlannedSnapshot().GetPlanStep();
+    }
+    NOlap::TCommittedData commitData(userData, NOlap::TSnapshot::MaxForPlanStep(mediatorStep), Self->Generation(), writeId);
     if (Self->TablesManager.HasTable(userData->GetPathId())) {
         Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
     }

@@ -95,16 +95,18 @@ struct TEvPrivate {
     };
 
     struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, EvFetchDatabaseResponse> {
-        TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, NYql::TIssues issues)
+        TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, TPathId pathId, NYql::TIssues issues)
             : Status(status)
             , Database(database)
             , Serverless(serverless)
+            , PathId(pathId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
         const TString Database;
         const bool Serverless;
+        const TPathId PathId;
         const NYql::TIssues Issues;
     };
 

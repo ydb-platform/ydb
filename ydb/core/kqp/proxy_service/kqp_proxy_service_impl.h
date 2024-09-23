@@ -642,4 +642,76 @@ private:
     bool SubscribedOnResourcePoolClassifiers = false;
 };
 
+class TDatabasesCache {
+public:
+    struct TDelayedEvent {
+        THolder<IEventHandle> Event;
+        std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> ErrorHandler;
+    };
+
+private:
+    struct TDatabaseInfo {
+        TString DatabaseId;  // string "<scheme shard id>:<domain path id>:<database path>"
+        std::vector<TDelayedEvent> DelayedEvents;
+    };
+
+public:
+    template<typename TEvent>
+    bool SetDatabaseIdOrDeffer(TEvent& event, std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> errorHandler, TActorContext actorContext) {
+        if (!event->Get()->GetDatabaseId().empty()) {
+            return true;
+        }
+
+        const auto& database = event->Get()->GetDatabase();
+        auto& databaseInfo = DatabasesCache[database];
+        if (databaseInfo.DatabaseId) {
+            event->Get()->SetDatabaseId(databaseInfo.DatabaseId);
+            return true;
+        }
+
+        if (!SubscriberActor) {
+            CreateDatabaseSubscriberActor(actorContext);
+        }
+
+        actorContext.Send(SubscriberActor, new TEvKqp::TEvSubscribeOnDatabase(database));
+        databaseInfo.DelayedEvents.push_back({
+            .Event = std::move(event),
+            .ErrorHandler = errorHandler
+        });
+        return false;
+    }
+
+    void UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext) {
+        auto it = DatabasesCache.find(event->Get()->Database);
+        it->second.DatabaseId = event->Get()->DatabaseId;
+
+        bool success = event->Get()->Status == Ydb::StatusIds::SUCCESS;
+        for (auto& delayedEvent : it->second.DelayedEvents) {
+            if (success) {
+                actorContext.Send(std::move(delayedEvent.Event));
+            } else {
+                delayedEvent.ErrorHandler(event->Get()->Status, event->Get()->Issues);
+            }
+        }
+        it->second.DelayedEvents.clear();
+
+        if (!success) {
+            DatabasesCache.erase(it);
+        }
+    }
+
+    void StopSubscriberActor(TActorContext actorContext) const {
+        if (SubscriberActor) {
+            actorContext.Send(SubscriberActor, new TEvents::TEvPoison());
+        }
+    }
+
+private:
+    void CreateDatabaseSubscriberActor(TActorContext actorContext);
+
+private:
+    std::unordered_map<TString, TDatabaseInfo> DatabasesCache;
+    TActorId SubscriberActor;
+};
+
 }  // namespace NKikimr::NKqp

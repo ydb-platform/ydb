@@ -351,6 +351,17 @@ public:
         return PoolConfig;
     }
 
+    const TString& GetDatabaseId() const {
+        if (DatabaseId) {
+            return DatabaseId;
+        }
+        return Record.GetRequest().GetDatabaseId();
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -363,6 +374,7 @@ private:
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
     TActorId RequestActorId;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TString YqlText;
     TString QueryId;

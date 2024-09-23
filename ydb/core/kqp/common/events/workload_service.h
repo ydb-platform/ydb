@@ -90,14 +90,4 @@ struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TKqpWo
     const std::optional<NACLib::TSecurityObject> SecurityObject;
 };
 
-struct TEvUpdateDatabaseInfo : public NActors::TEventLocal<TEvUpdateDatabaseInfo, TKqpWorkloadServiceEvents::EvUpdateDatabaseInfo> {
-    TEvUpdateDatabaseInfo(const TString& database, bool serverless)
-        : Database(database)
-        , Serverless(serverless)
-    {}
-
-    const TString Database;
-    const bool Serverless;
-};
-
 }  // NKikimr::NKqp::NWorkload

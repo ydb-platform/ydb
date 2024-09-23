@@ -486,6 +486,7 @@ public:
         });
 
         ResourcePoolsCache.UnsubscribeFromResourcePoolClassifiers(ActorContext());
+        DatabasesCache.StopSubscriberActor(ActorContext());
 
         return TActor::PassAway();
     }
@@ -635,6 +636,16 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        const auto errorHandler = [this, sender = ev->Sender](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
+            auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
+            response->Record.GetRef().SetYdbStatus(status);
+            NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+            Send(sender, std::move(response));
+        };
+        if (!DatabasesCache.SetDatabaseIdOrDeffer(ev, errorHandler, ActorContext())) {
+            return;
+        }
+
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
         const auto queryType = ev->Get()->GetType();
@@ -1359,7 +1370,7 @@ public:
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
-            hFunc(NWorkload::TEvUpdateDatabaseInfo, Handle);
+            hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
@@ -1636,6 +1647,13 @@ private:
             return false;
         }
 
+        const auto errorHandler = [this, sender = ev->Sender](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
+            Send(sender, new TResponse(status, std::move(issues)));
+        };
+        if (!DatabasesCache.SetDatabaseIdOrDeffer(ev, errorHandler, ActorContext())) {
+            return false;
+        }
+
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
@@ -1645,9 +1663,7 @@ private:
                 if (DelayedEventsQueue.size() < 10000) {
                     DelayedEventsQueue.push_back({
                         .Event = std::move(ev),
-                        .ResponseBuilder = [](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-                            return new TResponse(status, std::move(issues));
-                        }
+                        .ErrorHandler = errorHandler
                     });
                 } else {
                     NYql::TIssues issues;
@@ -1677,7 +1693,7 @@ private:
             if (ev->Get()->Success) {
                 Send(std::move(delayedEvent.Event));
             } else {
-                Send(delayedEvent.Event->Sender, delayedEvent.ResponseBuilder(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue}));
+                delayedEvent.ErrorHandler(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue});
             }
             DelayedEventsQueue.pop_front();
         }
@@ -1806,8 +1822,11 @@ private:
         ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
     }
 
-    void Handle(NWorkload::TEvUpdateDatabaseInfo::TPtr& ev) {
-        ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
+    void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
+        }
+        DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -1867,16 +1886,13 @@ private:
         Pending,
         Finished,
     };
-    struct TDelayedEvent {
-        THolder<IEventHandle> Event;
-        std::function<IEventBase*(Ydb::StatusIds::StatusCode, NYql::TIssues)> ResponseBuilder;
-    };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
-    std::deque<TDelayedEvent> DelayedEventsQueue;
+    std::deque<TDatabasesCache::TDelayedEvent> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
 
     TResourcePoolsCache ResourcePoolsCache;
+    TDatabasesCache DatabasesCache;
 };
 
 } // namespace

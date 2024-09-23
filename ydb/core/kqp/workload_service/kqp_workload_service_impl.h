@@ -77,10 +77,6 @@ struct TDatabaseState {
             return;
         }
 
-        if (Serverless != ev->Get()->Serverless) {
-            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless));
-        }
-
         LastUpdateTime = TInstant::Now();
         Serverless = ev->Get()->Serverless;
         StartPendingRequests();

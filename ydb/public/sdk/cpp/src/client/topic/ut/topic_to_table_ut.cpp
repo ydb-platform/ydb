@@ -2124,32 +2124,32 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
     NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
 
     // Users have created their own topic on it
-    CreateTopic(TEST_TOPIC);
+    CreateTopic(TString{TEST_TOPIC});
 
     // And they wrote their messages into it
-    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-1");
-    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-2");
-    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-3");
+    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-1");
+    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-2");
+    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-3");
 
     // And he had a consumer
-    AddConsumer(TEST_TOPIC, {"consumer-1"});
+    AddConsumer(TString{TEST_TOPIC}, {"consumer-1"});
 
     // We read messages from the topic and committed offsets
-    auto messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
+    auto messages = ReadFromTopic(TString{TEST_TOPIC}, "consumer-1", TDuration::Seconds(2));
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
-    CloseTopicReadSession(TEST_TOPIC, "consumer-1");
+    CloseTopicReadSession(TString{TEST_TOPIC}, "consumer-1");
 
     // And then the Logbroker team turned on the feature flag
     NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = true});
 
     // Users continued to write to the topic
-    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-4");
+    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-4");
 
     // Users have added new consumers
-    AddConsumer(TEST_TOPIC, {"consumer-2"});
+    AddConsumer(TString{TEST_TOPIC}, {"consumer-2"});
 
     // And they wanted to continue reading their messages
-    messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
+    messages = ReadFromTopic(TString{TEST_TOPIC}, "consumer-1", TDuration::Seconds(2));
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
 }
 

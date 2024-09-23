@@ -127,6 +127,7 @@ public:
 public:
     IDqComputeActorAsyncInput* DqAsyncInput = nullptr;
     IDqComputeActorAsyncOutput* DqAsyncOutput = nullptr;
+    std::optional<NActors::TActorId> DqAsyncInputActorId;
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -164,7 +165,6 @@ public:
     NKikimr::NMiniKQL::TDefaultValueBuilder ValueBuilder;
 
 private:
-    std::optional<NActors::TActorId> DqAsyncInputActorId;
     IActor* DqAsyncInputAsActor = nullptr;
 
     std::optional<NActors::TActorId> DqAsyncOutputActorId;

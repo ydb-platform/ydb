@@ -1,15 +1,24 @@
 #include "retry_queue.h"
 
 #include <util/generic/utility.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NYql::NDq {
 
-void TRetryEventsQueue::Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId) {
+const ui64 PingPeriodSeconds = 2;
+
+void TRetryEventsQueue::Init(
+    const TTxId& txId,
+    const NActors::TActorId& senderId,
+    const NActors::TActorId& selfId,
+    ui64 eventQueueId,
+    bool keepAlive) {
     TxId = txId;
     SenderId = senderId;
     SelfId = selfId;
     Y_ASSERT(SelfId.NodeId() == SenderId.NodeId());
     EventQueueId = eventQueueId;
+    KeepAlive = keepAlive;
 }
 
 void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe) {
@@ -44,6 +53,9 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
                 SendRetryable(ev);
             }
         }
+        if (KeepAlive) {
+            SchedulePing();
+        }
     }
 }
 
@@ -51,6 +63,14 @@ bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr
     if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
         Connected = false;
         ScheduleRetry();
+        return true;
+    }
+
+    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+        if (KeepAlive) {
+            NActors::TActivationContext::Send(
+                new NActors::IEventHandle(SelfId, SelfId, new TEvRetryQueuePrivate::TEvSessionClosed(EventQueueId), 0, 0));
+        }
         return true;
     }
 
@@ -64,10 +84,28 @@ void TRetryEventsQueue::Retry() {
     }
 }
 
+void TRetryEventsQueue::Ping() {
+    PingScheduled = false;
+
+    if (!Connected) {
+        return;
+    }
+
+    if (TInstant::Now() - LastReceivedDataTime < TDuration::Seconds(PingPeriodSeconds)) {
+        SchedulePing();
+        return;
+    }
+
+    auto ev = MakeHolder<NActors::TEvents::TEvPing>();
+    NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery));
+    SchedulePing();
+}
+
 void TRetryEventsQueue::Connect() {
     auto connectEvent = MakeHolder<NActors::TEvInterconnect::TEvConnectNode>();
+    auto proxyId = NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId());
     NActors::TActivationContext::Send(
-        new NActors::IEventHandle(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, connectEvent.Release(), 0, 0));
+        new NActors::IEventHandle(proxyId, SenderId, connectEvent.Release(), 0, 0));
 }
 
 void TRetryEventsQueue::Unsubscribe() {
@@ -97,14 +135,25 @@ void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
 }
 
 void TRetryEventsQueue::ScheduleRetry() {
-    if (!RetryScheduled && !Events.empty()) {
-        RetryScheduled = true;
-        if (!RetryState) {
-            RetryState.ConstructInPlace();
-        }
-        auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
-        NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
+    if (RetryScheduled) {
+        return;
+    } 
+    RetryScheduled = true;
+    if (!RetryState) {
+        RetryState.ConstructInPlace();
     }
+    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
+    NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
+}
+
+void TRetryEventsQueue::SchedulePing() {
+    if (!KeepAlive || PingScheduled) {
+        return;
+    }
+
+    PingScheduled = true;
+    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvPing>(EventQueueId);
+    NActors::TActivationContext::Schedule(TDuration::Seconds(PingPeriodSeconds), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
 TDuration TRetryEventsQueue::TRetryState::GetNextDelay() {
@@ -119,5 +168,11 @@ TDuration TRetryEventsQueue::TRetryState::RandomizeDelay(TDuration baseDelay) {
     const TDuration::TValue half = baseDelay.GetValue() / 2;
     return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
 }
+
+void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
+    stream << "RetryQueue: id " << EventQueueId << ", NextSeqNo " 
+        << NextSeqNo << ", MyConfirmedSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+}
+
 
 } // namespace NYql::NDq

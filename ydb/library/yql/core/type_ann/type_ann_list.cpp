@@ -26,6 +26,22 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
+    bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
+        for (auto& item : structType.GetItems()) {
+            auto name = item->GetName();
+            auto type = item->GetItemType();
+            if (auto idx = sourceStructType.FindItem(name)) {
+                if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
     TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx) {
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;
@@ -551,20 +567,48 @@ namespace {
                     traitsInputItemType = traitsInputItemType->Cast<TListExprType>()->GetItemType();
                 }
 
-                const TStructExprType* traitsInputStruct = traitsInputItemType->Cast<TStructExprType>();
-                // traitsInputStruct should be subset of inputStruct
-                for (auto& item : traitsInputStruct->GetItems()) {
-                    auto name = item->GetName();
-                    auto type = item->GetItemType();
-                    if (auto idx = inputStructType.FindItem(name)) {
-                        if (inputStructType.GetItems()[*idx]->GetItemType() == type) {
-                            continue;
-                        }
+                bool isDistinct = calcSpec->IsCallable("WindowTraits") && func->ChildrenSize() == 3;
+                if (isDistinct) {
+                    auto distinctColumn = func->Child(2);
+                    if (!EnsureAtom(*distinctColumn, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
                     }
-                    ctx.AddError(TIssue(ctx.GetPosition(traitsInputTypeNode->Pos()), TStringBuilder() << "Invalid " <<
-                        calcSpec->Content() << " traits input type: " << *traitsInputItemType << ", expecting subset of " <<
-                        static_cast<const TTypeAnnotationNode&>(inputStructType)));
-                    return IGraphTransformer::TStatus::Error;
+
+                    auto distinctColumnType = inputStructType.FindItemType(distinctColumn->Content());
+                    if (!distinctColumnType) {
+                        ctx.AddError(TIssue(ctx.GetPosition(distinctColumn->Pos()),
+                            TStringBuilder() << "Unknown key column " << distinctColumn->Content() << " for distinct, input type is " <<
+                            static_cast<const TTypeAnnotationNode&>(inputStructType)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (distinctColumnType->GetKind() == ETypeAnnotationKind::Struct) {
+                        const TStructExprType* traitsInputStruct = traitsInputItemType->Cast<TStructExprType>();
+                        const TStructExprType* distinctColumnStructType = distinctColumnType->Cast<TStructExprType>();
+                        if (!IsFieldSubset(*traitsInputStruct, *distinctColumnStructType)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(traitsInputTypeNode->Pos()),
+                                TStringBuilder() << "Expected window traits input type " << *traitsInputItemType << " to be subset of distinct key struct type" <<
+                                static_cast<const TTypeAnnotationNode&>(*distinctColumnStructType)));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else if (distinctColumnType != traitsInputItemType) {
+                        ctx.AddError(TIssue(ctx.GetPosition(distinctColumn->Pos()),
+                            TStringBuilder() << "Expected window traits input type " << *traitsInputItemType << " to be same as distinct key type " << *distinctColumnType));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (!EnsureHashableKey(distinctColumn->Pos(), distinctColumnType, ctx) ||
+                        !EnsureEquatableKey(distinctColumn->Pos(), distinctColumnType, ctx)) {
+                          return IGraphTransformer::TStatus::Error;
+                    }
+                } else {
+                    const TStructExprType* traitsInputStruct = traitsInputItemType->Cast<TStructExprType>();
+                    if (!IsFieldSubset(*traitsInputStruct, inputStructType)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(traitsInputTypeNode->Pos()), TStringBuilder() << "Invalid " <<
+                            calcSpec->Content() << " traits input type: " << *traitsInputItemType << ", expecting subset of " <<
+                            static_cast<const TTypeAnnotationNode&>(inputStructType)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 }
 
                 if (calcSpec->IsCallable("WindowTraits")) {
@@ -5624,7 +5668,11 @@ namespace {
                 }
             }
 
-            input->SetTypeAnn(retType);
+            if (originalType && originalType->GetKind() != NYql::ETypeAnnotationKind::Null) {
+                input->SetTypeAnn(originalType);
+            } else {
+                input->SetTypeAnn(retType);
+            }
         } else if (name == "min" || name == "max") {
             auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;
@@ -6018,14 +6066,24 @@ namespace {
         }
 
         for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            if (!EnsureTupleSize(*input->Child(i), 2, ctx.Expr)) {
+            if (!EnsureTupleMinSize(*input->Child(i), 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
+
+            if (!EnsureTupleMaxSize(*input->Child(i), 3, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
             auto currColumn = input->Child(i)->Child(0)->Content();
             auto calcSpec = input->Child(i)->Child(1);
             if (!calcSpec->IsCallable({"WindowTraits", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile", "Void"})) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(calcSpec->Pos()),
                                          "Invalid traits or special function for calculation on window"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (input->Child(i)->ChildrenSize() == 3 && !calcSpec->IsCallable("WindowTraits")) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(calcSpec->Pos()), "DISTINCT is allowed only for aggregate functions"));
                 return IGraphTransformer::TStatus::Error;
             }
 

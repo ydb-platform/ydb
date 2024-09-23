@@ -41,7 +41,6 @@ void TTxInit::SetDefaults() {
     Self->CurrentSchemeShardId = 0;
     Self->LastSchemaSeqNo = { };
     Self->ProcessingParams.reset();
-    Self->LastWriteId = TWriteId{0};
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
     Self->LastCompletedTx = NOlap::TSnapshot::Zero();
@@ -73,7 +72,6 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoRound, Self->LastSchemaSeqNo.Round);
     ready = ready && Schema::GetSpecialProtoValue(db, Schema::EValueIds::ProcessingParams, Self->ProcessingParams);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastWriteId, Self->LastWriteId);
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastPlannedStep, Self->LastPlannedStep);
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
@@ -107,12 +105,37 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
         auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-        if (!localInsertTable->Load(dbTable, TAppData::TimeProvider->Now())) {
+        if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
             ACFL_ERROR("step", "TInsertTable::Load_Fails");
             return false;
         }
         ACFL_DEBUG("step", "TInsertTable::Load_Finish");
         Self->InsertTable.swap(localInsertTable);
+    }
+
+    {
+        ACFL_DEBUG("step", "TTablesManager::Load_Start");
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+        {
+            TMemoryProfileGuard g("TTxInit/TTablesManager");
+            if (!tManagerLocal.InitFromDB(db)) {
+                ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
+                return false;
+            }
+        }
+        {
+            TMemoryProfileGuard g("TTxInit/LoadIndex");
+            if (!tManagerLocal.LoadIndex(dbTable)) {
+                ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
+                return false;
+            }
+        }
+        Self->TablesManager = std::move(tManagerLocal);
+
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
+        ACFL_DEBUG("step", "TTablesManager::Load_Finish");
     }
 
     {
@@ -150,31 +173,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
 
     {
-        ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
-        {
-            TMemoryProfileGuard g("TTxInit/TTablesManager");
-            if (!tManagerLocal.InitFromDB(db)) {
-                ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
-                return false;
-            }
-        }
-        {
-            TMemoryProfileGuard g("TTxInit/LoadIndex");
-            if (!tManagerLocal.LoadIndex(dbTable)) {
-                ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
-                return false;
-            }
-        }
-        Self->TablesManager = std::move(tManagerLocal);
-
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
-        ACFL_DEBUG("step", "TTablesManager::Load_Finish");
-    }
-
-    {
         TMemoryProfileGuard g("TTxInit/LongTxWrites");
         auto rowset = db.Table<Schema::LongTxWrites>().Select();
         if (!rowset.IsReady()) {
@@ -182,7 +180,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
 
         while (!rowset.EndOfSet()) {
-            const TWriteId writeId = TWriteId{ rowset.GetValue<Schema::LongTxWrites::WriteId>() };
+            const TInsertWriteId writeId = (TInsertWriteId)rowset.GetValue<Schema::LongTxWrites::WriteId>();
             const ui32 writePartId = rowset.GetValue<Schema::LongTxWrites::WritePartId>();
             NKikimrLongTxService::TLongTxId proto;
             Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));

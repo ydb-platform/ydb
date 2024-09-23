@@ -1,5 +1,5 @@
 #include "utils.h"
-#include "plan2svg.h"
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -433,7 +433,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline, ui64 maxTimelineSize) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -478,6 +478,16 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
         TPlanVisualizer planViz;
         planViz.LoadPlans(plan);
         *timeline = planViz.PrintSvgSafe();
+        if (maxTimelineSize && timeline->size() > maxTimelineSize) {
+            TStringBuilder builder;
+            builder
+                << "<svg width='600' height='200' xmlns='http://www.w3.org/2000/svg'>" << Endl
+                << "  <text font-size='16px' x='20' y='40'>There is nothing wrong with the request.</text>" << Endl
+                << "  <text font-size='16px' x='20' y='80'>Unfortunately, image size " << timeline->size() << " is too large.</text>" << Endl
+                << "  <text font-size='16px' x='20' y='120'>It exceeds limit of " << maxTimelineSize << " and was discarded</text>" << Endl
+                << "</svg>" << Endl;
+            *timeline = builder;
+        }
         // remove json "timeline" field after migration
         writer.OnKeyedItem("timeline");
         writer.OnStringScalar(*timeline);
@@ -1156,7 +1166,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString&, double& cpuUsage, TString*) override {
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*, ui64) override {
         cpuUsage = 0.0;
         return "";
     }
@@ -1189,8 +1199,8 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, ui64 maxtimelineSize) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline, maxtimelineSize);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
@@ -1221,8 +1231,8 @@ struct TProfileStatProcessor : TPlanStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, ui64 maxtimelineSize) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline, maxtimelineSize));
     }
 };
 
@@ -1240,8 +1250,12 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
 
 PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
     : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
-    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline())
-{}
+    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline()), MaxQueryTimelineSize(commonConfig.GetMaxQueryTimelineSize())
+{
+    if (!MaxQueryTimelineSize) {
+        MaxQueryTimelineSize = 200_KB;
+    }
+}
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
     const NYdb::NQuery::TExecStats& queryStats,
@@ -1307,7 +1321,7 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     CpuUsage = 0.0;
     try {
         TString timeline;
-        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr, MaxQueryTimelineSize);
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
         if (timeline) {

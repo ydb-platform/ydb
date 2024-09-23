@@ -5,13 +5,9 @@ LICENSE(Service-Py23-Proxy)
 VERSION(Service-proxy-version)
 
 IF (PYTHON2)
-    PEERDIR(
-        contrib/python/PyYAML/py2
-    )
+    PEERDIR(contrib/python/PyYAML/py2)
 ELSE()
-    PEERDIR(
-        contrib/python/PyYAML/py3
-    )
+    PEERDIR(contrib/python/PyYAML/py3)
 ENDIF()
 
 NO_LINT()

@@ -9,7 +9,7 @@ Arguments:
 
 TestBit returns `true/false`. The other functions return a copy of their first argument with the corresponding conversion.
 
-**Examples:**
+### Examples
 
 ```yql
 SELECT

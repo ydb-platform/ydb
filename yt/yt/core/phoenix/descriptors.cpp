@@ -47,9 +47,9 @@ const std::vector<std::unique_ptr<TFieldDescriptor>>& TTypeDescriptor::Fields() 
     return Fields_;
 }
 
-const std::vector<const TTypeDescriptor*>& TTypeDescriptor::BaseTypes() const
+const std::vector<TTypeTag>& TTypeDescriptor::BaseTypeTags() const
 {
-    return BaseTypes_;
+    return BaseTypeTags_;
 }
 
 bool TTypeDescriptor::IsTemplate() const
@@ -68,9 +68,7 @@ const TTypeSchemaPtr& TTypeDescriptor::GetSchema() const
             for (const auto& fieldDescriptor : Fields_) {
                 Schema_->Fields.push_back(fieldDescriptor->GetSchema());
             }
-            for (const auto* baseTypeDescriptor : BaseTypes_) {
-                Schema_->BaseTypeTags.push_back(baseTypeDescriptor->Tag_);
-            }
+            Schema_->BaseTypeTags = BaseTypeTags_;
             Schema_->Template = Template_;
         });
     return Schema_;
@@ -84,16 +82,6 @@ const TYsonString& TTypeDescriptor::GetSchemaYson() const
             SchemaYson_ = ConvertToYsonString(GetSchema());
         });
     return SchemaYson_;
-}
-
-std::vector<TTypeTag> TTypeDescriptor::GetBaseTypeTags() const
-{
-    std::vector<TTypeTag> result;
-    result.reserve(BaseTypes_.size());
-    for (const auto* baseTypeDescriptor : BaseTypes_) {
-        result.push_back(baseTypeDescriptor->Tag_);
-    }
-    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

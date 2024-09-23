@@ -325,3 +325,56 @@ test'''
         assert result_set.columns[0].name == "data"
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].text_value == "test"
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_decimal_binding(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("decimal_binding")
+        bucket.create(ACL='public-read')
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        row = R'''
+            { "a": 0.1111111115, "b": 0.111111115 },
+            { "a": 0.1111111115, "b": 0.111111115 },
+        '''
+        s3_client.put_object(Body=row, Bucket='decimal_binding', Key='abc.json', ContentType='text/json')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        connection_response = client.create_storage_connection(unique_prefix + "_decc", "decimal_binding")
+
+        aType = ydb.Column(name="a", type=ydb.Type(decimal_type=ydb.DecimalType(precision=22, scale=9)))
+        bType = ydb.Column(name="b", type=ydb.Type(decimal_type=ydb.DecimalType(precision=22, scale=9)))
+
+        storage_binding_name = unique_prefix + "_decb"
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path="abc.json",
+            format="json_each_row",
+            connection_id=connection_response.result.connection_id,
+            columns=[aType, bType],
+        )
+
+        sql = fR'''
+            SELECT Unwrap(SUM(a)) as a, Unwrap(SUM(b)) as b
+            FROM bindings.{storage_binding_name};
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 2
+        assert len(result_set.rows) == 1
+        assert result_set.columns[0].type == ydb.Type(decimal_type=ydb.DecimalType(precision=35, scale=9))
+        assert result_set.columns[1].type == ydb.Type(decimal_type=ydb.DecimalType(precision=35, scale=9))
+        assert result_set.rows[0].items[0].low_128 == 222222222
+        assert result_set.rows[0].items[1].low_128 == 222222230

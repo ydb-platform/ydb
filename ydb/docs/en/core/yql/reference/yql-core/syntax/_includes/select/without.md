@@ -2,7 +2,7 @@
 
 Excluding columns from the result of `SELECT *`.
 
-**Examples**
+## Examples
 
 ```yql
 SELECT * WITHOUT foo, bar FROM my_table;

@@ -34,10 +34,9 @@
 
 Имя исходной таблицы, из которой изначально была получена каждая строка, можно получить при помощи функции [TablePath()](../../builtins/basic.md#tablepath).
 
+## Примеры
 
-**Примеры:**
-
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM CONCAT(
   `table1`,
@@ -45,7 +44,7 @@ SELECT * FROM CONCAT(
   `table3`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 $indices = ListFromRange(1, 4);
 $tables = ListMap($indices, ($index) -> {
@@ -54,19 +53,19 @@ $tables = ListMap($indices, ($index) -> {
 SELECT * FROM EACH($tables); -- идентично предыдущему примеру
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM RANGE(`my_folder`);
 ```
 
-``` yql
+```yql
 SELECT * FROM some_cluster.RANGE( -- Кластер можно указать перед названием функции
   `my_folder`,
   `from_table`,
   `to_table`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
@@ -75,7 +74,7 @@ SELECT * FROM RANGE(
   `my_table`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
@@ -85,7 +84,7 @@ SELECT * FROM RANGE(
   `my_view`);
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM LIKE(
   `my_folder`,
@@ -93,7 +92,7 @@ SELECT * FROM LIKE(
 );
 ```
 
-``` yql
+```yql
 USE some_cluster;
 SELECT * FROM REGEXP(
   `my_folder`,
@@ -101,7 +100,7 @@ SELECT * FROM REGEXP(
 );
 ```
 
-``` yql
+```yql
 $callable = ($table_name) -> {
     return $table_name > "2017-03-13";
 };

@@ -297,6 +297,10 @@ class TableIndex(object):
         self._pb.global_index.SetInParent()
         return self
 
+    def with_global_async_index(self):
+        self._pb.global_async_index.SetInParent()
+        return self
+
     def with_index_columns(self, *columns):
         for column in columns:
             self._pb.index_columns.append(column)

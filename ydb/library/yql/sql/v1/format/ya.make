@@ -6,6 +6,7 @@ SRCS(
 )
 
 RESOURCE(DONT_PARSE ../SQLv1.g.in SQLv1.g.in)
+RESOURCE(DONT_PARSE ../SQLv1Antlr4.g.in SQLv1Antlr4.g.in)
 
 PEERDIR(
     ydb/library/yql/parser/lexer_common
@@ -21,4 +22,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_antlr4
 )

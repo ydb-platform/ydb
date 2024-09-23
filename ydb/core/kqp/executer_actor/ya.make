@@ -11,7 +11,6 @@ SRCS(
     kqp_partition_helper.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
-    kqp_shards_resolver.cpp
     kqp_result_channel.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
@@ -27,6 +26,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
+    ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/federated_query
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service

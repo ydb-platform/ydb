@@ -4,7 +4,7 @@
 
 Для организации постраничного вывода рекомендуется последовательно выбирать данные, отсортированные по первичному ключу, ограничивая количество строк ключевым словом LIMIT.
 
-Запрос, представленный в листинге 1, демонстрирует рекомендованный способ организации постраничного вывода.
+
 
 {% note info %}
 
@@ -12,9 +12,9 @@
 
 {% endnote %}
 
-<small>Листинг 1 — запрос для организации постраничного вывода</small>
+Запрос c примером рекомендованного способа организации постраничного вывода:
 
-```sql
+```yql
 --  Table `schools`:
 -- ┌─────────┬─────────┬─────┐
 -- | Name    | Type    | Key |
@@ -45,7 +45,9 @@ LIMIT $limit;
 ## Примеры реализации постраничного вывода
 
 {% if oss %}
+
 * [C++](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/pagination)
+
 {% endif %}
 * [Java](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/pagination)
 * [Python](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/pagination)

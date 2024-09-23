@@ -40,3 +40,7 @@
 
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+
+/ydb/core/formats/arrow @ydb-platform/cs
+/ydb/core/tx/columnshard @ydb-platform/cs
+

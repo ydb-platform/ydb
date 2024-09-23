@@ -37,7 +37,7 @@ TTestChannel::TTestChannel(
         .EndMap()))
 { }
 
-const TString& TTestChannel::GetEndpointDescription() const
+const std::string& TTestChannel::GetEndpointDescription() const
 {
     return Address_;
 }
@@ -184,7 +184,7 @@ TTestBus::TTestBus(const std::string& address)
     , NetworkAddress_(NNet::TNetworkAddress())
 { }
 
-const TString& TTestBus::GetEndpointDescription() const
+const std::string& TTestBus::GetEndpointDescription() const
 {
     return EndpointDescription_;
 }

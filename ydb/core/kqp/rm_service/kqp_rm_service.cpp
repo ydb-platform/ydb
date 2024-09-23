@@ -184,6 +184,15 @@ public:
         return Counters;
     }
 
+    TPlannerPlacingOptions GetPlacingOptions() override {
+        return TPlannerPlacingOptions{
+            .MaxNonParallelTasksExecutionLimit = MaxNonParallelTasksExecutionLimit.load(),
+            .MaxNonParallelDataQueryTasksLimit = MaxNonParallelDataQueryTasksLimit.load(),
+            .MaxNonParallelTopStageExecutionLimit = MaxNonParallelTopStageExecutionLimit.load(),
+            .PreferLocalDatacenterExecution = PreferLocalDatacenterExecution.load(),
+        };
+    }
+
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
         ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
@@ -280,6 +289,7 @@ public:
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
+            tx->AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
                 << ". " << tx->ToString();
@@ -293,6 +303,7 @@ public:
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
+                tx->AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
                     if (!tx->PoolId.empty()) {
@@ -465,6 +476,10 @@ public:
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         SpillingPercent.store(config.GetSpillingPercent());
+        MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
+        MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
+        PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
+        MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
     }
 
     ui32 GetNodeId() override {
@@ -512,6 +527,10 @@ public:
     std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
     std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
+    std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
+    std::atomic<bool> PreferLocalDatacenterExecution = true;
+    std::atomic<ui64> MaxNonParallelDataQueryTasksLimit = 1000;
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;

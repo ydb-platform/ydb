@@ -4,7 +4,7 @@ Delete data from the table using [DELETE](../../yql/reference/syntax/delete.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 DELETE
 FROM episodes
 WHERE

@@ -9,7 +9,7 @@ namespace NYql {
 class TAggregateExpander {
 public:
     TAggregateExpander(bool usePartitionsByKeys, const bool useFinalizeByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
-        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false, bool allowSpilling = false)
+        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false, bool useBlocks = false)
         : Node(node)
         , Ctx(ctx)
         , TypesCtx(typesCtx)
@@ -25,7 +25,7 @@ public:
         , HaveSessionSetting(false)
         , OriginalRowType(nullptr)
         , RowType(nullptr)
-        , UseBlocks(typesCtx.IsBlockEngineEnabled() && !allowSpilling)
+        , UseBlocks(useBlocks)
     {
         PreMap = Ctx.Builder(node->Pos())
             .Lambda()
@@ -135,7 +135,7 @@ private:
 inline TExprNode::TPtr ExpandAggregatePeepholeImpl(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
     const bool useFinalizeByKey, const bool useBlocks, const bool allowSpilling) {
     TAggregateExpander aggExpander(!useFinalizeByKey && !useBlocks, useFinalizeByKey, node, ctx, typesCtx,
-        true, false, false, allowSpilling);
+        true, false, false, typesCtx.IsBlockEngineEnabled() && !allowSpilling);
     return aggExpander.ExpandAggregate();
 }
 

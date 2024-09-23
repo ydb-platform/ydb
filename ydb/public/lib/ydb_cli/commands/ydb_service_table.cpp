@@ -365,33 +365,33 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
 
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Parquet,
     });
 
     AddParametersOption(config, "(for data & scan queries)");
 
     AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonBase64
     });
 
     AddStdinFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::Raw,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonBase64,
+        EDataFormat::Raw,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
     }, {
-        EOutputFormat::NoFraming,
-        EOutputFormat::NewlineDelimited
+        EDataFormat::NoFraming,
+        EDataFormat::NewlineDelimited
     });
 
     AddParametersStdinOption(config, "query");
@@ -841,12 +841,12 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
         .StoreTrue(&CollectFullDiagnostics);
 
-    AddFormats(config, {
-            EOutputFormat::Pretty,
-            EOutputFormat::PrettyTable,
-            EOutputFormat::JsonUnicode,
-            EOutputFormat::JsonBase64,
-            EOutputFormat::JsonBase64Simplify
+    AddOutputFormats(config, {
+            EDataFormat::Pretty,
+            EDataFormat::PrettyTable,
+            EDataFormat::JsonUnicode,
+            EDataFormat::JsonBase64,
+            EDataFormat::JsonBase64Simplify
     });
 
     config.SetFreeArgsNum(0);
@@ -1049,19 +1049,19 @@ void TCommandReadTable::Config(TConfig& config) {
         .NoArgument().SetFlag(&ToExclusive);
 
     AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonBase64
     });
 
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Parquet,
     });
 
     config.SetFreeArgsNum(1);
@@ -1130,11 +1130,11 @@ int TCommandReadTable::Run(TConfig& config) {
 
         EBinaryStringEncoding encoding;
         switch (InputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
+        case EDataFormat::Default:
+        case EDataFormat::JsonUnicode:
             encoding = EBinaryStringEncoding::Unicode;
             break;
-        case EOutputFormat::JsonBase64:
+        case EDataFormat::JsonBase64:
             encoding = EBinaryStringEncoding::Base64;
             break;
         default:

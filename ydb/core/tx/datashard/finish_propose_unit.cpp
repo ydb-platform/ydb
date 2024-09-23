@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
@@ -171,6 +172,10 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                     "Errors while proposing transaction txid " << op->GetTxId()
                     << " at tablet " << DataShard.TabletID() << " status: "
                     << res->GetStatus() << " errors: " << errors);
+    }
+
+    if (op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
+        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
     }
 
     if (res->IsPrepared()) {

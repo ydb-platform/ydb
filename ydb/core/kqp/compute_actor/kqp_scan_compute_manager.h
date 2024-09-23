@@ -71,6 +71,18 @@ public:
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
     }
 
+    TString ToString() const {
+        TStringBuilder builder;
+
+        if (ActorId) {
+            builder << "ActorId: " << *ActorId;
+        }
+
+        builder << "TabletId: " << TabletId << ", ScanId: " << ScanId;
+
+        return builder;
+    }
+
     void Stop(const bool finalFlag, const TString& message) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "stop_scanner")("actor_id", ActorId)("message", message)("final_flag", finalFlag);
         if (ActorId) {

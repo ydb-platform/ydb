@@ -95,7 +95,7 @@ public:
         }
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -139,7 +139,7 @@ public:
 
 private:
     const std::string Address_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     THashSet<std::string>* ChannelRegistry_;
@@ -366,7 +366,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetRandomChannel)
         EXPECT_TRUE(viablePeerRegistry->RegisterPeer(Format("address-%v", i)));
     }
 
-    THashSet<TString> retrievedAddresses;
+    THashSet<std::string> retrievedAddresses;
 
     auto req = CreateRequest();
     for (int iter = 0; iter < 100; ++iter) {
@@ -388,7 +388,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetStickyChannel)
         EXPECT_TRUE(viablePeerRegistry->RegisterPeer(Format("address-%v", i)));
     }
 
-    THashSet<TString> retrievedAddresses;
+    THashSet<std::string> retrievedAddresses;
 
     auto req = CreateRequest(/*enableStickiness*/ true);
     for (int iter = 0; iter < 100; ++iter) {
@@ -544,7 +544,7 @@ TEST(TPreferLocalViablePeerRegistryTest, MinPeerCountForPriorityAwareness)
         EXPECT_TRUE(viablePeerRegistry->RegisterPeer(Format("non-local-%v.sas.yp-c.yandex.net", i)));
     }
 
-    THashSet<TString> retrievedAddresses;
+    THashSet<std::string> retrievedAddresses;
 
     auto req = CreateRequest();
     for (int iter = 0; iter < 100; ++iter) {

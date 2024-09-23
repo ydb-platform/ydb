@@ -89,7 +89,7 @@ void MakeJoinHypergraphRec(
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     const std::shared_ptr<IBaseOptimizerNode>& joinTree,
-    const TJoinOrderHints& hints = {}
+    const TOptimizerHints& hints = {}
 ) {
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
@@ -100,9 +100,9 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
         YQL_CLOG(TRACE, CoreDq) << graph.String();
     }
 
-    if (hints.HintsTree != nullptr) {
+    if (!hints.JoinOrderHints->Hints.empty()) { 
         TJoinOrderHintsApplier joinHints(graph);
-        joinHints.Apply(hints);
+        joinHints.Apply(*hints.JoinOrderHints);
         if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
             YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
             YQL_CLOG(TRACE, CoreDq) << graph.String();

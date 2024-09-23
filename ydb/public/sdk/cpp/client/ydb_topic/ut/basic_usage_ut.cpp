@@ -455,14 +455,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(!futureWrite.HasValue());
         Cerr << ">>>TEST: future write has no value " << Endl;
-        RunTasks(stepByStepExecutor, {0});
+        RunTasks(stepByStepExecutor, {0});  // Run compression task.
+        RunTasks(stepByStepExecutor, {1});  // Run send task.
         futureWrite.GetValueSync();
         UNIT_ASSERT(futureWrite.HasValue());
         Cerr << ">>>TEST: future write has value " << Endl;
 
         UNIT_ASSERT(!futureRead.HasValue());
         Cerr << ">>>TEST: future read has no value " << Endl;
-        RunTasks(stepByStepExecutor, {1});
+        RunTasks(stepByStepExecutor, {2});  // Run decompression task.
         futureRead.GetValueSync();
         UNIT_ASSERT(futureRead.HasValue());
         Cerr << ">>>TEST: future read has value " << Endl;

@@ -51,13 +51,11 @@ public:
     const TString& GetName() const;
     TTypeTag GetTag() const;
     const std::vector<std::unique_ptr<TFieldDescriptor>>& Fields() const;
-    const std::vector<const TTypeDescriptor*>& BaseTypes() const;
+    const std::vector<TTypeTag>& BaseTypeTags() const;
     bool IsTemplate() const;
 
     const TTypeSchemaPtr& GetSchema() const;
     const NYson::TYsonString& GetSchemaYson() const;
-
-    std::vector<TTypeTag> GetBaseTypeTags() const;
 
     template <class T>
     T* TryConstruct() const;
@@ -72,7 +70,7 @@ private:
     std::vector<const std::type_info*> TypeInfos_;
     TTypeTag Tag_;
     std::vector<std::unique_ptr<TFieldDescriptor>> Fields_;
-    std::vector<const TTypeDescriptor*> BaseTypes_;
+    std::vector<TTypeTag> BaseTypeTags_;
     bool Template_ = false;
     TPolymorphicConstructor PolymorphicConstructor_ = nullptr;
     TConcreteConstructor ConcreteConstructor_ = nullptr;

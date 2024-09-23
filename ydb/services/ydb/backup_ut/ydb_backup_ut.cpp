@@ -19,6 +19,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 using namespace NYdb;
+using namespace NYdb::NOperation;
 using namespace NYdb::NTable;
 
 namespace NYdb::NTable {
@@ -95,13 +96,47 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
             expectedMinPartitions,
             debugHint
         );
+        return true;
+    };
+}
+
+auto CreateHasIndexChecker(const TString& indexName) {
+    return [=](const TTableDescription& tableDescription) {
+        for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
+            if (indexDesc.GetIndexName() == indexName) {
+                return true;
+            }
+        }
+        return false;
+    };
+}
+
+auto CreateHasSerialChecker(i64 nextValue, bool nextUsed) {
+    return [=](const TTableDescription& tableDescription) {
+        for (const auto& column : tableDescription.GetTableColumns()) {
+            if (column.Name == "Key") {
+                UNIT_ASSERT(column.SequenceDescription.has_value());
+                UNIT_ASSERT(column.SequenceDescription->SetVal.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextValue, nextValue);
+                UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextUsed, nextUsed);
+                return true;
+            }
+        }
+        return false;
     };
 }
 
 void CheckTableDescription(TSession& session, const TString& path, auto&& checker,
     const TDescribeTableSettings& settings = {}
 ) {
-    checker(GetTableDescription(session, path, settings));
+    UNIT_ASSERT(checker(GetTableDescription(session, path, settings)));
+}
+
+void CheckBuildIndexOperationsCleared(TDriver& driver) {
+    TOperationClient operationClient(driver);
+    const auto result = operationClient.List<TBuildIndexOperation>().GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "issues:\n" << result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.GetList().empty(), "Build index operations aren't cleared:\n" << result.ToJsonString());
 }
 
 using TBackupFunction = std::function<void(const char*)>;
@@ -311,6 +346,41 @@ void TestIndexTableSplitBoundariesArePreserved(
     UNIT_ASSERT_EQUAL(restoredKeyRanges, originalKeyRanges);
 }
 
+void TestRestoreTableWithSerial(
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Serial,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+        )",
+        table
+    ));
+    ExecuteDataModificationQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Value
+            )
+            VALUES (1), (2), (3), (4), (5), (6), (7);
+        )",
+        table
+    ));
+    const auto originalContent = GetTableContent(session, table);
+
+    backup(table);
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore(table);
+
+    CheckTableDescription(session, table, CreateHasSerialChecker(8, false), TDescribeTableSettings().WithSetVal(true));
+    CompareResults(GetTableContent(session, table), originalContent);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -417,6 +487,60 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     // TO DO: test index impl table split boundaries restoration from a backup
+
+    Y_UNIT_TEST(BasicRestoreTableWithIndex) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key),
+                    INDEX %s GLOBAL ON (Value)
+                );
+            )",
+            table, index
+        ));
+  
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
+        
+        NDump::TClient backupClient(driver);
+
+        // restore deleted table
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        Restore(backupClient, pathToBackup, "/Root");
+
+        CheckTableDescription(session, table, CreateHasIndexChecker(index));
+        CheckBuildIndexOperationsCleared(driver);
+    }
+
+    Y_UNIT_TEST(BasicRestoreTableWithSerial) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithSerial(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
@@ -617,6 +741,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexPartitions,
+            testEnv.GetSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    Y_UNIT_TEST(RestoreTableWithSerial) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithSerial(
+            table,
             testEnv.GetSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())

@@ -6,6 +6,10 @@
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/library/grpc/server/grpc_async_ctx_base.h>
+#include <ydb/core/protos/node_broker.pb.h>
+
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
 
 #include <library/cpp/json/json_writer.h>
 

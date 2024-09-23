@@ -83,6 +83,10 @@ public:
         return ScanId;
     }
 
+    bool HasLock() const {
+        return !!ReadMetadata->GetLockId();
+    }
+
     const TReadMetadataBase::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;
     }

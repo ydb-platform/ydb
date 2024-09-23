@@ -493,7 +493,7 @@ ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, const TTxTransaction& 
 ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
+TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state);
@@ -514,10 +514,10 @@ ISubOperation::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state
 
 // Alter
 TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state);
+//NOTE: no variants to construct individual suboperations directly from TTxTransaction --
+// -- it should be possible only through CreateCompatibleAlterExtSubDomain
 
 // Drop
 ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx);

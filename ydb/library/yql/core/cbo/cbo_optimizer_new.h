@@ -71,8 +71,12 @@ struct TCardinalityHints {
         TVector<TString> JoinLabels;
         ECardOperation Operation;
         double Value;
+        TString StringRepr;
+        bool Applied = false;
 
         double ApplyHint(double originalValue) {
+            Applied = true;
+            
             switch (Operation) {
                 case Add:
                     return originalValue + Value;
@@ -84,41 +88,104 @@ struct TCardinalityHints {
                     return originalValue / Value;
                 case Replace:
                     return Value;
-
             }
         }
     };
 
     TVector<TCardinalityHint> Hints;
-
-    TCardinalityHints() {}
-    TCardinalityHints(const TString& json);
+    void PushBack(TVector<TString> labels, ECardOperation op, double value, TString stringRepr) {
+        Hints.push_back({.JoinLabels = std::move(labels), .Operation = op, .Value = value, .StringRepr = std::move(stringRepr)});
+    }
 };
 
 struct TJoinAlgoHints {
-
     struct TJoinAlgoHint {
         TVector<TString> JoinLabels;
         EJoinAlgoType JoinHint;
+        TString StringRepr;
+        bool Applied = false;
     };
 
     TVector<TJoinAlgoHint> Hints;
 
-    TJoinAlgoHints() {}
-    TJoinAlgoHints(const TString& json);
+    void PushBack(TVector<TString> labels, EJoinAlgoType joinHint, TString stringRepr) {
+        Hints.push_back({.JoinLabels = std::move(labels), .JoinHint = joinHint, .StringRepr = std::move(stringRepr)});
+    }
 };
 
 struct TJoinOrderHints {
-    std::shared_ptr<IBaseOptimizerNode> HintsTree;
+    struct ITreeNode {
+        enum _ : ui32 {
+            Relation,
+            Join
+        };
 
-    TJoinOrderHints() {}
-    TJoinOrderHints(const TString& json);
+        virtual TVector<TString> Labels() = 0;
+        bool IsRelation() { return Type == Relation; }
+        bool IsJoin() { return Type == Join; } 
+        virtual ~ITreeNode() = default;
+
+        ui32 Type;
+    };
+
+    struct TJoinNode: public ITreeNode {
+        TJoinNode(std::shared_ptr<ITreeNode> lhs, std::shared_ptr<ITreeNode> rhs)
+            : Lhs(std::move(lhs))
+            , Rhs(std::move(rhs))
+        {
+            this->Type = ITreeNode::Join;
+        }
+
+        TVector<TString> Labels() override {     
+            auto labels = Lhs->Labels();
+            auto rhsLabels = Rhs->Labels();
+            labels.insert(labels.end(), std::make_move_iterator(rhsLabels.begin()), std::make_move_iterator(rhsLabels.end()));
+            return labels;
+        }
+
+        std::shared_ptr<ITreeNode> Lhs;
+        std::shared_ptr<ITreeNode> Rhs;
+    };
+
+    struct TRelationNode: public ITreeNode {
+        TRelationNode(TString label)
+            : Label(std::move(label))
+        {
+            this->Type = ITreeNode::Relation;
+        }
+
+        TVector<TString> Labels() override { return {Label}; }
+
+        TString Label;
+    };
+
+    struct TJoinOrderHint {
+        std::shared_ptr<ITreeNode> Tree;
+        TString StringRepr;
+        bool Applied = false;
+    };
+
+    TVector<TJoinOrderHint> Hints;
+
+    void PushBack(std::shared_ptr<ITreeNode> hintTree, TString stringRepr) {
+        Hints.push_back({.Tree = std::move(hintTree), .StringRepr = std::move(stringRepr)});
+    }
 };
 
 struct TOptimizerHints {
-    TCardinalityHints CardinalityHints;
-    TJoinAlgoHints JoinAlgoHints;
-    TJoinOrderHints JoinOrderHints;
+    std::shared_ptr<TCardinalityHints> CardinalityHints = std::make_shared<TCardinalityHints>();
+    std::shared_ptr<TJoinAlgoHints> JoinAlgoHints = std::make_shared<TJoinAlgoHints>();
+    std::shared_ptr<TJoinOrderHints> JoinOrderHints = std::make_shared<TJoinOrderHints>();
+
+    TVector<TString> GetUnappliedHintStrings();
+
+    /* 
+     *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):
+     *   1) JoinAlgo(t1 t2 ... tn Map | Grace | Lookup) to change join algo for join, where these labels take part
+     *   2) Card(t1 t2 ... tn (*|/|+|-) Number) to change cardinality for join, where these labels take part or labels only
+     *   3) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
+     */  
+    static TOptimizerHints Parse(const TString&);
 };
 
 /**

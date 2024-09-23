@@ -231,19 +231,12 @@ struct TStopOneNodeTest {
             Env.StartNode(nodeIdWithBlob);
             Env->Sim(TDuration::Seconds(30));
 
-            Cerr << "Start compaction 1" << Endl;
+            Cerr << "Start compaction" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
             Env->Sim(TDuration::Seconds(30));
-            Cerr << "Finish compaction 1" << Endl;
-
-            Cerr << "Start compaction 2" << Endl;
-            for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
-                Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-            }
-            Env->Sim(TDuration::Seconds(30));
-            Cerr << "Finish compaction 2" << Endl;
+            Cerr << "Finish compaction" << Endl;
 
             Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
             UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
@@ -327,12 +320,6 @@ struct TRandomTest {
         }
         Env->Sim(TDuration::Seconds(60));
 
-        Cerr << "Start compaction 2" << Endl;
-        for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
-            Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-        }
-        Env->Sim(TDuration::Seconds(60));
-
         Cerr << "Start checking" << Endl;
         for (ui32 step: successfulSteps) {
             Env.CheckPartsLocations(MakeLogoBlobId(step, data[step].size()));
@@ -407,13 +394,6 @@ struct TTwoPartsOnOneNodeTest {
         }
         Env->Sim(TDuration::Seconds(30));
         Cerr << "Finish compaction 1" << Endl;
-
-        Cerr << "Start compaction 2" << Endl;
-        for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
-            Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-        }
-        Env->Sim(TDuration::Seconds(30));
-        Cerr << "Finish compaction 2" << Endl;
 
         Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
         UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);

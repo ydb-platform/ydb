@@ -570,7 +570,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
         if (tableInfo->GetStats().TableStats.contains(pathId)) {
-            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
+            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId).Aggregated);
         } else {
             FillTableStats(*pathDescription, TPartitionStats());
         }
@@ -1052,6 +1052,7 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(viewInfo->AlterVersion);
     entry->SetQueryText(viewInfo->QueryText);
+    *entry->MutableCapturedContext() = viewInfo->CapturedContext;
 }
 
 void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {

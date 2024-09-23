@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
-            UNIT_ASSERT_STRINGS_EQUAL("Total size limit exceeded", resp->Get()->Message);
+            UNIT_ASSERT_STRINGS_EQUAL("Total size limit exceeded: 0/0Mb", resp->Get()->Message);
         }
     }
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
-            UNIT_ASSERT_STRINGS_EQUAL("File size limit exceeded", resp->Get()->Message);
+            UNIT_ASSERT_STRINGS_EQUAL("File size limit exceeded: 0/0Mb", resp->Get()->Message);
         }
     }
 

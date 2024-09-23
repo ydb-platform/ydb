@@ -7,6 +7,8 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <library/cpp/disjoint_sets/disjoint_sets.h>
+
 namespace NYql {
 
 namespace {
@@ -348,10 +350,30 @@ void DropDups(TExprNode::TListType& children) {
     }
 }
 
+void StripLikely(TExprNodeList& args, TNodeOnNodeOwnedMap& likelyArgs) {
+    for (auto& arg : args) {
+        if (arg->IsCallable("Likely")) {
+            likelyArgs[arg->Child(0)] = arg;
+            arg = arg->HeadPtr();
+        }
+    }
+}
+
+void UnstripLikely(TExprNodeList& args, const TNodeOnNodeOwnedMap& likelyArgs) {
+    for (auto& arg : args) {
+        if (auto it = likelyArgs.find(arg.Get()); it != likelyArgs.end()) {
+            arg = it->second;
+        }
+    }
+}
+
 TExprNode::TPtr OptimizeDups(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto children = node->ChildrenList();
+    TNodeOnNodeOwnedMap likelyArgs;
+    StripLikely(children, likelyArgs);
     DropDups(children);
     if (children.size() < node->ChildrenSize()) {
+        UnstripLikely(children, likelyArgs);
         YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->ChildrenSize() - children.size() << " dups";
         return 1U == children.size() ? children.front() : ctx.ChangeChildren(*node, std::move(children));
     }
@@ -423,11 +445,8 @@ TExprNode::TPtr OptimizeNot(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (auto opt = OptimizeDups(node, ctx); opt != node) {
-        return opt;
-    }
-
+TExprNode::TPtr OptimizeExistsAndUnwrap(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable("And"));
     TExprNodeList children = node->ChildrenList();
     TNodeMap<size_t> exists;
     TNodeSet toReplace;
@@ -470,6 +489,307 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     YQL_CLOG(DEBUG, Core) << "Exist(pred) AND Unwrap(pred) -> Coalesce(pred, false)";
     return ctx.ChangeChildren(*node, std::move(newChildren));
+}
+
+bool IsExtractCommonPredicatesFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const TString enable = to_lower(TString("ExtractCommonPredicatesFromLogicalOps"));
+    static const TString disable = to_lower(TString("DisableExtractCommonPredicatesFromLogicalOps"));
+    return optCtx.Types->OptimizerFlags.contains(enable) && !optCtx.Types->OptimizerFlags.contains(disable);
+}
+
+size_t GetNodeId(const TExprNode* node, const TNodeMap<size_t>& node2id) {
+    auto it = node2id.find(node);
+    YQL_ENSURE(it != node2id.end());
+    return it->second;
+}
+
+TExprNodeList GetOrChildren(const TExprNode::TPtr& node) {
+    return node->IsCallable("Or") ? node->ChildrenList() : TExprNodeList{ node };
+}
+
+bool AllOrNoneOr(const TExprNodeList& children) {
+    size_t orCount = 0;
+    for (auto& child : children) {
+        orCount += child->IsCallable("Or");
+    }
+    return orCount == children.size() || orCount == 0;
+}
+
+TExprNodeList GetOrAndChildren(TExprNode::TPtr node, bool visitOr) {
+    if (node->IsCallable("Likely")) {
+        node = node->HeadPtr();
+    }
+    if (visitOr && node->IsCallable("Or") || !visitOr && node->IsCallable("And")) {
+        return node->ChildrenList();
+    }
+    return { node };
+}
+
+const TExprNode* GetFirstOrAndChild(TExprNode::TPtr node, bool visitOr) {
+    TExprNodeList children = GetOrAndChildren(node, visitOr);
+    YQL_ENSURE(!children.empty());
+    return children.front().Get();
+}
+
+TVector<TVector<size_t>> SplitToNonIntersectingGroups(const TExprNodeList& children, bool visitOr) {
+    TNodeMap<size_t> node2id;
+    for (const auto& child : children) {
+        TExprNodeList components = GetOrAndChildren(child, visitOr);
+        for (auto& p : components) {
+            size_t currSize = node2id.size();
+            node2id.insert({p.Get(), currSize});
+        }
+    }
+
+    TDisjointSets disjointSets(node2id.size());
+    for (const auto& child : children) {
+        TExprNodeList components = GetOrAndChildren(child, visitOr);
+        size_t first = GetNodeId(components.front().Get(), node2id);
+        for (auto& p : components) {
+            disjointSets.UnionSets(first, GetNodeId(p.Get(), node2id));
+        }
+    }
+
+    THashMap<size_t, size_t> canonicalElement2Group;
+    TVector<TVector<size_t>> groups;
+    for (size_t i = 0; i < children.size(); ++i) {
+        size_t first = GetNodeId(GetFirstOrAndChild(children[i], visitOr), node2id);
+        size_t canonicalElement = disjointSets.CanonicSetElement(first);
+        auto it = canonicalElement2Group.find(canonicalElement);
+        if (it != canonicalElement2Group.end()) {
+            YQL_ENSURE(groups.size() > it->second);
+            groups[it->second].push_back(i);
+        } else {
+            canonicalElement2Group[canonicalElement] = groups.size();
+            groups.emplace_back();
+            groups.back().push_back(i);
+        }
+    }
+
+    return groups;
+}
+
+TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable("And"));
+    TExprNodeList children = node->ChildrenList();
+    TNodeOnNodeOwnedMap likelyPreds;
+    StripLikely(children, likelyPreds);
+    if (AllOrNoneOr(children)) {
+        return node;
+    }
+
+    // AND Absorption law
+    // (A OR B) AND A -> A
+    const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, true);
+
+    THashSet<size_t> toDrop;
+    for (auto& group : groups) {
+        TVector<size_t> orIndexes;
+        TNodeSet restSet;
+        for (auto& index : group) {
+            if (children[index]->IsCallable("Or")) {
+                orIndexes.push_back(index);
+            } else {
+                restSet.insert(children[index].Get());
+            }
+        }
+        for (auto& idx : orIndexes) {
+            if (AnyOf(children[idx]->ChildrenList(), [&](const auto& n) { return restSet.contains(n.Get()); })) {
+                toDrop.insert(idx);
+            }
+        }
+    }
+
+    if (!toDrop.empty()) {
+        TExprNodeList newChildren;
+        for (size_t i = 0; i < children.size(); ++i) {
+            if (!toDrop.contains(i)) {
+                newChildren.push_back(children[i]);
+            }
+        }
+        UnstripLikely(newChildren, likelyPreds);
+        bool addJust = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional &&
+            AllOf(newChildren, [](const auto& node) {
+                YQL_ENSURE(node->GetTypeAnn());
+                return node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional;
+            });
+        YQL_CLOG(DEBUG, Core) << "Absorption law for AND. Original size: " << node->ChildrenSize() << ", result size: " << newChildren.size();
+        return ctx.WrapByCallableIf(addJust, "Just", ctx.ChangeChildren(*node, std::move(newChildren)));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (auto opt = OptimizeDups(node, ctx); opt != node) {
+        return opt;
+    }
+
+    if (auto opt = OptimizeExistsAndUnwrap(node, ctx); opt != node) {
+        return opt;
+    }
+
+    if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
+        if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
+            return opt;
+        }
+    }
+
+    return node;
+}
+
+TExprNode::TPtr ApplyOrAbsorption(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable("Or"));
+    const TExprNodeList children = node->ChildrenList();
+    YQL_ENSURE(!children.empty());
+    if (AnyOf(children, [](const auto& child) { return child->IsCallable("And"); })) {
+        // OR Absorption law
+        // X AND A OR A -> A
+        // (X AND (B OR A)) OR A OR B -> A OR B
+        TVector<size_t> andIndexes;
+        TNodeSet restSet;
+        for (size_t i = 0; i < children.size(); ++i) {
+            if (children[i]->IsCallable("And")) {
+                andIndexes.push_back(i);
+            } else {
+                restSet.insert(children[i].Get());
+            }
+        }
+
+        THashSet<size_t> toDrop;
+        for (auto& idx : andIndexes) {
+            TExprNodeList andChildren = children[idx]->ChildrenList();
+            bool haveCommonFactor = AnyOf(andChildren, [&](TExprNode::TPtr child) {
+                if (child->IsCallable("Likely")) {
+                    child = child->HeadPtr();
+                }
+                TExprNodeList orList = GetOrChildren(child);
+                return AllOf(orList, [&](const auto& n) { return restSet.contains(n.Get()); });
+            });
+            if (haveCommonFactor) {
+                toDrop.insert(idx);
+            }
+        }
+
+        if (!toDrop.empty()) {
+            TExprNodeList newChildren;
+            for (size_t i = 0; i < children.size(); ++i) {
+                if (!toDrop.contains(i)) {
+                    newChildren.push_back(children[i]);
+                }
+            }
+            bool addJust = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional &&
+                AllOf(newChildren, [](const auto& node) {
+                    YQL_ENSURE(node->GetTypeAnn());
+                    return node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional;
+                });
+            YQL_CLOG(DEBUG, Core) << "Absorption law for OR. Original size: " << node->ChildrenSize() << ", result size: " << newChildren.size();
+            return ctx.WrapByCallableIf(addJust, "Just", ctx.ChangeChildren(*node, std::move(newChildren)));
+        }
+    }
+    return node;
+}
+
+TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable("Or"));
+    const TExprNodeList children = node->ChildrenList();
+    YQL_ENSURE(!children.empty());
+    if (AllOf(children, [](const auto& child) { return child->IsCallable("And"); })) {
+        // OR Distributive law: (a AND b) OR (b AND c) -> (a OR c) AND b
+        if (!IsStrict(node)) {
+            return node;
+        }
+        const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, false);
+        auto ptrComparator = [](const TExprNode::TPtr& l, const TExprNode::TPtr& r) {
+            return l.Get() < r.Get();
+        };
+        TExprNodeList newChildren;
+        bool changed = false;
+        for (auto& group : groups) {
+            YQL_ENSURE(!group.empty());
+            if (group.size() == 1) {
+                newChildren.push_back(children[group.front()]);
+                continue;
+            }
+            TExprNodeList commonPreds = children[group.front()]->ChildrenList();
+
+            TNodeOnNodeOwnedMap likelyPreds;
+            StripLikely(commonPreds, likelyPreds);
+
+            Sort(commonPreds, ptrComparator);
+            for (size_t i = 1; i < group.size() && !commonPreds.empty(); ++i) {
+                TExprNodeList curr = children[group[i]]->ChildrenList();
+                StripLikely(curr, likelyPreds);
+                Sort(curr, ptrComparator);
+
+                TExprNodeList intersected;
+                SetIntersection(commonPreds.begin(), commonPreds.end(), curr.begin(), curr.end(), std::back_inserter(intersected), ptrComparator);
+                std::swap(commonPreds, intersected);
+            }
+
+            if (!commonPreds.empty()) {
+                changed = true;
+                TNodeSet commonSet;
+                commonSet.reserve(commonPreds.size());
+                for (const auto& c : commonPreds) {
+                    commonSet.insert(c.Get());
+                }
+                UnstripLikely(commonPreds, likelyPreds);
+                // stabilize common predicate order
+                Sort(commonPreds, [](const auto& l, const auto& r) { return CompareNodes(*l, *r) < 0; });
+
+                TExprNodeList newGroup;
+                for (auto& idx : group) {
+                    auto childAnd = children[idx];
+                    TExprNodeList preds = childAnd->ChildrenList();
+                    EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(p->IsCallable("Likely") ? p->Child(0) : p.Get()); });
+                    if (!preds.empty()) {
+                        newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
+                    }
+                }
+                auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
+                commonPreds.push_back(restPreds);
+                newChildren.push_back(ctx.NewCallable(node->Pos(), "And", std::move(commonPreds)));
+            } else {
+                for (auto& idx : group) {
+                    newChildren.push_back(children[idx]);
+                }
+            }
+        }
+
+        if (changed) {
+            YQL_CLOG(DEBUG, Core) << "Distributive law for OR";
+            return ctx.ChangeChildren(*node, std::move(newChildren));
+        }
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (auto opt = OptimizeDups(node, ctx); opt != node) {
+        return opt;
+    }
+
+    TNodeOnNodeOwnedMap likelyPreds;
+    TExprNodeList children = node->ChildrenList();
+    StripLikely(children, likelyPreds);
+    if (!likelyPreds.empty()) {
+        // Likely(A) OR B -> Likely(A OR B)
+        YQL_CLOG(DEBUG, Core) << "Or with Likely argument";
+        return ctx.NewCallable(node->Pos(), "Likely", { ctx.ChangeChildren(*node, std::move(children)) });
+    }
+
+    if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
+        if (auto opt = ApplyOrAbsorption(node, ctx); opt != node) {
+            return opt;
+        }
+        if (auto opt = ApplyOrDistributive(node, ctx); opt != node) {
+            return opt;
+        }
+    }
+    return node;
 }
 
 TExprNode::TPtr OptimizeMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -594,8 +914,8 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     map["Xor"] = std::bind(&OptimizeXor, _1, _2);
     map["Not"] = std::bind(&OptimizeNot, _1, _2);
 
-    map["And"] = std::bind(&OptimizeAnd, _1, _2);
-    map["Or"] = std::bind(OptimizeDups, _1, _2);
+    map["And"] = OptimizeAnd;
+    map["Or"] = OptimizeOr;
 
     map["Min"] = map["Max"] = std::bind(&OptimizeMinMax, _1, _2);
 

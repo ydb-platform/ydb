@@ -142,7 +142,6 @@ std::string computeName(const FormatToken *NamespaceTok) {
 std::string computeEndCommentText(StringRef NamespaceName, bool AddNewline,
                                   const FormatToken *NamespaceTok,
                                   unsigned SpacesToAdd) {
-  return "";
   std::string text = "//";
   text.append(SpacesToAdd, ' ');
   text += NamespaceTok->TokenText;

@@ -58,7 +58,7 @@ public:
         return ColumnStatsUsedMembers;
     }
 
-private:
+protected:
     double ComputeEqualitySelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
 
     double ComputeComparisonSelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);

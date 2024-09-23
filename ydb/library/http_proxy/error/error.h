@@ -23,6 +23,7 @@ struct TErrorClass {
 
     static const std::tuple<TString, ui32> GetErrorAndCode(ui32 id);
     static ui32 GetId(const TString& code);
+    static TMaybe<ui32> GetHttpStatus(const TString& code);
 
 private:
     static THashSet<TString> RegisteredCodes;

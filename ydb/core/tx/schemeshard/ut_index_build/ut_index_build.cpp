@@ -6,11 +6,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
-template <>
-inline void Out<Ydb::Table::IndexBuildState_State>(IOutputStream& o, Ydb::Table::IndexBuildState_State info) {
-    o << IndexBuildState_State_Name(info);
-}
-
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;

@@ -23,7 +23,8 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationC
         return node;
     }
     TAggregateExpander aggExpander(!typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey,
-        useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases, allowSpilling);
+        useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases,
+        typesCtx.IsBlockEngineEnabled() && !allowSpilling);
     auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 
@@ -384,16 +385,6 @@ IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPt
 TExprBase DqExpandMatchRecognize(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx) {
     YQL_ENSURE(node.Maybe<TCoMatchRecognize>(), "Expected MatchRecognize");
     return TExprBase(ExpandMatchRecognize(node.Ptr(), ctx, typeAnnCtx));
-}
-
-IDqOptimization* GetDqOptCallback(const TExprBase& providerRead, TTypeAnnotationContext& typeAnnCtx) {
-    if (providerRead.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerRead.Ref().Child(1))) {
-        auto dataSourceName = providerRead.Ref().Child(1)->Child(0)->Content();
-        auto datasource = typeAnnCtx.DataSourceMap.FindPtr(dataSourceName);
-        YQL_ENSURE(datasource);
-        return (*datasource)->GetDqOptimization();
-    }
-    return nullptr;
 }
 
 TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const std::function<const TParentsMap*()>& getParents, bool enableDqReplicate, TTypeAnnotationContext& typeAnnCtx) {

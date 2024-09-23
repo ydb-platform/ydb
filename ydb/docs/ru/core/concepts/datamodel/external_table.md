@@ -13,7 +13,7 @@
 
 Запись в YQL может выглядеть так:
 
-```sql
+```yql
 CREATE EXTERNAL TABLE s3_test_data (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL
@@ -27,7 +27,7 @@ CREATE EXTERNAL TABLE s3_test_data (
 
 Во внешние таблицы можно вставлять данные, так же, как и в обычные. Например, для записи данных во внешнюю таблицу достаточно выполнить следующий запрос:
 
-```sql
+```yql
 INSERT INTO s3_test_data
 SELECT * FROM Table
 ```

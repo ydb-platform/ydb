@@ -1,6 +1,6 @@
 Metadata-Version: 2.3
 Name: prettytable
-Version: 3.10.2
+Version: 3.11.0
 Summary: A simple Python library for easily displaying tabular data in a visually appealing ASCII table format
 Project-URL: Changelog, https://github.com/jazzband/prettytable/releases
 Project-URL: Homepage, https://github.com/jazzband/prettytable
@@ -705,6 +705,16 @@ will print:
     </tr>
   </tbody>
 </table>
+```
+
+#### Setting HTML escaping
+
+By default, PrettyTable will escape the data contained in the header and data fields
+when sending output to HTML. This can be disabled by setting the `escape_header` and
+`escape_data` to false. For example:
+
+```python
+print(table.get_html_string(escape_header=False, escape_data=False))
 ```
 
 ### Miscellaneous things

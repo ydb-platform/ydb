@@ -12,12 +12,7 @@ NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
 }
 
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig) {
-    const auto& properties = description.GetProperties().GetProperties();
-    for (auto& [property, value] : poolConfig.GetPropertiesMap()) {
-        if (auto propertyIt = properties.find(property); propertyIt != properties.end()) {
-            std::visit(NResourcePool::TPoolSettings::TParser{propertyIt->second}, value);
-        }
-    }
+    poolConfig = NResourcePool::TPoolSettings(description.GetProperties().GetProperties());
 }
 
 ui64 SaturationSub(ui64 x, ui64 y) {

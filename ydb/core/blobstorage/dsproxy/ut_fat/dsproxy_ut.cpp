@@ -3410,7 +3410,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                                 .GroupInfo = BsInfo,
                                 .GroupQueues = GroupQueues,
                                 .Mon = Mon,
-                                .Now = TInstant::Now(),
+                                .Now = TMonotonic::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                                 .LatencyQueueKind = kind,

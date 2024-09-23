@@ -392,7 +392,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 }
             } else {
                 if (inputPaths.size() == 1 && inputPaths.front()->Table->RowSpec && inputPaths.front()->Table->RowSpec->IsSorted()) {
-                    outTable.RowSpec->CopySortness(*inputPaths.front()->Table->RowSpec);
+                    outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec);
                 }
             }
         }
@@ -406,12 +406,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 bool hasAux = inputPaths.front()->Table->RowSpec->HasAuxColumns();
                 bool sortIsChanged = inputPaths.front()->Table->IsUnordered
                     ? inputPaths.front()->Table->RowSpec->IsSorted()
-                    : outTable.RowSpec->CopySortness(*inputPaths.front()->Table->RowSpec,
+                    : outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec,
                         exactCopySort ? TYqlRowSpecInfo::ECopySort::Exact : TYqlRowSpecInfo::ECopySort::WithDesc);
                 useExplicitColumns = useExplicitColumns || (inputPaths.front()->HasColumns() && hasAux);
 
                 for (size_t i = 1; i < inputPaths.size(); ++i) {
-                    sortIsChanged = outTable.RowSpec->MakeCommonSortness(*inputPaths[i]->Table->RowSpec) || sortIsChanged;
+                    sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *inputPaths[i]->Table->RowSpec) || sortIsChanged;
                     const bool tableHasAux = inputPaths[i]->Table->RowSpec->HasAuxColumns();
                     hasAux = hasAux || tableHasAux;
                     if (inputPaths[i]->HasColumns() && tableHasAux) {
@@ -669,30 +669,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtDqWrite(TExprBase nod
             .Build().Done();
     }
 
-    const auto& items = GetSeqItemType(write.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
-    auto expand = ctx.Builder(write.Pos())
-        .Callable("ExpandMap")
-            .Add(0, write.Input().Ptr())
-            .Lambda(1)
-                .Param("item")
-                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
-                    ui32 i = 0U;
-                    for (const auto& item : items) {
-                        lambda.Callable(i++, "Member")
-                            .Arg(0, "item")
-                            .Atom(1, item->GetName())
-                        .Seal();
-                    }
-                    return lambda;
-                })
-            .Seal()
-        .Seal().Build();
-
-    return Build<TCoDiscard>(ctx, write.Pos())
-        .Input<TYtDqWideWrite>()
-            .Input(std::move(expand))
-            .Settings(write.Settings())
-        .Build().Done();
+    return node;
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TExprContext& ctx) const {
@@ -794,43 +771,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
         .Publish(write.Table())
         .Settings(publishSettings)
         .Done();
-}
-
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnorderedPublishTarget(TExprBase node, TExprContext& ctx) const {
-    auto publish = node.Cast<TYtPublish>();
-
-    auto cluster = TString{publish.DataSink().Cluster().Value()};
-    auto pubTableInfo = TYtTableInfo(publish.Publish());
-    if (auto commitEpoch = pubTableInfo.CommitEpoch.GetOrElse(0)) {
-        const TYtTableDescription& nextDescription = State_->TablesData->GetTable(cluster, pubTableInfo.Name, commitEpoch);
-        YQL_ENSURE(nextDescription.RowSpec);
-        if (!nextDescription.RowSpec->IsSorted()) {
-            bool modified = false;
-            TVector<TYtOutput> outs;
-            for (auto out: publish.Input()) {
-                if (!IsUnorderedOutput(out) && TYqlRowSpecInfo(GetOutTable(out).Cast<TYtOutTable>().RowSpec()).IsSorted()) {
-                    outs.push_back(Build<TYtOutput>(ctx, out.Pos())
-                        .InitFrom(out)
-                        .Mode()
-                            .Value(ToString(EYtSettingType::Unordered))
-                        .Build()
-                        .Done());
-                    modified = true;
-                } else {
-                    outs.push_back(out);
-                }
-            }
-            if (modified) {
-                return Build<TYtPublish>(ctx, publish.Pos())
-                    .InitFrom(publish)
-                    .Input()
-                        .Add(outs)
-                    .Build()
-                    .Done();
-            }
-        }
-    }
-    return node;
 }
 
 }  // namespace NYql

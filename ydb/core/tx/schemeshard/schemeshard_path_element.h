@@ -162,7 +162,7 @@ public:
     void ChangeFileStoreSpaceBegin(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     void ChangeFileStoreSpaceCommit(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     bool CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStoreSpace oldSpace, TString& errStr);
-    void SetAsyncReplica();
+    void SetAsyncReplica(bool value);
     void SetRestoreTable();
     bool HasRuntimeAttrs() const;
     void SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const;

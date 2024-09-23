@@ -17,6 +17,9 @@ namespace NYT::NObjectClient {
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
 
+//! Checks if the given type is a Sequoia node.
+bool IsSequoiaNode(NObjectClient::EObjectType type);
+
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
 
@@ -76,6 +79,9 @@ bool IsSystemTransactionType(EObjectType type);
 
 //! Checks if the given type if an upload transaction.
 bool IsUploadTransactionType(EObjectType type);
+
+//! Checks if the given type is an externalized Cypress transaction.
+bool IsExternalizedTransactionType(EObjectType type);
 
 //! Checks if node with the given type can contain other nodes.
 bool IsCompositeNodeType(EObjectType type);

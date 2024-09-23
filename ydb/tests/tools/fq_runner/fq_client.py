@@ -405,7 +405,7 @@ class FederatedQueryClient(object):
     @retry.retry_intrusive
     def create_yds_connection(self, name, database=None, endpoint=None, database_id=None,
                               visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.no_auth(),
-                              check_issues=True):
+                              check_issues=True, shared_reading=False):
         assert (database_id is not None and database is None and endpoint is None) or (
             database_id is None and database is not None and endpoint is not None)
         request = fq.CreateConnectionRequest()
@@ -417,23 +417,9 @@ class FederatedQueryClient(object):
             yds.database = database
             yds.endpoint = endpoint
 
+        yds.shared_reading = shared_reading
+
         yds.auth.CopyFrom(auth_method)
-        request.content.acl.visibility = visibility
-        return self.create_connection(request, check_issues)
-
-    @retry.retry_intrusive
-    def create_postgresql_connection(self, name, database_name, database_id, login, password,
-                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
-        request = fq.CreateConnectionRequest()
-        request.content.name = name
-        pg = request.content.setting.postgresql_cluster
-        pg.database_name = database_name
-        pg.database_id = database_id
-        pg.secure = secure
-        pg.login = login
-        pg.password = password
-
-        pg.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 
@@ -450,6 +436,37 @@ class FederatedQueryClient(object):
         ch.password = password
 
         ch.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_greenplum_connection(self, name, database_name, database_id, login, password,
+                                    secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        gp = request.content.setting.greenplum_cluster
+        gp.database_name = database_name
+        gp.database_id = database_id
+        gp.login = login
+        gp.password = password
+
+        gp.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_postgresql_connection(self, name, database_name, database_id, login, password,
+                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        pg = request.content.setting.postgresql_cluster
+        pg.database_name = database_name
+        pg.database_id = database_id
+        pg.secure = secure
+        pg.login = login
+        pg.password = password
+
+        pg.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 

@@ -109,7 +109,7 @@ message TEvListResponse {
 
 enum EBuildStatus {
     INVALID = 0;
-    ACCEPTED = 1;
+    ACCEPTED = 1; // DEPRECATED don't use it, it does nothing, we cannot remove it for now, because old nodes can send it
     IN_PROGRESS = 2;
     DONE = 3;
 
@@ -117,3 +117,14 @@ enum EBuildStatus {
     BUILD_ERROR = 5;
     BAD_REQUEST = 6;
 }
+
+message TEvUploadSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional Ydb.StatusIds.StatusCode UploadStatus = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+
+    optional uint64 RowsDelta = 4;
+    optional uint64 BytesDelta = 5;
+}
+

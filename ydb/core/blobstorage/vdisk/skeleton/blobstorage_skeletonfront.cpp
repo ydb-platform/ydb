@@ -1082,7 +1082,7 @@ namespace NKikimr {
                 light = Max(light, queue->GetCumulativeLight());
             }
             // send a message to Whiteboard
-            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, PDiskErrorState.GetErrorReason(), outOfSpaceFlags,
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
                 replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();

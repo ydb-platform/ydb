@@ -218,7 +218,6 @@ struct TEvWhiteboard{
         }
 
         explicit TEvVDiskStateUpdate(NKikimrWhiteboard::EVDiskState state,
-                                     const TString& pdiskErrorReason,
                                      NKikimrWhiteboard::EFlag diskSpace,
                                      bool replicated,
                                      bool unreplicatedPhantoms,
@@ -227,7 +226,6 @@ struct TEvWhiteboard{
                                      NKikimrWhiteboard::EFlag frontQueuesLigth,
                                      bool hasUnreadableBlobs) {
             Record.SetVDiskState(state);
-            Record.SetPDiskErrorReason(pdiskErrorReason);
             Record.SetDiskSpace(diskSpace);
             Record.SetReplicated(replicated);
             Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);

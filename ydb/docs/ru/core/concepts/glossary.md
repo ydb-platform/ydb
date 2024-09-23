@@ -101,7 +101,7 @@
 
 {% if oss == "true" %}
 
-Реализация распределённых транзакций рассмотрена в отдельной статье [{#T}](../contributor/datashard-distributed-txs.md), а ниже приведён список нескольких связанных терминов.
+Реализация распределённых транзакций рассмотрена в отдельной статье [{#T}](../contributor/datashard-distributed-txs.md), а ниже приведён список нескольких [связанных терминов](#distributed-transaction-implementation).
 
 {% endif %}
 

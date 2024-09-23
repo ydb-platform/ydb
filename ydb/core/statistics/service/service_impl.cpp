@@ -22,6 +22,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+
 namespace NKikimr {
 namespace NStat {
 
@@ -207,6 +208,7 @@ public:
             hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
 
             hFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(NMon::TEvHttpInfoRes, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -1249,146 +1251,259 @@ private:
     void PrintStatServiceState(TStringStream& str) {
         HTML(str) {
             PRE() {
-                str << "---- StatisticsService ----" << Endl << Endl;
-                str << "StatisticsAggregatorId: " << StatisticsAggregatorId << Endl;
-                str << "SAPipeClientId: " << SAPipeClientId << Endl;
+            str << "---- StatisticsService ----" << Endl << Endl;
+            str << "StatisticsAggregatorId: " << StatisticsAggregatorId << Endl;
+            str << "SAPipeClientId: " << SAPipeClientId << Endl;
 
-                str << "InFlight: " << InFlight.size();
-                {
-                    ui32 simple{ 0 };
-                    ui32 countMin{ 0 };
-                    for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
-                        if (it->second.StatType == EStatType::SIMPLE) {
-                            ++simple;
-                        } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
-                            ++countMin;
-                        }
+            str << "InFlight: " << InFlight.size();
+            {
+                ui32 simple{ 0 };
+                ui32 countMin{ 0 };
+                for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
+                    if (it->second.StatType == EStatType::SIMPLE) {
+                        ++simple;
+                    } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
+                        ++countMin;
                     }
-                    str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
                 }
-                str << "NextRequestId: " << NextRequestId << Endl;
+                str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
+            }
+            str << "NextRequestId: " << NextRequestId << Endl;
 
-                str << "LoadQueriesInFlight: " << LoadQueriesInFlight.size() << Endl;
-                str << "NextLoadQueryCookie: " << NextLoadQueryCookie << Endl;
+            str << "LoadQueriesInFlight: " << LoadQueriesInFlight.size() << Endl;
+            str << "NextLoadQueryCookie: " << NextLoadQueryCookie << Endl;
 
-                str << "NeedSchemeShards: " << NeedSchemeShards.size() << Endl;
-                str << "Statistics: " << Statistics.size() << Endl;
+            str << "NeedSchemeShards: " << NeedSchemeShards.size() << Endl;
+            str << "Statistics: " << Statistics.size() << Endl;
 
-                str << "ResolveSAStage: ";
-                if (ResolveSAStage == RSA_INITIAL) {
-                    str << "RSA_INITIAL";
-                } else if (ResolveSAStage == RSA_IN_FLIGHT) {
-                    str << "RSA_IN_FLIGHT";
-                }
-                else {
-                    str << "RSA_FINISHED";
-                }
-                str << Endl;
+            str << "ResolveSAStage: ";
+            if (ResolveSAStage == RSA_INITIAL) {
+                str << "RSA_INITIAL";
+            } else if (ResolveSAStage == RSA_IN_FLIGHT) {
+                str << "RSA_IN_FLIGHT";
+            }
+            else {
+                str << "RSA_FINISHED";
+            }
+            str << Endl;
 
-                str << "AggregateKeepAlivePeriod: " << Settings.AggregateKeepAlivePeriod << Endl;
-                str << "AggregateKeepAliveTimeout: " << Settings.AggregateKeepAliveTimeout << Endl;
-                str << "AggregateKeepAliveAckTimeout: " << Settings.AggregateKeepAliveAckTimeout << Endl;
-                str << "StatisticsRequestTimeout: " << Settings.StatisticsRequestTimeout << Endl;
-                str << "MaxInFlightTabletRequests: " << Settings.MaxInFlightTabletRequests << Endl;
-                str << "FanOutFactor: " << Settings.FanOutFactor << Endl;
+            str << "AggregateKeepAlivePeriod: " << Settings.AggregateKeepAlivePeriod << Endl;
+            str << "AggregateKeepAliveTimeout: " << Settings.AggregateKeepAliveTimeout << Endl;
+            str << "AggregateKeepAliveAckTimeout: " << Settings.AggregateKeepAliveAckTimeout << Endl;
+            str << "StatisticsRequestTimeout: " << Settings.StatisticsRequestTimeout << Endl;
+            str << "MaxInFlightTabletRequests: " << Settings.MaxInFlightTabletRequests << Endl;
+            str << "FanOutFactor: " << Settings.FanOutFactor << Endl;
 
-                str << "---- AggregationStatistics ----" << Endl;
-                str << "Round: " << AggregationStatistics.Round << Endl;
-                str << "Cookie: " << AggregationStatistics.Cookie << Endl;
-                str << "PathId: " << AggregationStatistics.PathId.ToString() << Endl;
-                str << "LastAckHeartbeat: " << AggregationStatistics.LastAckHeartbeat << Endl;
-                str << "ParentNode: " << AggregationStatistics.ParentNode << Endl;
-                str << "PprocessedNodes: " << AggregationStatistics.PprocessedNodes << Endl;
-                str << "TotalStatisticsResponse: " << AggregationStatistics.TotalStatisticsResponse << Endl;
-                str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
-                str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
+            str << "---- AggregationStatistics ----" << Endl;
+            str << "Round: " << AggregationStatistics.Round << Endl;
+            str << "Cookie: " << AggregationStatistics.Cookie << Endl;
+            str << "PathId: " << AggregationStatistics.PathId.ToString() << Endl;
+            str << "LastAckHeartbeat: " << AggregationStatistics.LastAckHeartbeat << Endl;
+            str << "ParentNode: " << AggregationStatistics.ParentNode << Endl;
+            str << "PprocessedNodes: " << AggregationStatistics.PprocessedNodes << Endl;
+            str << "TotalStatisticsResponse: " << AggregationStatistics.TotalStatisticsResponse << Endl;
+            str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
+            str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
             }
         }
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        auto& request = ev->Get()->Request;
-
-        auto method = request.GetMethod();
-        if (method == HTTP_METHOD_POST) {
-            if (!EnableColumnStatistics) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-                return;
-            }
-
-            auto& params = request.GetPostParams();
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
-                return;
-            }
-            if (itAction->second != "analyze") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
-            return;
-
-        } else if (method == HTTP_METHOD_GET) {
-            auto& params = request.GetParams();
-            if (params.empty()) {
-                TStringStream str;
-                PrintStatServiceState(str);
-                Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
-                return;
-            }
-
-            if (!EnableColumnStatistics) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-                return;
-            }
-
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
-                return;
-            }
-            if (itAction->second != "status") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
-            return;
-        }
-
-        TStringStream str;
+    void AddPanel(IOutputStream& str, const TString& title, const std::function<void(IOutputStream&)>& bodyRender) {
         HTML(str) {
-            str << "<form method=\"post\" id=\"analyzePath\" name=\"analyzePath\" class=\"form-group\">" << Endl;
-            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
-            DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
+            DIV_CLASS("panel panel-default") {
+                DIV_CLASS("panel-heading") {
+                    H4_CLASS("panel-title") {
+                        str << title;
+                    }
+                }
+                DIV_CLASS("panel-body") {
+                    bodyRender(str);
+                }
             }
-            DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
-            }
-            str << "</form>" << Endl;
-            str << "<form method=\"get\" id=\"pathStatus\" name=\"pathStatus\" class=\"form-group\">" << Endl;
-            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
-            DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
-            }
-            DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Status\"/>";
-            }
-            str << "</form>" << Endl;
+        }
+    }
+
+    void PrintForm(TStringStream& str) {
+        HTML(str) {
+            AddPanel(str, "Analyze table", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+                            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
+                            }
+                        }
+                    }
+                }
+            });
+            AddPanel(str, "Get operation status", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "operation") {
+                                str << "OperationId";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='operation' name='operation' class='form-control' placeholder='operation id'>";
+                            }
+                            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"GetStatus\"/>";
+                            }
+                        }
+                    }
+                }
+            });
+            AddPanel(str, "Probe count-min sketch", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "column") {
+                                str << "ColumnName";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='column' name='column' class='form-control' placeholder='column name'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "cell") {
+                                str << "Value";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='cell' name='cell' class='form-control' placeholder='value'>";
+                            }
+
+                            str << "<input type=\"hidden\" name=\"action\" value=\"probe\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Probe\"/>";
+                            }
+                        }
+                    }
+                }
+            });
+
+            PrintStatServiceState(str);
+        }
+    }
+
+    void Handle(NMon::TEvHttpInfoRes::TPtr& ev) {
+        if (HttpRequestActorId != ev->Sender) {
+            return;
         }
 
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+        HttpRequestActorId = TActorId();
+
+        const auto* msg = ev->CastAsLocal<NMon::TEvHttpInfoRes>();
+        if (msg != nullptr) {
+            ReplyToMonitoring(msg->Answer);
+        }
+    }
+
+    void ReplyToMonitoring(const TString& description) {
+        TStringStream str;
+
+        if (!description.empty()) {
+            HTML(str) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12 alert alert-info") {
+                        str << description;
+                    }
+                }
+            }
+        }
+
+        PrintForm(str);
+        Send(MonitoringActorId, new NMon::TEvHttpInfoRes(str.Str()));
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+        if (!EnableColumnStatistics) {
+            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
+            return;
+        }
+
+        HttpRequestActorId = TActorId();
+        MonitoringActorId = ev->Sender;
+
+        const auto& request = ev->Get()->Request;
+        const auto& params = request.GetParams();
+
+        auto getRequestParam = [&params](const TString& name){
+            auto it = params.find(name);
+            return it != params.end() ? it->second : TString();
+        };
+
+        const auto action = getRequestParam("action");
+        if (action.empty()) {
+            ReplyToMonitoring("");
+            return;
+        }
+
+        const auto path = getRequestParam("path");
+        if (path.empty()) {
+            ReplyToMonitoring("'Path' parameter is required");
+            return;
+        }
+
+        if (action == "analyze") {
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
+                { THttpRequest::EParamType::PATH, path }
+            }, SelfId()));
+        } else if (action == "status") {
+            const auto operationId = getRequestParam("operation");
+            if (operationId.empty()) {
+                ReplyToMonitoring("'OperationId' parameter is required");
+                return;
+            }
+
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::STATUS, {
+                { THttpRequest::EParamType::PATH, path },
+                { THttpRequest::EParamType::OPERATION_ID, operationId }
+            }, SelfId()));
+        } else if (action == "probe") {
+            const auto column = getRequestParam("column");
+            if (column.empty()) {
+                ReplyToMonitoring("'ColumnName' parameter is required");
+                return;
+            }
+
+            const auto cell = getRequestParam("cell");
+            if (cell.empty()) {
+                ReplyToMonitoring("'Value' parameter is required");
+                return;
+            }
+
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::COUNT_MIN_SKETCH_PROBE, {
+                { THttpRequest::EParamType::PATH, path },
+                { THttpRequest::EParamType::COLUMN_NAME, column },
+                { THttpRequest::EParamType::CELL_VALUE, cell }
+            }, SelfId()));
+        } else {
+            ReplyToMonitoring("Wrong 'action' parameter value");
+        }
     }
 
 private:
@@ -1440,6 +1555,9 @@ private:
     EResolveSAStage ResolveSAStage = RSA_INITIAL;
 
     static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
+
+    TActorId HttpRequestActorId;
+    TActorId MonitoringActorId;
 };
 
 THolder<IActor> CreateStatService(const TStatServiceSettings& settings) {

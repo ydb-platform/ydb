@@ -1,7 +1,8 @@
 #include "http_request.h"
 
-
 #include <ydb/core/base/path.h>
+#include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/statistics/database/database.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -10,23 +11,19 @@
 namespace NKikimr {
 namespace NStat {
 
-TString MakeOperationId() {
-    TULIDGenerator ulidGen;
-    return ulidGen.Next(TActivationContext::Now()).ToBinary();
-}
+static constexpr ui64 FirstRoundCookie = 1;
+static constexpr ui64 SecondRoundCookie = 2;
 
-THttpRequest::THttpRequest(EType type, const TString& path, TActorId replyToActorId)
-    : Type(type)
-    , Path(path)
+THttpRequest::THttpRequest(ERequestType requestType, const std::unordered_map<EParamType, TString>& params, const TActorId& replyToActorId)
+    : RequestType(requestType)
+    , Params(params)
     , ReplyToActorId(replyToActorId)
-    , OperationId(MakeOperationId() )
-{}    
+{}
 
 void THttpRequest::Bootstrap() {
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     auto navigate = std::make_unique<TNavigate>();
     auto& entry = navigate->ResultSet.emplace_back();
-    entry.Path = SplitPath(Path);
+    entry.Path = SplitPath(Params[EParamType::PATH]);
     entry.Operation = TNavigate::EOp::OpTable;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
     navigate->Cookie = FirstRoundCookie;
@@ -37,20 +34,17 @@ void THttpRequest::Bootstrap() {
 }
 
 void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     std::unique_ptr<TNavigate> navigate(ev->Get()->Request.Release());
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
-    auto& entry = navigate->ResultSet.front();
+    const auto& entry = navigate->ResultSet.front();
 
     if (navigate->Cookie == SecondRoundCookie) {
         if (entry.Status != TNavigate::EStatus::Ok) {
             HttpReply("Internal error");
             return;
         }
-        if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
-            StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
-        }
-        ResolveSuccess();
+
+        DoRequest(entry);
         return;
     }
 
@@ -71,19 +65,7 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
         }
     }
 
-    PathId = entry.TableId.PathId;
-
-    auto& domainInfo = entry.DomainInfo;
-    ui64 aggregatorId = 0;
-    if (domainInfo->Params.HasStatisticsAggregator()) {
-        aggregatorId = domainInfo->Params.GetStatisticsAggregator();
-    }
-    bool isServerless = domainInfo->IsServerless();
-    TPathId domainKey = domainInfo->DomainKey;
-    TPathId resourcesDomainKey = domainInfo->ResourcesDomainKey;
-
     auto navigateDomainKey = [this] (TPathId domainKey) {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
@@ -94,26 +76,31 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
     };
+    const auto& domainInfo = entry.DomainInfo;
 
-    if (!isServerless) {
-        if (aggregatorId) {
-            StatisticsAggregatorId = aggregatorId;
-            ResolveSuccess();
-        } else {
-            navigateDomainKey(domainKey);
-        }
-    } else {
-        navigateDomainKey(resourcesDomainKey);
+    if (domainInfo->IsServerless()) {
+        navigateDomainKey(domainInfo->ResourcesDomainKey);
+        return;
     }
+
+    if (!domainInfo->Params.HasStatisticsAggregator()) {
+        navigateDomainKey(domainInfo->DomainKey);
+        return;
+    }
+
+    DoRequest(entry);
 }
 
 void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
-    auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
+    const auto& operationIdParam = Params[EParamType::OPERATION_ID];
+    TULID operationId;
+    operationId.ParseString(operationIdParam);
 
-    if (record.GetOperationId() != OperationId) {
+    if (record.GetOperationId() != operationId.ToBinary()) {
         ALOG_ERROR(NKikimrServices::STATISTICS, 
             "THttpRequest, TEvAnalyzeStatusResponse has operationId=" << record.GetOperationId() 
-            << " , but expected " << OperationId);
+            << " , but expected " << operationId);
         HttpReply("Wrong OperationId");
     }
 
@@ -133,34 +120,111 @@ void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     }
 }
 
+void THttpRequest::Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
+    const auto msg = ev->Get();
+
+    if (!msg->Success || !msg->Data) {
+        const auto status = std::to_string(static_cast<ui32>(msg->Status));
+        HttpReply("Error occurred while loading statistics. Status: " + status);
+        return;
+    }
+
+    const auto typeId = static_cast<NScheme::TTypeId>(msg->Cookie);
+    const NScheme::TTypeInfo typeInfo(typeId);
+    const TStringBuf value(Params[EParamType::CELL_VALUE]);
+    TMemoryPool pool(64);
+
+    TCell cell;
+    TString error;
+    if (!NFormats::MakeCell(cell, value, typeInfo, pool, error)) {
+        HttpReply("Cell value parsing error: " + error);
+        return;
+    }
+
+NActors::IActor* CreateLoadStatisticsQuery(const NActors::TActorId& replyActorId,
+    const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie);
+
+    auto countMinSketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(msg->Data->Data(), msg->Data->Size()));
+    const auto probe = countMinSketch->Probe(cell.Data(), cell.Size());
+    HttpReply(Params[EParamType::PATH] + "[" + Params[EParamType::COLUMN_NAME] + "]=" + std::to_string(probe));
+}
+
 void THttpRequest::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
     HttpReply("Delivery problem");
 }
 
-void THttpRequest::ResolveSuccess() {
-    if (StatisticsAggregatorId == 0) {
+void THttpRequest::DoRequest(const TNavigate::TEntry& entry) {
+    switch (RequestType) {
+        case ERequestType::ANALYZE:
+            DoAnalyze(entry);
+            return;
+        case ERequestType::STATUS:
+            DoStatus(entry);
+            return;
+        case ERequestType::COUNT_MIN_SKETCH_PROBE:
+            DoCountMinSketchProbe(entry);
+            return;
+    }
+}
+
+void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
+    if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
         HttpReply("No statistics aggregator");
         return;
     }
 
-    if (Type == ANALYZE) {
-        auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
-        auto& record = analyze->Record;
-        record.SetOperationId(OperationId);
-        PathIdFromPathId(PathId, record.AddTables()->MutablePathId());
+    const auto statisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
 
-        Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(analyze.release(), StatisticsAggregatorId, true));
+    TULIDGenerator ulidGen;
+    const auto operationId = ulidGen.Next(TActivationContext::Now());
 
-        HttpReply("Analyze sent");
-    } else {
-        auto getStatus = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
-        auto& record = getStatus->Record;
-        record.SetOperationId(OperationId);
+    auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
+    auto& record = analyze->Record;
+    record.SetOperationId(operationId.ToBinary());
 
-        Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, true));
+    const auto& pathId = entry.TableId.PathId;
+    PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
+
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(analyze.release(), statisticsAggregatorId, true));
+    HttpReply("Analyze sent. OperationId: " + operationId.ToString());
+}
+
+void THttpRequest::DoStatus(const TNavigate::TEntry& entry) {
+    if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
+        HttpReply("No statistics aggregator");
+        return;
     }
+
+    const auto statisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
+
+    const auto& operationIdParam = Params[EParamType::OPERATION_ID];
+    TULID operationId;
+
+    if (operationIdParam.empty() || !operationId.ParseString(operationIdParam)) {
+        HttpReply(TString("Wrong OperationId: ") + (operationIdParam.empty() ? "Empty" : operationIdParam));
+    }
+
+    auto status = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
+    auto& record = status->Record;
+    record.SetOperationId(operationId.ToBinary());
+
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(status.release(), statisticsAggregatorId, true));
+}
+
+void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
+    const auto& columnName = Params[EParamType::COLUMN_NAME];
+
+    for (const auto& [_, tableInfo]: entry.Columns) {
+        if (tableInfo.Name == columnName) {
+            const auto columnTag = tableInfo.Id;
+            const auto typeId = tableInfo.PType.GetTypeId();
+            const auto& pathId = entry.TableId.PathId;
+            Register(CreateLoadStatisticsQuery(SelfId(), pathId, EStatType::COUNT_MIN_SKETCH, columnTag, typeId));
+            return;
+        }
+    }
+
+    HttpReply("Column is not set");
 }
 
 void THttpRequest::HttpReply(const TString& msg) {

@@ -943,6 +943,21 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     TStringStream str;
     HTML(str) {
         PRE() {
+            str << "<form method=\"post\" id=\"probe\" name=\"probe\" class=\"form-group\">" << Endl;
+            str << "<input type=\"hidden\" name=\"action\" value=\"probe\"/>";
+            DIV() {
+                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
+            }
+            DIV() {
+                str << "<input type=\"text\" class=\"form-control\" id=\"column\" name=\"column\"/>";
+            }
+            DIV() {
+                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Probe\"/>";
+            }
+            str << "</form>" << Endl;
+
+
+
             str << "---- StatisticsAggregator ----" << Endl << Endl;
             str << "Database: " << Database << Endl;
             str << "BaseStatistics: " << BaseStatistics.size() << Endl;

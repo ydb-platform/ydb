@@ -21,11 +21,9 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -681,22 +679,6 @@ private:
 
             TExprBase node(exprNode);
 
-            auto stats = TypesCtx.GetStats(exprNode.Get());
-            if (auto wrapBase = node.Maybe<TDqSourceWrapBase>()) {
-                if (auto maybeS3DataSource = wrapBase.Cast().DataSource().Maybe<TS3DataSource>()) {
-                    auto s3DataSource = maybeS3DataSource.Cast();
-                    auto dsStats = TypesCtx.GetStats(s3DataSource.Raw());
-                    if (dsStats && dsStats->Specific) {
-                        const TS3ProviderStatistics* specific = dynamic_cast<const TS3ProviderStatistics*>((dsStats->Specific.get()));
-                        auto rowType = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                        auto it = specific->Costs.find(TStructExprType::MakeHash(rowType->GetItems()));
-                        if (it != specific->Costs.end()) {
-                            stageCost += it->second;
-                        }
-                    }
-                }
-            }
-
             if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) {
                 auto readTable = maybeReadTable.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTable.Table().Path()).Metadata;
@@ -777,6 +759,8 @@ private:
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
+            } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
+                stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());
             }

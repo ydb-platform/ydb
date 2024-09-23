@@ -1491,7 +1491,7 @@ public:
         if (hasRead) {
             TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
         }
-        //TxManager->AddLock(lock->GetDataShard(), lock);
+        TxManager->AddLock(lock->GetDataShard(), *lock);
 
         Process();
     }

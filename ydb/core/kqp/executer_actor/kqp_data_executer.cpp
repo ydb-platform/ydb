@@ -263,7 +263,7 @@ public:
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        //TxManager->AddLock(lock.GetDataShard(), lock);
+                        TxManager->AddLock(lock.GetDataShard(), lock);
                     }
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {

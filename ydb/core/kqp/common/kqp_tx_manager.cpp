@@ -33,18 +33,18 @@ public:
         }
     }
 
-    bool AddLock(ui64 shardId, TKqpTxLock lock) override {
+    bool AddLock(ui64 shardId, TKqpLock lock) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING);
-        bool isError = (lock.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
-        bool isInvalidated = (lock.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
-                            || (lock.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
+        bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
+        bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
+                            || (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
         bool isLocksAcquireFailure = isError && !isInvalidated;
         bool broken = false;
 
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
-            if (lock.HasWrites()) {
-                lockPtr->Lock.SetHasWrites();
+            if (lock.Proto.GetHasWrites()) {
+                lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
             lockPtr->LocksAcquireFailure |= isLocksAcquireFailure;
@@ -293,12 +293,12 @@ private:
         TActionFlags Flags = 0;
 
         struct TLockInfo {
-            TKqpTxLock Lock;
+            TKqpLock Lock;
             bool Invalidated = false;
             bool LocksAcquireFailure = false;
         };
 
-        THashMap<TKqpTxLock::TKey, TLockInfo> Locks;
+        THashMap<TKqpLock::TKey, TLockInfo> Locks;
 
         bool IsOlap = false;
         THashSet<TStringBuf> Pathes;

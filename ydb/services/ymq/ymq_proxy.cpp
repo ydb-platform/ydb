@@ -260,8 +260,8 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::SendMessageResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
             Ydb::Ymq::V1::SendMessageResult result;
-            result.set_md5_of_message_attributes(GetResponse(resp).GetMD5OfMessageAttributes());
-            result.set_md5_of_message_body(GetResponse(resp).GetMD5OfMessageBody());
+            result.set_m_d_5_of_message_attributes(GetResponse(resp).GetMD5OfMessageAttributes());
+            result.set_m_d_5_of_message_body(GetResponse(resp).GetMD5OfMessageBody());
             result.set_message_id(GetResponse(resp).GetMessageId());
             result.set_sequence_number(std::to_string(GetResponse(resp).GetSequenceNumber()));
             return result;
@@ -348,8 +348,8 @@ namespace NKikimr::NYmq::V1 {
                 }
 
                 dstMessage.set_body(srcMessage.GetData());
-                dstMessage.set_md5_of_body(srcMessage.GetMD5OfMessageBody());
-                dstMessage.set_md5_of_message_attributes(srcMessage.GetMD5OfMessageAttributes());
+                dstMessage.set_m_d_5_of_body(srcMessage.GetMD5OfMessageBody());
+                dstMessage.set_m_d_5_of_message_attributes(srcMessage.GetMD5OfMessageAttributes());
 
                 for (const auto& srcAttribute: srcMessage.GetMessageAttributes()) {
                     Ydb::Ymq::V1::MessageAttribute dstAttribute;
@@ -819,8 +819,8 @@ namespace NKikimr::NYmq::V1 {
                 } else {
                     auto currentSuccessful = result.Addsuccessful();
                     currentSuccessful->Setid(entry.GetId());
-                    currentSuccessful->Setmd5_of_message_attributes(entry.GetMD5OfMessageAttributes());
-                    currentSuccessful->Setmd5_of_message_body(entry.GetMD5OfMessageBody());
+                    currentSuccessful->set_m_d_5_of_message_attributes(entry.GetMD5OfMessageAttributes());
+                    currentSuccessful->set_m_d_5_of_message_body(entry.GetMD5OfMessageBody());
                     currentSuccessful->Setmessage_id(entry.GetMessageId());
                     currentSuccessful->Setsequence_number(std::to_string(entry.GetSequenceNumber()));
                 }

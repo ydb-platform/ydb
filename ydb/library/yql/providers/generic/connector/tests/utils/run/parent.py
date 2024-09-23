@@ -6,8 +6,8 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 
-# 3 mins
-DefaultTimeout: Final = 180
+# 10 mins, because database startup is very slow on Github CI
+DefaultTimeout: Final = 600
 
 
 class Runner(ABC):

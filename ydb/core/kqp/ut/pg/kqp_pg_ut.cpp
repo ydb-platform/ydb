@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         ui16 rowCount = 10,
         TVector<TString> colNames = {"key", "value"}
     ) {
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
         TTableBuilder builder;
@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         std::function<TString()> textIn,
         size_t rowCount = 1
     ) {
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
         auto paramsHash = THash<TString>()(typeMod);
@@ -1104,6 +1104,26 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             Cerr << spec.TypeId << Endl;
             testType(spec);
         }
+    }
+
+    Y_UNIT_TEST(DuplicatedColumns) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SELECT 1 a, '2' a, '1' || '2' a;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetResultSet(0).GetColumnsMeta().size() == 3, "Expected 3 columns");
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_C(result.GetResultSet(0).GetColumnsMeta()[i].Name == "a", TStringBuilder() << "Expected all columns to be named 'a', but got: " << result.GetResultSet(0).GetColumnsMeta()[i].Name);
+        }
+        CompareYson(R"([
+            ["1";"2";"12"]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(ReadPgArray) {
@@ -3213,7 +3233,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto tableClient = kikimr.GetTableClient();
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto tableName = createTable(tableClient, session, spec.TypeId, spec.IsKey, true, spec.TextIn, "", 0);
-            auto* typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
+            auto typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
             auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             auto keyType = spec.IsKey ? typeName : "pgint2";
             auto req = Sprintf("\
@@ -5063,6 +5083,33 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         UNIT_ASSERT_VALUES_EQUAL(colNames.size(), ydbResults.begin()->Getcolumns().size());
         for (size_t i = 0; i < colNames.size(); i++) {
             UNIT_ASSERT_VALUES_EQUAL(ydbResults.begin()->Getcolumns().at(i).Getname(), colNames[i]);
+        }
+    }
+
+    Y_UNIT_TEST(LongDomainName) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting})
+            .SetDomainRoot(std::string(65, 'a'));
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (id INT PRIMARY KEY, data1 UUID[]);
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                SELECT * FROM t;
+            )");
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 }

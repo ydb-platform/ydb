@@ -322,7 +322,7 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
-    friend class TAsyncIndexChangeSenderShard;
+    friend class TBaseChangeSenderShard;
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
@@ -1928,7 +1928,7 @@ public:
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     // TODO(ilnaz): remove 'afterMove' after #6541
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0, bool afterMove = false);
-    ui32 GetFreeChangeQueueCapacity(ui64 cookie);
+    ui32 GetFreeChangeQueueCapacity(ui64 cookie) const;
     ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);

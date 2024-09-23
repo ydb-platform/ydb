@@ -5175,6 +5175,66 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         session.Close().GetValueSync();
     }
 
+    Y_UNIT_TEST(DisableExternalDataSourcesOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableExternalDataSourcesOnServerless(false)
+            .Create();
+
+        auto checkDisabled = [](const auto& result, NYdb::EStatus status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+        };
+
+        auto checkNotFound = [](const auto& result, NYdb::EStatus status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+        };
+
+        const auto& createSourceSql = R"(
+            CREATE EXTERNAL DATA SOURCE MyExternalDataSource WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+
+        const auto& createTableSql = R"(
+            CREATE EXTERNAL TABLE MyExternalTable (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="MyExternalDataSource",
+                LOCATION="/"
+            );)";
+
+        const auto& dropSourceSql = "DROP EXTERNAL DATA SOURCE MyExternalDataSource;";
+
+        const auto& dropTableSql = "DROP EXTERNAL TABLE MyExternalTable;";
+
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        checkDisabled(ydb->ExecuteQuery(createSourceSql, settings), NYdb::EStatus::GENERIC_ERROR);
+        checkDisabled(ydb->ExecuteQuery(createTableSql, settings), NYdb::EStatus::PRECONDITION_FAILED);
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), NYdb::EStatus::SCHEME_ERROR);
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), NYdb::EStatus::GENERIC_ERROR);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddHostnamePatterns("my-bucket");
@@ -6877,8 +6937,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // ALTER RESOURCE POOL CLASSIFIER
         checkDisabled(R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                SET (RANK = 1, MEMBERNAME = "test@user"),
-                RESET (RESOURCE_POOL);
+                SET (RANK = 1, RESOURCE_POOL = "test"),
+                RESET (MEMBERNAME);
             )");
 
         // DROP RESOURCE POOL CLASSIFIER
@@ -6911,8 +6971,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto& alterSql = R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                SET (RANK = 1, MEMBERNAME = "test@user"),
-                RESET (RESOURCE_POOL);
+                SET (RANK = 1, RESOURCE_POOL = "test"),
+                RESET (MEMBERNAME);
             )";
 
         const auto& dropSql = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
@@ -6951,6 +7011,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test",
                 ANOTHER_PROPERTY=20
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -6966,10 +7027,40 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test",
                 RANK="StringValue"
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to parse property rank:");
+
+        result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK="0"
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing required property resource_pool");
+
+        result = session.ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                RESET (RESOURCE_POOL);
+            )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot reset required property resource_pool");
+
+        result = session.ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER `MyResource/PoolClassifier` WITH (
+                RESOURCE_POOL="test"
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Symbol '/' is not allowed in the resource pool classifier name 'MyResource/PoolClassifier'");
+
+        result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test",
+                MEMBERNAME=")" << BUILTIN_ACL_METADATA << R"("
+            );)").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << BUILTIN_ACL_METADATA);
     }
 
     Y_UNIT_TEST(ResourcePoolClassifiersRankValidation) {
@@ -6986,6 +7077,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Create with sample rank
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER ClassifierRank42 WITH (
+                RESOURCE_POOL="test_pool",
                 RANK=42
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
@@ -6993,6 +7085,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Try to create with same rank
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER AnotherClassifierRank42 WITH (
+                RESOURCE_POOL="test_pool",
                 RANK=42
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -7001,6 +7094,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Create with high rank
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER `ClassifierRank2^63` WITH (
+                RESOURCE_POOL="test_pool",
                 RANK=9223372036854775807
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
@@ -7008,6 +7102,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Try to create with auto rank
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER ClassifierRankAuto WITH (
+                RESOURCE_POOL="test_pool",
                 MEMBERNAME="test@user"
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -7065,11 +7160,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Auto rank
         query = R"(
             CREATE RESOURCE POOL CLASSIFIER AnotherResourcePoolClassifier WITH (
+                RESOURCE_POOL="test_pool",
                 MEMBERNAME="another@user"
             );)";
         result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"membername\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"membername\":\"another@user\"},\"database\":\"\\/Root\"}]}");
+        UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"membername\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"membername\":\"another@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
@@ -7086,6 +7182,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    RESOURCE_POOL="test_pool",
                     RANK=20
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -7095,6 +7192,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    RESOURCE_POOL="test_pool",
                     RANK=1
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -7141,22 +7239,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL CLASSIFIER AnotherResourcePoolClassifier WITH (
+                    RESOURCE_POOL="test_pool",
                     RANK=42
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"membername\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{},\"database\":\"\\/Root\"}]}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"membername\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
         }
 
         // Test reset
         {
             auto query = R"(
                 ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                    RESET (RANK, RESOURCE_POOL);
+                    RESET (RANK, MEMBERNAME);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1042,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"membername\":\"test@user\",\"resource_pool\":\"default\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{},\"database\":\"\\/Root\"}]}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1042,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"membername\":\"\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
         }
     }
 
@@ -7173,8 +7272,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto query = R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                SET (MEMBERNAME = "test@user", RANK = 100),
-                RESET (RESOURCE_POOL);
+                SET (RESOURCE_POOL = "test", RANK = 100),
+                RESET (MEMBERNAME);
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -7195,11 +7294,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                    RESOURCE_POOL="test_pool",
                     RANK=20
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{},\"database\":\"\\/Root\"}]}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
         }
 
         {
@@ -7753,7 +7853,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Pg).SetTypeDesc(NPg::TypeDescFromPgTypeName("pgint4"))
+            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")})
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -7773,7 +7873,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Pg).SetTypeDesc(NPg::TypeDescFromPgTypeName("pgfloat4")));
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")}));
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column pgfloat4;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -8072,7 +8172,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             csController->WaitCompactions(TDuration::Seconds(5));
         }
 
-        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest`", "[[#];[#];[[42u]];[[43u]]]");
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` ORDER BY value", "[[#];[#];[[42u]];[[43u]]]");
     }
 
     Y_UNIT_TEST(DropThenAddColumn) {

@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap {
 
-TCommittedData TInsertedData::Commit(const ui64 planStep, const ui64 txId) {
+TCommittedData TInsertedData::Commit(const ui64 planStep, const ui64 txId) const {
     return TCommittedData(UserData, planStep, txId, InsertWriteId);
 }
 

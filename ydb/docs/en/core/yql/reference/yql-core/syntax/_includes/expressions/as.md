@@ -6,8 +6,9 @@ Can be used in the following scenarios:
 * Using named arguments in function calls.
 * To specify the target type in the case of explicit type casting, see [CAST](../../../syntax/expressions.md#cast).
 
+### Examples
+
 {% if select_command != "SELECT STREAM" %}
-**Examples:**
 
 ```yql
 SELECT key AS k FROM my_table;
@@ -24,7 +25,6 @@ FROM my_table;
 ```
 
 {% else %}
-**Examples:**
 
 ```yql
 SELECT STREAM key AS k FROM my_stream;

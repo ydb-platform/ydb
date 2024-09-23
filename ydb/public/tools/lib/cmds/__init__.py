@@ -17,7 +17,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator, KikimrFixedNodePortAllocator
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
 
 
@@ -332,7 +332,7 @@ def deploy(arguments):
     port_allocator = None
     if getattr(arguments, 'fixed_ports', False):
         base_port_offset = getattr(arguments, 'base_port_offset', 0)
-        port_allocator = KikimrFixedPortAllocator(base_port_offset, [KikimrFixedNodePortAllocator(base_port_offset=base_port_offset)])
+        port_allocator = KikimrFixedPortAllocator(base_port_offset)
 
     optionals = {}
     if enable_tls():
@@ -513,7 +513,6 @@ def produce_arguments(args):
     parser.add_argument("--fixed-ports", action='store_true', default=False)
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
-    parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
@@ -527,7 +526,6 @@ def produce_arguments(args):
         arguments.debug_logging = parsed.debug_logging
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
-    arguments.enable_datastreams = parsed.enable_datastreams
     arguments.enable_pqcd = parsed.enable_pqcd
     return arguments
 

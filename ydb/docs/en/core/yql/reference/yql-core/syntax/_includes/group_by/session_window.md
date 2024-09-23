@@ -2,7 +2,7 @@
 
 YQL supports grouping by session. To standard expressions in `GROUP BY`, you can add a special `SessionWindow` function:
 
-```sql
+```yql
 SELECT
   user,
   session_start,
@@ -15,14 +15,18 @@ GROUP BY user, SessionWindow(<time_expr>, <timeout_expr>) AS session_start
 
 The following happens in this case:
 
-1) The input table is partitioned by the grouping keys specified in `GROUP BY`, ignoring SessionWindow (in this case, it's based on `user`).
+1. The input table is partitioned by the grouping keys specified in `GROUP BY`, ignoring SessionWindow (in this case, it's based on `user`).
+
    If `GROUP BY` includes nothing more than SessionWindow, then the input table gets into one partition.
-2) Each partition is split into disjoint subsets of rows (sessions).
+
+2. Each partition is split into disjoint subsets of rows (sessions).
+
    For this, the partition is sorted in the ascending order of the `time_expr` expression.
    The session limits are drawn between neighboring items of the partition, that differ in their `time_expr` values by more than `timeout_expr`.
-3) The sessions obtained in this way are the final partitions on which aggregate functions are calculated.
 
-The SessionWindow() key column (in the example, it's `session_start`) has the value "the minimum `time_expr` in the session".
+3. The sessions obtained in this way are the final partitions on which aggregate functions are calculated.
+
+The `SessionWindow()` key column (in the example, it's `session_start`) has the value "the minimum `time_expr` in the session".
 If `GROUP BY` includes SessionWindow(), you can use a special aggregate function
 [SessionStart](../../../builtins/aggregation.md#session-start).
 
@@ -39,9 +43,9 @@ Where:
 
 Using the extended version of SessionWindow, you can, for example, do the following: divide a partition into sessions, as in the SessionWindow use case with two arguments, but with the maximum session length limited by a certain constant:
 
-**Example**
+### Example
 
-```sql
+```yql
 $max_len = 1000; -- is the maximum session length.
 $timeout = 100; -- is the timeout (timeout_expr in a simplified version of SessionWindow).
 
@@ -62,5 +66,5 @@ FROM my_table
 GROUP BY user, SessionWindow(ts, $init, $update, $calculate) AS session_start
 ```
 
-You can use SessionWindow in GROUP BY only once.
+You can use `SessionWindow` in `GROUP BY` only once.
 

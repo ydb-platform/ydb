@@ -20,13 +20,16 @@
 * `RETENTION_PERIOD` — [время хранения записей](../../../../concepts/cdc.md#retention-period). Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_MIN_ACTIVE_PARTITIONS` — [количество партиций топика](../../../../concepts/cdc.md#topic-partitions). По умолчанию количество партиций топика равно количеству партиций таблицы.
 * `INITIAL_SCAN` — включение-выключение [первоначального сканирования](../../../../concepts/cdc.md#initial-scan) таблицы. По умолчанию выключено.
+
 {% if audience == "tech" %}
+
 * `AWS_REGION` — значение, которое будет записано в поле `awsRegion`. Применимо только совместно с форматом `DYNAMODB_STREAMS_JSON`.
+
 {% endif %}
 
 Приведенный ниже код добавит поток изменений с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES'
@@ -35,7 +38,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Записи в таком потоке изменений будут храниться в течение 24 часов (значение по умолчанию). Код из следующего примера создаст поток изменений с хранением записей в течение 12 часов:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -45,7 +48,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Пример создания потока изменений с включенными виртуальными метками времени:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -55,7 +58,7 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 Пример создания потока изменений с первоначальным сканированием:
 
-```sql
+```yql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
@@ -65,6 +68,6 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 
 `DROP CHANGEFEED` — удаляет поток изменений с указанным именем. Приведенный ниже код удалит changefeed с именем `updates_feed`:
 
-```sql
+```yql
 ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ```

@@ -44,7 +44,7 @@ TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadPa
 int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGenerator& /*workloadGen*/, TConfig& /*config*/) {
     auto dataGeneratorList = Initializer->GetBulkInitialData();
     AtomicSet(ErrorsCount, 0);
-    InFlightSemaphore = NThreading::TAsyncSemaphore::Make(UploadParams.MaxInFlight);
+    InFlightSemaphore = MakeHolder<TFastSemaphore>(UploadParams.MaxInFlight);
     for (auto dataGen : dataGeneratorList) {
         TThreadPoolParams params;
         params.SetCatching(false);
@@ -61,7 +61,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         }
         NThreading::WaitAll(sendings).Wait();
         const bool wereErrors = AtomicGet(ErrorsCount);
-        Cout << "Fill table " << dataGen->GetName() << (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
+        Cout << "Fill table " << dataGen->GetName()  << " "<< (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
         if (wereErrors) {
             break;
         }
@@ -97,36 +97,31 @@ TAsyncStatus TWorkloadCommandImport::TUploadCommand::SendDataPortion(NYdbWorkloa
 }
 
 void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept try {
-    TDeque<NThreading::TFuture<void>> sendings;
+    TAtomic counter = 0;
     for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(ErrorsCount); portions = dataGen->GenerateDataPortion()) {
         for (const auto& data: portions) {
-            sendings.emplace_back(
-                InFlightSemaphore->AcquireAsync().Apply([this, data](const auto& sem) {
-                    auto ar = MakeAtomicShared<NThreading::TAsyncSemaphore::TAutoRelease>(sem.GetValueSync()->MakeAutoRelease());
-                    return SendDataPortion(data).Apply(
-                        [ar, data, this](const TAsyncStatus& result) {
-                            const auto& res = result.GetValueSync();
-                            data->SetSendResult(res);
-                            auto guard = Guard(Lock);
-                            if (!res.IsSuccess()) {
-                                Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
-                                AtomicIncrement(ErrorsCount);
-                            } else {
-                                Bar->AddProgress(data->GetSize());
-                            }
-                        });
+            AtomicIncrement(counter);
+            SendDataPortion(data).Apply(
+                [data, this, &counter, g = MakeAtomicShared<TGuard<TFastSemaphore>>(*InFlightSemaphore)](const TAsyncStatus& result) {
+                    const auto& res = result.GetValueSync();
+                    data->SetSendResult(res);
+                    auto guard = Guard(Lock);
+                    if (!res.IsSuccess()) {
+                        Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
+                        AtomicIncrement(ErrorsCount);
+                    } else {
+                        Bar->AddProgress(data->GetSize());
                     }
-                )
-            );
-            while(sendings.size() > UploadParams.MaxInFlight) {
-                sendings.pop_front();
-            }
+                    AtomicDecrement(counter);
+                });
         }
         if (AtomicGet(ErrorsCount)) {
             break;
         }
     }
-    NThreading::WaitAll(sendings).GetValueSync();
+    while(AtomicGet(counter) > 0) {
+        Sleep(TDuration::MilliSeconds(100));
+    }
 } catch (...) {
     auto g = Guard(Lock);
     Cerr << "Fill table " << dataGen->GetName() << " failed: " << CurrentExceptionMessage() << ", backtrace: ";

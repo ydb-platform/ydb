@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
@@ -22,6 +23,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
@@ -293,8 +295,8 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NYdbGrpc::TServerOptions& options);
-        void EnableGRpc(ui16 port);
+        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0);
+        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0);
         void SetupRootStoragePools(const TActorId sender) const;
 
         void SetupDefaultProfiles();

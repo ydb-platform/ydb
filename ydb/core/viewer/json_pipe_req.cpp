@@ -21,7 +21,7 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
     }
 }
 
-TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
     : Viewer(viewer)
     , Event(ev)
 {
@@ -48,7 +48,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
         traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
     }
     if (traceId) {
-        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
+        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
         Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
     }
 }
@@ -122,37 +122,45 @@ TString TViewerPipeClient::GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResul
 }
 
 bool TViewerPipeClient::IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
-    return (ev->Request->ResultSet.size() == 1) && (ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+    return (ev->Request->ResultSet.size() > 0) && (std::find_if(ev->Request->ResultSet.begin(), ev->Request->ResultSet.end(),
+        [](const auto& entry) {
+            return entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        }) != ev->Request->ResultSet.end());
 }
 
 TString TViewerPipeClient::GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
     if (ev->Request->ResultSet.size() == 0) {
         return "empty response";
     }
-    switch (ev->Request->ResultSet.begin()->Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            return "Ok";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-            return "Unknown";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-            return "RootUnknown";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            return "PathErrorUnknown";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            return "PathNotTable";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-            return "PathNotPath";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-            return "TableCreationNotComplete";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-            return "LookupError";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-            return "RedirectLookupError";
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-            return "AccessDenied";
-        default:
-            return ::ToString(static_cast<int>(ev->Request->ResultSet.begin()->Status));
+    for (const auto& entry : ev->Request->ResultSet) {
+        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            switch (entry.Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                    return "Ok";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+                    return "Unknown";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+                    return "RootUnknown";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                    return "PathErrorUnknown";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+                    return "PathNotTable";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+                    return "PathNotPath";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                    return "TableCreationNotComplete";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+                    return "LookupError";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                    return "RedirectLookupError";
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                    return "AccessDenied";
+                default:
+                    return ::ToString(static_cast<int>(ev->Request->ResultSet.begin()->Status));
+            }
+        }
     }
+    return "no error";
 }
 
 bool TViewerPipeClient::IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev) {
@@ -752,11 +760,13 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
-    Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-    Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-    if (Database && !Direct) {
-        RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        return true;
+    if (Event) {
+        Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+        if (Database && !Direct) {
+            RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+            return true;
+        }
     }
     return false;
 }

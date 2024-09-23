@@ -80,6 +80,8 @@ public:
         ythrow yexception() << "Unknown type: " << name;
     }
 
+    bool GetTypeInfo(const TStringBuf& typeName, const TStringBuf& columnName, NScheme::TTypeInfo &typeInfo, ::TString& errorStr) const;
+
     TVector<const IType*> GetTypes() const {
         TVector<const IType*> types;
         types.reserve(TypeByIdMap.size());

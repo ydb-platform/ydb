@@ -43,7 +43,8 @@ private:
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
-    NMonitoring::THistogramPtr PackageSize;
+    NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
+    NMonitoring::THistogramPtr PackageSizeCountByRecords;
 
     NMonitoring::THistogramPtr PreparingDuration;
     NMonitoring::THistogramPtr WritingDuration;
@@ -108,7 +109,8 @@ public:
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
-        PackageSize->Collect(rowsCount);
+        PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
+        PackageSizeCountByRecords->Collect(rowsCount);
     }
 
     void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;
@@ -179,8 +181,8 @@ namespace NTxProxy {
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
-    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues);
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -222,6 +224,8 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
+    bool ImmediateWrite = false;
+
 protected:
     enum class EUploadSource {
         ProtoValues = 0,
@@ -280,6 +284,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
+        ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }
@@ -469,7 +474,7 @@ private:
                 if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
                     ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
                 } else {
-                    auto* typeDesc = typeInfo.GetTypeDesc();
+                    auto typeDesc = typeInfo.GetPgTypeDesc();
                     auto* pg = ydbType.mutable_pg_type();
                     pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                     pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
@@ -517,13 +522,13 @@ private:
                 }
             } else if (typeInProto.has_pg_type()) {
                 const auto& typeName = typeInProto.pg_type().type_name();
-                auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errorMessage = Sprintf("Unknown pg type for column %s: %s",
                                            name.c_str(), typeName.c_str());
                     return false;
                 }
-                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                auto typeInRequest = NScheme::TTypeInfo(typeDesc);
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
@@ -845,7 +850,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
@@ -919,8 +924,8 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
-            GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+        DoLongTxWriteSameMailbox(
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -947,9 +952,11 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
+        } else if (ImmediateWrite) {
+            return ReplyWithResult(status, ctx);
+        } else {
+            CommitLongTx(ctx);
         }
-
-        CommitLongTx(ctx);
     }
 
     void CommitLongTx(const TActorContext& ctx) {
@@ -1332,7 +1339,7 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
+            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS || ImmediateWrite);
             RollbackLongTx(ctx);
         }
         Span.EndOk();

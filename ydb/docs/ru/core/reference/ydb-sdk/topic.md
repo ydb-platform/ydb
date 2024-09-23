@@ -1,4 +1,3 @@
-<!-- Этот файл не отслеживается автоматической системой перевода. Правки в EN-версию необходимо внести самостоятельно. -->
 # Работа с топиками
 
 В этой статье приведены примеры использования {{ ydb-short-name }} SDK для работы с [топиками](../../concepts/topic.md).
@@ -34,13 +33,14 @@
 
 - C++
 
-  Для работы с топиками создаются экземпляры драйвера YDB и клиента.
+  Для работы с топиками создаются экземпляры драйвера {{ ydb-short-name }} и клиента.
 
-  Драйвер YDB отвечает за взаимодействие приложения и YDB на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
 
-  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) работает поверх драйвера YDB и отвечает за управляющие операции с топиками, а также создание сессий чтения и записи.
+  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) работает поверх драйвера {{ ydb-short-name }} и отвечает за управляющие операции с топиками, а также создание сессий чтения и записи.
 
-  Фрагмент кода приложения для инициализации драйвера YDB:
+  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
+
   ```cpp
   // Create driver instance.
   auto driverConfig = TDriverConfig()
@@ -50,20 +50,23 @@
 
   TDriver driver(driverConfig);
   ```
+
   В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
 
   Фрагмент кода приложения для создания клиента:
+
   ```cpp
   TTopicClient topicClient(driver);
   ```
 
 - Java
 
-  Для работы с топиками создаются экземпляры транспорта YDB и клиента.
+  Для работы с топиками создаются экземпляры транспорта {{ ydb-short-name }} и клиента.
 
-  Транспорт YDB отвечает за взаимодействие приложения и YDB на транспортном уровне. Он должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+  Транспорт {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Он должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
 
-  Фрагмент кода приложения для инициализации транспорта YDB:
+  Фрагмент кода приложения для инициализации транспорта {{ ydb-short-name }}:
+
   ```java
   try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
           .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
@@ -71,13 +74,15 @@
       // Use YDB transport
   }
   ```
+
   В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
   Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
 
-  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта YDB и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
+  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
 
   Фрагмент кода приложения для создания клиента:
+
   ```java
   try (TopicClient topicClient = TopicClient.newClient(transport)
                 .setCompressionExecutor(compressionExecutor)
@@ -85,6 +90,7 @@
     // Use topic client
   }
   ```
+
   В обоих примерах кода выше используется блок ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)).
   Это позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, т.к. оба являются наследниками `AutoCloseable`.
 
@@ -221,7 +227,6 @@
 
   Полный список настроек можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
 
-
   ```java
   topicClient.alterTopic(topicPath, AlterTopicSettings.newBuilder()
                   .addAddConsumer(Consumer.newBuilder()
@@ -282,7 +287,6 @@
   Для получения информации о топике используется метод `describeTopic`.
 
   Полный список полей описания можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
-
 
   ```java
   Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
@@ -371,6 +375,7 @@
 - Java (sync)
 
   Инициализация настроек писателя:
+
   ```java
   String producerAndGroupID = "group-id";
   WriterSettings settings = WriterSettings.newBuilder()
@@ -381,6 +386,7 @@
   ```
 
   Создание синхронного писателя:
+
   ```java
   SyncWriter writer = topicClient.createSyncWriter(settings);
   ```
@@ -388,10 +394,13 @@
   После создания писателя его необходимо инициализировать. Для этого есть два метода:
 
   - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+
     ```java
     writer.init();
     ```
+
   - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+
     ```java
     try {
         writer.initAndWait();
@@ -405,6 +414,7 @@
 - Java (async)
 
   Инициализация настроек писателя:
+
   ```java
   String producerAndGroupID = "group-id";
   WriterSettings settings = WriterSettings.newBuilder()
@@ -415,6 +425,7 @@
   ```
 
   Создание и инициализация асинхронного писателя:
+
   ```java
   AsyncWriter writer = topicClient.createAsyncWriter(settings);
 
@@ -445,9 +456,10 @@
 
   Для записи каждого сообщения пользователь должен "потратить" move-only объект `TContinuationToken`, который выдаёт SDK с событием `TReadyToAcceptEvent`. При записи сообщения можно установить пользовательские seqNo и временную метку создания, но по умолчанию их проставляет SDK автоматически.
 
-  По умолчанию `Write` выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к YDB при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, которую невозможно повторить, сессия чтения отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
+  По умолчанию `Write` выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, которую невозможно повторить, сессия чтения отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
 
   Так может выглядеть запись нескольких сообщений в цикле событий без использования обработчиков:
+
   ```cpp
   // Event loop
   while (true) {
@@ -473,7 +485,7 @@
 
   SeqNo и дата создания сообщений по умолчанию проставляются автоматически.
 
-  По умолчанию Write выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне. Writer сам переподключается к YDB при обрывах связи и повторяет отправку сообщений пока это возможно. При получении ошибки, которую невозможно повторить Writer останавливается и следующие вызовы Write будут завершаться с ошибкой.
+  По умолчанию Write выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне. Writer сам переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно. При получении ошибки, которую невозможно повторить Writer останавливается и следующие вызовы Write будут завершаться с ошибкой.
 
   ```go
   err := writer.Write(ctx,
@@ -515,7 +527,6 @@
     ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
     ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
     ])
-
   ```
 
 - Java (sync)
@@ -526,6 +537,7 @@
   Но попадание сообщения в очередь отправки не гарантирует того, что сообщение в итоге будет записано.
   Например, могут возникать ошибки, приводящие к завершению работы писателя до того, как сообщения из очереди будут отправлены.
   Если нужно подтверждение успешной записи для каждого сообщения, используйте асинхронного писателя и проверяйте статус, возвращаемый методом `send`.
+
   ```java
   writer.send(Message.of("11".getBytes()));
 
@@ -554,6 +566,7 @@
   Это способ сигнализировать пользователю о том, что поток записи следует притормозить.
   В таком случае стоит или пропускать сообщения, или выполнять повторные попытки записи через exponential backoff.
   Также можно увеличить размер клиентского буфера (`setMaxSendBufferMemorySize`), чтобы обрабатывать больший объем сообщений перед тем, как он заполнится.
+
   ```java
   try {
       // Non-blocking. Throws QueueOverflowException if send queue is full
@@ -576,6 +589,7 @@
   Ответы о записи сообщений на сервере приходят клиенту SDK в виде событий `TAcksEvent`. В одном событии могут содержаться ответы о нескольких отправленных ранее сообщениях. Варианты ответа: запись подтверждена (`EES_WRITTEN`), запись отброшена как дубликат ранее записанного сообщения (`EES_ALREADY_WRITTEN`) или запись отброшена по причине сбоя (`EES_DISCARDED`).
 
   Пример установки обработчика TAcksEvent для сессии записи:
+
   ```cpp
   auto settings = TWriteSessionSettings()
     // other settings are set here
@@ -603,7 +617,6 @@
   При подключении можно указать опцию синхронной записи сообщений - topicoptions.WithSyncWrite(true). Тогда Write будет возвращаться только после того как получит подтверждение с сервера о сохранении всех, сообщений переданных в вызове. При этом SDK так же как и обычно будет при необходимости переподключаться и повторять отправку сообщений. В этом режиме контекст управляет только временем ожидания ответа из SDK, т.е. даже после отмены контекста SDK продолжит попытки отправить сообщения.
 
   ```go
-
   producerAndGroupID := "group-id"
   writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
     topicoptions.WithMessageGroupID(producerAndGroupID),
@@ -643,7 +656,6 @@
   # Это самый медленный вариант отправки сообщений, используйте его только если такой режим
   # действительно нужен.
   writer.write_with_ack("message")
-
   ```
 
 - Java (async)
@@ -653,27 +665,27 @@
 
   ```java
   writer.send(Message.of(message))
-          .whenComplete((result, ex) -> {
-              if (ex != null) {
-                  logger.error("Exception on writing message message: ", ex);
-              } else {
-                  switch (result.getState()) {
-                      case WRITTEN:
-                          WriteAck.Details details = result.getDetails();
-                          StringBuilder str = new StringBuilder("Message was written successfully");
-                          if (details != null) {
-                              str.append(", offset: ").append(details.getOffset());
-                          }
-                          logger.debug(str.toString());
-                          break;
-                      case ALREADY_WRITTEN:
-                          logger.warn("Message has already been written");
-                          break;
-                      default:
-                          break;
-                  }
-              }
-          });
+        .whenComplete((result, ex) -> {
+            if (ex != null) {
+                logger.error("Exception on writing message message: ", ex);
+            } else {
+                switch (result.getState()) {
+                    case WRITTEN:
+                        WriteAck.Details details = result.getDetails();
+                        StringBuilder str = new StringBuilder("Message was written successfully");
+                        if (details != null) {
+                            str.append(", offset: ").append(details.getOffset());
+                        }
+                        logger.debug(str.toString());
+                        break;
+                    case ALREADY_WRITTEN:
+                        logger.warn("Message has already been written");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        });
   ```
 
 {% endlist %}
@@ -790,7 +802,6 @@
   if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
       session->Write(std::move(event.ContinuationToken), std::move(message));
   }
-
   ```
 
 - Java
@@ -834,6 +845,19 @@
 ### Запись в транзакции {#write-tx}
 
 {% list tabs %}
+
+- C++
+
+  Для записи в топик в транзакции необходимо передать ссылку на объект транзакции в метод `Write` сессии записи:
+
+  ```c++
+    auto tableSession = tableClient.GetSession().GetValueSync().GetSession();
+    auto transaction = tableSession.BeginTransaction().GetValueSync().GetTransaction();
+    NYdb::NTopic::TWriteMessage writeMessage("message");
+
+    topicSession->Write(std::move(writeMessage), transaction);
+    transaction.Commit().GetValueSync();
+  ```
 
 - Java (sync)
 
@@ -1011,6 +1035,7 @@
 - Java (sync)
 
   Инициализация настроек читателя
+
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
@@ -1023,16 +1048,20 @@
   ```
 
   Создание синхронного читателя
+
   ```java
   SyncReader reader = topicClient.createSyncReader(settings);
   ```
 
   После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
   - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+
     ```java
     reader.init();
     ```
+
   - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+
     ```java
     try {
         reader.initAndWait();
@@ -1046,6 +1075,7 @@
 - Java (async)
 
   Инициализация настроек читателя
+
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
@@ -1089,6 +1119,7 @@
   ```
 
   Создание и инициализация асинхронного читателя:
+
   ```java
   AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
   // Init in background
@@ -1176,7 +1207,7 @@
 
 - C++
 
-  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
+  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TEndPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
 
   Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
 
@@ -1432,6 +1463,7 @@
 - Java (async)
 
   В обработчике `onMessage` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
+
   ```java
   @Override
   public void onMessages(DataReceivedEvent event) {
@@ -1467,6 +1499,7 @@
   Допольнительно можно передать параметр `commitOffset`, который укажет позицию, сообщения до которой следует считать [закоммиченными](#commit).
 
   Пример установки обработчика:
+
   ```cpp
   settings.EventHandlers_.StartPartitionSessionHandler(
       [](TReadSessionEvent::TStartPartitionSessionEvent& event) {
@@ -1475,6 +1508,7 @@
       }
   );
   ```
+
   Здесь `GetOffsetToReadFrom` - это часть примера, а не SDK. Используйте свой способ определить требуемую стартовую позицию чтения для партиции с данным partition id.
 
   Также в `TReadSessionSettings` поддерживается настройка `ReadFromTimestamp` для чтения событий с отметками времени записи не меньше данной. Эта настройка предполагается не для точного позиционирования старта, а для пропуска объёма данных за большой интервал времени. Несколько первых полученных сообщений могут иметь отметки времени записи меньше указанной.
@@ -1647,6 +1681,7 @@
           .setTransaction(transaction)
           .build());
   ```
+
   Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
   Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
@@ -1662,7 +1697,7 @@
 
   ```java
   @Override
-  public void onMessages(DataReceivedEvent event) {
+    public void onMessages(DataReceivedEvent event) {
       for (Message message : event.getMessages()) {
           // creating a session in the table service
           Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
@@ -1695,7 +1730,7 @@
   }
   ```
 
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 
@@ -1703,9 +1738,9 @@
 
 В {{ ydb-short-name }} используется серверная балансировка партиций между клиентами. Это означает, что сервер может прерывать чтение сообщений из произвольных партиций.
 
-При _мягком прерывании_ клиент получает уведомление, что сервер уже закончил отправку сообщений из партиции и больше сообщения читаться не будут. Клиент может завершить обработку сообщений и отправить подтверждение на сервер.
+При *мягком прерывании* клиент получает уведомление, что сервер уже закончил отправку сообщений из партиции и больше сообщения читаться не будут. Клиент может завершить обработку сообщений и отправить подтверждение на сервер.
 
-В случае _жесткого прерывания_ клиент получает уведомление, что работать с сообщениями партиции больше нельзя. Клиент должен прекратить обработку прочитанных сообщений. Неподтвержденные сообщения будут переданы другому читателю.
+В случае *жесткого прерывания* клиент получает уведомление, что работать с сообщениями партиции больше нельзя. Клиент должен прекратить обработку прочитанных сообщений. Неподтвержденные сообщения будут переданы другому читателю.
 
 #### Мягкое прерывание чтения {#soft-stop}
 
@@ -1849,5 +1884,53 @@
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+{% endlist %}
+
+### Поддержка автомасштабирования топиков {#autoscaling}
+
+{% list tabs %}
+
+- C++
+
+  SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся в параметрах создания сессии чтения. По умолчанию используется режим совместимости.
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(true); // full support is enabled
+
+  // or
+
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(false); // compatibility mode is enabled
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  В режиме полной поддержки, когда все сообщения из партиции будут прочитаны, придёт событие `TEndPartitionSessionEvent`. После получения этого события в партиции больше не появится новых сообщений для чтения. Чтобы продолжить чтение из дочерних партиций, необходимо вызвать `Confirm()`, тем самым подтвердив, что приложение готово принимать сообщения из дочерних партиций. Если сообщения из всех партиций обрабатываются в одном потоке, то `Confirm()` можно вызвать сразу после получения `TEndPartitionSessionEvent`. Если обработка сообщений из разных партиций осуществляется в разных потоках, то следует завершить обработку сообщений, например, выполнить накопившийся батч, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого вызвать `Confirm()`.
+
+  После получения `TEndPartitionSessionEvent` и обработки всех сообщений рекомендуется всегда сразу подтверждать их обработку (коммит). Это позволит сбалансировать чтение дочерних партиций между разными сессиями чтения, что приведёт к равномерному распределению нагрузки по всем читателям.
+
+  Фрагмент цикла событий может выглядеть так:
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(true);
+
+  auto readSession = topicClient.CreateReadSession(settings);
+
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* endPartitionSessionEvent = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+      endPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
+  В режиме совместимости отсутствует явный сигнал о завершении чтения из партиции, и сервер будет пытаться эвристически определить, что клиент обработал партицию до конца. Это может привести к задержке между завершением чтения из исходной партиции и началом чтения из её дочерних партиций.
+
+  Если клиент подтверждает обработку сообщений (коммит), то сигналом завершения обработки сообщений из партиции будет подтверждение обработки последнего сообщения этой партиции. В случае, если клиент не подтверждает обработку сообщений, сервер будет периодически прерывать чтение из партиции и переключаться на чтение в другой сессии (если существуют другие сессии, готовые обрабатывать партицию). Это будет продолжаться до тех пор, пока чтение не [начнётся](#client-commit) с конца партиции.
+
+  Рекомендуется проверять корректность обработки мягкого прерывания чтения: клиент должен обработать полученные сообщения, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого вызывать `Confirm()` для события `TStopPartitionSessionEvent`.
 
 {% endlist %}

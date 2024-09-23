@@ -90,7 +90,7 @@ datasources:
 
 Например:
 
-```sql
+```yql
 SELECT
     `timestamp`,
     `responseStatus`
@@ -126,13 +126,13 @@ ORDER BY `timestamp`
 
 Пример запроса с макросом, который позволяет использовать временной фильтр Grafana.
 
-```sql
+```yql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol`)
 ```
 
-```sql
+```yql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + Interval("PT24H"))

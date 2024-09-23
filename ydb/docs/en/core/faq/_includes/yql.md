@@ -6,7 +6,7 @@
 
 You can select table rows based on a specified list of table primary key (or key prefix) values using the `IN` operator:
 
-```sql
+```yql
 DECLARE $keys AS List<UInt64>;
 
 SELECT * FROM some_table
@@ -15,7 +15,7 @@ WHERE Key1 IN $keys;
 
 If a selection is made using a composite key, the query parameter must have the type of a list of tuples:
 
-```sql
+```yql
 DECLARE $keys AS List<Tuple<UInt64, String>>;
 
 SELECT * FROM some_table
@@ -28,7 +28,7 @@ To select rows effectively, make sure that the value types in the parameters mat
 
 You can only use the `LIKE` operator to search a table index if it specifies a row prefix:
 
-```sql
+```yql
 SELECT * FROM string_key_table
 WHERE Key LIKE "some_prefix%";
 ```
@@ -41,13 +41,14 @@ WHERE Key LIKE "some_prefix%";
 
 Consider an example with two possible options for adding a JSON string to a table:
 
-```sql
+```yql
 UPSERT INTO test_json(id, json_string)
 VALUES
     (1, Json(@@[{"name":"Peter \"strong cat\" Kourbatov"}]@@)),
     (2, Json('[{"name":"Peter \\\"strong cat\\\" Kourbatov"}]'))
 ;
 ```
+
 To insert a value in the first line, use `raw string` and the escape method using `\"`. To insert the second line, escaping through `\\\"` is used.
 
 We recommend using `raw string` and the escape method using `\"`, as it is more visual.
@@ -56,7 +57,7 @@ We recommend using `raw string` and the escape method using `\"`, as it is more 
 
 You can use the `LEFT JOIN` operator to identify the keys a table is missing and update their values:
 
-```sql
+```yql
 DECLARE $values AS List<Struct<Key: UInt64, Value: String>>;
 
 UPSERT INTO kv_table
@@ -94,7 +95,7 @@ For most OLTP queries, we recommend using Index Lookup Join with a small size of
 
 You can use query parameter data as a constant table. To do this, use the `AS_TABLE` modifier with a parameter whose type is a list of structures:
 
-```sql
+```yql
 DECLARE $data AS List<Struct<Key1: UInt64, Key2: String>>;
 
 SELECT * FROM AS_TABLE($data) AS d
@@ -108,7 +109,7 @@ There is no explicit limit on the number of entries in the constant table, but m
 
 It's better to write it using a JOIN with a constant table:
 
-```sql
+```yql
 $keys = AsList(
     AsStruct(1 AS Key1, "One" AS Key2),
     AsStruct(2 AS Key1, "Three" AS Key2),

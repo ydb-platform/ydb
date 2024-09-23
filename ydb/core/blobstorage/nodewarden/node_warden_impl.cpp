@@ -1,4 +1,5 @@
 #include "node_warden_impl.h"
+#include "distconf.h"
 
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
@@ -206,6 +207,7 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
         icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
         icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
     }
 
     // start replication broker
@@ -231,20 +233,13 @@ void TNodeWarden::Bootstrap() {
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
 
-    // fill in a storage config
-    StorageConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
-    for (const auto& node : Cfg->NameserviceConfig.GetNode()) {
-        auto *r = StorageConfig.AddAllNodes();
-        r->SetHost(node.GetInterconnectHost());
-        r->SetPort(node.GetPort());
-        r->SetNodeId(node.GetNodeId());
-        if (node.HasLocation()) {
-            r->MutableLocation()->CopyFrom(node.GetLocation());
-        } else if (node.HasWalleLocation()) {
-            r->MutableLocation()->CopyFrom(node.GetWalleLocation());
-        }
-    }
-    StorageConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
+    // fill in a base storage config (from the file)
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
+    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    TString errorReason;
+    const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
+    Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
 
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
@@ -830,6 +825,175 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
     return true;
 }
 
+bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig,
+        NKikimrBlobStorage::TStorageConfig *config, TString *errorReason) {
+    // copy blob storage config
+    if (!appConfig.HasBlobStorageConfig()) {
+        *errorReason = "original config missing mandatory BlobStorageConfig section";
+        return false;
+    }
+    
+    const auto& bsFrom = appConfig.GetBlobStorageConfig();
+    auto *bsTo = config->MutableBlobStorageConfig();
+    if (bsFrom.HasAutoconfigSettings()) {
+        const auto& acFrom = bsFrom.GetAutoconfigSettings();
+        auto *acTo = bsTo->MutableAutoconfigSettings();
+        if (acFrom.HasGeneration() && acTo->HasGeneration() && acTo->GetGeneration() + 1 != acFrom.GetGeneration()) {
+            *errorReason = TStringBuilder() << "generation mismatch for AutoconfigSettings section existing Generation# "
+                << acTo->GetGeneration() << " newly provided Generation# " << acFrom.GetGeneration();
+            return false;
+        } else if (acTo->HasGeneration() && !acFrom.HasGeneration()) {
+            *errorReason = "existing AutoconfigSettings has set generation, but newly provided one doesn't have it";
+            return false;
+        }
+
+        acTo->CopyFrom(acFrom);
+    } else {
+        bsTo->ClearAutoconfigSettings();
+    }
+
+    if (bsFrom.HasServiceSet()) {
+        const auto& ssFrom = bsFrom.GetServiceSet();
+        auto *ssTo = bsTo->MutableServiceSet();
+
+        ssTo->MutableAvailabilityDomains()->CopyFrom(ssFrom.GetAvailabilityDomains());
+        if (ssFrom.HasReplBrokerConfig()) {
+            ssTo->MutableReplBrokerConfig()->CopyFrom(ssFrom.GetReplBrokerConfig());
+        }
+        if (!ssTo->PDisksSize() && !ssTo->VDisksSize() && !ssTo->GroupsSize()) {
+            ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());
+            ssTo->MutableVDisks()->CopyFrom(ssFrom.GetVDisks());
+            ssTo->MutableGroups()->CopyFrom(ssFrom.GetGroups());
+        } else {
+            NProtoBuf::util::MessageDifferencer differ;
+
+            auto error = [&](auto&& key, const char *error) {
+                *errorReason = TStringBuilder() << key() << ' ' << error;
+                return false;
+            };
+
+            auto pdiskKey = [](const auto *item) {
+                return TStringBuilder() << "PDisk NodeId# " << item->GetNodeID() << " PDiskId# " << item->GetPDiskID();
+            };
+
+            auto vdiskKey = [](const auto *item) {
+                return TStringBuilder() << "VDisk NodeId# " << item->GetNodeID() << " PDiskId# " << item->GetPDiskID()
+                    << " VDiskSlotId# " << item->GetVDiskSlotID();
+            };
+
+            auto groupKey = [](const auto *item) {
+                return TStringBuilder() << "group GroupId# " << item->GetGroupID();
+            };
+
+            auto duplicateKey = [&](auto&& key) { return error(std::move(key), "duplicate key in existing StorageConfig"); };
+            auto removed = [&](auto&& key) { return error(std::move(key), "was removed from BlobStorageConfig of newly provided configuration"); };
+            auto mismatch = [&](auto&& key) { return error(std::move(key), "configuration item mismatch"); };
+
+            THashMap<std::tuple<ui32, ui32>, const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk*> pdiskMap;
+            for (const auto& item : ssTo->GetPDisks()) {
+                if (const auto [it, inserted] = pdiskMap.emplace(std::make_tuple(item.GetNodeID(), item.GetPDiskID()),
+                        &item); !inserted) {
+                    return duplicateKey(std::bind(pdiskKey, &item));
+                }
+            }
+            for (const auto& item : ssFrom.GetPDisks()) {
+                if (const auto it = pdiskMap.find(std::make_tuple(item.GetNodeID(), item.GetPDiskID())); it == pdiskMap.end()) {
+                    return removed(std::bind(pdiskKey, &item));
+                } else if (!differ.Equals(item, *it->second)) {
+                    return mismatch(std::bind(pdiskKey, &item));
+                } else {
+                    pdiskMap.erase(it);
+                }
+            }
+            if (!pdiskMap.empty()) {
+                *errorReason = "some PDisks were added in newly provided configuration";
+                return false;
+            }
+
+            THashMap<std::tuple<ui32, ui32, ui32>, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk*> vdiskMap;
+            for (const auto& item : ssTo->GetVDisks()) {
+                if (!item.HasVDiskLocation()) {
+                    *errorReason = "VDisk in existing StorageConfig doesn't have VDiskLocation field set";
+                    return false;
+                }
+                const auto& loc = item.GetVDiskLocation();
+                if (const auto [it, inserted] = vdiskMap.emplace(std::make_tuple(loc.GetNodeID(), loc.GetPDiskID(),
+                        loc.GetVDiskSlotID()), &item); !inserted) {
+                    return duplicateKey(std::bind(vdiskKey, &loc));
+                }
+            }
+            for (const auto& item : ssFrom.GetVDisks()) {
+                if (!item.HasVDiskLocation()) {
+                    *errorReason = "VDisk in newly provided configuration doesn't have VDiskLocation field set";
+                    return false;
+                }
+                const auto& loc = item.GetVDiskLocation();
+                if (const auto it = vdiskMap.find(std::make_tuple(loc.GetNodeID(), loc.GetPDiskID(),
+                        loc.GetVDiskSlotID())); it == vdiskMap.end()) {
+                    return removed(std::bind(vdiskKey, &loc));
+                } else if (!differ.Equals(item, *it->second)) {
+                    return mismatch(std::bind(vdiskKey, &loc));
+                } else {
+                    vdiskMap.erase(it);
+                }
+            }
+            if (!vdiskMap.empty()) {
+                *errorReason = "some VDisks were added in newly provided configuration";
+                return false;
+            }
+
+            THashMap<ui32, const NKikimrBlobStorage::TGroupInfo*> groupMap;
+            for (const auto& item : ssTo->GetGroups()) {
+                if (const auto [it, inserted] = groupMap.emplace(item.GetGroupID(), &item); !inserted) {
+                    return duplicateKey(std::bind(groupKey, &item));
+                }
+            }
+            for (const auto& item : ssFrom.GetGroups()) {
+                if (const auto it = groupMap.find(item.GetGroupID()); it == groupMap.end()) {
+                    return removed(std::bind(groupKey, &item));
+                } else if (!differ.Equals(item, *it->second)) {
+                    return mismatch(std::bind(groupKey, &item));
+                } else {
+                    groupMap.erase(it);
+                }
+            }
+            if (!groupMap.empty()) {
+                *errorReason = "some groups were added in newly provided configuration";
+                return false;
+            }
+        }
+    }
+
+    // copy nameservice-related things
+    if (!appConfig.HasNameserviceConfig()) {
+        *errorReason = "origin config missing mandatory NameserviceConfig section";
+        return false;
+    }
+
+    const auto& nsFrom = appConfig.GetNameserviceConfig();
+    auto *nodes = config->MutableAllNodes();
+
+    // just copy AllNodes from TAppConfig into TStorageConfig
+    nodes->Clear();
+    for (const auto& node : nsFrom.GetNode()) {
+        auto *r = nodes->Add();
+        r->SetHost(node.GetInterconnectHost());
+        r->SetPort(node.GetPort());
+        r->SetNodeId(node.GetNodeId());
+        if (node.HasLocation()) {
+            r->MutableLocation()->CopyFrom(node.GetLocation());
+        } else if (node.HasWalleLocation()) {
+            r->MutableLocation()->CopyFrom(node.GetWalleLocation());
+        }
+    }
+
+    // and copy ClusterUUID from there too
+    config->SetClusterUUID(nsFrom.GetClusterUUID());
+
+    // TODO(alexvru): apply SS, SSB, SB configs from there too
+
+    return true;
+}
 
 bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {
     // TODO(cthulhu): Replace this with real data

@@ -63,6 +63,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -150,6 +151,12 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
+void ThrowParquetNotOk(arrow::Status status) {
+    if (!status.ok()) {
+        throw parquet::ParquetException(status.ToString());
+    }
+}
+
 using namespace NKikimr::NMiniKQL;
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
@@ -167,7 +174,11 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    TString Format, Compression;
+    // It's very important to keep here std::string instead of TString 
+    // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
+    // This behaviour can be found in the getInputFormat call
+    std::string Format;  
+    TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
     std::vector<ui32> ColumnReorder;
@@ -637,8 +648,8 @@ public:
 
         // init the 1st reader, get meta/rg count
         readers.resize(1);
-        THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
-        THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
+        ThrowParquetNotOk(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
+        ThrowParquetNotOk(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
 
         bool hasPredicate = ReadSpec->Predicate.payload_case() != NYql::NConnector::NApi::TPredicate::PayloadCase::PAYLOAD_NOT_SET;
@@ -647,7 +658,7 @@ public:
 
         if (numGroups) {
             std::shared_ptr<arrow::Schema> schema;
-            THROW_ARROW_NOT_OK(readers[0]->GetSchema(&schema));
+            ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
 
@@ -684,17 +695,17 @@ public:
                 // init other readers if any
                 readers.resize(readerCount);
                 for (ui64 i = 1; i < readerCount; i++) {
-                    THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit),
+                    ThrowParquetNotOk(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit),
                                     parquet::default_reader_properties(),
                                     fileMetadata));
-                    THROW_ARROW_NOT_OK(builder.Build(&readers[i]));
+                    ThrowParquetNotOk(builder.Build(&readers[i]));
                 }
             }
 
             for (ui64 i = 0; i < readerCount; i++) {
                 if (!columnIndices.empty()) {
                     CurrentRowGroupIndex = i;
-                    THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
+                    ThrowParquetNotOk(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
                     SourceContext->IncChunkCount();
                 }
                 RowGroupReaderIndex[i] = i;
@@ -736,7 +747,7 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                THROW_ARROW_NOT_OK(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -772,7 +783,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
+                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;
@@ -806,11 +817,11 @@ public:
         properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
-        THROW_ARROW_NOT_OK(builder.Open(arrowFile));
-        THROW_ARROW_NOT_OK(builder.Build(&fileReader));
+        ThrowParquetNotOk(builder.Open(arrowFile));
+        ThrowParquetNotOk(builder.Build(&fileReader));
 
         std::shared_ptr<arrow::Schema> schema;
-        THROW_ARROW_NOT_OK(fileReader->GetSchema(&schema));
+        ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
 
@@ -829,7 +840,7 @@ public:
 
             std::shared_ptr<arrow::Table> table;
             ui64 ingressBytes = IngressBytes;
-            THROW_ARROW_NOT_OK(fileReader->ReadRowGroup(group, columnIndices, &table));
+            ThrowParquetNotOk(fileReader->ReadRowGroup(group, columnIndices, &table));
             ui64 downloadedBytes = IngressBytes - ingressBytes;
             auto reader = std::make_unique<arrow::TableBatchReader>(*table);
 
@@ -1152,6 +1163,11 @@ private:
                     Issues.AddIssue(TIssue(ex.message()));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
+                } catch (const TCodeLineException& ex) {
+                    LOG_CORO_D(ex.what());
+                    Issues.AddIssue(ex.GetRawMessage());
+                    FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
+                    RetryStuff->Cancel();
                 }
             }
         } catch (const TS3ReadAbort&) {
@@ -1375,12 +1391,7 @@ public:
             DecodedChunkSizeHist,
             HttpInflightSize,
             HttpDataRps,
-            DeferredQueueSize,
-            ReadSpec->Format,
-            ReadSpec->Compression,
-            ReadSpec->ArrowSchema,
-            ReadSpec->RowSpec,
-            ReadSpec->Settings
+            DeferredQueueSize
         );
 
         if (!UseRuntimeListing) {
@@ -2185,7 +2196,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                 auto memberType = extraStructType->GetMemberType(i);
                 std::shared_ptr<arrow::DataType> dataType;
 
-                YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
+                YQL_ENSURE(ConvertArrowType(memberType, dataType, true), "Unsupported arrow type");
                 THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional())));
                 readSpec->ColumnReorder.push_back(i);
                 readSpec->RowSpec.emplace(memberName, memberType);

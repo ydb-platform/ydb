@@ -13,6 +13,8 @@
 
 #include <util/system/unaligned_mem.h>
 
+constexpr size_t MAX_REQS_PER_CYCLE = 200; // 200 requests take ~0.2ms in EnqueueAll function
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -727,7 +729,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                         data.LogChunkCountBeforeCut = ownedLogChunks;
                         // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(data.OperationLog, "System owner asked to cut log, OwnerId# " << chunkOwner);
                     } else {
-                        P_LOG(PRI_INFO, BPD14, "Can't send CutLog", 
+                        P_LOG(PRI_INFO, BPD14, "Can't send CutLog",
                             (OwnerId, ui32(chunkOwner)),
                             (VDiskId, data.VDiskId.ToStringWOGeneration()));
                     }
@@ -784,7 +786,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                     data.LogChunkCountBeforeCut = ownedLogChunks;
                     // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(data.OperationLog, "User owner asked to cut log, OwnerId# " << ownerFilter);
                 } else {
-                    P_LOG(PRI_INFO, BPD14, "Can't send CutLog", 
+                    P_LOG(PRI_INFO, BPD14, "Can't send CutLog",
                         (OwnerId, ui32(ownerFilter)),
                         (VDiskId, data.VDiskId.ToStringWOGeneration()));
                 }
@@ -1434,7 +1436,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                     case TChunkState::DATA_DECOMMITTED:
                         Y_VERIFY_S(state.CommitsInProgress == 0,
                                 "PDiskId# " << PCtx->PDiskId << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
-                        P_LOG(PRI_INFO, BPD01, "chunk was forgotten", 
+                        P_LOG(PRI_INFO, BPD01, "chunk was forgotten",
                                 (ChunkIdx, chunkIdx),
                                 (OldOwner, (ui32)state.OwnerId),
                                 (NewOwner, (ui32)OwnerUnallocated));
@@ -1796,7 +1798,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
                 DriveModel.BulkWriteBlockSize(), GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), owner,
                 ownerRound, GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
-                Cfg->RetrieveDeviceType(), nullptr));
+                Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -1946,7 +1948,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(), GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), owner, ownerRound,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), nullptr));
+        Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
@@ -2238,14 +2240,11 @@ void TPDisk::ProcessChunkWriteQueue() {
                 Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
         }
     }
+    LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
     JointChunkWrites.clear();
 }
 
 void TPDisk::ProcessChunkReadQueue() {
-    if (JointChunkReads.empty()) {
-        return;
-    }
-
     NHPTimer::STime now = HPNow();
     // Size (bytes) of elementary sectors block, it is useless to read/write less than that blockSize
     ui64 bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
@@ -2296,6 +2295,7 @@ void TPDisk::ProcessChunkReadQueue() {
                 Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkReads");
         }
     }
+    LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());
     JointChunkReads.clear();
 }
 
@@ -3392,7 +3392,13 @@ void TPDisk::ProcessYardInitSet() {
 }
 
 void TPDisk::EnqueueAll() {
+    auto start = TMonotonic::Now();
+
     TGuard<TMutex> guard(StateMutex);
+    size_t initialQueueSize = InputQueue.GetWaitingSize();
+    size_t processedReqs = 0;
+    size_t pushedToForsetiReqs = 0;
+
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase* request = InputQueue.Pop();
         AtomicSub(InputQueueCost, request->Cost);
@@ -3435,13 +3441,22 @@ void TPDisk::EnqueueAll() {
         } else {
             if (PreprocessRequest(request)) {
                 PushRequestToForseti(request);
+                ++pushedToForsetiReqs;
             }
         }
+        ++processedReqs;
+        if (processedReqs >= MAX_REQS_PER_CYCLE) {
+            break;
+        }
     }
+
+    double spentTimeMs = (TMonotonic::Now() - start).MillisecondsFloat();
+    LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
 }
 
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
+    LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
 
     // ui32 userSectorSize = 0;
 
@@ -3537,9 +3552,9 @@ void TPDisk::Update() {
         }
     }
     ui64 totalCost = totalLogCost + totalNonLogCost;
-    LWPROBE(PDiskForsetiCycle, PCtx->PDiskId, nowCycles, prevForsetiTimeNs, ForsetiPrevTimeNs, timeCorrection,
+    LWTRACK(PDiskForsetiCycle, UpdateCycleOrbit, PCtx->PDiskId, nowCycles, prevForsetiTimeNs, ForsetiPrevTimeNs, timeCorrection,
             realDuration, virtualDuration, ForsetiTimeNs, totalCost, virtualDeadline);
-    LWPROBE(PDiskMilliBatchSize, PCtx->PDiskId, totalLogCost, totalNonLogCost, totalLogReqs, totalNonLogReqs);
+    LWTRACK(PDiskMilliBatchSize, UpdateCycleOrbit, PCtx->PDiskId, totalLogCost, totalNonLogCost, totalLogReqs, totalNonLogReqs);
     ForsetiRealTimeCycles = nowCycles;
 
 
@@ -3619,6 +3634,7 @@ void TPDisk::Update() {
 
 
     Mon.UpdateDurationTracker.WaitingStart(isNothingToDo);
+    LWTRACK(PDiskStartWaiting, UpdateCycleOrbit, PCtx->PDiskId);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3651,7 +3667,9 @@ void TPDisk::Update() {
         InputQueue.ProducedWait(TDuration::MilliSeconds(10));
     }
 
-    Mon.UpdateDurationTracker.UpdateEnded();
+    auto entireUpdateMs = Mon.UpdateDurationTracker.UpdateEnded();
+    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs );
+    UpdateCycleOrbit.Reset();
     *Mon.PDiskThreadCPU = ThreadCPUTime();
 }
 

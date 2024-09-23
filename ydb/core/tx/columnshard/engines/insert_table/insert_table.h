@@ -9,12 +9,8 @@
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
-
+class TPKRangesFilter;
 class IDbWrapper;
-
-/// Use one table for inserted and committed blobs:
-/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
-///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
 
 class TInsertTableAccessor {
 protected:
@@ -57,6 +53,7 @@ public:
         return Summary.AddInserted(std::move(data), load);
     }
     bool AddAborted(TInsertedData&& data, const bool load) {
+        AFL_VERIFY_DEBUG(!Summary.ExtractInserted(data.GetInsertWriteId()));
         if (load) {
             AddBlobLink(data.GetBlobRange().BlobId);
         }
@@ -75,7 +72,7 @@ public:
     const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
         return Summary.GetAborted();
     }
-    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const {
+    const TInsertedContainer& GetInserted() const {
         return Summary.GetInserted();
     }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
@@ -101,6 +98,7 @@ public:
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(
         IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
+    TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
     void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
     void MarkAsNotAbortable(const TInsertWriteId writeId) {
         Summary.MarkAsNotAbortable(writeId);
@@ -114,8 +112,8 @@ public:
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(
-        ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
     bool Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime);
 
     TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);

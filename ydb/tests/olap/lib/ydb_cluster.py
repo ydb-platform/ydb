@@ -52,9 +52,11 @@ class YdbCluster:
             version = ''
             cluster_name = ''
             nodes_wilcard = ''
+            max_start_time = 0
             nodes, node_count = cls._get_cluster_nodes()
             for node in nodes:
                 n = node.get('SystemState', {})
+                max_start_time = max(max_start_time, int(n.get('StartTime', 0)))
                 cluster_name = n.get('ClusterName', cluster_name)
                 version = n.get('Version', version)
                 for tenant in n.get('Tenants', []):
@@ -67,6 +69,7 @@ class YdbCluster:
                 'name': cluster_name,
                 'nodes_wilcard': nodes_wilcard,
                 'service_url': cls._get_service_url(),
+                'max_start_time': max_start_time,
             }
         return deepcopy(cls._cluster_info)
 
@@ -167,7 +170,10 @@ class YdbCluster:
                 start_time = int(ss.get('StartTime', int(time()) * 1000)) / 1000
                 uptime = int(time()) - start_time
                 r = ss.get('Roles', [])
-                role = r[0] if len(r) > 0 else role
+                for role_candidate in ['Storage', 'Tenant']:
+                    if role_candidate in r:
+                        role = role_candidate
+                        break
                 if uptime < 15:
                     error = f'Node {name} too yong: {uptime}'
             except BaseException as ex:

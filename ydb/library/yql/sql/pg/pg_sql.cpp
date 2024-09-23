@@ -1520,12 +1520,9 @@ public:
                     }
                 } else if (NodeTag(r->val) == T_FuncCall) {
                     auto func = CAST_NODE(FuncCall, r->val);
-                    TVector<TString> names;
-                    if (!ExtractFuncName(func, names)) {
+                    if (!ExtractFuncName(func, name, nullptr)) {
                         return nullptr;
                     }
-
-                    name = names.back();
                 }
             }
 
@@ -3427,12 +3424,13 @@ public:
             return {};
         }
 
-        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, true);
+        bool injectRead = false;
+        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, true, injectRead);
         if (!func) {
             return {};
         }
 
-        return TFromDesc{ func, alias, colnames, false };
+        return TFromDesc{ func, alias, colnames, injectRead };
     }
 
     TMaybe<TFromDesc> ParseRangeSubselect(const RangeSubselect* value) {
@@ -3723,7 +3721,8 @@ public:
             return ParseNullTestExpr(CAST_NODE(NullTest, node), settings);
         }
         case T_FuncCall: {
-            return ParseFuncCall(CAST_NODE(FuncCall, node), settings, false);
+            bool injectRead;
+            return ParseFuncCall(CAST_NODE(FuncCall, node), settings, false, injectRead);
         }
         case T_A_ArrayExpr: {
             return ParseAArrayExpr(CAST_NODE(A_ArrayExpr, node), settings);
@@ -4009,7 +4008,124 @@ public:
         return L(A("PgSubLink"), QA(linkType), L(A("Void")), L(A("Void")), rowTest, L(A("lambda"), QL(), select));
     }
 
-    TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings, bool rangeFunction) {
+    TAstNode* ParseTableRangeFunction(const TString& name, const TString& schema, List* args) {
+        auto source = BuildClusterSinkOrSourceExpression(false, schema);
+        if (!source) {
+            return nullptr;
+        }
+
+        TVector<TString> argStrs;
+        for (int i = 0; i < ListLength(args); ++i) {
+            auto arg = ListNodeNth(args, i);
+            if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
+                TString rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                argStrs.push_back(rawStr);
+            } else {
+                AddError("Expected String argument for table function");
+                return nullptr;
+            }
+        }
+
+        if (argStrs.empty()) {
+            AddError("Expected at least one argument for table function");
+            return nullptr;
+        }
+
+        TAstNode* key;
+        auto lowerName = to_lower(name);
+        auto options = QL();
+        if (lowerName == "concat") {
+            TVector<TAstNode*> concatArgs;
+            concatArgs.push_back(A("MrTableConcat"));
+            for (const auto& s : argStrs) {
+                concatArgs.push_back(L(A("Key"), QL(QA("table"),L(A("String"), QAX(s)))));
+            }
+            
+            key = VL(concatArgs);
+        } else if (lowerName == "concat_view") {
+            if (argStrs.size() % 2 != 0) {
+                AddError("Expected sequence of pairs of table and view for concat_view");
+                return nullptr;
+            }
+
+            TVector<TAstNode*> concatArgs;
+            concatArgs.push_back(A("MrTableConcat"));
+            for (ui32 i = 0; i < argStrs.size(); i += 2) {
+                concatArgs.push_back(L(A("Key"), 
+                    QL(QA("table"),L(A("String"), QAX(argStrs[i]))),
+                    QL(QA("view"),L(A("String"), QAX(argStrs[i + 1])))));
+            }
+            
+            key = VL(concatArgs);
+        } else if (lowerName == "range") {
+            if (argStrs.size() > 5) {
+                AddError("Too many arguments");
+                return nullptr;
+            }
+
+            options = QL(QL(QA("ignorenonexisting")));
+            TAstNode* expr;
+            if (argStrs.size() == 1) {
+                expr = L(A("Bool"),QA("true"));
+            } else if (argStrs.size() == 2) {
+                expr = L(A(">="),A("item"),L(A("String"),QAX(argStrs[1])));
+            } else {
+                expr = L(A("And"),
+                    L(A(">="),A("item"),L(A("String"),QAX(argStrs[1]))),
+                    L(A("<="),A("item"),L(A("String"),QAX(argStrs[2])))
+                );
+            }
+
+            auto lambda = L(A("lambda"), QL(A("item")), expr);
+            auto range = L(A("MrTableRange"), QAX(argStrs[0]), lambda, QAX(argStrs.size() < 4 ? "" : argStrs[3]));
+            if (argStrs.size() < 5) {
+                key = L(A("Key"), QL(QA("table"),range));
+            } else {
+                key = L(A("Key"), QL(QA("table"),range), QL(QA("view"),L(A("String"), QAX(argStrs[4]))));
+            }
+        } else if (lowerName == "regexp" || lowerName == "like") {
+            if (argStrs.size() < 2 || argStrs.size() > 4) {
+                AddError("Expected from 2 to 4 arguments");
+                return nullptr;
+            }
+
+            options = QL(QL(QA("ignorenonexisting")));
+            TAstNode* expr;
+            if (lowerName == "regexp") {
+                expr = L(A("Apply"),L(A("Udf"),QA("Re2.Grep"),
+                    QL(L(A("String"),QAX(argStrs[1])),L(A("Null")))),
+                    A("item"));
+            } else {
+                expr = L(A("Apply"),L(A("Udf"),QA("Re2.Match"),
+                    QL(L(A("Apply"), 
+                        L(A("Udf"), QA("Re2.PatternFromLike")), 
+                        L(A("String"),QAX(argStrs[1]))),L(A("Null")))),
+                    A("item"));
+            }
+
+            auto lambda = L(A("lambda"), QL(A("item")), expr);
+            auto range = L(A("MrTableRange"), QAX(argStrs[0]), lambda, QAX(argStrs.size() < 3 ? "" : argStrs[2]));
+            if (argStrs.size() < 4) {
+                key = L(A("Key"), QL(QA("table"),range));
+            } else {
+                key = L(A("Key"), QL(QA("table"),range), QL(QA("view"),L(A("String"), QAX(argStrs[3]))));
+            }
+        } else {
+            AddError(TStringBuilder() << "Unknown table function: " << name);
+            return nullptr;
+        }
+
+        return L(
+            A("Read!"),
+            A("world"),
+            source,
+            key,
+            L(A("Void")),
+            options
+        );
+    }
+
+    TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings, bool rangeFunction, bool& injectRead) {
         AT_LOCATION(value);
         if (ListLength(value->agg_order) > 0) {
             AddError("FuncCall: unsupported agg_order");
@@ -4052,12 +4168,17 @@ public:
             }
         }
 
-        TVector<TString> names;
-        if (!ExtractFuncName(value, names)) {
+        TString name;
+        TString schema;
+        if (!ExtractFuncName(value, name, rangeFunction ? &schema : nullptr)) {
             return nullptr;
         }
 
-        auto name = names.back();
+        if (rangeFunction && !schema.empty() && schema != "pg_catalog") {
+            injectRead = true;
+            return ParseTableRangeFunction(name, schema, value->args);
+        }
+
         if (name == "shobj_description" || name == "obj_description") {
             AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
             return L(A("Null"));
@@ -4159,7 +4280,8 @@ public:
         return VL(args.data(), args.size());
     }
 
-    bool ExtractFuncName(const FuncCall* value, TVector<TString>& names) {
+    bool ExtractFuncName(const FuncCall* value, TString& name, TString* schemaName) {
+        TVector<TString> names;
         for (int i = 0; i < ListLength(value->funcname); ++i) {
             auto x = ListNodeNth(value->funcname, i);
             if (NodeTag(x) != T_String) {
@@ -4180,11 +4302,18 @@ public:
             return false;
         }
 
-        if (names.size() == 2 && names[0] != "pg_catalog") {
-            AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
-            return false;
+        if (names.size() == 2) {
+            if (!schemaName && names[0] != "pg_catalog") {
+                AddError(TStringBuilder() << "FuncCall: expected pg_catalog, but got: " << names[0]);
+                return false;
+            }
+
+            if (schemaName) {
+                *schemaName = names[0];
+            }
         }
 
+        name = names.back();
         return true;
     }
 
@@ -5145,8 +5274,8 @@ private:
     void ScanRows(const TString& query) {
         QuerySize = query.Size();
         RowStarts.push_back(0);
-        TPosition position(1, 1);
-        TTextWalker walker(position);
+        TPosition position(0, 1);
+        TTextWalker walker(position, true);
         auto prevRow = position.Row;
         for (ui32 i = 0; i < query.Size(); ++i) {
             walker.Advance(query[i]);

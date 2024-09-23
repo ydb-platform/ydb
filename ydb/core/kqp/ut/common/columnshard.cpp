@@ -1,6 +1,8 @@
 #include "columnshard.h"
-#include <ydb/core/testlib/cs_helper.h>
+
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/testlib/cs_helper.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -143,12 +145,19 @@ namespace NKqp {
         }
     }
 
+    void TTestHelper::SetCompression(
+        const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression, const NYdb::EStatus expectedStatus) {
+        auto alterQuery = columnTable.BuildAlterCompressionQuery(columnName, compression);
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+    }
+
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
-        switch (Type) {
+        switch (TypeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Pg:
-            str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
+            str << NPg::PgTypeNameFromTypeDesc(TypeInfo.GetPgTypeDesc());
             break;
         case NScheme::NTypeIds::Decimal: {
             TTypeBuilder builder;
@@ -157,12 +166,17 @@ namespace NKqp {
             break;
         }
         default:
-            str << NScheme::GetTypeName(Type);
+            str << NScheme::GetTypeName(TypeInfo.GetTypeId());
         }
         if (!NullableFlag) {
             str << " NOT NULL";
         }
         return str;
+    }
+
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(NScheme::TTypeId typeId) {
+        TypeInfo = NScheme::TTypeInfo(typeId);
+        return *this;
     }
 
     TString TTestHelper::TColumnTableBase::BuildQuery() const {
@@ -180,11 +194,21 @@ namespace NKqp {
         return str;
     }
 
+    TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
+        auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
+        str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerName() << "`,";
+        str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(compression.GetType()) << "`";
+        if (compression.GetCompressionLevel() != Max<i32>()) {
+            str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel();
+        }
+        str << ");";
+        return str;
+    }
 
     std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
         std::vector<std::shared_ptr<arrow::Field>> result;
         for (auto&& col : columns) {
-            result.push_back(BuildField(col.GetName(), col.GetType(), col.GetTypeDesc(), col.IsNullable()));
+            result.push_back(BuildField(col.GetName(), col.GetTypeInfo(), col.IsNullable()));
         }
         return std::make_shared<arrow::Schema>(result);
     }
@@ -198,8 +222,8 @@ namespace NKqp {
         return JoinStrings(columnStr, ", ");
     }
 
-    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const {
-        switch (typeId) {
+    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
+        switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return arrow::field(name, arrow::boolean(), nullable);
         case NScheme::NTypeIds::Int8:
@@ -246,8 +270,10 @@ namespace NKqp {
             return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
+        case NScheme::NTypeIds::Decimal:
+            return arrow::field(name, arrow::decimal(22, 9));
         case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
+            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:
                     return arrow::field(name, arrow::int16(), true);
                 case INT4OID:

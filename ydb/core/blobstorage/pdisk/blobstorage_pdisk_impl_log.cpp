@@ -21,6 +21,7 @@ public:
         , CommonLogger(commonLogger)
         , CompletionLogWrite(completionLogWrite)
     {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
         Orbit = std::move(completionLogWrite->Orbit);
     }
 
@@ -34,7 +35,7 @@ public:
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
-        
+
         SetUpCompletionLogWrite();
         CompletionLogWrite->Exec(actorSystem);
 
@@ -108,7 +109,7 @@ void TPDisk::InitLogChunksInfo() {
                     range.IsPresent = false;
                     Y_ABORT_UNLESS(it->CurrentUserCount > 0);
                     it->CurrentUserCount--;
-                    P_LOG(PRI_INFO, BPD01, "InitLogChunksInfo, chunk is dereferenced by owner", 
+                    P_LOG(PRI_INFO, BPD01, "InitLogChunksInfo, chunk is dereferenced by owner",
                         (ChunkIdx, it->ChunkIdx),
                         (LsnRange, TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")),
                         (PresentNonces, TString(TStringBuilder() << "[" << it->FirstNonce << ", " << it->LastNonce << "]")),
@@ -707,8 +708,10 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 // Common log writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TPDisk::ProcessLogWriteQueueAndCommits() {
-    if (JointLogWrites.empty())
+    if (JointLogWrites.empty()) {
+        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
         return;
+    }
 
     NHPTimer::STime now = HPNow();
     for (TLogWrite *logCommit : JointCommits) {
@@ -748,6 +751,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
                 double(logWrite->Cost) / 1000000.0, HPSecondsFloat(logWrite->Deadline),
                 logWrite->Owner, logWrite->IsFast, logWrite->PriorityClass);
     }
+    LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
     TReqId reqId = JointLogWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
         this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));
@@ -875,8 +879,8 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
         P_LOG(PRI_ERROR, BPD70, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,
                     NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str()));
-        evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         Y_ABORT_UNLESS(evLog.Result.Get());
+        evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         return;
     }
     if (!CommonLogger->NextChunks.empty()) {
@@ -938,7 +942,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
     Y_ABORT_UNLESS(CommonLogger->NextChunks.empty());
 
-    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), nullptr));
+    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), ""));
     Y_ABORT_UNLESS(evLog.Result.Get());
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
@@ -997,7 +1001,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
         if (ChunkState[chunkIdx].CommitState == TChunkState::DATA_RESERVED) {
             Mon.UncommitedDataChunks->Dec();
             Mon.CommitedDataChunks->Inc();
-            P_LOG(PRI_INFO, BPD01, "Commit Data Chunk", 
+            P_LOG(PRI_INFO, BPD01, "Commit Data Chunk",
                 (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
                 (ChunkIdx, chunkIdx),
                 (OwnerId, (ui32)ChunkState[chunkIdx].OwnerId));

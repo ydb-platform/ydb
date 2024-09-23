@@ -3,6 +3,10 @@
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TSharedBlobsManager;
@@ -58,7 +62,9 @@ public:
         AFL_VERIFY(!!Cursor);
         return Cursor;
     }
-/*
+
+    void SaveCursorToDatabase(NIceDb::TNiceDb& db);
+    /*
     bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
         AFL_VERIFY(Cursor);
         if (packIdx != Cursor->GetPackIdx()) {

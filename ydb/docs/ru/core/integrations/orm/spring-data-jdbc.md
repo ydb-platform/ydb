@@ -25,7 +25,7 @@ Spring Data JDBC является частью экосистемы [Spring Data
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
         <artifactId>spring-data-jdbc-ydb</artifactId>
-        <version>${spring.data.jdbc.ydb}</version> 
+        <version>${spring.data.jdbc.ydb}</version>
     </dependency>
     ```
 
@@ -136,7 +136,7 @@ public interface SimpleUserRepository extends CrudRepository<User, Long> {
 
 Запрос, который сгенерирует этот метод, будет выглядеть следующим образом:
 
-```sql
+```yql
 SELECT `Users`.`id`        AS `id`,
        `Users`.`login`     AS `login`,
        `Users`.`lastname`  AS `lastname`,

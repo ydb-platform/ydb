@@ -277,7 +277,7 @@ ui32 TValue::GetSize() const {
             return value->GetDictLength();
         }
     } else {
-        Y_ABORT("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetSize");
     }
 }
 
@@ -287,9 +287,9 @@ TValue TValue::GetElement(ui32 index) const {
     if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         return TValue(value->GetElement(index));
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value)) {
-        return TValue(value->GetElement(index));
+        return TValue(value->Lookup(TUnboxedValuePod(index)));
     } else {
-        Y_ABORT("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetElement");
     }
 }
 
@@ -304,7 +304,7 @@ TArrayIterator TValue::GetArrayIterator() const {
         }
         return TArrayIterator(value->GetListIterator());
     } else {
-        Y_ABORT("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetArrayIterator");
     }
 }
 
@@ -332,7 +332,7 @@ TMaybe<TValue> TValue::Lookup(const TStringBuf key) const {
             return Nothing();
         }
     } else {
-        Y_ABORT("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in Lookup");
     }
 }
 
@@ -347,7 +347,7 @@ TObjectIterator TValue::GetObjectIterator() const {
         }
         return TObjectIterator(value->GetDictIterator());
     } else {
-        Y_ABORT("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetObjectIterator");
     }
 }
 

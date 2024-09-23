@@ -6,7 +6,6 @@
 #include "kqp_partition_helper.h"
 #include "kqp_result_channel.h"
 #include "kqp_table_resolver.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
@@ -19,6 +18,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -210,7 +210,7 @@ protected:
     }
 
     [[nodiscard]]
-    bool HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+    bool HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
@@ -294,7 +294,7 @@ protected:
             batch.Payload = std::move(computeData.Payload);
 
             TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder);
+            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
 
             if (!trailingResults) {
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
@@ -417,7 +417,9 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED:
                 // Don't finalize stats twice.
                 if (Planner->CompletedCA(taskId, computeActor)) {
-                    ExtraData[computeActor].Swap(state.MutableExtraData());
+                    auto& extraData = ExtraData[computeActor];
+                    extraData.TaskId = taskId;
+                    extraData.Data.Swap(state.MutableExtraData());
 
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
@@ -491,6 +493,7 @@ protected:
         }
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
+        TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
@@ -1398,7 +1401,7 @@ protected:
                 auto memberType = resultStructType->GetMemberType(i);
                 if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Pg) {
                     const auto memberPgType = static_cast<NKikimr::NMiniKQL::TPgType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(memberPgType->GetTypeId()));
+                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(memberPgType->GetTypeId()));
                 } else {
                     if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
                         memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
@@ -1838,7 +1841,7 @@ protected:
         IActor* proxy;
         if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
+                txResult.ColumnOrder, txResult.ColumnHints, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
         } else {
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
@@ -1977,7 +1980,12 @@ protected:
 
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
-    THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
+
+    struct TExtraData {
+        ui64 TaskId;
+        NYql::NDqProto::TComputeActorExtraData Data;
+    };
+    THashMap<TActorId, TExtraData> ExtraData;
 
     TInstant StartResolveTime;
     TInstant LastResourceUsageUpdate;
@@ -2024,9 +2032,9 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const TShardIdToTableInfoPtr& shardIdToTableInfo);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

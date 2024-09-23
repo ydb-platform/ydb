@@ -218,6 +218,15 @@ public:
                 Span.Attribute("database", Database);
             }
         }
+        event->Record.SetApplicationName("ydb-ui");
+        event->Record.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
+        event->Record.SetClientUserAgent(TString(Event->Get()->Request.GetHeader("User-Agent")));
+        if (Event->Get()->UserToken) {
+            NACLibProto::TUserToken userToken;
+            if (userToken.ParseFromString(Event->Get()->UserToken)) {
+                event->Record.SetUserSID(userToken.GetUserSID());
+            }
+        }
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
@@ -265,11 +274,11 @@ public:
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
         }
-        if (Action.empty() || Action == "execute-script" || Action == "execute") {
+        if (Action == "execute-script") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
             request.SetKeepSession(false);
-        } else if (Action == "execute-query") {
+        } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);
@@ -413,6 +422,9 @@ private:
 
             case NYdb::TTypeParser::ETypeKind::Pg:
                 return valueParser.GetPg().Content_;
+
+            case NYdb::TTypeParser::ETypeKind::Decimal:
+                return valueParser.GetDecimal().ToString();
 
             default:
                 return NJson::JSON_UNDEFINED;

@@ -165,6 +165,8 @@ public:
 
     EGroupFields SortBy = EGroupFields::PoolName;
     EGroupFields GroupBy = EGroupFields::GroupId;
+    EGroupFields FilterGroupBy = EGroupFields::GroupId;
+    TString FilterGroup;
     EWith With = EWith::Everything;
     bool ReverseSort = false;
     std::optional<std::size_t> Offset;
@@ -475,6 +477,35 @@ public:
         ui64 GetLatencyForSort() const {
             return PutTabletLogLatency;
         }
+
+        TString GetGroupName(EGroupFields groupBy) {
+            switch (groupBy) {
+                case EGroupFields::GroupId:
+                    return ToString(GroupId);
+                case EGroupFields::Erasure:
+                    return Erasure;
+                case EGroupFields::Usage:
+                    return GetUsageForGroup();
+                case EGroupFields::DiskSpaceUsage:
+                    return GetDiskUsageForGroup();
+                case EGroupFields::PoolName:
+                    return PoolName;
+                case EGroupFields::Kind:
+                    return Kind;
+                case EGroupFields::Encryption:
+                    return GetEncryptionForGroup();
+                case EGroupFields::MediaType:
+                    return MediaType;
+                case EGroupFields::MissingDisks:
+                    return GetMissingDisksForGroup();
+                case EGroupFields::State:
+                    return State;
+                case EGroupFields::Latency:
+                    return GetLatencyForGroup();
+                default:
+                    return {};
+            }
+        }
     };
 
     using TGroupData = std::vector<TGroup>;
@@ -604,7 +635,7 @@ public:
     }
 
     TStorageGroups(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev)
+        : TBase(viewer, ev, "/storage/groups")
     {
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
@@ -640,6 +671,12 @@ public:
             Filter = params.Get("filter");
             FieldsRequired.set(+EGroupFields::PoolName);
             FieldsRequired.set(+EGroupFields::GroupId);
+            NeedFilter = true;
+        }
+        if (params.Has("filter_group") && params.Has("filter_group_by")) {
+            FilterGroup = params.Get("filter_group");
+            FilterGroupBy = ParseEGroupFields(params.Get("filter_group_by"));
+            FieldsRequired.set(+FilterGroupBy);
             NeedFilter = true;
         }
         if (params.Get("with") == "missing") {
@@ -890,17 +927,27 @@ public:
                 Filter.clear();
                 GroupsByGroupId.clear();
             }
-            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty();
+            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
+                TGroupView groupView;
+                for (TGroup* group : GroupView) {
+                    if (group->GetGroupName(FilterGroupBy) == FilterGroup) {
+                        groupView.push_back(group);
+                    }
+                }
+                GroupView.swap(groupView);
+                FilterGroup.clear();
+                GroupsByGroupId.clear();
+            }
+            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.empty() || !FilterPDiskIds.empty() || !FilterGroupIds.empty() || !FilterGroup.empty();
             FoundGroups = GroupView.size();
         }
     }
 
-    template<typename F>
-    void GroupCollection(F&& groupBy) {
+    void GroupCollection() {
         std::unordered_map<TString, size_t> groupGroups;
         GroupGroups.clear();
         for (TGroup* group : GroupView) {
-            auto gb = groupBy(group);
+            auto gb = group->GetGroupName(GroupBy);
             TGroupGroup* groupGroup = nullptr;
             auto it = groupGroups.find(gb);
             if (it == groupGroups.end()) {
@@ -918,48 +965,23 @@ public:
         if (!NeedFilter && NeedGroup && FieldsAvailable.test(+GroupBy)) {
             switch (GroupBy) {
                 case EGroupFields::GroupId:
-                    GroupCollection([](const TGroup* group) { return ToString(group->GroupId); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Erasure:
-                    GroupCollection([](const TGroup* group) { return group->Erasure; });
+                case EGroupFields::PoolName:
+                case EGroupFields::Kind:
+                case EGroupFields::Encryption:
+                case EGroupFields::MediaType:
+                case EGroupFields::State:
+                    GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
+                    NeedGroup = false;
                     break;
                 case EGroupFields::Usage:
-                    GroupCollection([](const TGroup* group) { return group->GetUsageForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
                 case EGroupFields::DiskSpaceUsage:
-                    GroupCollection([](const TGroup* group) { return group->GetDiskUsageForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
-                case EGroupFields::PoolName:
-                    GroupCollection([](const TGroup* group) { return group->PoolName; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::Kind:
-                    GroupCollection([](const TGroup* group) { return group->Kind; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::Encryption:
-                    GroupCollection([](const TGroup* group) { return group->GetEncryptionForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
-                case EGroupFields::MediaType:
-                    GroupCollection([](const TGroup* group) { return group->MediaType; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::MissingDisks:
-                    GroupCollection([](const TGroup* group) { return group->GetMissingDisksForGroup(); });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
-                    break;
-                case EGroupFields::State:
-                    GroupCollection([](const TGroup* group) { return group->State; });
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
-                    break;
                 case EGroupFields::Latency:
-                    GroupCollection([](const TGroup* group) { return group->GetLatencyForGroup(); });
+                    GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
+                    NeedGroup = false;
                     break;
                 case EGroupFields::Read:
                 case EGroupFields::Write:
@@ -974,7 +996,6 @@ public:
                 case EGroupFields::PDiskId:
                     break;
             }
-            NeedGroup = false;
         }
     }
 
@@ -1330,6 +1351,7 @@ public:
             }
         }
         if (AreBSControllerRequestsDone() && FieldsNeeded(FieldsWbDisks)) {
+            AddEvent("SendWhiteboardRequests");
             for (TGroup* group : GroupView) {
                 for (TNodeId nodeId : group->VDiskNodeIds) {
                     SendWhiteboardDisksRequest(nodeId);
@@ -1860,6 +1882,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
+        AddEvent("ReplyAndPassAway");
         ApplyEverything();
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));
@@ -1940,6 +1963,9 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::Available)) {
                     jsonGroup.SetAvailable(group->Available);
                 }
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                    jsonGroup.SetDiskSpaceUsage(group->DiskSpaceUsage);
+                }
                 if (FieldsAvailable.test(+EGroupFields::Latency)) {
                     jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
                     jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
@@ -1953,12 +1979,14 @@ public:
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());
             }
         }
+        AddEvent("RenderingResult");
         TStringStream out;
         Proto2Json(json, out, {
             .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
             .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
             .WriteNanAsString = true,
         });
+        AddEvent("ResultReady");
         TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
     }
 
@@ -2017,6 +2045,28 @@ public:
                     type: string
                   - name: filter
                     description: filter to search for in group ids and pool names
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        filter group by:
+                          * `GroupId`
+                          * `Erasure`
+                          * `Usage`
+                          * `DiskSpaceUsage`
+                          * `PoolName`
+                          * `Kind`
+                          * `Encryption`
+                          * `MediaType`
+                          * `MissingDisks`
+                          * `State`
+                          * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: content for filter group by
                     required: false
                     type: string
                   - name: sort

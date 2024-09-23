@@ -97,6 +97,7 @@ namespace NLs {
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
+    TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
@@ -168,8 +169,10 @@ namespace NLs {
     TCheckFunc BackupHistoryCount(ui64 count);
 
     TCheckFunc HasOwner(const TString& owner);
+    TCheckFunc HasRight(const TString& right);
+    TCheckFunc HasNoRight(const TString& right);
     TCheckFunc HasEffectiveRight(const TString& right);
-    TCheckFunc HasNotEffectiveRight(const TString& right);
+    TCheckFunc HasNoEffectiveRight(const TString& right);
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);

@@ -59,7 +59,7 @@ CDC представлен объектом схемы данных — пото
 1. [Инициализируйте](../reference/ydb-cli/commands/workload/stock#init) тест.
 1. Добавьте поток изменений:
 
-    ```sql
+    ```yql
     ALTER TABLE `orders` ADD CHANGEFEED `updates` WITH (
         FORMAT = 'JSON',
         MODE = 'UPDATES'

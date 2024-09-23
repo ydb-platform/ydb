@@ -637,7 +637,16 @@ class StaticConfigGenerator(object):
             tablet.AllowDynamicConfiguration = True
 
         if explicit_node_ids:
-            node_ids = explicit_node_ids
+            node_ids = []
+            for item in explicit_node_ids:
+                if type(item) is list:
+                    try:
+                        node_ids.append(item[index])
+                    except IndexError:
+                        logger.error("nodes count for tablet type %s wrong, nodeid for tablet index: %d not found" % (tablet_name, index))
+                        exit(1)
+                else:
+                    node_ids.append(item)
         tablet.Node.extend(node_ids)
 
         for channel_id in range(int(number_of_channels)):

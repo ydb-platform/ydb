@@ -313,9 +313,9 @@ TUnboxedValuePod LookupImpl(TUnboxedValuePod dict, const TUnboxedValuePod key, c
                         if (index < 0)
                             index += size;
                         if constexpr (Converter != nullptr) {
-                            return Converter(dict.GetElement(index).Release(), valueBuilder, pos);
+                            return Converter(dict.Lookup(TUnboxedValuePod(index)).Release(), valueBuilder, pos);
                         }
-                        return dict.GetElement(index).Release();
+                        return dict.Lookup(TUnboxedValuePod(index)).Release();
                     }
                 }
             }

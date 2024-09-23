@@ -26,5 +26,24 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         testHelper.CreateTable(testTable);
         testHelper.SetCompression(testTable, "pk_int", compression, NYdb::EStatus::SCHEME_ERROR);
     }
+
+    Y_UNIT_TEST(OffCompression) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+        };
+        TTestHelper::TCompression compression = TTestHelper::TCompression().SetType(arrow::Compression::type::UNCOMPRESSED);
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/StandaloneTable").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
+        testHelper.CreateTable(standaloneTable);
+        testHelper.SetCompression(standaloneTable, "pk_int", compression);
+
+        TTestHelper::TColumnTableStore testTableStore;
+        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({ "pk_int" }).SetSchema(schema);
+        testHelper.CreateTable(testTableStore);
+        testHelper.SetCompression(testTableStore, "pk_int", compression);
+    }
 }
 }

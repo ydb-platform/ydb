@@ -151,9 +151,11 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         if (!writeMeta.HasLongTxId()) {
             auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
             if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetTableId(),
-                    buffer.GetAggregations()[i]->GetRecordBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
-                Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetTableId())) {
+                    auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetTableId(),
+                        buffer.GetAggregations()[i]->GetRecordBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                    Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                }
             }
             if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());

@@ -19,6 +19,8 @@ struct TDatabaseState {
     bool& EnabledResourcePoolsOnServerless;
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
+    std::unordered_set<TString> PendingSessionIds = {};
+    std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests = {};
     std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
     bool HasDefaultPool = false;
     bool Serverless = false;
@@ -38,6 +40,7 @@ struct TDatabaseState {
 
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
         TString database = ev->Get()->Database;
+        PendingSessionIds.emplace(ev->Get()->SessionId);
         PendingRequersts.emplace_back(std::move(ev));
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
@@ -83,6 +86,14 @@ struct TDatabaseState {
         StartPendingRequests();
     }
 
+    void RemovePendingSession(const TString& sessionId, std::function<void(TEvCleanupRequest::TPtr)> callback) {
+        for (auto& event : PendingCancelRequests[sessionId]) {
+            callback(std::move(event));
+        }
+        PendingCancelRequests.erase(sessionId);
+        PendingSessionIds.erase(sessionId);
+    }
+
 private:
     void StartPendingRequests() {
         if (!EnabledResourcePoolsOnServerless && Serverless) {
@@ -98,6 +109,9 @@ private:
 
     void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         for (const auto& ev : PendingRequersts) {
+            RemovePendingSession(ev->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
+                ActorContext.Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, {NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
+            });
             ActorContext.Send(ev->Sender, new TEvContinueRequest(status, {}, {}, issues));
         }
         PendingRequersts.clear();
@@ -112,6 +126,7 @@ struct TPoolState {
     bool WaitingInitialization = false;
     bool PlaceRequestRunning = false;
     std::optional<TActorId> NewPoolHandler = std::nullopt;
+    std::unordered_set<TActorId> PreviousPoolHandlers = {};
 
     ui64 InFlightRequests = 0;
     TInstant LastUpdateTime = TInstant::Now();
@@ -122,6 +137,7 @@ struct TPoolState {
         }
 
         ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
+        PreviousPoolHandlers.insert(PoolHandler);
         PoolHandler = *NewPoolHandler;
         NewPoolHandler = std::nullopt;
         InFlightRequests = 0;
@@ -142,6 +158,16 @@ struct TPoolState {
         Y_ENSURE(InFlightRequests);
         InFlightRequests--;
         LastUpdateTime = TInstant::Now();
+    }
+
+    void DoCleanupRequest(TEvCleanupRequest::TPtr event) {
+        for (const auto& poolHandler : PreviousPoolHandlers) {
+            ActorContext.Send(poolHandler, new TEvCleanupRequest(
+                event->Get()->Database, event->Get()->SessionId, event->Get()->PoolId,
+                event->Get()->Duration, event->Get()->CpuConsumed
+            ));
+        }
+        ActorContext.Send(event->Forward(PoolHandler));
     }
 };
 

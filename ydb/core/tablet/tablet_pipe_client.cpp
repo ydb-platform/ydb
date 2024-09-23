@@ -49,6 +49,13 @@ namespace NTabletPipe {
         void Bootstrap(const TActorContext& ctx) {
             BLOG_D("::Bootstrap");
 
+            if (Config.ConnectToUserTablet ? Config.HintTabletActor : Config.HintTablet) {
+                LastKnownLeaderTablet = Config.HintTabletActor;
+                LastKnownLeader = Config.HintTablet;
+                LastCacheEpoch = 0; // avoid unnecessary cache invalidation
+                return Resolved(ctx);
+            }
+
             Lookup(ctx);
         }
 
@@ -161,7 +168,7 @@ namespace NTabletPipe {
         void HandleLookup(TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext &ctx) {
             Y_ABORT_UNLESS(ev->Get()->TabletID == TabletId);
 
-            if (ev->Get()->Status != NKikimrProto::OK || (Config.ConnectToUserTablet && !ev->Get()->TabletActor)) {
+            if (ev->Get()->Status != NKikimrProto::OK) {
                 BLOG_D("forward result error, check reconnect");
                 return TryToReconnect(ctx);
             }
@@ -170,6 +177,15 @@ namespace NTabletPipe {
             LastKnownLeader = ev->Get()->Tablet;
             LastCacheEpoch = ev->Get()->CacheEpoch;
 
+            if (!GetTabletLeader()) {
+                BLOG_D("tablet actor unavailable, check reconnect");
+                return TryToReconnect(ctx);
+            }
+
+            Resolved(ctx);
+        }
+
+        void Resolved(const TActorContext &ctx) {
             if (IsLocalNode(ctx)) {
                 BLOG_D("forward result local node, try to connect");
                 UnsubscribeNetworkSession(ctx);
@@ -407,7 +423,12 @@ namespace NTabletPipe {
         }
 
         void RequestHiveInfo(ui64 hiveTabletId) {
-            static TClientConfig clientConfig({.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(300)});
+            static TClientConfig clientConfig{
+                .RetryPolicy = {
+                    .RetryLimitCount = 3,
+                    .MinRetryTime = TDuration::MilliSeconds(300),
+                },
+            };
             HiveClient = Register(CreateClient(SelfId(), hiveTabletId, clientConfig));
             NTabletPipe::SendData(SelfId(), HiveClient, new TEvHive::TEvRequestHiveInfo(TabletId, false));
         }
@@ -521,8 +542,13 @@ namespace NTabletPipe {
         }
 
         void TryToReconnect(const TActorContext& ctx) {
-            if (LastKnownLeaderTablet)
-                ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, LastKnownLeaderTablet));
+            if (auto actor = GetTabletLeader()) {
+                ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, actor));
+            } else if (LastKnownLeader) {
+                // Connecting to user tablet that is not running yet
+                // Invalidate current resolve cache so we can resolve again
+                ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, LastKnownLeader));
+            }
 
             LastKnownLeaderTablet = TActorId();
             LastKnownLeader = TActorId();

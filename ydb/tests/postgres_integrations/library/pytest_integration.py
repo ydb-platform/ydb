@@ -160,8 +160,7 @@ def _run_tests_in_docker(
         results_folder: str,
         ):
 
-    # TODO: run YDB with scripts/receipt and get connection port/database with runtime
-    client: docker.Client = docker.from_env()
+    client: docker.Client = docker.from_env(timeout=7200)  # a long timeout for work with resourses pressure in CI
 
     container = client.containers.create(
         image=image,

@@ -21,7 +21,7 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
     }
 }
 
-TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
     : Viewer(viewer)
     , Event(ev)
 {
@@ -48,7 +48,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
         traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
     }
     if (traceId) {
-        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
+        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
         Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
     }
 }
@@ -760,11 +760,13 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
-    Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-    Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-    if (Database && !Direct) {
-        RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        return true;
+    if (Event) {
+        Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+        if (Database && !Direct) {
+            RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+            return true;
+        }
     }
     return false;
 }

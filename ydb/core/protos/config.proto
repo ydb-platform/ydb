@@ -290,6 +290,9 @@ message TBlobStorageConfig {
         // filled in by config parser, not by user; required for automatic static group creation
         repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
         optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
+
+        // generation of the distconf section; when set, one can automatically apply in-filesystem config
+        optional uint64 Generation = 8;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;

@@ -142,10 +142,11 @@ class Platform(object):
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
 
+        self.is_wasm32 = self.arch == 'wasm32'
         self.is_wasm64 = self.arch == 'wasm64'
-        self.is_wasm = self.is_wasm64
+        self.is_wasm = self.is_wasm32 or self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32
+        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32 or self.is_wasm32
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -230,6 +231,7 @@ class Platform(object):
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
+            (self.is_wasm32, 'ARCH_WASM32'),
             (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),
             (self.is_64_bit, 'ARCH_TYPE_64'),
@@ -1240,6 +1242,7 @@ class GnuToolchain(Toolchain):
                     (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
                     (target.is_android and target.is_armv8, 'aarch64-linux-android'),
 
+                    (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
                     (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
                 ])
 

@@ -62,7 +62,7 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
     i32 number = 0;
     for (const auto& column : inputColumns) {
         NScheme::TTypeInfo typeInfo = (column.GetTypeId() == NScheme::NTypeIds::Pg) ?
-            NScheme::TTypeInfo(column.GetTypeId(), NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
+            NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
             NScheme::TTypeInfo(column.GetTypeId());
         result.emplace_back(
             column.GetName(),

@@ -190,6 +190,7 @@ namespace NYdb {
                    token.Name == "ASSUME" ||
                    token.Name == "ASYMMETRIC" ||
                    token.Name == "ASYNC" ||
+                   token.Name == "AT" ||
                    token.Name == "ATTACH" ||
                    token.Name == "ATTRIBUTES" ||
                    token.Name == "AUTOINCREMENT" ||
@@ -478,8 +479,8 @@ namespace NYdb {
                 token.Name == "RPAREN" ||
                 token.Name == "QUESTION" ||
                 token.Name == "COLON" ||
-                token.Name == "AT" ||
-                token.Name == "DOUBLE_AT" ||
+                token.Name == "COMMAT" ||
+                token.Name == "DOUBLE_COMMAT" ||
                 token.Name == "DOLLAR" ||
                 token.Name == "QUOTE_DOUBLE" ||
                 token.Name == "QUOTE_SINGLE" ||

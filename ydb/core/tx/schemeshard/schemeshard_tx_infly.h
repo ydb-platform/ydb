@@ -739,6 +739,14 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateResourcePool: return TxCreateResourcePool;
             case NKikimrSchemeOp::ESchemeOpAlterResourcePool: return TxAlterResourcePool;
             case NKikimrSchemeOp::ESchemeOpDropResourcePool: return TxDropResourcePool;
+            case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropExternalTable: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpCreateColumnBuild: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropContinuousBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup: return TxInvalid;
             default: return TxInvalid;
         }
     }

@@ -161,6 +161,12 @@ public:
         return Raw.Resource.Value;
     }
 
+    inline IBoxedValuePtr AsBoxed() const
+    {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Boxed, "Value is not boxed");
+        return Raw.Resource.Value;
+    }
+
     inline void* GetRawPtr()
     {
         return &Raw;

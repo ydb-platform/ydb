@@ -47,6 +47,7 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/types
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/utils
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)

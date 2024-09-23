@@ -35,6 +35,7 @@ enum class ENodeFields : ui8 {
     SubDomainKey,
     DisconnectTime,
     Database,
+    HasDisks,
     COUNT
 };
 
@@ -124,6 +125,7 @@ class TJsonNodes : public TViewerPipeClient {
         Any,
         Static,
         Dynamic,
+        Storage,
     };
     EType Type = EType::Any;
 
@@ -155,6 +157,8 @@ class TJsonNodes : public TViewerPipeClient {
         TString Database;
         ui32 MissingDisks = 0;
         float DiskSpaceUsage = 0; // the highest
+        float CpuUsage = 0; // total, normalized
+        float LoadAverage = 0; // normalized
         bool Problems = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -249,6 +253,22 @@ class TJsonNodes : public TViewerPipeClient {
                         }
                     }
                 }
+            }
+        }
+
+        void CalcCpuUsage() {
+            float usage = 0;
+            int threads = 0;
+            for (const auto& pool : SystemState.GetPoolStats()) {
+                usage += pool.GetUsage() * pool.GetThreads();
+                threads += pool.GetThreads();
+            }
+            CpuUsage = usage / threads;
+        }
+
+        void CalcLoadAverage() {
+            if (SystemState.GetNumberOfCpus() && SystemState.LoadAverageSize() > 0) {
+                LoadAverage = SystemState.GetLoadAverage(0) / SystemState.GetNumberOfCpus();
             }
         }
 
@@ -434,6 +454,14 @@ class TJsonNodes : public TViewerPipeClient {
                     return {};
             }
         }
+
+        void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState) {
+            SystemState.MergeFrom(systemState);
+            Cleanup();
+            CalcDatabase();
+            CalcCpuUsage();
+            CalcLoadAverage();
+        }
     };
 
     struct TNodeGroup {
@@ -494,6 +522,10 @@ class TJsonNodes : public TViewerPipeClient {
         { ENodeFields::Uptime, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Version, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::NodeName, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::CPU, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::Memory, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::LoadAverage, TFieldsType().set(+ENodeFields::SystemState) },
+        { ENodeFields::Database, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Missing, TFieldsType().set(+ENodeFields::PDisks) },
     };
 
@@ -570,13 +602,8 @@ class TJsonNodes : public TViewerPipeClient {
     }
 
 public:
-    TString GetLogPrefix() {
-        static TString prefix = "json/nodes ";
-        return prefix;
-    }
-
     TJsonNodes(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev)
+        : TBase(viewer, ev, "/viewer/nodes")
     {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -634,6 +661,9 @@ public:
             FieldsRequired.set(+ENodeFields::NodeInfo);
         } else if (params.Get("type") == "dynamic") {
             Type = EType::Dynamic;
+            FieldsRequired.set(+ENodeFields::NodeInfo);
+        } else if (params.Get("type") == "storage") {
+            Type = EType::Storage;
             FieldsRequired.set(+ENodeFields::NodeInfo);
         } else if (params.Get("type") == "any") {
             Type = EType::Any;
@@ -744,6 +774,16 @@ public:
                 PDisksResponse = RequestBSControllerPDisks();
             }
         }
+        if (FieldsRequired.test(+ENodeFields::PDisks)) {
+            if (!PDisksResponse) {
+                PDisksResponse = RequestBSControllerPDisks();
+            }
+        }
+        if (FieldsRequired.test(+ENodeFields::VDisks)) {
+            if (!VSlotsResponse) {
+                VSlotsResponse = RequestBSControllerVSlots();
+            }
+        }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
             TTabletId rootHiveId = AppData()->DomainsInfo->GetHive();
             HivesToAsk.push_back(rootHiveId);
@@ -831,6 +871,42 @@ public:
         if (FilterStorageStage != EFilterStorageStage::None) {
             return;
         }
+        if (((Type == EType::Static || Type == EType::Dynamic) && FieldsAvailable.test(+ENodeFields::NodeInfo)) || (Type == EType::Storage && FieldsAvailable.test(+ENodeFields::HasDisks))) {
+            TNodeView nodeView;
+            switch (Type) {
+                case EType::Static:
+                    for (TNode* node : NodeView) {
+                        if (node->IsStatic()) {
+                            nodeView.push_back(node);
+                        }
+                    }
+                    break;
+                case EType::Dynamic:
+                    for (TNode* node : NodeView) {
+                        if (!node->IsStatic()) {
+                            nodeView.push_back(node);
+                        }
+                    }
+                    break;
+                case EType::Storage:
+                    for (TNode* node : NodeView) {
+                        if (node->HasDisks) {
+                            nodeView.push_back(node);
+                        }
+                    }
+                    break;
+                case EType::Any:
+                    break;
+            }
+            NodeView.swap(nodeView);
+            FoundNodes = TotalNodes = NodeView.size();
+            Type = EType::Any;
+            InvalidateNodes();
+        }
+        // storage/nodes pre-filter, affects TotalNodes count
+        if (Type != EType::Any) {
+            return;
+        }
         if (!FilterNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
             TNodeView nodeView;
             for (TNode* node : NodeView) {
@@ -864,17 +940,6 @@ public:
                 }
                 NodeView.swap(nodeView);
                 With = EWith::Everything;
-                InvalidateNodes();
-            }
-            if (Type != EType::Any && FieldsAvailable.test(+ENodeFields::NodeInfo)) {
-                TNodeView nodeView;
-                for (TNode* node : NodeView) {
-                    if ((Type == EType::Static && node->IsStatic()) || (Type == EType::Dynamic && !node->IsStatic())) {
-                        nodeView.push_back(node);
-                    }
-                }
-                NodeView.swap(nodeView);
-                Type = EType::Any;
                 InvalidateNodes();
             }
             if (ProblemNodesOnly && FieldsAvailable.test(+ENodeFields::SystemState)) {
@@ -986,6 +1051,7 @@ public:
                 case ENodeFields::CPU:
                 case ENodeFields::LoadAverage:
                 case ENodeFields::DisconnectTime:
+                case ENodeFields::HasDisks:
                     break;
             }
         }
@@ -996,43 +1062,70 @@ public:
             switch (SortBy) {
                 case ENodeFields::NodeId:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetNodeId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::HostName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetHostName(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::NodeName:
                     SortCollection(NodeView, [](const TNode* node) { return node->GetNodeName(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::DC:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetDataCenterId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Rack:
                     SortCollection(NodeView, [](const TNode* node) { return node->NodeInfo.Location.GetRackId(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Version:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetVersion(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Uptime:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetStartTime(); }, ReverseSort);
+                    NeedSort = false;
                     break;
                 case ENodeFields::Memory:
+                    SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetMemoryUsed(); }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::CPU:
+                    SortCollection(NodeView, [](const TNode* node) { return node->CpuUsage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::LoadAverage:
+                    SortCollection(NodeView, [](const TNode* node) { return node->LoadAverage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::Missing:
+                    SortCollection(NodeView, [](const TNode* node) { return node->MissingDisks; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::DiskSpaceUsage:
+                    SortCollection(NodeView, [](const TNode* node) { return node->DiskSpaceUsage; }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::Database:
+                    SortCollection(NodeView, [](const TNode* node) { return node->Database; }, ReverseSort);
+                    NeedSort = false;
+                    break;
                 case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
                 case ENodeFields::SubDomainKey:
-                case ENodeFields::Database:
                 case ENodeFields::DisconnectTime:
+                case ENodeFields::HasDisks:
                 case ENodeFields::COUNT:
                     break;
             }
-            NeedSort = false;
-            InvalidateNodes();
+            if (!NeedSort) {
+                InvalidateNodes();
+            }
         }
     }
 
@@ -1492,6 +1585,7 @@ public:
                     ++slots;
                     MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), slots);
                 }
+                FieldsAvailable.set(+ENodeFields::HasDisks);
                 FilterStorageStage = EFilterStorageStage::None;
                 ApplyEverything();
             } else {
@@ -1515,6 +1609,7 @@ public:
                 for (TNode* node : NodeView) {
                     node->CalcDisks();
                 }
+                FieldsAvailable.set(+ENodeFields::HasDisks);
                 FieldsAvailable.set(+ENodeFields::Missing);
                 FieldsAvailable.set(+ENodeFields::DiskSpaceUsage);
             } else {
@@ -1544,7 +1639,7 @@ public:
     void SendWhiteboardSystemAndTabletsBatch(TNodeBatch& batch) {
         TNodeId nodeId = OffloadMerge ? batch.ChooseNodeId() : 0;
         if (batch.HasStaticNodes && (FieldsNeeded(FieldsVDisks) || FieldsNeeded(FieldsPDisks))) {
-            nodeId = 0; // we need to ask for all nodes anyway
+            nodeId = 0; // we need to ask for all nodes anyway (for the compatibility with older versions)
         }
         if (nodeId) {
             if (FieldsNeeded(FieldsSystemState) && SystemViewerResponse.count(nodeId) == 0) {
@@ -1637,9 +1732,7 @@ public:
                         TNodeId nodeId = systemInfo.GetNodeId();
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->SystemState.MergeFrom(systemInfo);
-                            node->Cleanup();
-                            node->CalcDatabase();
+                            node->MergeFrom(systemInfo);
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -1655,9 +1748,7 @@ public:
                     if (systemState.SystemStateInfoSize() > 0) {
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->SystemState.MergeFrom(systemState.GetSystemStateInfo(0));
-                            node->Cleanup();
-                            node->CalcDatabase();
+                            node->MergeFrom(systemState.GetSystemStateInfo(0));
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
@@ -1959,18 +2050,22 @@ public:
         bool result = false;
         if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (GroupsResponse && GroupsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (VSlotsResponse && VSlotsResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         if (PDisksResponse && PDisksResponse->Error(error)) {
             ProcessResponses();
+            RequestDone();
             result = true;
         }
         return result;
@@ -1985,6 +2080,7 @@ public:
                 if (it->second.Error(error)) {
                     AddProblem("hive-error");
                     ProcessResponses();
+                    RequestDone();
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
@@ -1992,8 +2088,8 @@ public:
                     AddProblem("bsc-error");
                 }
             }
+            FailPipeConnect(ev->Get()->TabletId);
         }
-        TBase::Handle(ev); // all RequestDone() are handled by base handler
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
@@ -2002,28 +2098,34 @@ public:
         if (ev->Get()->Tag == TimeoutTablets) {
             if (NodesInfoResponse && NodesInfoResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (NodeStateResponse && NodeStateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (DatabaseNavigateResponse && DatabaseNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (ResourceNavigateResponse && ResourceNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (PathNavigateResponse && PathNavigateResponse->Error(error)) {
                 ProcessResponses();
+                RequestDone();
             }
             if (OnBscError(error)) {
                 AddProblem("bsc-timeout");
+                FailPipeConnect(GetBSControllerId());
             }
-            RequestDone(FailPipeConnect(GetBSControllerId()));
             for (auto& [hiveId, response] : HiveNodeStats) {
                 if (response.Error(error)) {
                     AddProblem("hive-timeout");
                     ProcessResponses();
-                    RequestDone(FailPipeConnect(hiveId));
+                    RequestDone();
+                    FailPipeConnect(hiveId);
                 }
             }
         }
@@ -2138,28 +2240,28 @@ public:
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks)) {
+                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
+                        return a.path() < b.path();
+                    });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
                         (*jsonNode.AddPDisks()) = std::move(pDisk);
                     }
-                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
-                        return a.pdiskid() < b.pdiskid();
-                    });
                 }
                 if (FieldsAvailable.test(+ENodeFields::VDisks)) {
-                    for (NKikimrWhiteboard::TVDiskStateInfo& vDisk : node->VDisks) {
-                        (*jsonNode.AddVDisks()) = std::move(vDisk);
-                    }
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
+                    for (NKikimrWhiteboard::TVDiskStateInfo& vDisk : node->VDisks) {
+                        (*jsonNode.AddVDisks()) = std::move(vDisk);
+                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::Tablets)) {
-                    for (NKikimrViewer::TTabletStateInfo& tablet : node->Tablets) {
-                        (*jsonNode.AddTablets()) = std::move(tablet);
-                    }
                     std::sort(node->Tablets.begin(), node->Tablets.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) {
                         return a.type() < b.type();
                     });
+                    for (NKikimrViewer::TTabletStateInfo& tablet : node->Tablets) {
+                        (*jsonNode.AddTablets()) = std::move(tablet);
+                    }
                 }
             }
         } else {
@@ -2169,94 +2271,207 @@ public:
                 jsonNodeGroup.SetNodeCount(nodeGroup.Nodes.size());
             }
         }
+        AddEvent("RenderingResult");
         TStringStream out;
         Proto2Json(json, out, {
             .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
+            .MapAsObject = true,
             .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
             .WriteNanAsString = true,
         });
+        AddEvent("ResultReady");
         TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
     }
 
     static YAML::Node GetSwagger() {
-        TSimpleYamlBuilder yaml({
-            .Method = "get",
-            .Tag = "viewer",
-            .Summary = "Nodes info",
-            .Description = "Information about nodes",
-        });
-        yaml.AddParameter({
-            .Name = "path",
-            .Description = "path to schema object",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "with",
-            .Description = "filter nodes by missing disks or space",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "storage",
-            .Description = "return storage info",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "tablets",
-            .Description = "return tablets info",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "sort",
-            .Description = "sort by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "group",
-            .Description = "group by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "offset",
-            .Description = "skip N nodes",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "limit",
-            .Description = "limit to N nodes",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "uptime",
-            .Description = "return only nodes with less uptime in sec.",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
-            .Name = "problems_only",
-            .Description = "return only problem nodes",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "filter",
-            .Description = "filter nodes by id or host",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "filter_group_by",
-            .Description = "filter group by (NodeId,Host,NodeName,DC,Rack,Version,Uptime,Missing)",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "filter_group",
-            .Description = "content for filter group by",
-            .Type = "string",
-        });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>());
-        return yaml;
+        YAML::Node node = YAML::Load(R"___(
+            get:
+                tags:
+                  - viewer
+                summary: Nodes info
+                description: Information about nodes
+                parameters:
+                  - name: database
+                    in: query
+                    description: database name
+                    required: false
+                    type: string
+                  - name: path
+                    in: query
+                    description: path to schema object
+                    required: false
+                    type: string
+                  - name: node_id
+                    in: query
+                    description: node id
+                    required: false
+                    type: integer
+                  - name: group_id
+                    in: query
+                    description: group id
+                    required: false
+                    type: integer
+                  - name: pool
+                    in: query
+                    description: storage pool name
+                    required: false
+                    type: string
+                  - name: type
+                    in: query
+                    description: >
+                        return nodes of specific type:
+                          * `static`
+                          * `dynamic`
+                          * `storage`
+                          * `any`
+                  - name: with
+                    in: query
+                    description: >
+                        filter groups by missing or space:
+                          * `missing`
+                          * `space`
+                  - name: storage
+                    in: query
+                    description: return storage info
+                    required: false
+                    type: boolean
+                  - name: tablets
+                    in: query
+                    description: return tablets info
+                    required: false
+                    type: boolean
+                  - name: problems_only
+                    in: query
+                    description: return only problem nodes
+                    required: false
+                    type: boolean
+                  - name: uptime
+                    in: query
+                    description: return only nodes with less uptime in sec.
+                    required: false
+                    type: integer
+                  - name: filter
+                    in: query
+                    description: filter nodes by id or host
+                    required: false
+                    type: string
+                  - name: sort
+                    in: query
+                    description: >
+                        sort by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `DC`
+                          * `Rack`
+                          * `Version`
+                          * `Uptime`
+                          * `Memory`
+                          * `CPU`
+                          * `LoadAverage`
+                          * `Missing`
+                          * `DiskSpaceUsage`
+                          * `Database`
+                    required: false
+                    type: string
+                  - name: group
+                    in: query
+                    description: >
+                        group by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `Database`
+                          * `DiskSpaceUsage`
+                          * `DC`
+                          * `Rack`
+                          * `Missing`
+                          * `Uptime`
+                          * `Version`
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        group by:
+                          * `NodeId`
+                          * `Host`
+                          * `NodeName`
+                          * `Database`
+                          * `DiskSpaceUsage`
+                          * `DC`
+                          * `Rack`
+                          * `Missing`
+                          * `Uptime`
+                          * `Version`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: content for filter group by
+                    required: false
+                    type: string
+                  - name: fields_required
+                    in: query
+                    description: >
+                        list of fields required in response, the more - the heavier could be request. `all` for all fields:
+                          * `NodeId` (always required)
+                          * `SystemState`
+                          * `PDisks`
+                          * `VDisks`
+                          * `Tablets`
+                          * `Host`
+                          * `NodeName`
+                          * `DC`
+                          * `Rack`
+                          * `Version`
+                          * `Uptime`
+                          * `Memory`
+                          * `CPU`
+                          * `LoadAverage`
+                          * `Missing`
+                          * `DiskSpaceUsage`
+                          * `SubDomainKey`
+                          * `DisconnectTime`
+                          * `Database`
+                    required: false
+                    type: string
+                  - name: offset
+                    in: query
+                    description: skip N nodes
+                    required: false
+                    type: integer
+                  - name: limit
+                    in: query
+                    description: limit to N nodes
+                    required: false
+                    type: integer
+                  - name: timeout
+                    in: query
+                    description: timeout in ms
+                    required: false
+                    type: integer
+                  - name: direct
+                    in: query
+                    description: fulfill request on the target node without redirects
+                    required: false
+                    type: boolean
+                responses:
+                    200:
+                        description: OK
+                        content:
+                            application/json:
+                                schema:
+                                    type: object
+                    400:
+                        description: Bad Request
+                    403:
+                        description: Forbidden
+                    504:
+                        description: Gateway Timeout
+                )___");
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
+        return node;
     }
 };
 

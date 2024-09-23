@@ -3174,7 +3174,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
         }
 
-        /*{
+        {
             auto result = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/ColumnShard` ON SELECT * FROM `/Root/DataShard` WHERE Col1 > 9;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -3223,7 +3223,127 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 DELETE FROM `/Root/ColumnShard` WHERE Col2 = "not found";
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }*/
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableSink_HtapComplex, withOltpSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnSrc` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
+            CREATE TABLE `/Root/RowSrc` (
+                Col1 Uint64 NOT NULL,
+                Col2 String NOT NULL,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+
+            CREATE TABLE `/Root/ColumnDst` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
+            CREATE TABLE `/Root/RowDst` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32,
+                PRIMARY KEY (Col1)
+            )
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ColumnSrc` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11);
+                REPLACE INTO `/Root/ColumnSrc` (Col1, Col2, Col3) VALUES
+                    (3u, "test3", 12), (4u, "test", 13);
+                UPSERT INTO `/Root/RowSrc` (Col1, Col2, Col3) VALUES
+                    (10u, "test1", 10), (20u, "test2", 11);
+                REPLACE INTO `/Root/RowSrc` (Col1, Col2, Col3) VALUES
+                    (30u, "test3", 12), (40u, "test", 13);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                $data = SELECT c.Col1 as Col1, c.Col2 As Col2, r.Col3 AS Col3
+                    FROM `/Root/ColumnSrc`as c
+                    JOIN `/Root/RowSrc` as r
+                    ON c.Col1 + 10 = r.Col3;
+                UPSERT INTO `/Root/ColumnDst` SELECT * FROM $data;
+                REPLACE INTO `/Root/RowDst` SELECT * FROM $data;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColumnDst`;
+                SELECT COUNT(*) FROM `/Root/RowDst`;
+                DELETE FROM `/Root/ColumnDst` WHERE 1=1;
+                DELETE FROM `/Root/RowDst` WHERE 1=1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                $prepare = SELECT *
+                    FROM `/Root/ColumnSrc`
+                    WHERE Col2 LIKE '%test%test%';
+                $data = SELECT c.Col1 as Col1, c.Col2 As Col2, r.Col3 AS Col3
+                    FROM `/Root/RowSrc`as c
+                    LEFT OUTER JOIN $prepare as r
+                    ON c.Col1 + 10 = r.Col3;
+                UPSERT INTO `/Root/ColumnDst` SELECT * FROM $data;
+                REPLACE INTO `/Root/RowDst` SELECT * FROM $data;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColumnDst`;
+                SELECT COUNT(*) FROM `/Root/RowDst`;
+                DELETE FROM `/Root/ColumnDst` WHERE 1=1;
+                DELETE FROM `/Root/RowDst` WHERE 1=1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
     }
 
     Y_UNIT_TEST_TWIN(TableSink_HtapInteractive, withOltpSink) {
@@ -4136,6 +4256,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -4724,6 +4845,83 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[101u;["test1"];10];[102u;["test2"];11];[103u;["test3"];12];[104u;#;13]])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+    }
+
+    Y_UNIT_TEST(MixedReadQueryWithoutStreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/DataShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32 NOT NULL,
+                    Col3 String,
+                    PRIMARY KEY (Col1, Col2)
+                ) WITH (STORE = ROW);
+                CREATE TABLE `/Root/ColumnShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32 NOT NULL,
+                    Col3 String,
+                    PRIMARY KEY (Col1, Col2)
+                ) WITH (STORE = COLUMN);
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (1u, 1, "row"), (1u, 2, "row"), (1u, 3, "row"), (2u, 3, "row");
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
+                    (1u, 1, "row"), (1u, 2, "row"), (1u, 3, "row"), (2u, 3, "row");
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"sql(
+                SELECT Col3 FROM `/Root/DataShard` WHERE Col1 = 1u
+                UNION ALL
+                SELECT Col3 FROM `/Root/ColumnShard` WHERE Col1 = 1u;
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"sql(
+                SELECT r.Col3
+                FROM `/Root/DataShard` AS r
+                JOIN `/Root/ColumnShard` AS c 
+                ON r.Col1 = c.Col1;
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]];[["row"]]])");
         }
     }
 }

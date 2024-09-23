@@ -395,7 +395,8 @@ public:
             [this](const THyperedge& edge) {
                 return 
                     edge.IsReversed || 
-                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual());
+                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual()) ||
+                    edge.LeftAny || edge.RightAny;
             }
         );
         
@@ -435,8 +436,6 @@ private:
         const auto& nodes = Graph_.GetNodes();
 
         EJoinKind groupJoinKind = edges[groupBegin].JoinKind;
-        bool leftAny = edges[groupBegin].LeftAny;
-        bool rightAny = edges[groupBegin].RightAny;
         bool isJoinCommutative = edges[groupBegin].IsCommutative;
 
         TVector<TString> groupConditionUsedAttributes;
@@ -473,7 +472,7 @@ private:
                         });
                     }
 
-                    auto e = THyperedge(lhs, rhs, groupJoinKind, leftAny, rightAny, isJoinCommutative, joinConditions);
+                    auto e = THyperedge(lhs, rhs, groupJoinKind, false, false, isJoinCommutative, joinConditions);
                     Graph_.AddEdge(std::move(e));
                 }
             }

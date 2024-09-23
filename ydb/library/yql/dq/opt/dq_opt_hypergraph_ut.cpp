@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
 
     template<typename TLhsArg, typename TRhsArg>
-    std::shared_ptr<IBaseOptimizerNode> Join(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="") {
+    std::shared_ptr<IBaseOptimizerNode> Join(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="", TString onAttr="") {
         if constexpr (std::is_convertible_v<TLhsArg, std::string> && std::is_convertible_v<TRhsArg, std::string>) {
             on = Sprintf("%s,%s", lhsArg, rhsArg);
         }
@@ -174,8 +174,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         
         std::string lhsCond, rhsCond;
         Split(on, ",", lhsCond, rhsCond);
-
-        auto col = ToString(rand());
+        auto col = onAttr.empty()? ToString(rand()): onAttr;
         std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TJoinOptimizerNode>(
             TJoinOptimizerNode(
                 GetJoinArg(lhsArg),
@@ -188,6 +187,23 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             )
         );
         return root;
+    }
+
+    Y_UNIT_TEST(AnyJoinWithTransitiveClosure) {
+        auto root = Join("A", Join("B", Join("C", "D", "C,D", "id"), "B,C", "id"), "A,B", "id");
+        std::static_pointer_cast<TJoinOptimizerNode>(root)->LeftAny = true;
+
+        auto graph = MakeJoinHypergraph<TNodeSet>(root);
+        Cout << graph.String() << Endl;
+        
+        auto A = graph.GetNodesByRelNames({"A"});
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+        auto D = graph.GetNodesByRelNames({"D"});
+
+        UNIT_ASSERT(graph.FindEdgeBetween(B, D));
+        UNIT_ASSERT(!graph.FindEdgeBetween(A, D));
+        UNIT_ASSERT(!graph.FindEdgeBetween(A, C));
     }
 
     Y_UNIT_TEST(AnyJoinConstraints1) {

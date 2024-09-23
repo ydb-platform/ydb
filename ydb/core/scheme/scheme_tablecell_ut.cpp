@@ -312,10 +312,9 @@ Y_UNIT_TEST_SUITE(Scheme) {
     /**
      * CompareOrder test for cell1 < cell2 < cell3 given a type id
      */
-    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId typeId) {
+    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeInfo type) {
         TCell nullCell;
 
-        NScheme::TTypeInfo type(typeId);
         NScheme::TTypeInfoOrder typeDescending(type, NScheme::EOrder::Descending);
 
         // NULL is always equal to itself, both ascending and descending
@@ -381,7 +380,20 @@ Y_UNIT_TEST_SUITE(Scheme) {
             TCell((const char*)&decVal1, sizeof(decVal1)),
             TCell((const char*)&decVal2, sizeof(decVal2)),
             TCell((const char*)&decVal3, sizeof(decVal3)),
-            NScheme::NTypeIds::Decimal);
+            NScheme::TDecimalType::Default());
+
+        DoTestCompareOrder(
+            TCell((const char*)&decVal1, sizeof(decVal1)),
+            TCell((const char*)&decVal2, sizeof(decVal2)),
+            TCell((const char*)&decVal3, sizeof(decVal3)),
+            NScheme::TDecimalType(20, 10));
+
+        DoTestCompareOrder(
+            TCell((const char*)&decVal1, sizeof(decVal1)),
+            TCell((const char*)&decVal2, sizeof(decVal2)),
+            TCell((const char*)&decVal3, sizeof(decVal3)),
+            NScheme::TDecimalType(35, 20));
+
     }
 
     Y_UNIT_TEST(YqlTypesMustBeDefined) {

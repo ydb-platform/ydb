@@ -49,7 +49,9 @@ vim dynconfig.yaml
 # Применить конфигурацию dynconfig.yaml на кластер
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
 ```
+
 аналогично в одну строчку:
+
 ```bash
 {{ ydb-cli }} admin config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin config replace -f -
 ```

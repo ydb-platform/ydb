@@ -146,6 +146,7 @@ SRCS(
     tx_sequenceshard.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
+    yql_translation_settings.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)

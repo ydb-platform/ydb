@@ -186,7 +186,7 @@ namespace {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             ++Responses;
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
             } else {
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
@@ -196,10 +196,16 @@ namespace {
 
         void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr ev) {
             ++Responses;
+            auto rec = ev->Get()->Record;
+            if (rec.GetStatus()  != NKikimrProto::OK) {
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB33, VDISKP(Ctx->VCtx, "MultiPut failed"), (Msg, ev->Get()->ToString()));
+                return;
+            }
+
             const auto& items = ev->Get()->Record.GetItems();
             for (const auto& item: items) {
                 if (item.GetStatus() != NKikimrProto::OK) {
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                    STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut item failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()), (Status, NKikimrProto::EReplyStatus_Name(item.GetStatus())), (Error, item.GetErrorReason()));
                     continue;
                 }
                 ++Ctx->MonGroup.SentOnMain();

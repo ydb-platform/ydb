@@ -30,6 +30,8 @@ Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::Status
         return Ydb::StatusIds::EXTERNAL_ERROR;
     case NYql::NDqProto::StatusIds::SCHEME_ERROR:
         return Ydb::StatusIds::SCHEME_ERROR;
+    case NYql::NDqProto::StatusIds::UNSUPPORTED:
+        return Ydb::StatusIds::UNSUPPORTED;
     case NYql::NDqProto::StatusIds::GENERIC_ERROR:
     default:
         return Ydb::StatusIds::GENERIC_ERROR;
@@ -63,12 +65,13 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
         return NYql::NDqProto::StatusIds::CANCELLED;
     case Ydb::StatusIds::SCHEME_ERROR:
         return NYql::NDqProto::StatusIds::SCHEME_ERROR;
-    case Ydb::StatusIds::GENERIC_ERROR:
-        return NYql::NDqProto::StatusIds::GENERIC_ERROR;
+    case Ydb::StatusIds::UNSUPPORTED:
+        return NYql::NDqProto::StatusIds::UNSUPPORTED;
     case Ydb::StatusIds::EXTERNAL_ERROR:
         return NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+    case Ydb::StatusIds::GENERIC_ERROR:
     default:
-        return NYql::NDqProto::StatusIds::UNSPECIFIED;
+        return NYql::NDqProto::StatusIds::GENERIC_ERROR;
     }
 }
 

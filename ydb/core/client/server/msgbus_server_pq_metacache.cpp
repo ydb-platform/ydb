@@ -185,7 +185,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start pipe to hive tablet: " << hiveTabletId);
         auto pipeRetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         pipeRetryPolicy.MaxRetryTime = TDuration::Seconds(1);
-        NTabletPipe::TClientConfig pipeConfig{pipeRetryPolicy};
+        NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = pipeRetryPolicy};
         HivePipeClient = ctx.RegisterWithSameMailbox(
                 NTabletPipe::CreateClient(ctx.SelfID, hiveTabletId, pipeConfig)
         );

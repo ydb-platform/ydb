@@ -59,6 +59,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 .NotResolved();
         }
 
+        // TODO(mbkkt) less than necessary for vector index
         checks
             .IsValidLeafName()
             .PathsLimit(2) // index and impl-table

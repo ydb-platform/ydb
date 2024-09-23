@@ -3047,14 +3047,20 @@ TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ct
         return node;
     }
 
+    bool withConnections = false;
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
         if (inputsToOptimize.Test(i)) {
             if (auto conn = stage.Inputs().Item(i).Maybe<TDqConnection>()) {
                 if (!IsSingleConsumerConnection(conn.Cast(), parentsMap, allowStageMultiUsage)) {
                     return node;
                 }
+                withConnections = true;
             }
         }
+    }
+    // Stage input section may be reused multiple times
+    if (withConnections && !IsSingleConsumer(stage.Inputs(), parentsMap)) {
+        return node;
     }
 
     TExprNode::TPtr newStageLambda;

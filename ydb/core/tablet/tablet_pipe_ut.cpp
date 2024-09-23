@@ -1219,6 +1219,52 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         Y_UNUSED(client);
     }
 
+    class THintedTabletActor : public TActor<THintedTabletActor> {
+    public:
+        THintedTabletActor()
+            : TActor(&TThis::StateWork)
+        {}
+
+    private:
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTabletPipe::TEvConnect, Handle);
+            }
+        }
+
+        void Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
+            auto* msg = ev->Get();
+            auto tabletId = msg->Record.GetTabletId();
+            auto clientId = ActorIdFromProto(msg->Record.GetClientId());
+            Send(ev->Sender,
+                new TEvTabletPipe::TEvConnectResult(NKikimrProto::OK,
+                    tabletId, clientId, /* serverId */ SelfId(),
+                    /* leader */ true,
+                    /* generation */ 1,
+                    /* versionInfo */ "hint actor"));
+        }
+    };
+
+    Y_UNIT_TEST(TestPipeConnectToHint) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+
+        auto hint = runtime.Register(new THintedTabletActor());
+        auto sender = runtime.AllocateEdgeActor();
+        auto client = runtime.Register(NTabletPipe::CreateClient(sender, 12345, NTabletPipe::TClientConfig{
+            .HintTablet = hint,
+        }));
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ServerId, hint);
+            UNIT_ASSERT_VALUES_EQUAL(msg->VersionInfo, "hint actor");
+        }
+        Y_UNUSED(client);
+    }
+
 }
 
 }

@@ -309,6 +309,15 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJso
 }
 
 void TPlan::Load(const NJson::TJsonValue& node) {
+    if (auto* subplanNameNode = node.GetValueByPath("Subplan Name")) {
+        auto subplanName = subplanNameNode->GetStringSafe();
+        if (subplanName.StartsWith("CTE ")) {
+            if (auto* nodeTypeNode = node.GetValueByPath("Node Type")) {
+                CteSubPlans[subplanName] = nodeTypeNode->GetStringSafe();
+            }
+        }
+    }
+
     if (auto* subNode = node.GetValueByPath("Plans")) {
         for (auto& plan : subNode->GetArray()) {
             TString nodeType;
@@ -331,6 +340,13 @@ void TPlan::Load(const NJson::TJsonValue& node) {
 }
 
 void TPlan::ResolveCteRefs() {
+    for (auto& memberRef : MemberRefs) {
+        auto it = CteSubPlans.find(memberRef.first);
+        if (it == CteSubPlans.end()) {
+            ythrow yexception() << "Can not find CTE Ref " << memberRef.first;
+        }
+        memberRef.second.first->Info.at(memberRef.second.second) = "Reference: " + it->second;
+    }
     for (auto& cteRef : CteRefs) {
         auto it = CteStages.find(cteRef.first);
         if (it == CteStages.end()) {
@@ -405,11 +421,42 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     auto operators = node.GetValueByPath("Operators");
 
     if (operators) {
+        TString prevFilter;
+        std::set<std::string> references;
         for (const auto& subNode : operators->GetArray()) {
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
                 auto name = nameNode->GetStringSafe();
+
+                if (name == "Iterator" || name == "Member") {
+                    if (auto* referenceNode = subNode.GetValueByPath(name)) {
+                        auto referenceName = referenceNode->GetStringSafe();
+                        if (references.contains(referenceName)) {
+                            continue;
+                        }
+                        if (name == "Iterator" && !referenceName.StartsWith("precompute_")) {
+                            continue;
+                        }
+                    }
+                }
+
+                if (name == "Filter" && prevFilter) {
+                    if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
+                        auto filter = predicateNode->GetStringSafe();
+                        if (filter == prevFilter) {
+                            continue;
+                        }
+                    }
+                }
+                prevFilter = "";
+
                 TStringBuilder builder;
-                builder << name;
+
+                if (name == "Iterator" || name == "Member") {
+                    builder << "Reference";
+                } else {
+                    builder << name;
+                }
+
                 if (name == "Limit") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         builder << ": " << limitNode->GetStringSafe();
@@ -417,6 +464,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (name == "Filter") {
                     if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
                         auto filter = predicateNode->GetStringSafe();
+                        prevFilter = filter;
                         while(true) {
                             auto p = filter.find("item.");
                             if (p == filter.npos) {
@@ -440,6 +488,15 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                     if (auto* topSortByNode = subNode.GetValueByPath("TopSortBy")) {
                         builder << ", TopSortBy: " << topSortByNode->GetStringSafe();
+                    }
+                } else if (name == "Iterator" || name == "Member") {
+                    if (auto* referenceNode = subNode.GetValueByPath(name)) {
+                        auto referenceName = referenceNode->GetStringSafe();
+                        references.insert(referenceName);
+                        builder << ": " << referenceName;
+                        auto cteRef = "CTE " + referenceName;
+                        auto stageCopy = stage;
+                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Info.size()));
                     }
                 } else if (name.Contains("Join")) {
                     if (auto* conditionNode = subNode.GetValueByPath("Condition")) {
@@ -747,7 +804,6 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
             c->CteOffsetY = offsetY;
             offsetY += GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
             stage->IndentY = std::max(stage->IndentY, offsetY);
-            stage->CteHeight += GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
         } else {
             MarkStageIndent(indent, offsetY, c->FromStage);
             stage->IndentY = std::max(stage->IndentY, c->FromStage->IndentY);
@@ -758,6 +814,33 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
 void TPlan::MarkLayout() {
     ui32 offsetY = 0;
     MarkStageIndent(0, offsetY, Stages.front());
+    // Compress Reference(s)
+    for (auto& stage : Stages) {
+        auto& info = stage->Info;
+        ui32 i = 0;
+        while (i < info.size()) {
+            auto& s = info[i];
+            if (s.starts_with("Reference: ")) {
+                auto next = i + 1;
+                if (next < info.size()) {
+                    auto& sn = info[next];
+                    if (sn.starts_with("Reference: ")) {
+                        s.insert(9, "s");
+                        while (next < info.size()) {
+                            auto& sn = info[next];
+                            if (sn.starts_with("Reference: ")) {
+                                s += ", " + sn.substr(11);
+                                info.erase(info.begin() + next);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            i++;
+        }
+    }
 }
 
 void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color) {
@@ -905,7 +988,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
         background
         << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageDark << "'/>" << Endl
+        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
         << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
         << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl;
     }
@@ -915,35 +998,36 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
 
 void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas) {
     OffsetY = offsetY;
-    ui32 planHeight = Stages.back()->OffsetY + Stages.back()->Height + Stages.back()->CteHeight;
+    ui32 planHeight = 0;
 
     for (auto& s : Stages) {
+        planHeight = std::max(planHeight, s->IndentY);
         background
             << "<rect x='" << s->IndentX << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.HeaderWidth - s->IndentX - INTERNAL_WIDTH << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         auto x = Config.HeaderWidth + GAP_X;
         background
             << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.SummaryWidth << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         x += Config.SummaryWidth + GAP_X;
         background
             << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.Width - x << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         if (s->Connections.size() > 1) {
             ui32 y = s->OffsetY + s->Height;
             background
                 << "<rect x='" << s->IndentX << "' y='" << y + offsetY
                 << "' width='" << INDENT_X << "' height='" << s->IndentY - y
-                << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+                << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         }
         background
             << "<circle cx='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
             << "' r='" << INTERNAL_WIDTH / 2 - 1
-            << "' stroke='" << Config.Palette.StageDark << "' stroke-width='1' fill='" << Config.Palette.StageLight << "' />" << Endl
+            << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
             << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
             << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
@@ -1121,22 +1205,22 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.HeaderWidth - xx - INTERNAL_WIDTH<< "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 xx = Config.HeaderWidth + GAP_X;
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.SummaryWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 xx += Config.SummaryWidth + GAP_X;
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.Width - xx << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 background
                     << "<circle cx='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
                     << "' cy='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y
                     << "' r='" << std::min(INTERNAL_HEIGHT, INTERNAL_WIDTH) / 2 - 1
-                    << "' stroke='" << Config.Palette.StageDark << "' stroke-width='1' fill='" << Config.Palette.StageLight << "' />" << Endl
+                    << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
                     << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
                     << "px' fill='" << Config.Palette.StageText << "' x='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
                     << "' y='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT / 2
@@ -1327,8 +1411,8 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
 }
 
 TColorPalette::TColorPalette() {
-    StageDark     = "var(--stage-dark, #F2F2F2)";
-    StageLight    = "var(--stage-dark, #D9D9D9";
+    StageMain     = "var(--stage-main, #F2F2F2)";
+    StageClone    = "var(--stage-clone, #D9D9D9";
     StageText     = "var(--stage-text, #262626)";
     StageTextHighlight = "var(--stage-texthl, #EA0703)";
     StageGrid     = "var(--stage-grid, #B2B2B2";
@@ -1350,6 +1434,7 @@ TColorPalette::TColorPalette() {
     ConnectionText= "var(--conn-text, #393939)";
     MinMaxLine    = "var(--minmax-line, #FFDB4D)";
     TextLight     = "var(--text-light, #FFFFFF)";
+    TextInverted  = "var(--text-inv, #FFFFFF)";
     TextSummary   = "var(--text-summary, #262626)";
     SpillingBytesDark   = "var(--spill-dark, #406B61)";
     SpillingBytesMedium = "var(--spill-medium, #599587)";
@@ -1385,7 +1470,7 @@ void TPlanVisualizer::LoadPlans(const TString& plans) {
 }
 
 void TPlanVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {
-    Plans.emplace_back(nodeType, Config, CteStages);
+    Plans.emplace_back(nodeType, Config, CteStages, CteSubPlans);
     Plans.back().Load(node);
 }
 
@@ -1429,8 +1514,8 @@ TString TPlanVisualizer::PrintSvg() {
     for (auto& p : Plans) {
         offsetY += GAP_Y;
         canvas
-            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-            << "px' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+            << "' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
             << p.NodeType << "</text>" << Endl;
 
         canvas
@@ -1490,7 +1575,7 @@ TString TPlanVisualizer::PrintSvg() {
             << "  <rect x='" << x - summary3 << "' y='" << offsetY
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
-            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight << "' x='" << x - 2
+            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
             << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</text>" << Endl
             << "</g>" << Endl;
 
@@ -1547,8 +1632,8 @@ TString TPlanVisualizer::PrintSvg() {
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
             for (auto& p : Plans) {
                 svg
-                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-                    << "px' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>"
+                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+                    << "' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
                     << timeLabel << "</text>" << Endl;
             }
         }

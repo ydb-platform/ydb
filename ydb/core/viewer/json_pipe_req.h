@@ -85,8 +85,8 @@ protected:
             }
             if (!IsDone()) {
                 Span.EndOk();
+                Response = std::move(response);
             }
-            Response = std::move(response);
         }
 
         void Set(TAutoPtr<TEventHandle<T>>&& response) {
@@ -170,7 +170,7 @@ protected:
     ~TViewerPipeClient();
     TViewerPipeClient();
     TViewerPipeClient(NWilson::TTraceId traceId);
-    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev);
+    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName = {});
     TActorId ConnectTabletPipe(TTabletId tabletId);
     void SendEvent(std::unique_ptr<IEventHandle> event);
     void SendRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});

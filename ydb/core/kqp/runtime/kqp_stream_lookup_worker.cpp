@@ -61,7 +61,7 @@ NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
     if (type->GetKind() == NMiniKQL::TType::EKind::Pg) {
         auto pgType = static_cast<NMiniKQL::TPgType*>(type);
         auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
+        return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(pgTypeId));
     } else {
         bool isOptional = false;
         auto dataType = NMiniKQL::UnpackOptionalData(type, isOptional);
@@ -149,7 +149,7 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     i32 keyOrder = 0;
     for (const auto& keyColumn : settings.GetKeyColumns()) {
         NScheme::TTypeInfo typeInfo = keyColumn.GetTypeId() == NScheme::NTypeIds::Pg ?
-            NScheme::TTypeInfo(keyColumn.GetTypeId(), NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())) :
+            NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())) :
             NScheme::TTypeInfo(keyColumn.GetTypeId());
 
         KeyColumns.emplace(
@@ -174,7 +174,7 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     Columns.reserve(settings.GetColumns().size());
     for (const auto& column : settings.GetColumns()) {
         NScheme::TTypeInfo typeInfo = column.GetTypeId() == NScheme::NTypeIds::Pg ?
-            NScheme::TTypeInfo(column.GetTypeId(), NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
+            NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
             NScheme::TTypeInfo(column.GetTypeId());
 
         Columns.emplace_back(TSysTables::TTableColumnInfo{

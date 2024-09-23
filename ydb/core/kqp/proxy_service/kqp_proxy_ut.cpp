@@ -2,7 +2,9 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service_impl.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -64,6 +66,63 @@ TString CreateSession(TTestActorRuntime* runtime, const TActorId& kqpProxy, cons
     TString sessionId = record.GetResponse().GetSessionId();
     return sessionId;
 }
+
+class TDatabaseCacheTestActor : public TActorBootstrapped<TDatabaseCacheTestActor> {
+public:
+    TDatabaseCacheTestActor(const TString& database, const TString& expectedDatabaseId, bool fromCache, TDatabasesCache& cache, NThreading::TPromise<void> promise)
+        : Database(database)
+        , ExpectedDatabaseId(expectedDatabaseId)
+        , Cache(cache)
+        , Promise(promise)
+        , FromCache(fromCache)
+    {}
+
+    void Bootstrap() {
+        Become(&TDatabaseCacheTestActor::StateFunc);
+
+        auto event = MakeHolder<TEvKqp::TEvQueryRequest>();
+        event->Record.MutableRequest()->SetDatabase(Database);
+        Send(SelfId(), event.Release());
+    }
+
+    void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
+        Cache.UpdateDatabaseInfo(ev, ActorContext());
+    }
+
+    void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        auto success = Cache.SetDatabaseIdOrDeffer(ev, [this](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
+            UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, " << GetErrorString() << ", status: " << status << ", reason: " << issues.ToOneLineString());
+        }, ActorContext());
+
+        if (FromCache) {
+            UNIT_ASSERT_C(success, TStringBuilder() << "Expected database id from cache, " << GetErrorString());
+            UNIT_ASSERT_STRING_CONTAINS_C(ev->Get()->GetDatabaseId(), ExpectedDatabaseId, GetErrorString());
+            Promise.SetValue();
+            PassAway();
+        } else {
+            UNIT_ASSERT_C(!success, TStringBuilder() << "Unexpected database id from cache, " << GetErrorString());
+            FromCache = true;
+        }
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
+        hFunc(TEvKqp::TEvQueryRequest, Handle);
+    )
+
+private:
+    TString GetErrorString() const {
+        return TStringBuilder() << "database: " << Database << ", from cache: " << FromCache << "\n";
+    }
+
+private:
+    const TString Database;
+    const TString ExpectedDatabaseId;
+    TDatabasesCache& Cache;
+    NThreading::TPromise<void> Promise;
+
+    bool FromCache = false;
+};
 
 }
 
@@ -541,6 +600,33 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         }
 
         UNIT_ASSERT(allDoneOk);
+    }
+
+    Y_UNIT_TEST(DatabasesCacheForServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .Create();
+        
+        auto& runtime = *ydb->GetRuntime();
+        TDatabasesCache cache;
+
+        auto checkCache = [&](const TString& database, const TString& expectedDatabaseId, bool fromCache) {
+            auto promise = NThreading::NewPromise();
+            runtime.Register(new TDatabaseCacheTestActor(database, expectedDatabaseId, fromCache, cache, promise));
+            promise.GetFuture().GetValueSync();
+        };
+
+        const auto& dedicatedTennant = ydb->GetSettings().GetDedicatedTenantName();
+        checkCache(dedicatedTennant, dedicatedTennant, false);
+        checkCache(dedicatedTennant, dedicatedTennant, true);
+
+        const auto& sharedTennant = ydb->GetSettings().GetSharedTenantName();
+        checkCache(sharedTennant, sharedTennant, false);
+        checkCache(sharedTennant, sharedTennant, true);
+
+        const auto& serverlessTennant = ydb->GetSettings().GetServerlessTenantName();
+        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, false);
+        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, true);
     }
 } // namspace NKqp
 } // namespace NKikimr

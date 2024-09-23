@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);
     }
 
-    Y_UNIT_TEST(ChangeSender) {
+    Y_UNIT_TEST(ChangeSenderEmpty) {
         TPortManager pm;
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TPathId targetPathId = *GetTablePathId(runtime, edgeActor, "/Root/Table");
         TPathId sourcePathId = *GetTablePathId(runtime, edgeActor, "/Root/IncrBackupTable");
 
-        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, sourcePathId, targetPathId);
+        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, TDataShardId{}, sourcePathId, targetPathId);
 
         auto changeSenderActor = runtime.Register(changeSender);
         runtime.EnableScheduleForActor(changeSenderActor);
@@ -255,8 +255,8 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
-        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
-        CreateShardedTable(
+        auto [_, dstTable] = CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        auto [srcShards, srcTable] = CreateShardedTable(
              server,
              edgeActor,
              "/Root",
@@ -268,10 +268,20 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
                     {"value", "Uint32", false, false},
                     {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
 
-        TPathId targetPathId = *GetTablePathId(runtime, edgeActor, "/Root/Table");
-        TPathId sourcePathId = *GetTablePathId(runtime, edgeActor, "/Root/IncrBackupTable");
+        TPathId targetPathId = dstTable.PathId;
+        TPathId sourcePathId = srcTable.PathId;
 
-        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, sourcePathId, targetPathId);
+        TDataShardId sourceDatashard;
+
+        {
+            auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+            runtime.SendToPipe(srcShards[0], edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(edgeActor);
+            sourceDatashard.ActorId = ev->Sender;
+        }
+
+        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, sourceDatashard, sourcePathId, targetPathId);
         auto changeSenderActor = runtime.Register(changeSender);
 
         {
@@ -280,9 +290,13 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         }
 
         {
-            TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
             NKikimrChangeExchange::TDataChange body;
+            TVector<TCell> keyCells = { TCell::Make(ui32(0)) };
+            auto key = TSerializedCellVec::Serialize(keyCells);
+            body.MutableKey()->AddTags(0);
+            body.MutableKey()->SetData(key);
+            body.MutableErase();
 
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::IncrementalRestore)
                 .WithOrder(0)
@@ -293,14 +307,29 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
                 .WithSource(TChangeRecord::ESource::InitialScan)
                 .Build();
 
-            const auto& record = *recordPtr;
-            records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
+            {
+                const auto& record = *recordPtr;
+                TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+                records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
 
-            auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>(records);
-            runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+                auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>(records);
+                runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+            }
 
             runtime.GrabEdgeEventRethrow<NChangeExchange::TEvChangeExchange::TEvRequestRecords>(edgeActor);
+
+            {
+                TVector<TChangeRecord::TPtr> records;
+                records.emplace_back(recordPtr);
+
+                auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRecords>(records);
+                runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+            }
+
+            runtime.GrabEdgeEventRethrow<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(edgeActor);
         }
+
+        // there is a race here between noMoreData an all senders is ready or unint right now
 
         {
             auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();
@@ -309,7 +338,6 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(edgeActor);
         }
     }
-
 }
 
 } // namespace NKikimr::NDataShard

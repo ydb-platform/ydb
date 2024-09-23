@@ -132,9 +132,7 @@ class TIncrRestoreChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        Y_UNUSED(partitionId);
-        return nullptr;
-        // return new TBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
+        return new TBaseChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -198,9 +196,10 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN;
     }
 
-    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& targetPathId)
+    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& targetPathId)
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, changeServerActor)
+        , DataShard(dataShard)
         , UserTableId(userTableId)
         , TargetTablePathId(targetPathId)
         , TargetTableVersion(0)
@@ -237,6 +236,7 @@ public:
     }
 
 private:
+    const TDataShardId DataShard;
     const TTableId UserTableId;
     mutable TMaybe<TString> LogPrefix;
 
@@ -250,8 +250,8 @@ private:
     bool FirstServe = false;
 }; // TIncrRestoreChangeSenderMain
 
-IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TTableId& userTableId, const TPathId& restoreTargetPathId) {
-    return new TIncrRestoreChangeSenderMain(changeServerActor, userTableId, restoreTargetPathId);
+IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& restoreTargetPathId) {
+    return new TIncrRestoreChangeSenderMain(changeServerActor, dataShard, userTableId, restoreTargetPathId);
 }
 
 } // namespace NKikimr::NDataShard

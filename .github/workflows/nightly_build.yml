@@ -51,4 +51,4 @@ jobs:
       shell: bash
       run: |
         set -x
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ydb/apps/ydbd/ydbd" "${{ inputs.build_preset }}/ydbd"
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "${{ inputs.build_preset }}/ydbd"

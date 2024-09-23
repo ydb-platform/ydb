@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager
     ydb/core/fq/libs/rate_limiter/control_plane_service
     ydb/core/fq/libs/rate_limiter/quoter_service
+    ydb/core/fq/libs/row_dispatcher
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/test_connection
     ydb/core/protos

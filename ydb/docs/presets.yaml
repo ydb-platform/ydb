@@ -9,6 +9,7 @@ default:
   feature_replace: true
   feature_upsert: true
   feature_join: true
+  feature_serial: true
   feature_map_tables: true
   feature_group_by_rollup_cube: true
   feature_window_functions: true

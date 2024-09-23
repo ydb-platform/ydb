@@ -170,7 +170,10 @@ class YdbCluster:
                 start_time = int(ss.get('StartTime', int(time()) * 1000)) / 1000
                 uptime = int(time()) - start_time
                 r = ss.get('Roles', [])
-                role = r[0] if len(r) > 0 else role
+                for role_candidate in ['Storage', 'Tenant']:
+                    if role_candidate in r:
+                        role = role_candidate
+                        break
                 if uptime < 15:
                     error = f'Node {name} too yong: {uptime}'
             except BaseException as ex:

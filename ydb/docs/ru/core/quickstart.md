@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} Быстрый старт
+# Быстрый старт с {{ ydb-short-name }}
 
 В этом руководстве вы установите одноузловой локальный [кластер {{ ydb-short-name }}](concepts/glossary.md#cluster) и выполните простые запросы к вашей [базе данных](concepts/glossary.md#database).
 

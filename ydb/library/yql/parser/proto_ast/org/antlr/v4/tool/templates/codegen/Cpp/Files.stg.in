@@ -43,6 +43,9 @@ LexerFileHeader(file, lexer, namedActions) ::= <<
 
 <namedActions.preinclude>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include "antlr4-runtime.h"
 
 <namedActions.postinclude>
@@ -80,6 +83,9 @@ ParserFileHeader(file, parser, namedActions, contextSuperClass) ::= <<
 
 <namedActions.preinclude>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include "antlr4-runtime.h"
 #include \<ydb/library/yql/parser/proto_ast/antlr4/proto_ast_antlr4.h>
 
@@ -121,6 +127,9 @@ BaseListenerFileHeader(file, header, namedActions) ::= <<
 
 <namedActions.baselistenerpreinclude>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include "antlr4-runtime.h"
 #include "<file.grammarName>Listener.h"
 
@@ -183,6 +192,9 @@ ListenerFileHeader(file, header, namedActions) ::= <<
 
 <namedActions.listenerpreinclude>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include "antlr4-runtime.h"
 #include "<file.parserName>.h"
 
@@ -238,6 +250,9 @@ BaseVisitorFileHeader(file, header, namedActions) ::= <<
 
 <namedActions.basevisitorpreinclude>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include "antlr4-runtime.h"
 #include "<file.grammarName>Visitor.h"
 
@@ -296,6 +311,9 @@ VisitorFileHeader(file, header, namedActions) ::= <<
 
 <namedActions.visitorpreinclude>
 
+#ifdef ERROR
+#undef ERROR
+#endif
 #include "antlr4-runtime.h"
 #include "<file.parserName>.h"
 

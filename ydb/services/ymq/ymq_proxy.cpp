@@ -807,7 +807,6 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::SendMessageBatchResult GetResult(const NKikimrClient::TSqsResponse& response) override {
             Ydb::Ymq::V1::SendMessageBatchResult result;
-            response.GetSendMessageBatch();
             for (auto& entry : response.GetSendMessageBatch().GetEntries()) {
                 if (entry.GetError().HasErrorCode()) {
                     auto currentFailed = result.Addfailed();

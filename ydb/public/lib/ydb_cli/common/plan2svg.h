@@ -143,8 +143,8 @@ public:
 
 struct TColorPalette {
     TColorPalette();
-    TString StageDark;
-    TString StageLight;
+    TString StageMain;
+    TString StageClone;
     TString StageText;
     TString StageTextHighlight;
     TString StageGrid;
@@ -166,6 +166,7 @@ struct TColorPalette {
     TString ConnectionText;
     TString MinMaxLine;
     TString TextLight;
+    TString TextInverted;
     TString TextSummary;
     TString SpillingBytesDark;
     TString SpillingBytesMedium;

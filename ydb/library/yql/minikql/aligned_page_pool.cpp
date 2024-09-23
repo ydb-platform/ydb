@@ -103,6 +103,10 @@ public:
         return *Pools[index];
     }
 
+    const TGlobalPagePool<T, SysAlign>& Get(ui32 index) const {
+        return *Pools[index];
+    }
+
     TGlobalPools()
     {
         Reset();
@@ -112,6 +116,24 @@ public:
         void* res = T::Mmap(size);
         TotalMmappedBytes += size;
         return res;
+    }
+
+    void DoCleanupFreeList(ui64 targetSize) {
+        for(ui32 level = 0; level <= MidLevels; ++level) {
+            auto& p = Get(level);
+            const size_t pageSize = p.GetPageSize();
+
+            while(p.GetSize() >= targetSize) {
+                void* page = p.GetPage();
+
+                if (!page)
+                    break;
+
+                p.FreePage(page);
+                i64 prev = TotalMmappedBytes.fetch_sub(pageSize);
+                Y_DEBUG_ABORT_UNLESS(prev >= 0);
+            }
+        }
     }
 
     void PushPage(size_t level, void* addr) {
@@ -141,7 +163,7 @@ public:
     i64 GetTotalFreeListBytes() const {
         i64 bytes = 0;
         for (ui32 i = 0; i <= MidLevels; ++i) {
-            bytes += Get(i).GetPageCount() * Get(i).GetPageSize();
+            bytes += Get(i).GetSize();
         }
 
         return bytes;
@@ -539,6 +561,14 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
     }
 }
 
+
+template<typename T>
+void TAlignedPagePoolImpl<T>::DoCleanupGlobalFreeList(ui64 targetSize) {
+    TGlobalPools<T, true>::Instance().DoCleanupFreeList(targetSize);
+    TGlobalPools<T, false>::Instance().DoCleanupFreeList(targetSize);
+}
+
+
 template<typename T>
 void TAlignedPagePoolImpl<T>::UpdateMemoryYellowZone() {
     if (Limit == 0) return;
@@ -596,17 +626,19 @@ void* GetAlignedPage(ui64 size) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;
     }
 
+    auto& pool = TGlobalPools<TMmap, true>::Instance();
+
     if (size <= MaxMidSize) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
-        if (auto res = TGlobalPools<TMmap, true>::Instance().Get(level).GetPage()) {
+        if (auto res = pool.Get(level).GetPage()) {
             return res;
         }
     }
 
     auto allocSize = Max<ui64>(MaxMidSize, size);
-    void* mem = TMmap::Mmap(allocSize);
+    void* mem = pool.DoMmap(allocSize);
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
         ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText();
     }
@@ -615,7 +647,6 @@ void* GetAlignedPage(ui64 size) {
         // push extra allocated pages to cache
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
-        auto& pool = TGlobalPools<TMmap, true>::Instance();
         ui8* ptr = (ui8*)mem + size;
         ui8* const end = (ui8*)mem + MaxMidSize;
         while (ptr < end) {
@@ -654,6 +685,14 @@ template<typename TMmap>
 i64 GetTotalFreeListBytes() {
     return TGlobalPools<TMmap, true>::Instance().GetTotalFreeListBytes() + TGlobalPools<TMmap, false>::Instance().GetTotalFreeListBytes();
 }
+
+template i64 GetTotalMmapedBytes<>();
+template i64 GetTotalMmapedBytes<TFakeAlignedMmap>();
+template i64 GetTotalMmapedBytes<TFakeUnalignedMmap>();
+
+template i64 GetTotalFreeListBytes<>();
+template i64 GetTotalFreeListBytes<TFakeAlignedMmap>();
+template i64 GetTotalFreeListBytes<TFakeUnalignedMmap>();
 
 template void* GetAlignedPage<>(ui64);
 template void* GetAlignedPage<TFakeAlignedMmap>(ui64);

@@ -548,4 +548,69 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         UNIT_ASSERT_EQUAL(response->Response->Status, "400");
         UNIT_ASSERT_EQUAL(response->Response->Body, "Invalid http header");
     }
+
+    void SimulateSleep(NActors::TTestActorRuntimeBase& actorSystem, TDuration duration) {
+        auto sleepEdgeActor = actorSystem.AllocateEdgeActor();
+        actorSystem.Schedule(new IEventHandle(sleepEdgeActor, sleepEdgeActor, new NActors::TEvents::TEvWakeup()), duration);
+        actorSystem.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(sleepEdgeActor);
+    }
+
+    Y_UNIT_TEST(TooManyRequests) {
+        static constexpr int MaxRequestsPerSecond = 5;
+        NActors::TTestActorRuntimeBase actorSystem;
+        actorSystem.SetUseRealInterconnect();
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        auto* addPortEvent = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPortEvent->MaxRequestsPerSecond = MaxRequestsPerSecond;
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPortEvent), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        for (int i = 0; i < MaxRequestsPerSecond + 1; ++i) {
+            actorSystem.Send(new NActors::IEventHandle(proxyId, clientId,
+                new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test"))), 0, true);
+        }
+
+        for (int i = 0; i < MaxRequestsPerSecond ; ++i) {
+            // ok
+            NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+            UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        }
+
+        {
+            // error
+            NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+            UNIT_ASSERT_EQUAL(response->Response->Status, "429");
+            UNIT_ASSERT_EQUAL(response->Response->Message, "Too Many Requests");
+        }
+
+        SimulateSleep(actorSystem, TDuration::Seconds(1));
+
+        for (int i = 0; i < MaxRequestsPerSecond + 1; ++i) {
+            actorSystem.Send(new NActors::IEventHandle(proxyId, clientId,
+                new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test"))), 0, true);
+        }
+
+        for (int i = 0; i < MaxRequestsPerSecond ; ++i) {
+            // ok
+            NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+            UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        }
+
+        {
+            // error
+            NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+            UNIT_ASSERT_EQUAL(response->Response->Status, "429");
+            UNIT_ASSERT_EQUAL(response->Response->Message, "Too Many Requests");
+        }
+    }
 }

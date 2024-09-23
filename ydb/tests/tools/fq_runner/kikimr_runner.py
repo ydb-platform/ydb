@@ -117,6 +117,7 @@ class BaseTenant(abc.ABC):
         self.enable_logging("FQ_QUOTA_PROXY")
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
+        self.enable_logging("FQ_ROW_DISPATCHER", LogLevels.TRACE)
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod
@@ -363,7 +364,7 @@ class BaseTenant(abc.ABC):
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
             if completed >= checkpoints_count:
                 break
-            assert time.time() < deadline, "Wait zero checkpoint failed"
+            assert time.time() < deadline, "Wait zero checkpoint failed, actual completed: " + str(completed)
             time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
 
     def wait_zero_checkpoint(self, query_id, timeout=yatest_common.plain_or_under_sanitizer(30, 150),
@@ -513,6 +514,17 @@ class YqTenant(BaseTenant):
         self.fill_gateways_cfg(fq_config['gateways'])
         self.fill_storage_config(fq_config['checkpoint_coordinator']['storage'],
                                  "CheckpointCoordinatorStorage_" + self.uuid)
+
+        fq_config['row_dispatcher'] = {
+            'enabled': True,
+            'timeout_before_start_session_sec': 2,
+            'send_status_period_sec': 2,
+            'max_session_used_memory': 1000000,
+            'without_consumer': True}
+        fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator']['database'] = {}
+        self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
+                                 "RowDispatcher_" + self.uuid)
 
         fq_config['quotas_manager'] = {'enabled': True}
 

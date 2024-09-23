@@ -622,12 +622,8 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
 void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
     std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters,
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
-
     for (int i = 0; i < dataSchema->num_fields(); ++i) {
         switch (dataSchema->field(i)->type()->id()) {
-        case arrow::Type::LIST:
-            throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
-                << dataSchema->field(i)->name() << " and can't be parsed");
         case arrow::Type::STRUCT:
             throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
                 << dataSchema->field(i)->name() << " and can't be parsed");

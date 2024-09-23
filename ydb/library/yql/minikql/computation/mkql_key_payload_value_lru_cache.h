@@ -73,7 +73,7 @@ public:
         return std::nullopt;
     }
 
-    // Perform garbage collection.
+    // Perform garbage collection, single step, O(1) time.
     // Must be called periodically
     bool Tick(const std::chrono::time_point<std::chrono::steady_clock>& now) {
         if (UsageList.empty()) {
@@ -84,6 +84,12 @@ public:
         }
         RemoveLeastRecentlyUsedEntry();
         return true;
+    }
+
+    // Perform garbage collection, O(1) amortized, but O(n) one-time
+    void Prune(const std::chrono::time_point<std::chrono::steady_clock>& now) {
+        while(Tick(now)) {
+        }
     }
 
     size_t Size() const {

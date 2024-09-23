@@ -194,8 +194,7 @@ private: //IDqComputeActorAsyncInput
             const auto now = std::chrono::steady_clock::now();
             const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
             IDqAsyncLookupSource::TUnboxedValueMap keysForLookup{maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual()};
-            while (LruCache->Tick(now)) { // Prune cache
-            }
+            LruCache->Prune(now);
             while (
                 (keysForLookup.size() < maxKeysInRequest) &&
                 ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {

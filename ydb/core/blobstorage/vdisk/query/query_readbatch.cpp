@@ -64,18 +64,16 @@ namespace NKikimr {
             if (QueryPartId == 0 || QueryPartId == i + 1) {
                 FoundAnything = true;
                 auto& tmpItem = TmpItems[i];
-                if ((partSize ? QueryShift >= partSize : QueryShift) || QuerySize > partSize - QueryShift) {
+                if ((QueryShift >= partSize && partSize) || QuerySize > partSize - QueryShift) {
                     tmpItem.UpdateWithError(partId, Cookie);
-                } else if (!partSize) {
-                    tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
                     const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
-                    Y_DEBUG_ABORT_UNLESS(size);
-                    tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
+                    if (!size) { // for metadata reads
+                        tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
+                    } else {
+                        tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
+                    }
                 }
-            }
-            if (QueryPartId && QueryPartId <= i + 1) {
-                break;
             }
             partOffs += partSize;
         }
@@ -99,7 +97,7 @@ namespace NKikimr {
                 if (QueryPartId == 0 || QueryPartId == partId) {
                     FoundAnything = true;
                     auto& item = TmpItems[partId - 1];
-                    if ((partSize ? QueryShift >= partSize : QueryShift) || QuerySize > partSize - QueryShift) {
+                    if ((QueryShift >= partSize && partSize) || QuerySize > partSize - QueryShift) {
                         item.UpdateWithError(blobId, Cookie);
                     } else if (item.ShouldUpdateWithMem()) {
                         const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;

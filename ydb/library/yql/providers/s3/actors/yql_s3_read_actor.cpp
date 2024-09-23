@@ -2196,7 +2196,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                 auto memberType = extraStructType->GetMemberType(i);
                 std::shared_ptr<arrow::DataType> dataType;
 
-                YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
+                YQL_ENSURE(ConvertArrowType(memberType, dataType, true), "Unsupported arrow type");
                 THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional())));
                 readSpec->ColumnReorder.push_back(i);
                 readSpec->RowSpec.emplace(memberName, memberType);

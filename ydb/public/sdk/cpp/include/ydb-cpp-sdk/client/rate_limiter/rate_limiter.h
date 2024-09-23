@@ -159,6 +159,11 @@ public:
     TAsyncDescribeResourceResult DescribeResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TDescribeResourceSettings& = {});
 
     // Acquire resources's units inside a coordination node.
+    // If CancelAfter is set greater than zero and less than OperationTimeout
+    // and resource is not ready after CancelAfter time,
+    // the result code of this operation will be CANCELLED and resource will not be spent.
+    // It is recommended to specify both OperationTimeout and CancelAfter.
+    // CancelAfter should be less than OperationTimeout.
     TAsyncStatus AcquireResource(const std::string& coordinationNodePath, const std::string& resourcePath, const TAcquireResourceSettings& = {});
 
 private:

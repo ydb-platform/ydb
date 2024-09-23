@@ -27,8 +27,8 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/provider
     ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 CFLAGS(

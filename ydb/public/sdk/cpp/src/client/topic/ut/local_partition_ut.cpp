@@ -202,7 +202,7 @@ namespace NYdb::NTopic::NTests {
 
         private:
             Ydb::Discovery::ListEndpointsResult MockResults;
-            TString DiscoveryAddr = 0;
+            TString DiscoveryAddr;
             std::unique_ptr<grpc::Server> Server;
             TAdaptiveLock Lock;
 

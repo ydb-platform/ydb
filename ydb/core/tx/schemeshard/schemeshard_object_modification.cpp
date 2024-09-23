@@ -287,7 +287,7 @@ void TSchemeShard::PersistObjectModificationFinished(NIceDb::TNiceDb& db, const 
 
 class TMetadataInitializer: public TActorBootstrapped<TMetadataInitializer> {
 private:
-    constexpr static const TInstant RetryDelay = TInstant::Seconds(1);
+    constexpr static const TDuration RetryDelay = TDuration::Seconds(5);
 
     TString TypeId;
     std::shared_ptr<NMetadata::NModifications::TSchemeOperationsManagerBase> Manager;
@@ -295,7 +295,7 @@ private:
 
     void StartFetching() const {
         Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-            MakeHolder<NMetadata::NProvider::TEvAskExtendedSnapshot>(Manager->GetExtendedSnapshotFetcher()));
+            MakeHolder<NMetadata::NProvider::TEvAskExtendedSnapshot>(Manager->GetExtendedSnapshotFetcher()), IEventHandle::FlagTrackDelivery);
     }
 
     void ScheduleRetry() const {
@@ -320,8 +320,8 @@ public:
     }
 
     void Handle(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvError::TPtr& ev, const TActorContext& ctx) {
-        LOG_WARN_S(
-            ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Can't fetch metadata for objectType=" << TypeId << ": " << ev->Get()->GetErrorMessage());
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TMetadataInitializer: Can't fetch metadata for objectType=" << TypeId << ": " << ev->Get()->GetErrorMessage());
         // TODO: Consider using sime kind of background task manager for potentially infinite retries
         ScheduleRetry();
     }
@@ -329,6 +329,11 @@ public:
     void Handle(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvTableAbsent::TPtr& /*ev*/) {
         Send(Owner,
             MakeHolder<TEvPrivate::TEvInitializeObjectMetadata>(TypeId, std::make_shared<NMetadata::NContainer::TAbstractObjectContainer>()));
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TMetadataInitializer: Can't reach metadata service: " << ev->Get()->Reason);
+        ScheduleRetry();
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& /*ev*/) {
@@ -354,6 +359,7 @@ public:
             hFunc(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvResult, Handle);
             HFunc(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvError, Handle);
             hFunc(NMetadata::NProvider::TDSAccessorSimple::TEvController::TEvTableAbsent, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
             default:
                 AFL_VERIFY(false);

@@ -9,6 +9,9 @@
 namespace NKikimr::NMetadata::NContainer {
 
 class TSnapshotBase: public NFetcher::ISnapshot {
+private:
+    using TBase = NFetcher::ISnapshot;
+
 protected:
     TAbstractObjectContainer Objects;
 
@@ -26,7 +29,11 @@ public:
         return std::move(Objects);
     }
 
-    using NFetcher::ISnapshot::ISnapshot;
+    using TBase::ISnapshot;
+    TSnapshotBase(TAbstractObjectContainer objects, TInstant actuality)
+        : TBase(actuality)
+        , Objects(std::move(objects)) {
+    }
 };
 
 template <typename TObject>

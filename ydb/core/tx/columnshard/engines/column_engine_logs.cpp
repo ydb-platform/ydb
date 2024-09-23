@@ -26,38 +26,29 @@
 #include <concepts>
 
 namespace NKikimr::NOlap {
-/*
-TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
-    , StoragesManager(storagesManager)
-    , TabletId(tabletId)
-    , LastPortion(0)
-    , LastGranule(0)
-{
-    ActualizationController = std::make_shared<NActualizer::TController>();
-}
-*/
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs, NIceDb::TNiceDb* database)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
     , CS(cs)
+    , Database(database)
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, schema);
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs)
+    const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs, NIceDb::TNiceDb* database)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
-    , CS(cs) {
+    , CS(cs)
+    , Database(database) {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
 }
@@ -150,7 +141,16 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
     }
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
+    auto lastNotDeleted = VersionedIndex.LastNotDeletedVersion;
     auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
+    if (lastNotDeleted.has_value() && !VersionedIndex.LastNotDeletedVersion.has_value()) {
+        auto& versionToKey = CS->TablesManager.VersionToKey;
+        auto iter = versionToKey.find(*lastNotDeleted);
+        AFL_VERIFY(iter != versionToKey.end());
+        for (auto& key: iter->second) {
+            Database->Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>().Key(key.Id, key.PlanStep, key.TxId).Delete();
+        }
+    }
     if (isCriticalScheme) {
         if (!ActualizationStarted) {
             ActualizationStarted = true;

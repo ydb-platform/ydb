@@ -148,6 +148,16 @@ private:
         ui64 PlanStep;
         ui64 TxId;
         ui32 Id;
+
+    public:
+        TSchemaKey() = default;
+
+        TSchemaKey(ui32 id, ui64 planStep, ui64 txId)
+            : PlanStep(planStep)
+            , TxId(txId)
+            , Id(id)
+        {
+        }
     };
 
 private:
@@ -159,7 +169,9 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
     NColumnShard::TColumnShard* CS = nullptr;
-    THashMap<ui64, TSchemaKey> VersionToKey;
+
+public:
+    THashMap<ui64, TVector<TSchemaKey>> VersionToKey;
 
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, NColumnShard::TColumnShard* cs);

@@ -81,9 +81,8 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs);
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs);
-//    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs, NIceDb::TNiceDb* database);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs, NIceDb::TNiceDb* database);
 
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
 
@@ -190,6 +189,7 @@ private:
     ui64 LastPortion;
     ui64 LastGranule;
     NColumnShard::TColumnShard* CS = nullptr;
+    NIceDb::TNiceDb* Database;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
 

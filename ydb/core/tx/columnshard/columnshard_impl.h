@@ -56,6 +56,7 @@ class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
 class TDbWrapper;
+class TColumnEngineForLogs;
 
 namespace NReader {
 class TTxScan;
@@ -278,6 +279,7 @@ class TColumnShard
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
 
     friend class NOlap::TDbWrapper;
+    friend class NOlap::TColumnEngineForLogs;
 
     class TStoragesManager;
     friend class TTxController;

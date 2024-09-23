@@ -40,6 +40,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
     const bool needActualization = indexInfo.GetSchemeNeedActualization();
     auto newVersion = indexInfo.GetVersion();
     if (LastNotDeletedVersion.has_value() && (*LastNotDeletedVersion < newVersion)) {
+        LOG_S_CRIT("Removing schema version " << *LastNotDeletedVersion << " from memory, but not from db")
         RemoveVersionNoCheck(*LastNotDeletedVersion);
         LastNotDeletedVersion.reset();
     }

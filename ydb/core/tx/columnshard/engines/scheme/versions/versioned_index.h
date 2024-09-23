@@ -30,8 +30,10 @@ class TVersionedIndex {
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
-    std::optional<ui64> LastNotDeletedVersion;
     ISnapshotSchema::TPtr SchemeForActualization;
+
+public:
+    std::optional<ui64> LastNotDeletedVersion;
 
 public:
     ISnapshotSchema::TPtr GetLastCriticalSchema() const {

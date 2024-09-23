@@ -319,7 +319,7 @@ void RunAsDaemon() {
 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization finished" << colors.Default() << Endl;
     while (true) {
-        pause();
+        Sleep(TDuration::Seconds(1));
     }
 }
 

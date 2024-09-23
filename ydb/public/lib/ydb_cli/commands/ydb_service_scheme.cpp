@@ -546,7 +546,7 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
 }
 
 int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    Cout << "\nQuery text: " << result.GetViewDescription().GetQueryText() << Endl;
+    Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
     return EXIT_SUCCESS;
 }
 

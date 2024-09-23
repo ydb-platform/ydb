@@ -198,8 +198,6 @@
 
 ### Экземпляр асинхронной репликации {#async-replication-instance}
 
-{% if feature_async_replication == true %}
-
 **Экземпляр асинхронной репликации** — это именованная сущность, хранящая настройки [асинхронной репликации](async-replication.md) (настройки подключения, список реплицируемых объектов и т.д.). Также с его помощью можно получить информацию о состоянии асинхронной репликации: [прогресс первоначального сканирования](async-replication.md#initial-scan), [отставание](async-replication.md#replication-of-changes), [ошибки](async-replication.md#error-handling) и т.д.
 
 {% endif %}

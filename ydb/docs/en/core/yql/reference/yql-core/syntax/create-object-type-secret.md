@@ -11,7 +11,7 @@ The `CREATE OBJECT (TYPE SECRET)` statement creates a [secret](../../../concepts
 ## Syntax {#syntax}
 
 ```yql
-CREATE OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
+CREATE OBJECT <secret_name> (TYPE SECRET) WITH value="<secret_value>";
 ```
 
 ### Parameters
@@ -24,5 +24,5 @@ CREATE OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 The following statement creates a secret named `MySecretName` with `MySecretData` as a value.
 
 ```yql
-CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
+CREATE OBJECT MySecretName (TYPE SECRET) WITH value="MySecretData";
 ```

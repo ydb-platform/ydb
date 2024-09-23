@@ -14,7 +14,7 @@ sequenceDiagram
   dst-->src: Initialization
   dst->>dst: Creating an asynchronous replication instance
   dst->>src: Creating changefeeds
-  dst->>dst: Creating replicas
+  dst->>dst: Creating replica objects
 
   dst-->src: Initial table scan
   loop
@@ -56,9 +56,9 @@ The user account that is used to connect to the source database must have the fo
 
 {% endnote %}
 
-* The following objects are created for replication objects on the source:
+* The following objects are created for replicated objects on the source:
   * [changefeeds](glossary.md#changefeed) on the source
-  * [replicas](glossary.md#replica-object) on the target
+  * [replica objects](glossary.md#replica-object) on the target
 
 {% note info %}
 
@@ -86,8 +86,8 @@ You can also get the replication lag from the [description](../reference/ydb-cli
 
 ## Restrictions {#restrictions}
 
-* The set of replication objects is immutable and is generated when {{ ydb-short-name }} creates an asynchronous replication instance.
-* {{ ydb-short-name }} supports the following types of replication objects:
+* The set of replicated objects is immutable and is generated when {{ ydb-short-name }} creates an asynchronous replication instance.
+* {{ ydb-short-name }} supports the following types of replicated objects:
 
   * [row-based tables](datamodel/table.md#row-oriented-tables)
   * [directories](datamodel/dir.md)

@@ -189,7 +189,7 @@ A **consumer** is an entity that reads messages from a topic.
 
 ### Asynchronous replication instance {#async-replication-instance}
 
-**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replication objects, etc). You can also use it to get the status of asynchronous replication: [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), etc.
+**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc). You can also use it to get the status of asynchronous replication: [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), etc.
 
 #### Replicated object {#replicated-object}
 
@@ -197,7 +197,7 @@ A **consumer** is an entity that reads messages from a topic.
 
 #### Replica object {#replica-object}
 
-**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#asyncronous-replication-instance). Replica objects are typically read-only.
+**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#async-replication-instance). Replica objects are typically read-only.
 
 ### YQL {#yql}
 

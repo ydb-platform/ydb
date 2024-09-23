@@ -6,7 +6,7 @@ The `CREATE ASYNC REPLICATION` statement creates an [asynchronous replication in
 
 ```yql
 CREATE ASYNC REPLICATION <name>
-FOR remote_path AS local_path [, another_remote_path AS another_local_path]
+FOR <remote_path> AS <local_path> [, <another_remote_path> AS <another_local_path>]
 WITH (option = value [, ...])
 ```
 

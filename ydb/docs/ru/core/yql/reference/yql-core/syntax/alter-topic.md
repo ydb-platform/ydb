@@ -53,9 +53,9 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-### Включение и приостановка автопартиционирования {#autopartitioning}
+### Включение, приостановка автопартиционирования {#autopartitioning}
 
-Следующая команда включает [автопартиционирование](../../../../concepts/topic#autopartitioning):
+Следующая команда включает [автопартиционирование](../../../../concepts/topic#autopartitioning) или снимает его с паузы:
 
 ```yql
 ALTER TOPIC `my_topic` SET (

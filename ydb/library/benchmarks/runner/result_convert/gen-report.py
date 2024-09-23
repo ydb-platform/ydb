@@ -2,6 +2,7 @@
 import sys
 import signal
 import html
+import os
 from pathlib import Path
 
 
@@ -50,6 +51,8 @@ def main():
                 for line in f:
                     line = line.strip().split('\t')
                     (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]
+                    if not os.access(dirname + '/' + q + '-stderr.txt', os.F_OK):
+                        q = name[len(dirname) + 1:-len('summary.tsv')] + q
                     utime = float(utime)
                     stime = float(stime)
                     maxrss = int(maxrss)

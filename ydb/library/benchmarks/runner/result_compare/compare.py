@@ -126,6 +126,8 @@ code { white-space: pre; }
                     for line in f:
                         line = line.split('\t')
                         (q, utime, stime, maxrss, exitcode, elapsed, minflt, majflt, inblock, oublock, nvcsw, nivcsv) = line[:12]
+                        if not os.access(dirname + '/' + q + '-stderr.txt', os.F_OK):
+                            q = name[len(dirname) + 1:-len('summary.tsv')] + q
                         if len(args.include_q):
                             include = False
                             for r in args.include_q:

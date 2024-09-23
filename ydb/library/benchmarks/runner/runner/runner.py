@@ -82,6 +82,7 @@ def main():
     outdir = args.result_dir
     assert len(argv)
     querydir = Path(qdir)
+    os.makedirs(outdir, 0o777, exist_ok=True)
     with open(outdir / "summary.tsv", "w") as outf, \
          open(outdir / "summary.json", "w") as outj:
         print(' '.join(argv + ['-p', qdir, '--bindings-file', bindings]), file=outf)

@@ -178,8 +178,12 @@ NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromProto(const NKiki
 }
 
 void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
-    proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
-    proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
+    if (Options.codec) {
+        proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
+        proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
+    } else {
+        proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(arrow::Compression::UNCOMPRESSED));
+    }
 }
 
 }

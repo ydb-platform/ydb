@@ -554,7 +554,7 @@ public:
     , TabletID(tabletId)
     , Inflight(inflight)
     {
-        for (auto& p: Partitions) {
+        for (auto& p : Partitions) {
             Results[p.first].push_back(Sprintf("Partition %u: NO DATA", p.first));
         }
     }
@@ -691,6 +691,10 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ClearNewConfig();
 
     for (auto& p : Partitions) { //change config for already created partitions
+        if (p.first.IsSupportivePartition()) {
+            continue;
+        }
+
         ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig()));
     }
     ChangePartitionConfigInflight += Partitions.size();
@@ -1873,13 +1877,19 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
     }
     ui32 cnt = 0;
     for (auto& p : Partitions) {
-         cnt += p.second.InitDone;
+        if (p.first.IsSupportivePartition()) {
+            continue;
+        }
+
+        cnt += p.second.InitDone;
     }
     TActorId ans = CreateOffsetsProxyActor(TabletID(), ev->Sender, cnt, ctx);
 
     for (auto& p : Partitions) {
-        if (!p.second.InitDone)
+        if (!p.second.InitDone || p.first.IsSupportivePartition()) {
             continue;
+        }
+
         THolder<TEvPQ::TEvPartitionOffsets> event = MakeHolder<TEvPQ::TEvPartitionOffsets>(ans, ev->Get()->Record.HasClientId() ?
                                                                                         ev->Get()->Record.GetClientId() : "");
         ctx.Send(p.second.Actor, event.Release());
@@ -1937,15 +1947,20 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
     }
 
     ui32 cnt = 0;
-    for (auto& [_, partitionInfo] : Partitions) {
-         cnt += partitionInfo.InitDone;
+    for (auto& [partitionId, partitionInfo] : Partitions) {
+        if (partitionId.IsSupportivePartition()) {
+            continue;
+        }
+
+        cnt += partitionInfo.InitDone;
     }
 
     TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {
-        if (!p.second.InitDone) {
+        if (!p.second.InitDone || p.first.IsSupportivePartition()) {
             continue;
         }
+
         THolder<TEvPQ::TEvPartitionStatus> event;
         if (ev->Get()->Record.GetConsumers().empty()) {
             event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
@@ -4556,7 +4571,11 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    for (auto& [_, partition] : Partitions) {
+    for (auto& [partitionId, partition] : Partitions) {
+        if (partitionId.IsSupportivePartition()) {
+            continue;
+        }
+
         auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(tx.Step, tx.TxId);
 
         event->TopicConverter = tx.TopicConverter;
@@ -4567,7 +4586,7 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
     }
 
     tx.PartitionRepliesCount = 0;
-    tx.PartitionRepliesExpected = Partitions.size();
+    tx.PartitionRepliesExpected = OriginalPartitionsCount;
 }
 
 TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {

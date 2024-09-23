@@ -350,8 +350,8 @@ def deploy(arguments):
         optionals['pg_compatible_expirement'] = True
 
     configuration = KikimrConfigGenerator(
-        parse_erasure(arguments),
-        arguments.ydb_binary_path,
+        erasure=parse_erasure(arguments),
+        binary_paths=[arguments.ydb_binary_path],
         output_path=recipe.generate_data_path(),
         pdisk_store_path=pdisk_store_path,
         domain_name='local',

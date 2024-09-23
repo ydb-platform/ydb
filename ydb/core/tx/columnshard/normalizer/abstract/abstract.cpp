@@ -58,11 +58,14 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
     Counters.clear();
     Normalizers.clear();
     if (HasAppData()) {
+        LOG_S_CRIT("Repairs size " << AppDataVerified().ColumnShardConfig.GetRepairs().size());
         for (auto&& i : AppDataVerified().ColumnShardConfig.GetRepairs()) {
             AFL_VERIFY(i.GetDescription())("error", "repair normalization have to has unique description");
-            if (FinishedNormalizers.contains(TNormalizerFullId(i.GetClassName(), i.GetDescription()))) {
+            if (false) {//FinishedNormalizers.contains(TNormalizerFullId(i.GetClassName(), i.GetDescription()))) {
+                LOG_S_CRIT("Repair " << i.GetClassName() << " finished");
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("warning", "repair already processed")("description", i.GetDescription());
             } else {
+                LOG_S_CRIT("Repair " << i.GetClassName() << " will be started");
                 auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(i.GetClassName(), ctx)));
                 normalizer->SetIsRepair(true).SetUniqueDescription(i.GetDescription());
             }

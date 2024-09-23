@@ -44,6 +44,7 @@ INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr
 }
 
  TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
+    LOG_S_CRIT("TPortionsNormalizer DoInitImpl called\n");
     using namespace NColumnShard;
 
     NIceDb::TNiceDb db(txc.DB);

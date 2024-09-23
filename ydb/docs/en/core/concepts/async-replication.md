@@ -13,7 +13,7 @@ sequenceDiagram
 
   dst-->src: Initialization
   dst->>dst: Creating an asynchronous replication instance
-  dst->>src: Creating streams of changes
+  dst->>src: Creating changefeeds
   dst->>dst: Creating replicas
 
   dst-->src: Initial table scan
@@ -52,12 +52,12 @@ Initialization of asynchronous replication includes the following:
 The user account that is used to connect to the source database must have the following [permissions](../security/short-access-control-notation.md#access-rights):
 
 * Read permissions for schema objects and directory objects
-* Create, update, delete, and read permissions for streams of changes
+* Create, update, delete, and read permissions for changefeeds
 
 {% endnote %}
 
 * The following objects are created for replication objects on the source:
-  * [streams of changes](glossary.md#changefeed) on the source
+  * [changefeeds](glossary.md#changefeed) on the source
   * [replicas](glossary.md#replica-object) on the target
 
 {% note info %}
@@ -68,7 +68,7 @@ Replicas are created under the user account that was used to create the asynchro
 
 ### Initial table scan {#initial-scan}
 
-During the [initial table scan](cdc.md#initial-scan) the source data is exported to streams of changes. The target runs [consumers](topic.md#consumer) that read the source data from the streams of changes and write it to replicas.
+During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
@@ -134,7 +134,7 @@ To complete asynchronous replication, use the [ALTER ASYNC REPLICATION](../yql/r
 
 When you drop an asynchronous replication instance:
 
-* Streams of changes are deleted in the source tables.
+* Changefeeds are deleted in the source tables.
 * The source tables are unlocked, and you can add and delete columns again.
 * Optionally, all replicas are deleted.
 * Asynchronous replication instance is deleted.

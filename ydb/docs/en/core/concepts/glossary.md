@@ -185,11 +185,11 @@ A **consumer** is an entity that reads messages from a topic.
 
 #### Stream of changes {#changefeed}
 
-**Stream of changes** is a sorted list of changes in a given [table](#table) in a [topic](#topic).
+**Changefeed** is a sorted list of changes in a given [table](#table) in a [topic](#topic).
 
 ### Asynchronous replication instance {#async-replication-instance}
 
-**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replication objects, etc). You can also use it to get the status of asynchronous replication: [initial synchronization process](async-replication.md#initial-scan), [replication delay](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), etc.
+**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replication objects, etc). You can also use it to get the status of asynchronous replication: [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), etc.
 
 #### Replication object {#replicated-object}
 

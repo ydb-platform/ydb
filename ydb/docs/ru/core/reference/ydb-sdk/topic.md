@@ -859,6 +859,24 @@
     transaction.Commit().GetValueSync();
   ```
 
+- Go
+
+  Для записи в топик в транзакции нужно создать транзакционного писателя, после этого писать сообщения можно как обычно. Закрывать транзакционного
+  писателя не нужно - это делается автоматически при завершении транзакции.
+
+  [Пример на Github](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
+
+  ```go
+  err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+    writer, err := db.Topic().StartTransactionalWriter(tx, topicName)
+    if err != nil {
+      return err
+    }
+
+    return writer.Write(ctx, topicwriter.Message{Data: strings.NewReader("asd")})
+  })
+  ```
+
 - Java (sync)
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
@@ -1674,22 +1692,17 @@
 
   [Пример на Github](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
 
-  Для чтение сообщений внутри транзакции нужно воспользоваться методом [Reader.PopBatchTx](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.79.0/topic/topicreader#Reader.PopBatchTx). Он прочитает пакет сообщений и добавит их их коммит в транзакцию, отдельно коммитить эти сообщения не нужно.
+  Для чтение сообщений внутри транзакции нужно воспользоваться методом [Reader.PopMessagesBatchTx](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx). Он прочитает пакет сообщений и добавит их их коммит в транзакцию, отдельно коммитить эти сообщения не нужно. Читателя сообщений можно переиспользовать между разными транзакциями, в этом случае нужно чтобы порядок коммита транзакций соответствовал порядку получения сообщений из читателя, т.к. коммиты сообщений в топике должны идти строго по-порядку.
 
   ```go
   err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
-    batch, err := reader.PopBatchTx(ctx, tx)
+    batch, err := reader.PopMessagesBatchTx(ctx, tx)
     if err != nil {
       return err
     }
 
-    batchResult, err := processBatch(batch.Context(), batch)
-    if err != nil {
-        return err
-    }
-
-    return nil
-  }
+    return processBatch(ctx, batch)
+  })
   ```
 
   {% note info %}

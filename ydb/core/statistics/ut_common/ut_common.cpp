@@ -99,7 +99,9 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName,
 
     env.GetTenants().Run(fullDbName, nodeCount);
 
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 }
 
 void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName) {
@@ -122,7 +124,9 @@ void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const 
 
     env.GetTenants().Run(fullDbName, 0);
 
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 }
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey, ui64* saTabletId) {

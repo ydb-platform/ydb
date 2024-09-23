@@ -34,11 +34,11 @@ WITH (option = value [, ...])
 
 {% note tip %}
 
-Before creating an asynchronous replication instance, you must [create](create-object-type-secret.md) a secret with authentication details for the source database or ensure that you have access to an existing secret with the required authentication details.
+Before creating an asynchronous replication instance, you must [create](create-object-type-secret.md) a secret with authentication credentials for the source database or ensure that you have access to an existing secret.
 
 {% endnote %}
 
-The following statement creates an asynchronous replication instance to replicate the `original_table` source table in the `/Root/another_database` database to the `replica_table` target table in the local database:
+The following statement creates an asynchronous replication instance to synchronize the `original_table` source table in the `/Root/another_database` database to the `replica_table` target table in the local database:
 
 ```yql
 CREATE ASYNC REPLICATION my_replication_for_single_table

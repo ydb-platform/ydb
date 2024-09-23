@@ -191,13 +191,13 @@ A **consumer** is an entity that reads messages from a topic.
 
 **Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replication objects, etc). You can also use it to get the status of asynchronous replication: [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), etc.
 
-#### Replication object {#replicated-object}
+#### Replicated object {#replicated-object}
 
-**Replication object** is an object, for example a table, that is asynchronously replicated to the target.
+**Replicated object** is an object, for example, a table, that is asynchronously replicated to the target database.
 
-#### Replica {#replica-object}
+#### Replica object {#replica-object}
 
-**Replica** is a mirror copy of the replication object that is automatically created by an asynchronous replication instance. Replicas are read-only objects, as a rule.
+**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#asyncronous-replication-instance). Replica objects are typically read-only.
 
 ### YQL {#yql}
 

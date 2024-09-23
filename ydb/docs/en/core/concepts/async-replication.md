@@ -1,10 +1,10 @@
 # Asynchronous replication
 
-Asynchronous replication allows synchronizing data between {{ ydb-short-name }} [databases](glossary.md#database) in near real time. Asynchronous replication can also be used for data migration between databases with minimal downtime for applications that work with these databases. Such databases can be located in the same {{ ydb-short-name }} [cluster](glossary.md#cluster) as well as in different clusters.
+Asynchronous replication allows for synchronizing data between {{ ydb-short-name }} [databases](glossary.md#database) in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases. Such databases can be located in the same {{ ydb-short-name }} [cluster](glossary.md#cluster) as well as in different clusters.
 
 ## Overview {#how-it-works}
 
-Asynchronous replication is based on [Change Data Capture](cdc.md) and deals with logical data. The following diagram shows the replication process:
+Asynchronous replication is based on [Change Data Capture](cdc.md) and operates on logical data. The following diagram illustrates the replication process:
 
 ```mermaid
 sequenceDiagram
@@ -29,23 +29,23 @@ sequenceDiagram
   end
 ```
 
-As follows from the diagram above, asynchronous replication involves two databases:
+As shown in the diagram above, asynchronous replication involves two databases:
 
-1. **Source**. A database with [replication objects](glossary.md#replicated-object).
-2. **Target**. A database in which an [asynchronous replication instance](glossary.md#async-replication-instance) and [replicas](glossary.md#replica-object) will be created.
+1. **Source**. A database with [replicated objects](glossary.md#replicated-object).
+2. **Target**. A database where an [asynchronous replication instance](glossary.md#async-replication-instance) and [replica objects](glossary.md#replica-object) will be created.
 
 Asynchronous replication consists of the following stages:
 
-* [Initialization](#init).
-* [Initial table scan](#initial-scan).
-* [Change data replication](#replication-of-changes).
+* [Initialization](#init)
+* [Initial table scan](#initial-scan)
+* [Change data replication](#replication-of-changes)
 
 ### Initialization {#init}
 
-Initialization of asynchronous replication includes the following:
+Initialization of asynchronous replication includes the following steps:
 
-* Creating an asynchronous replication instance on the target database by using the [CREATE ASYNC REPLICATION](../yql/reference/syntax/create-async-replication.md) YQL expression.
-* Establishing a connection with the source database. To connect with the source, the target database uses the [connection parameters](../yql/reference/syntax/create-async-replication.md#params) specified when the  asynchronous replication instance was created.
+* Creating an asynchronous replication instance on the target database using the [CREATE ASYNC REPLICATION](../yql/reference/syntax/create-async-replication.md) YQL expression.
+* Establishing a connection with the source database. The target database connects to the source using the [connection parameters](../yql/reference/syntax/create-async-replication.md#params) specified during the creation of the asynchronous replication instance.
 
 {% note info %}
 

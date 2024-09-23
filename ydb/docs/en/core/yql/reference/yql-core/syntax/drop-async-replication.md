@@ -1,6 +1,6 @@
 # DROP ASYNC REPLICATION
 
-The `DROP ASYNC REPLICATION` statement deletes an [asynchronous replication](../../../concepts/async-replication.md) instance. An asynchronous replication instance is [deleted](../../../concepts/async-replication.md#drop) with the following objects:
+The `DROP ASYNC REPLICATION` statement deletes an [asynchronous replication](../../../concepts/async-replication.md) instance. When an asynchronous replication instance is [deleted](../../../concepts/async-replication.md#drop), the following objects are also deleted:
 
 * automatically created [streams of changes](../../../concepts/glossary.md#changefeed)
 * [replicas](../../../concepts/glossary.md#replica-object) (optionally)
@@ -29,13 +29,13 @@ WITH (
 );
 ```
 
-The following statement drops an asynchronous replication instance and an automatically created stream of changes for the `original_table` table, the `replica_table` table is not deleted:
+The following statement drops an asynchronous replication instance and the automatically created stream of changes for the `original_table` table, but the `replica_table` table is not deleted:
 
 ```yql
 DROP ASYNC REPLICATION my_replication;
 ```
 
-The following statement drops an asynchronous replication instance, an automatically created stream of changes for the `original_table` table, and the `replica_table` table:
+The following statement drops an asynchronous replication instance, the automatically created stream of changes for the `original_table` table, and the `replica_table` table:
 
 ```yql
 DROP ASYNC REPLICATION my_replication CASCADE;

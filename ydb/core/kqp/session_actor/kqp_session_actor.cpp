@@ -2242,6 +2242,7 @@ public:
     }
 
     void EndCleanup(bool isFinal) {
+        Cerr << "EndCleanup, isFinal: " << isFinal << Endl;
         LOG_D("EndCleanup, isFinal: " << isFinal);
 
         if (QueryResponse)
@@ -2318,6 +2319,7 @@ public:
         FillTxInfo(response);
 
         ExecuterId = TActorId{};
+        Cerr << "HERE" << Endl;
         Cleanup(IsFatalError(ydbStatus));
     }
 

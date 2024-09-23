@@ -252,6 +252,13 @@ public:
         AFL_ENSURE(!IsReadOnly());
         State = ETransactionState::EXECUTING;
 
+        for (auto& [_, shardInfo] : ShardsInfo) {
+            AFL_ENSURE(shardInfo.State == EShardState::PREPARED
+                || (shardInfo.State == EShardState::PROCESSING
+                    && IsSingleShard()));
+            shardInfo.State = EShardState::EXECUTING;
+        }
+
         ShardsToWait = ShardsIds;
     }
 

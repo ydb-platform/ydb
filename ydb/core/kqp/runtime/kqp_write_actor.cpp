@@ -1368,11 +1368,6 @@ public:
         Process();
     }
 
-    //void OnCommit() {
-    //    YQL_ENSURE(State == EState::PREPARING);
-    //    // TODO: need it?
-    //}
-
     void ImmediateCommit() {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
@@ -1453,7 +1448,13 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        ImmediateCommit();
+        YQL_ENSURE(!TxManager->IsReadOnly());
+        if (TxManager->IsSingleShard()) {
+            TxManager->StartExecuting();
+            ImmediateCommit();
+        } else {
+            //Prepare();
+        }
     }
 
     void OnReady() override {
@@ -1470,8 +1471,7 @@ public:
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
         AFL_ENSURE(State == EState::COMMITTING);
         Y_UNUSED(shardId, dataSize);
-        // TODO: check if everything is committed
-        if (true) {
+        if (TxManager->ConsumeCommitResult(shardId)) {
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
             ExecuterActorId = {};
         }

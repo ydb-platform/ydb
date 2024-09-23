@@ -21,7 +21,7 @@ public:
     
     void BlockUntilEvent() {
         with_lock(Mutex_) {
-            CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
+            CanPop_.WaitI(Mutex_, [this] () {return Stopped_ || !Events_.empty();});
         }
     }
 
@@ -48,6 +48,7 @@ public:
     void Stop() {
         with_lock(Mutex_) {
             Stopped_ = true;
+            CanPop_.BroadCast();
         }
     }
     
@@ -94,7 +95,7 @@ public:
         Y_UNUSED(maxByteSize);
 
         TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount; event = EventsQ_.Pop(/*block=*/ false)) {
+        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(*event);
         }
         return res;
@@ -119,7 +120,11 @@ public:
         Y_UNUSED(timeout);
         // TOOD send TSessionClosedEvent
         EventsQ_.Stop();
-        FilePoller_.join();
+        Pool_.Stop();
+
+        if (FilePoller_.joinable()) {
+            FilePoller_.join();
+        }
         return true;
     }
 
@@ -133,7 +138,10 @@ public:
 
     ~TFileTopicReadSession() {
         EventsQ_.Stop();
-        FilePoller_.join();
+        Pool_.Stop();
+        if (FilePoller_.joinable()) {
+            FilePoller_.join();
+        }
     }
 
 private:

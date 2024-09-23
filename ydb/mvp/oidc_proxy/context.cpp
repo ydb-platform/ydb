@@ -44,7 +44,7 @@ TString TContext::GetRequestedAddress() const {
 }
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
-    static constexpr size_t COOKIE_MAX_AGE_SEC = 60 * 60 * 12;
+    static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
     return TStringBuilder() << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "="
                             << GenerateCookie(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"

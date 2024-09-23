@@ -192,14 +192,17 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
             stateContainer = jsonStateContainer->GetStringRobust();
             stateContainer = Base64Decode(stateContainer);
         }
+        if (stateContainer.Empty()) {
+            return TCheckStateResult(false, errorMessage << "Container with state is empty");
+        }
         const NJson::TJsonValue* jsonDigest = nullptr;
         if (jsonValue.GetValuePointer("digest", &jsonDigest)) {
             expectedDigest = jsonDigest->GetStringRobust();
             expectedDigest = Base64Decode(expectedDigest);
         }
-    }
-    if (stateContainer.Empty() || expectedDigest.Empty()) {
-        return TCheckStateResult(false, errorMessage << "Struct with state or expected digest are empty");
+        if (expectedDigest.Empty()) {
+            return TCheckStateResult(false, errorMessage << "Expected digest is empty");
+        }
     }
     TString digest = HmacSHA1(key, stateContainer);
     if (expectedDigest != digest) {

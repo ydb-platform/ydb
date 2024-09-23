@@ -864,7 +864,7 @@
   Для записи в топик в транзакции нужно создать транзакционного писателя, после этого писать сообщения можно как обычно. Закрывать транзакционного
   писателя не нужно - это делается автоматически при завершении транзакции.
 
-  [Пример на Github](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
 
   ```go
   err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
@@ -1690,7 +1690,7 @@
 
 - Go
 
-  [Пример на Github](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
 
   Для чтение сообщений внутри транзакции нужно воспользоваться методом [Reader.PopMessagesBatchTx](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx). Он прочитает пакет сообщений и добавит их их коммит в транзакцию, отдельно коммитить эти сообщения не нужно. Читателя сообщений можно переиспользовать между разными транзакциями, в этом случае нужно чтобы порядок коммита транзакций соответствовал порядку получения сообщений из читателя, т.к. коммиты сообщений в топике должны идти строго по-порядку.
 

@@ -606,7 +606,7 @@ private:
             if (contentRowSpecs) {
                 size_t from = 0;
                 if (initialWrite) {
-                    ++nextDescription.WriteValidateCount;
+                    nextDescription.RowSpecSortReady = true;
                     if (nextDescription.IsReplaced) {
                         nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
                         if (auto contentNativeType = contentRowSpecs.front()->GetNativeYtType()) {
@@ -630,7 +630,7 @@ private:
                             << " setting cannot be used with a unsorted table"));
                         return TStatus::Error;
                     }
-                } else {
+                } else if (nextDescription.RowSpecSortReady) {
                     if (!nextDescription.MonotonicKeys) {
                         nextDescription.MonotonicKeys = monotonicKeys;
                     } else if (*nextDescription.MonotonicKeys != monotonicKeys) {
@@ -642,43 +642,50 @@ private:
                     }
                 }
 
-                const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
-                for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                    const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
-                    const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
-                    if (monotonicKeys) {
-                        if (breaksSorting) {
-                            ctx.AddError(TIssue(pos, TStringBuilder()
-                                << "Inserts with "
-                                << ToString(EYtSettingType::MonotonicKeys).Quote()
-                                << " setting must not change output table sorting"));
-                            return TStatus::Error;
-                        }
-                        nextDescription.RowSpec->UniqueKeys = uniqueKeys;
-                    }
-                    if (nextDescription.WriteValidateCount < 2) {
-                        TStringBuilder warning;
-                        if (breaksSorting) {
-                            warning << "Sort order of written data differs from the order of "
-                                << outTableInfo.Name.Quote() << " table content. Result table content will be ";
-                            if (nextDescription.RowSpec->IsSorted()) {
-                                warning << "ordered by ";
-                                for (size_t i: xrange(nextDescription.RowSpec->SortMembers.size())) {
-                                    if (i != 0) {
-                                        warning << ',';
-                                    }
-                                    warning << nextDescription.RowSpec->SortMembers[i] << '('
-                                        << (nextDescription.RowSpec->SortDirections[i] ? "asc" : "desc") << ")";
-                                }
-                            } else {
-                                warning << "unordered";
+                if (nextDescription.RowSpecSortReady) {
+                    const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
+                    for (size_t s = from; s < contentRowSpecs.size(); ++s) {
+                        const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
+                        const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
+                        if (monotonicKeys) {
+                            if (breaksSorting) {
+                                ctx.AddError(TIssue(pos, TStringBuilder()
+                                    << "Inserts with "
+                                    << ToString(EYtSettingType::MonotonicKeys).Quote()
+                                    << " setting must not change output table sorting"));
+                                return TStatus::Error;
                             }
-                        } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
-                            warning << "Result table content will have non unique keys";
+                            nextDescription.RowSpec->UniqueKeys = uniqueKeys;
+                        }
+                        ui32 mutationId = 0;
+                        if (auto setting = NYql::GetSetting(settings, EYtSettingType::MutationId)) {
+                            mutationId = FromString<ui32>(setting->Child(1)->Content());
                         }
 
-                        if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {
-                            return TStatus::Error;
+                        if (++nextDescription.WriteValidateCount[mutationId] < 2) {
+                            TStringBuilder warning;
+                            if (breaksSorting) {
+                                warning << "Sort order of written data differs from the order of "
+                                    << outTableInfo.Name.Quote() << " table content. Result table content will be ";
+                                if (nextDescription.RowSpec->IsSorted()) {
+                                    warning << "ordered by ";
+                                    for (size_t i: xrange(nextDescription.RowSpec->SortMembers.size())) {
+                                        if (i != 0) {
+                                            warning << ',';
+                                        }
+                                        warning << nextDescription.RowSpec->SortMembers[i] << '('
+                                            << (nextDescription.RowSpec->SortDirections[i] ? "asc" : "desc") << ")";
+                                    }
+                                } else {
+                                    warning << "unordered";
+                                }
+                            } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
+                                warning << "Result table content will have non unique keys";
+                            }
+
+                            if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {
+                                return TStatus::Error;
+                            }
                         }
                     }
                 }

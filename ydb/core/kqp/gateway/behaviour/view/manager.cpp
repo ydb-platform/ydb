@@ -14,11 +14,6 @@ using TYqlConclusionStatus = TViewManager::TYqlConclusionStatus;
 using TInternalModificationContext = TViewManager::TInternalModificationContext;
 using TExternalModificationContext = TViewManager::TExternalModificationContext;
 
-TString GetByKeyOrDefault(const NYql::TCreateObjectSettings& container, const TString& key) {
-    const auto value = container.GetFeaturesExtractor().Extract(key);
-    return value ? *value : TString{};
-}
-
 TYqlConclusionStatus CheckFeatureFlag(const TInternalModificationContext& context) {
     auto* const actorSystem = context.GetExternalData().GetActorSystem();
     if (!actorSystem) {
@@ -48,6 +43,16 @@ std::pair<TString, TString> SplitPathByObjectId(const TString& objectId) {
     return pathPair;
 }
 
+void ValidateOptions(NYql::TFeaturesExtractor& features) {
+    // Current implementation does not persist the security_invoker option value.
+    if (features.Extract("security_invoker") != "true") {
+        ythrow TBadArgumentException() << "security_invoker option must be explicitly enabled";
+    }
+    if (!features.IsFinished()) {
+        ythrow TBadArgumentException() << "Unknown property: " << features.GetRemainedParamsString();
+    }
+}
+
 void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
                             const NYql::TCreateObjectSettings& settings,
                             const TExternalModificationContext& context) {
@@ -58,12 +63,12 @@ void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
 
     auto& viewDesc = *modifyScheme.MutableCreateView();
     viewDesc.SetName(pathPair.second);
-    viewDesc.SetQueryText(GetByKeyOrDefault(settings, "query_text"));
-    NSQLTranslation::Serialize(context.GetTranslationSettings(), *viewDesc.MutableCapturedContext());
 
-    if (!settings.GetFeaturesExtractor().IsFinished()) {
-        ythrow TBadArgumentException() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();
-    }
+    auto& features = settings.GetFeaturesExtractor();
+    viewDesc.SetQueryText(features.Extract("query_text").value_or(""));
+    ValidateOptions(features);
+
+    NSQLTranslation::Serialize(context.GetTranslationSettings(), *viewDesc.MutableCapturedContext());
 }
 
 void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,

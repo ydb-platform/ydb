@@ -111,7 +111,7 @@ class KikimrConfigGenerator(object):
     def __init__(
             self,
             erasure=None,
-            binary_path=None,
+            binary_paths=None,
             nodes=None,
             additional_log_configs=None,
             port_allocator=None,
@@ -186,7 +186,7 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
 
-        self.__binary_path = binary_path
+        self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
         if nodes is None:
             nodes = rings_count * erasure.min_fail_domains
@@ -377,6 +377,9 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
             self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
 
+        if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
+            self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
+
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
@@ -523,11 +526,11 @@ class KikimrConfigGenerator(object):
     def output_path(self):
         return self.__output_path
 
-    @property
-    def binary_path(self):
-        if self.__binary_path is not None:
-            return self.__binary_path
-        return kikimr_driver_path()
+    def get_binary_path(self, node_id):
+        binary_paths = self.__binary_paths
+        if not binary_paths:
+            binary_paths = [kikimr_driver_path()]
+        return binary_paths[node_id % len(binary_paths)]
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:
@@ -542,6 +545,18 @@ class KikimrConfigGenerator(object):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.yaml_config))
+
+    def clone_grpc_as_ext_endpoint(self, port):
+        cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])
+        if 'ext_endpoints' in cur_grpc_config:
+            del cur_grpc_config['ext_endpoints']
+
+        cur_grpc_config['port'] = port
+
+        if 'ext_endpoints' not in self.yaml_config['grpc_config']:
+            self.yaml_config['grpc_config']['ext_endpoints'] = []
+
+        self.yaml_config['grpc_config']['ext_endpoints'].append(cur_grpc_config)
 
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:

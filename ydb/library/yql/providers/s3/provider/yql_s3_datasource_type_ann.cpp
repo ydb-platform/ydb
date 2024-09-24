@@ -277,7 +277,7 @@ bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TString
 }
 
 bool EnsureParquetTypeSupported(TPositionHandle position, const TTypeAnnotationNode* type, TExprContext& ctx, const IArrowResolver::TPtr& arrowResolver) {
-    auto resolveStatus = arrowResolver->AreTypesSupported(ctx.GetPosition(position), { type }, ctx);
+    auto resolveStatus = arrowResolver->AreTypesSupported(ctx.GetPosition(position), { type }, ctx, true);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
 
     if (resolveStatus != IArrowResolver::OK) {

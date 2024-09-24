@@ -55,13 +55,16 @@ Y_UNIT_TEST(JoinSearch2Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
         joinConditions,
         InnerJoin,
-        EJoinAlgoType::GraceJoin
+        EJoinAlgoType::GraceJoin,
+        true,
+        false
         );
 
     auto res = optimizer->JoinSearch(op);
     std::stringstream ss;
     res->Print(ss);
-    TString expected = R"__(Join: (InnerJoin,MapJoin) b.1=a.1,
+    Cout << ss.str() << '\n';
+    TString expected = R"__(Join: (InnerJoin,MapJoin,RightAny) b.1=a.1,
 Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel: 1, Storage: NA
     Rel: b
     Type: BaseTable, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06, Sel: 1, Storage: NA
@@ -93,8 +96,10 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
         joinConditions,
         InnerJoin,
-        EJoinAlgoType::GraceJoin
-        );
+        EJoinAlgoType::GraceJoin,
+        false,
+        false
+    );
 
     joinConditions.insert({
         NDq::TJoinColumn("a", "1"),
@@ -106,14 +111,17 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel3),
         joinConditions,
         InnerJoin,
-        EJoinAlgoType::GraceJoin
-        );
+        EJoinAlgoType::GraceJoin,
+        true,
+        false
+    );
 
     auto res = optimizer->JoinSearch(op2);
     std::stringstream ss;
     res->Print(ss);
+    Cout << ss.str() << '\n';
 
-    TString expected = R"__(Join: (InnerJoin,MapJoin) a.1=b.1,a.1=c.1,
+    TString expected = R"__(Join: (InnerJoin,MapJoin,LeftAny) a.1=b.1,a.1=c.1,
 Type: ManyManyJoin, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.004e+13, Sel: 1, Storage: NA
     Join: (InnerJoin,MapJoin) b.1=a.1,
     Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel: 1, Storage: NA
@@ -223,7 +231,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());
     auto resStr = NCommon::ExprToPrettyString(ctx, *res.Ptr());
     auto expected = R"__((
-(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '('('"join_algo" '"MapJoin"))))
+(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '('('join_algo 'MapJoin))))
 (return (EquiJoin '('() '"orders") '('() '"customer") $1 '()))
 )
 )__";

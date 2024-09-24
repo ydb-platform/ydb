@@ -174,11 +174,11 @@
           NAMES("poolId", "pool", "threacCount", "minThreadCount", "maxThreadCount", "defaultThreadCount"))                           \
     PROBE(HarmonizeCheckPool, GROUPS("Harmonizer"),                                                                                   \
           TYPES(ui32, TString, double, double, double, double, ui32, ui32, bool, bool, bool),                                         \
-          NAMES("poolId", "pool", "booked", "consumed", "lastSecondBooked", "lastSecondConsumed", "threadCount", "maxThreadCount",    \
+          NAMES("poolId", "pool", "cpu", "elapsed", "lastSecondCpu", "lastSecondElapsed", "threadCount", "maxThreadCount",    \
                   "isStarved", "isNeedy", "isHoggish"))                                                                               \
     PROBE(HarmonizeCheckPoolByThread, GROUPS("Harmonizer"),                                                                           \
           TYPES(ui32, TString, i16, double, double, double, double),                                                                  \
-          NAMES("poolId", "pool", "threadIdx", "booked", "consumed", "lastSecondBooked", "lastSecondConsumed"))                       \
+          NAMES("poolId", "pool", "threadIdx", "cpu", "elapsed", "lastSecondCpu", "lastSecondElapsed"))                       \
     PROBE(WakingUpConsumption, GROUPS("Harmonizer"),                                                                                  \
           TYPES(double, double, double, double, double),                                                                              \
           NAMES("avgWakingUpUs", "realAvgWakingUpUs", "avgAwakeningUs", "realAvgAwakeningUs", "total"))                               \

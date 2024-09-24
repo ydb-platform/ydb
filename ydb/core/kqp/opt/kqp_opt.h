@@ -50,9 +50,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NYql::TOptimizerHints GetOptimizerHints() {
         if (Config->OptimizerHints.Get()) {
             if (!Hints) {
-                Hints = std::make_shared<NYql::TOptimizerHints>(
-                    NYql::TOptimizerHints::Parse(*Config->OptimizerHints.Get())
-                );
+                Hints = std::make_shared<NYql::TOptimizerHints>(*Config->OptimizerHints.Get());
             }
             return *Hints;
         }

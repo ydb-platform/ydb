@@ -27,6 +27,8 @@ SRCS(
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
+    change_sender_incr_restore.cpp
+    change_sender_table_base.cpp
     check_commit_writes_tx_unit.cpp
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
@@ -208,6 +210,7 @@ SRCS(
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
     stream_scan_common.cpp
+    type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp

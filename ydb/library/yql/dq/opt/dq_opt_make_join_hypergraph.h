@@ -42,14 +42,13 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
 
     TNodeSet TES = ConvertConflictRulesIntoTES(conditionUsedRels, conflictRules);
 
-
-    /* For CROSS Join and degenerate predicates (if subtree tables and joinCondition tables do not intersect) */
-    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg])) {
+    /* For CROSS, Non-Reorderable, ANY Joins and degenerate predicates (if subtree tables and joinCondition tables do not intersect) */
+    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg]) || !joinNode->IsReorderable || joinNode->LeftAny) {
         TES |= subtreeNodes[joinNode->LeftArg];
         TES = ConvertConflictRulesIntoTES(TES, conflictRules);
     }
 
-    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg])) {
+    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg]) || !joinNode->IsReorderable || joinNode->RightAny) {
         TES |= subtreeNodes[joinNode->RightArg];
         TES = ConvertConflictRulesIntoTES(TES, conflictRules);
     }
@@ -57,7 +56,8 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommutative(joinNode->JoinType) && joinNode->IsReorderable, joinNode->JoinConditions);
+    bool isCommutative = OperatorIsCommutative(joinNode->JoinType) && (joinNode->IsReorderable);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, joinNode->JoinConditions);
 }
 
 template<typename TNodeSet>

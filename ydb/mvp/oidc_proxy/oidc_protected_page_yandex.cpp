@@ -2,6 +2,7 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
+#include "context.h"
 #include "oidc_protected_page_yandex.h"
 
 namespace NMVP {
@@ -31,7 +32,8 @@ void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPt
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
+        TContext context(Request);
+        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, context);
     } else {
         httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details);
     }

@@ -926,6 +926,35 @@ class TestData:
         return {cls.KEY: serialize_list(get_values_list(unit, "TEST_DATA_VALUE"))}
 
 
+class DockerImage:
+    KEY = 'DOCKER-IMAGES'
+
+    @staticmethod
+    def _validate(images):
+        docker_image_re = consts.DOCKER_LINK_RE
+        for img in images:
+            msg = None
+            if "=" in img:
+                link, _ = img.rsplit('=', 1)
+                if docker_image_re.match(link) is None:
+                    msg = 'Invalid docker url format: {}. Link should be provided in format docker://<repo>@sha256:<digest>'.format(
+                        link
+                    )
+            else:
+                msg = 'Invalid docker image: {}. Image should be provided in format <link>=<tag>'.format(img)
+            if msg:
+                ymake.report_configure_error(msg)
+                raise DartValueError(msg)
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        raw_value = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
+        images = sorted(raw_value)
+        if images:
+            cls._validate(images)
+        return {cls.KEY: serialize_list(images)}
+
+
 class TsConfigPath:
     KEY = 'TS_CONFIG_PATH'
 

@@ -3,3 +3,5 @@ items:
   href: spring-data-jdbc.md
 - name: Hibernate
   href: hibernate.md
+- name: JOOQ
+  href: jooq.md

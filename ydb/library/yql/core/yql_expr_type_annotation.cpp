@@ -3153,7 +3153,7 @@ bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type
             std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
         };
     }
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, onUnsupportedType);
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, false, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }

@@ -35,6 +35,12 @@ set -ex
       (56, 12, "2a02:1812:1713:4f00:517e:1d79:c88b:704", "Elena", 2),
       (18, 17, "ivalid ip", "newUser", 12);
     COMMIT;
+    CREATE TABLE db (b STRING NOT NULL, c Int32, a Int32 NOT NULL, d Int32, f Int32, e Int32, PRIMARY KEY(b, a));
+    COMMIT;
+    INSERT INTO db (a, b, c, d, e, f) VALUES
+      (1, "2", 3, 4, 5, 6),
+      (7, "8", 9, 10, 11, 12);
+    COMMIT;
   '
 
 retVal=$?

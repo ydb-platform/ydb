@@ -1,7 +1,7 @@
 /* Closures for Bison
 
    Copyright (C) 1984, 1989, 2000-2002, 2004-2005, 2007, 2009-2015,
-   2018-2019 Free Software Foundation, Inc.
+   2018-2021 Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 #include "system.h"
@@ -32,9 +32,12 @@
 #include "symtab.h"
 
 /* NITEMSET is the size of the array ITEMSET.  */
-item_number *itemset;
+item_index *itemset;
 size_t nitemset;
 
+/* RULESET contains a bit for each rule.  CLOSURE sets the bits for
+   all rules which could potentially describe the next input to be
+   read.  */
 static bitset ruleset;
 
 /* internal data.  See comments before set_fderives and set_firsts.  */
@@ -51,16 +54,16 @@ static bitsetv firsts = NULL;
 `-----------------*/
 
 static void
-print_closure (char const *title, item_number const *array, size_t size)
+closure_print (char const *title, item_index const *array, size_t size)
 {
   fprintf (stderr, "Closure: %s\n", title);
   for (size_t i = 0; i < size; ++i)
     {
       fprintf (stderr, "  %2d: .", array[i]);
       item_number *rp;
-      for (rp = &ritem[array[i]]; *rp >= 0; ++rp)
+      for (rp = &ritem[array[i]]; 0 <= *rp; ++rp)
         fprintf (stderr, " %s", symbols[*rp]->tag);
-      fprintf (stderr, "  (rule %d)\n", -*rp - 1);
+      fprintf (stderr, "  (rule %d)\n", item_number_as_rule_number (*rp));
     }
   fputs ("\n\n", stderr);
 }
@@ -101,21 +104,21 @@ print_fderives (void)
   fprintf (stderr, "\n\n");
 }
 
-/*------------------------------------------------------------------.
-| Set FIRSTS to be an NVARS array of NVARS bitsets indicating which |
-| items can represent the beginning of the input corresponding to   |
-| which other items.                                                |
-|                                                                   |
-| For example, if some rule expands symbol 5 into the sequence of   |
-| symbols 8 3 20, the symbol 8 can be the beginning of the data for |
-| symbol 5, so the bit [8 - ntokens] in first[5 - ntokens] (= FIRST |
-| (5)) is set.                                                      |
-`------------------------------------------------------------------*/
+/*-------------------------------------------------------------------.
+| Set FIRSTS to be an NNTERMS array of NNTERMS bitsets indicating    |
+| which items can represent the beginning of the input corresponding |
+| to which other items.                                              |
+|                                                                    |
+| For example, if some rule expands symbol 5 into the sequence of    |
+| symbols 8 3 20, the symbol 8 can be the beginning of the data for  |
+| symbol 5, so the bit [8 - ntokens] in first[5 - ntokens] (= FIRST  |
+| (5)) is set.                                                       |
+`-------------------------------------------------------------------*/
 
 static void
 set_firsts (void)
 {
-  firsts = bitsetv_create (nvars, nvars, BITSET_FIXED);
+  firsts = bitsetv_create (nnterms, nnterms, BITSET_FIXED);
 
   for (symbol_number i = ntokens; i < nsyms; ++i)
     for (symbol_number j = 0; derives[i - ntokens][j]; ++j)
@@ -136,8 +139,8 @@ set_firsts (void)
 }
 
 /*-------------------------------------------------------------------.
-| Set FDERIVES to an NVARS by NRULES matrix of bits indicating which |
-| rules can help derive the beginning of the data for each           |
+| Set FDERIVES to an NNTERMS by NRULES matrix of bits indicating     |
+| which rules can help derive the beginning of the data for each     |
 | nonterminal.                                                       |
 |                                                                    |
 | For example, if symbol 5 can be derived as the sequence of symbols |
@@ -148,7 +151,7 @@ set_firsts (void)
 static void
 set_fderives (void)
 {
-  fderives = bitsetv_create (nvars, nrules, BITSET_FIXED);
+  fderives = bitsetv_create (nnterms, nrules, BITSET_FIXED);
 
   set_firsts ();
 
@@ -167,7 +170,7 @@ set_fderives (void)
 
 
 void
-new_closure (unsigned n)
+closure_new (int n)
 {
   itemset = xnmalloc (n, sizeof *itemset);
 
@@ -179,10 +182,10 @@ new_closure (unsigned n)
 
 
 void
-closure (item_number const *core, size_t n)
+closure (item_index const *core, size_t n)
 {
-  if (trace_flag & trace_sets)
-    print_closure ("input", core, n);
+  if (trace_flag & trace_closure)
+    closure_print ("input", core, n);
 
   bitset_zero (ruleset);
 
@@ -192,15 +195,15 @@ closure (item_number const *core, size_t n)
 
   /* core is sorted on item index in ritem, which is sorted on rule number.
      Compute itemset with the same sort.  */
+  nitemset = 0;
+  size_t c = 0;
+
   /* A bit index over RULESET. */
   rule_number ruleno;
   bitset_iterator iter;
-
-  nitemset = 0;
-  size_t c = 0;
   BITSET_FOR_EACH (iter, ruleset, ruleno, 0)
     {
-      item_number itemno = rules[ruleno].rhs - ritem;
+      item_index itemno = rules[ruleno].rhs - ritem;
       while (c < n && core[c] < itemno)
         {
           itemset[nitemset] = core[c];
@@ -218,13 +221,13 @@ closure (item_number const *core, size_t n)
       c++;
     }
 
-  if (trace_flag & trace_sets)
-    print_closure ("output", itemset, nitemset);
+  if (trace_flag & trace_closure)
+    closure_print ("output", itemset, nitemset);
 }
 
 
 void
-free_closure (void)
+closure_free (void)
 {
   free (itemset);
   bitset_free (ruleset);

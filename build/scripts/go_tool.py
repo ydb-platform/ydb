@@ -83,7 +83,10 @@ def preprocess_args(args):
         if f.endswith('.gosrc'):
             with tarfile.open(f, 'r') as tar:
                 srcs.extend(os.path.join(args.output_root, src) for src in tar.getnames())
-                tar.extractall(path=args.output_root)
+                if sys.version_info >= (3, 12):
+                    tar.extractall(path=args.output_root, filter='data')
+                else:
+                    tar.extractall(path=args.output_root)
         else:
             srcs.append(f)
     args.srcs = srcs
@@ -497,9 +500,14 @@ def do_link_exe(args):
     if args.buildmode:
         cmd.append('-buildmode={}'.format(args.buildmode))
     elif args.mode in ('exe', 'test'):
-        cmd.append('-buildmode=exe')
+        mode = '-buildmode=exe'
         if 'ld.lld' in str(args):
-            extldflags.append('-Wl,-no-pie')
+            if '-fPIE' in str(args) or '-fPIC' in str(args):
+                # support explicit PIE
+                mode = '-buildmode=pie'
+            else:
+                extldflags.append('-Wl,-no-pie')
+        cmd.append(mode)
     elif args.mode == 'dll':
         cmd.append('-buildmode=c-shared')
     else:

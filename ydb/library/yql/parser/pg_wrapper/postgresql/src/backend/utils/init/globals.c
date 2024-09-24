@@ -28,6 +28,7 @@
 __thread ProtocolVersion FrontendProtocol;
 
 __thread volatile sig_atomic_t InterruptPending = false;
+volatile sig_atomic_t* ImplPtrInterruptPending() { return &InterruptPending; }
 __thread volatile sig_atomic_t QueryCancelPending = false;
 __thread volatile sig_atomic_t ProcDiePending = false;
 __thread volatile sig_atomic_t CheckClientConnectionPending = false;

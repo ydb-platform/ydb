@@ -2,6 +2,15 @@
 
 #include "public.h"
 
+#include <yt/yt/client/chunk_client/read_limit.h>
+
+#include <yt/yt/client/security_client/public.h>
+
+#include <yt/yt/client/table_client/column_sort_schema.h>
+#include <yt/yt/client/table_client/schema.h>
+
+#include <yt/yt/client/transaction_client/public.h>
+
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/attributes.h>
@@ -9,15 +18,6 @@
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/library/erasure/public.h>
-
-#include <yt/yt/client/table_client/column_sort_schema.h>
-#include <yt/yt/client/table_client/schema.h>
-
-#include <yt/yt/client/chunk_client/read_limit.h>
-
-#include <yt/yt/client/transaction_client/public.h>
-
-#include <yt/yt/client/security_client/public.h>
 
 namespace NYT::NYPath {
 
@@ -157,8 +157,8 @@ public:
     std::optional<NTableClient::TSortColumns> GetChunkSortColumns() const;
 
     // "cluster"
-    std::optional<TString> GetCluster() const;
-    void SetCluster(const TString& value);
+    std::optional<std::string> GetCluster() const;
+    void SetCluster(const std::string& value);
 
     // "clusters"
     std::optional<std::vector<TString>> GetClusters() const;
@@ -167,12 +167,15 @@ public:
     // "create"
     bool GetCreate() const;
 
+    // "versioned_read_options"
+    NTableClient::TVersionedReadOptions GetVersionedReadOptions() const;
+
 private:
     TYPath Path_;
     NYTree::IAttributeDictionaryPtr Attributes_;
 };
 
-bool operator== (const TRichYPath& lhs, const TRichYPath& rhs);
+bool operator==(const TRichYPath& lhs, const TRichYPath& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

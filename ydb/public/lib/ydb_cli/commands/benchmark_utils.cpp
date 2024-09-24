@@ -1,6 +1,7 @@
 #include "benchmark_utils.h"
 
 #include <util/string/split.h>
+#include <util/string/builder.h>
 #include <util/stream/file.h>
 #include <util/folder/pathsplit.h>
 #include <util/folder/path.h>
@@ -162,13 +163,6 @@ public:
     bool Scan(TIterator& it) {
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (!streamPart.EOS()) {
-                    OnError(streamPart.GetIssues().ToString());
-                    return false;
-                }
-                break;
-            }
 
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
@@ -183,6 +177,14 @@ public:
                     QueryPlan = stats->GetPlan().GetOrElse("");
                     PlanAst = stats->GetAst().GetOrElse("");
                 }
+            }
+
+            if (!streamPart.IsSuccess()) {
+                if (!streamPart.EOS()) {
+                    OnError(streamPart.GetIssues().ToString());
+                    return false;
+                }
+                break;
             }
 
             if (streamPart.HasResultSet()) {
@@ -290,9 +292,10 @@ public:
     }
 };
 
-TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, bool explainOnly) {
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+    settings.Explain(explainOnly);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
 
@@ -302,7 +305,8 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+        return TQueryBenchmarkResult::Error(
+            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
             scannerYson->GetResult(),
@@ -314,9 +318,18 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
+TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
+    return ExecuteImpl(query, client, false);
+}
+
+TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client) {
+    return ExecuteImpl(query, client, true);
+}
+
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
     settings.StatsMode(NQuery::EStatsMode::Full);
+    settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
@@ -329,7 +342,8 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+        return TQueryBenchmarkResult::Error(
+            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
             scannerYson->GetResult(),
@@ -339,6 +353,14 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
             composite.GetPlanAst()
             );
     }
+}
+
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
+    return ExecuteImpl(query, client, false);
+}
+
+TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client) {
+    return ExecuteImpl(query, client, true);
 }
 
 NJson::TJsonValue GetQueryLabels(ui32 queryId) {

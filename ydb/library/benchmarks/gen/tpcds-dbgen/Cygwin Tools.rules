@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<VisualStudioToolFile
+    Name="Cygwin Tools"
+    Version="8.00"
+    >
+    <Rules>
+        <CustomBuildRule
+            Name="Bison"
+            DisplayName="Bison"
+            CommandLine="bison -y -d [inputs] -o y.tab.c"
+            Outputs="y.tab.c;y.tab.h"
+            FileExtensions="*.y"
+            ExecutionDescription="Generating parser..."
+            >
+            <Properties>
+            </Properties>
+        </CustomBuildRule>
+        <CustomBuildRule
+            Name="Flex"
+            DisplayName="Flex"
+            CommandLine="flex -otokenizer.c [inputs]"
+            Outputs="tokenizer.c"
+            FileExtensions="*.l"
+            ExecutionDescription="Generating scanner..."
+            >
+            <Properties>
+            </Properties>
+        </CustomBuildRule>
+    </Rules>
+</VisualStudioToolFile>

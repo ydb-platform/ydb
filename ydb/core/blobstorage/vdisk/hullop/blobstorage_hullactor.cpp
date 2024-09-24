@@ -187,7 +187,10 @@ namespace NKikimr {
         // returns true, if selector has been started, false otherwise
         bool RunLevelCompactionSelector(const TActorContext &ctx) {
             // if compaction is in progress, return
-            if (RTCtx->LevelIndex->GetCompState() != TLevelIndexBase::StateNoComp || !Config->LevelCompaction) {
+            if (RTCtx->LevelIndex->GetCompState() != TLevelIndexBase::StateNoComp
+                || !Config->LevelCompaction
+                || Config->BaseInfo.DonorMode) {
+
                 return false;
             }
 

@@ -12,6 +12,7 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
+        Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
     virtual void DoFillIndexCheckers(

@@ -3,6 +3,14 @@
     - types.h
     - stat.h
 
+- source_filter: "^contrib(?!/restricted/libnl)"
+  includes:
+    - netlink/genl/genl.h
+    - netlink/genl/family.h
+    - netlink/genl/ctrl.h
+    - netlink/msg.h
+    - netlink/attr.h
+
 - source_filter: ".*contrib.*"
   includes:
   - stat.h
@@ -392,11 +400,6 @@
   - netdnet/dnetdb.h
   - sys/ethernet.h
   - sys/stream.h
-  - netlink/genl/genl.h
-  - netlink/genl/family.h
-  - netlink/genl/ctrl.h
-  - netlink/msg.h
-  - netlink/attr.h
   # end libpcap files
 
 # These includes are not used in autocheck builds, but might be necessary for

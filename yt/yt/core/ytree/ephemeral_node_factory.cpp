@@ -193,14 +193,14 @@ public:
         return KeyToChild_.ysize();
     }
 
-    std::vector< std::pair<TString, INodePtr> > GetChildren() const override
+    std::vector<std::pair<std::string, INodePtr>> GetChildren() const override
     {
-        return std::vector< std::pair<TString, INodePtr> >(KeyToChild_.begin(), KeyToChild_.end());
+        return {KeyToChild_.begin(), KeyToChild_.end()};
     }
 
-    std::vector<TString> GetKeys() const override
+    std::vector<std::string> GetKeys() const override
     {
-        std::vector<TString> result;
+        std::vector<std::string> result;
         result.reserve(KeyToChild_.size());
         for (const auto& [key, child] : KeyToChild_) {
             result.push_back(key);
@@ -208,13 +208,13 @@ public:
         return result;
     }
 
-    INodePtr FindChild(const TString& key) const override
+    INodePtr FindChild(const std::string& key) const override
     {
         auto it = KeyToChild_.find(key);
         return it == KeyToChild_.end() ? nullptr : it->second;
     }
 
-    bool AddChild(const TString& key, const INodePtr& child) override
+    bool AddChild(const std::string& key, const INodePtr& child) override
     {
         YT_ASSERT(child);
         ValidateYTreeKey(key);
@@ -228,11 +228,12 @@ public:
         }
     }
 
-    bool RemoveChild(const TString& key) override
+    bool RemoveChild(const std::string& key) override
     {
         auto it = KeyToChild_.find(TString(key));
-        if (it == KeyToChild_.end())
+        if (it == KeyToChild_.end()) {
             return false;
+        }
 
         auto child = it->second;
         child->SetParent(nullptr);
@@ -279,7 +280,7 @@ public:
         YT_VERIFY(ChildToKey_.emplace(newChild, key).second);
     }
 
-    std::optional<TString> FindChildKey(const IConstNodePtr& child) override
+    std::optional<std::string> FindChildKey(const IConstNodePtr& child) override
     {
         YT_ASSERT(child);
 

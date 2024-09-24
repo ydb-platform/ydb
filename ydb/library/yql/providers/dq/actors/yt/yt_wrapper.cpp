@@ -625,12 +625,12 @@ namespace NYql {
                             YQL_CLOG(DEBUG, ProviderDq) << "Printing stderr (" << ToString(operationId) << "," << ToString(job.Id) << ")";
 
                             YT_UNUSED_FUTURE(cli->GetJobStderr(operationId, job.Id)
-                                .Apply(BIND([jobId = job.Id, operationId](const TSharedRef& data) {
+                                .Apply(BIND([jobId = job.Id, operationId](const TGetJobStderrResponse& response) {
                                     YQL_CLOG(DEBUG, ProviderDq)
                                         << "Stderr ("
                                         << ToString(operationId) << ","
                                         << ToString(jobId) << ")"
-                                        << TString(data.Begin(), data.Size());
+                                        << TString(response.Data.Begin(), response.Data.Size());
                                 })));
                         }
                     }

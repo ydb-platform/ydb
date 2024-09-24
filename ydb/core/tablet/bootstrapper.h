@@ -3,6 +3,7 @@
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/library/actors/core/event_simple_non_local.h>
 
 namespace NKikimr {
 
@@ -19,12 +20,10 @@ struct TEvBootstrapper {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BOOTSTRAPPER), "event space overrun");
 
-    struct TEvActivate : public TEventBase<TEvActivate, EvActivate> {
-        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvActivate, "TEvBootstrapper::Activate");
+    struct TEvActivate : public TEventSimpleNonLocal<TEvActivate, EvActivate> {
     };
 
-    struct TEvStandBy : public TEventBase<TEvStandBy, EvStandBy> {
-        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvStandBy, "TEvBootstrapper::StandBy");
+    struct TEvStandBy : public TEventSimpleNonLocal<TEvStandBy, EvStandBy> {
     };
 
     struct TEvWatch;

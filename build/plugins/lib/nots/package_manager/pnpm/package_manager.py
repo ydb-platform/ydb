@@ -142,7 +142,7 @@ class PnpmPackageManager(BasePackageManager):
         It relies on .PEERDIRSELF=TS_PREPARE_DEPS
         Inputs:
             - source package.json
-            - merged lockfiles and workspace configs of TS_PREPARE_DEPS
+            - merged pre-lockfiles and workspace configs of TS_PREPARE_DEPS
         Outputs:
             - created node_modules bundle
         """
@@ -187,7 +187,7 @@ class PnpmPackageManager(BasePackageManager):
 
         return PnpmWorkspace.load(build_ws_config_path(self.build_path))
 
-    def build_workspace(self, tarballs_store):
+    def build_workspace(self, tarballs_store: str):
         """
         :rtype: PnpmWorkspace
         """
@@ -201,20 +201,6 @@ class PnpmPackageManager(BasePackageManager):
         self._build_merged_pre_lockfile(tarballs_store, dep_paths)
 
         return ws
-
-    def _build_package_json(self):
-        """
-        :rtype: PackageJson
-        """
-        pj = self.load_package_json_from_dir(self.sources_path)
-
-        if not os.path.exists(self.build_path):
-            os.makedirs(self.build_path, exist_ok=True)
-
-        pj.path = build_pj_path(self.build_path)
-        pj.write()
-
-        return pj
 
     def _build_merged_pre_lockfile(self, tarballs_store, dep_paths):
         """

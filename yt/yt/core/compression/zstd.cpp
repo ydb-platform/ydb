@@ -6,6 +6,8 @@
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 #include <contrib/libs/zstd/lib/zstd_errors.h>
@@ -29,8 +31,16 @@ struct TZstdCompressBufferTag
 
 void VerifyError(size_t result)
 {
-    YT_LOG_FATAL_IF(ZSTD_isError(result),
-        "Zstd compression failed (Error: %v)",
+    if (!ZSTD_isError(result)) {
+        return;
+    }
+
+    if (result == ZSTD_error_memory_allocation) {
+        YT_LOG_ERROR("Zstd compression failed with memory allocation error; terminating");
+        AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
+    }
+
+    YT_LOG_FATAL("Zstd compression failed (Error: %v)",
         ZSTD_getErrorName(result));
 }
 

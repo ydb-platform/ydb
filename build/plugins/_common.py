@@ -30,6 +30,10 @@ def listid(items):
     return pathid(str(sorted(items)))
 
 
+def sort_uniq(items):
+    return sorted(set(items))
+
+
 def stripext(fname):
     return fname[: fname.rfind('.')]
 

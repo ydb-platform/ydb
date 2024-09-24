@@ -89,7 +89,7 @@ static int wait_cqes(struct test_context *ctx)
 	return 0;
 }
 
-static int test_cancelled_userdata(struct io_uring *ring)
+static int test_canceled_userdata(struct io_uring *ring)
 {
 	struct test_context ctx;
 	int ret, i, nr = 100;
@@ -277,9 +277,9 @@ int main(int argc, char *argv[])
 	}
 
 
-	ret = test_cancelled_userdata(&poll_ring);
+	ret = test_canceled_userdata(&poll_ring);
 	if (ret) {
-		printf("test_cancelled_userdata failed\n");
+		printf("test_canceled_userdata failed\n");
 		return ret;
 	}
 

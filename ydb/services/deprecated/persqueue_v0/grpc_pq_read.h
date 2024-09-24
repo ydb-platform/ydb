@@ -28,10 +28,12 @@ class TPQReadService : public IPQClustersUpdaterCallback, public std::enable_sha
         void OnWriteDone(ui64 size) override;
         void DestroyStream(const TString& reason, const NPersQueue::NErrorCode::EErrorCode errorCode) override;
         bool IsShuttingDown() const override;
+
         TSession(std::shared_ptr<TPQReadService> proxy,
              grpc::ServerCompletionQueue* cq, ui64 cookie, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool needDiscoverClusters,
              const NPersQueue::TConverterFactoryPtr& converterFactory);
+
         void Start() override;
         void SendEvent(NActors::IEventBase* ev);
 
@@ -60,7 +62,7 @@ class TPQReadService : public IPQClustersUpdaterCallback, public std::enable_sha
 public:
 
     TPQReadService(NGRpcService::TGRpcPersQueueService* service,
-                     grpc::ServerCompletionQueue* cq,
+                     const std::vector<grpc::ServerCompletionQueue*>& cqs,
                      NActors::TActorSystem* as, const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                      const ui32 maxSessions);
 
@@ -116,7 +118,7 @@ private:
     NKikimr::NGRpcService::TGRpcPersQueueService* Service;
 
     grpc::ServerContext Context;
-    grpc::ServerCompletionQueue* CQ;
+    std::vector<grpc::ServerCompletionQueue*> CQS;
     NActors::TActorSystem* ActorSystem;
     NActors::TActorId SchemeCache;
     NActors::TActorId NewSchemeCache;

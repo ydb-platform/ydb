@@ -1,6 +1,8 @@
 #pragma once
 
-#include <vector>
+
+#include <numeric>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include "bitset.h"
 
@@ -26,12 +28,16 @@ public:
             const TNodeSet& left,
             const TNodeSet& right,
             EJoinKind joinKind,
+            bool leftAny,
+            bool rightAny,
             bool isCommutative,
             const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions
         )
             : Left(left)
             , Right(right)
             , JoinKind(joinKind)
+            , LeftAny(leftAny)
+            , RightAny(rightAny)
             , IsCommutative(isCommutative)
             , JoinConditions(joinConditions)
             , IsReversed(false)
@@ -50,6 +56,7 @@ public:
         TNodeSet Left;
         TNodeSet Right;
         EJoinKind JoinKind;
+        bool LeftAny, RightAny;
         bool IsCommutative;
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
@@ -63,22 +70,16 @@ public:
             LeftJoinKeys.clear();
             RightJoinKeys.clear();
 
-            for (auto [left, right] : JoinConditions) {
+            for (const auto& [left, right] : JoinConditions) {
                 auto leftKey = left.AttributeName;
                 auto rightKey = right.AttributeName;
 
-                for (size_t i = leftKey.size() - 1; i > 0; --i) {
-                    if (leftKey[i] == '.') {
-                        leftKey = leftKey.substr(i + 1);
-                        break;
-                    }
+                if (auto idx = leftKey.find_last_of('.'); idx != TString::npos) {
+                    leftKey =  leftKey.substr(idx+1);
                 }
 
-                for (size_t i = rightKey.size() - 1; i > 0; --i) {
-                    if (rightKey[i] == '.') {
-                        rightKey = rightKey.substr(i + 1);
-                        break;
-                    }
+                if (auto idx = rightKey.find_last_of('.'); idx != TString::npos) {
+                    rightKey =  rightKey.substr(idx+1);
                 }
 
                 LeftJoinKeys.emplace_back(leftKey);
@@ -98,41 +99,45 @@ public:
     TString String() {
         TString res;
 
+        TVector<TString> relNameByNodeId(Nodes_.size());
+        res.append("Nodes: ").append("\n");
+        for (const auto& [name, idx]: NodeIdByRelationName_) {
+            relNameByNodeId[idx] = name;
+        }
+
+        for (size_t idx = 0; idx < relNameByNodeId.size(); ++idx) {
+            res.append(Sprintf("%ld: %s\n", idx, relNameByNodeId[idx].c_str()));
+        }
+
         res.append("Edges: ").append("\n");
+
+        auto edgeSideToString = 
+            [&relNameByNodeId](const TNodeSet& edgeSide) {
+                TString res;
+                res.append("{");
+
+                for (size_t i = 0; i < edgeSide.size(); ++i) {
+                    if (edgeSide[i]) {    
+                        res.append(relNameByNodeId[i]).append(", ");
+                    }
+                }
+
+                if (res != "{") {
+                    res.pop_back();
+                    res.pop_back();
+                }
+
+                res.append("}");
+
+                return res;
+            };
+
         for (const auto& edge: Edges_) {
-            res.append("{");
-
-            auto left = TSetBitsIt(edge.Left);
-            while (left.HasNext()) {
-                res.append(ToString(left.Next())).append(", ");
-            }
-            res.pop_back();
-            res.pop_back();
-
-            res.append("}");
-            
-            res.append(" -> ");
-
-            res.append("{");
-
-            auto right = TSetBitsIt(edge.Right);
-            while (right.HasNext()) {
-                res.append(ToString(right.Next())).append(", ");
-            }
-            res.pop_back();
-            res.pop_back();
-
-            res.append("}, ");
-
-            for (auto l : edge.LeftJoinKeys) {
-                res.append(l).append(",");
-            }
-            res.append("=");
-            for (auto r : edge.RightJoinKeys) {
-                res.append(r).append(",");
-            }
-
-            res.append("\n");
+            res 
+                .append(edgeSideToString(edge.Left))
+                .append(" -> ")
+                .append(edgeSideToString(edge.Right))
+                .append("\n");
         }
         
         return res;
@@ -203,6 +208,16 @@ public:
         return simpleEdges;
     }
 
+    bool HasLabels(const TVector<TString>& labels) const  {
+        for (const auto& label: labels) {
+            if (!NodeIdByRelationName_.contains(label)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
     inline const TVector<TNode>& GetNodes() const {
         return Nodes_;
     }
@@ -226,6 +241,20 @@ public:
         return nullptr;
     }
 
+    void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
+        auto& edge = Edges_[idx];
+
+        Y_ENSURE(IsSubset(edge.Left, newLeft) && IsSubset(edge.Right, newRight), "Hint violates the join order restriction!");
+
+        if (edge.IsSimple() && !(HasSingleBit(newLeft) && HasSingleBit(newRight))) {
+            size_t lhsNodeIdx = GetLowestSetBit(edge.Left);
+            Nodes_[lhsNodeIdx].SimpleNeighborhood &= ~edge.Right;
+            Nodes_[lhsNodeIdx].ComplexEdgesId.push_back(idx);
+        }
+        edge.Left = newLeft;
+        edge.Right = newRight;
+    }
+
 private:
     /* Attach edges to nodes */
     void AddEdgeImpl(TEdge edge) {
@@ -247,6 +276,92 @@ private:
 
     TVector<TNode> Nodes_;
     TVector<TEdge> Edges_;
+};
+
+/* 
+ * This class applies join order hints to a hypergraph.
+ * It traverses a hints tree and modifies the edges to restrict the join order in the subgraph, which has all the nodes from the hints tree.
+ * Then, it restricts the join order of the edges, which connect the subgraph with the all graph.  
+ */
+template <typename TNodeSet>
+class TJoinOrderHintsApplier {
+public:
+    TJoinOrderHintsApplier(TJoinHypergraph<TNodeSet>& graph)
+        : Graph_(graph)
+    {}
+
+    void Apply(TJoinOrderHints& hints) {
+        for (auto& hint: hints.Hints) {
+            if (!Graph_.HasLabels(hint.Tree->Labels())) {
+                continue;
+            }
+            
+            auto labels = ApplyHintsToSubgraph(hint.Tree);
+            auto nodes = Graph_.GetNodesByRelNames(labels);
+            
+            for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+                TNodeSet newLeft = Graph_.GetEdge(i).Left;
+                if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
+                    newLeft |= nodes;
+                }
+
+                TNodeSet newRight = Graph_.GetEdge(i).Right;
+                if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
+                    newRight |= nodes;
+                }
+
+                Graph_.UpdateEdgeSides(i, newLeft, newRight);
+            }
+
+            hint.Applied = true;
+        }
+    }
+
+private:
+    TVector<TString> ApplyHintsToSubgraph(const std::shared_ptr<TJoinOrderHints::ITreeNode>& node) {
+        if (node->IsJoin()) {
+            auto join = std::static_pointer_cast<TJoinOrderHints::TJoinNode>(node);
+            TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->Lhs);
+            TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->Rhs);
+
+            auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
+            auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
+            
+            auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
+            if (maybeEdge == nullptr) {
+                const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
+                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));            
+            }
+
+            size_t revEdgeIdx = maybeEdge->ReversedEdgeId;
+            auto& revEdge = Graph_.GetEdge(revEdgeIdx);
+            size_t edgeIdx = revEdge.ReversedEdgeId;
+            auto& edge = Graph_.GetEdge(edgeIdx);
+
+            edge.IsReversed = false;
+            revEdge.IsReversed = true;
+
+            edge.IsCommutative = false;
+            revEdge.IsCommutative = false;
+
+            Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);
+            Graph_.UpdateEdgeSides(revEdgeIdx, rhs, lhs);
+
+            TVector<TString> joinLabels = std::move(lhsLabels);
+            joinLabels.insert(
+                joinLabels.end(), 
+                std::make_move_iterator(rhsLabels.begin()), 
+                std::make_move_iterator(rhsLabels.end())
+            );
+            return joinLabels;
+        }
+
+        auto relation = std::static_pointer_cast<TJoinOrderHints::TRelationNode>(node);
+        return {relation->Label};
+    }
+
+private:
+    TJoinHypergraph<TNodeSet>& Graph_;
 };
 
 /* 
@@ -280,7 +395,8 @@ public:
             [this](const THyperedge& edge) {
                 return 
                     edge.IsReversed || 
-                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual());
+                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual()) ||
+                    edge.LeftAny || edge.RightAny;
             }
         );
         
@@ -335,44 +451,29 @@ private:
 
         for (size_t i = 0; i < nodeSetSize; ++i) {
             for (size_t j = 0; j < i; ++j) {
-                if (
-                    connectedComponents.CanonicSetElement(i) == 
-                    connectedComponents.CanonicSetElement(j)
-                ) {
-                    TNodeSet lhs;
-                    lhs[i] = 1;
-
-                    TNodeSet rhs;
-                    rhs[j] = 1;
+                auto iGroup = connectedComponents.CanonicSetElement(i);
+                auto jGroup = connectedComponents.CanonicSetElement(j);
+                if (iGroup == jGroup) {
+                    TNodeSet lhs; lhs[i] = 1;
+                    TNodeSet rhs; rhs[j] = 1;
 
                     const auto* edge = Graph_.FindEdgeBetween(lhs, rhs);
-
                     if (edge != nullptr) {
                         continue;
                     }
 
                     TString lhsRelName = nodes[i].RelationOptimizerNode->Labels()[0];
                     TString rhsRelName = nodes[j].RelationOptimizerNode->Labels()[0];
-
                     std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
                     for (const auto& attributeName: groupConditionUsedAttributes){
-                        joinConditions.insert(
-                            {
-                                TJoinColumn(lhsRelName, attributeName), 
-                                TJoinColumn(rhsRelName, attributeName)
-                                }
-                        );
+                        joinConditions.insert({
+                            TJoinColumn(lhsRelName, attributeName), 
+                            TJoinColumn(rhsRelName, attributeName)
+                        });
                     }
 
-                    Graph_.AddEdge(
-                        THyperedge(
-                            lhs,
-                            rhs,
-                            groupJoinKind,
-                            isJoinCommutative,
-                            joinConditions
-                        )
-                    );
+                    auto e = THyperedge(lhs, rhs, groupJoinKind, false, false, isJoinCommutative, joinConditions);
+                    Graph_.AddEdge(std::move(e));
                 }
             }
         }

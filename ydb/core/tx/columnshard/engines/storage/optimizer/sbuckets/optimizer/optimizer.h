@@ -64,7 +64,7 @@ protected:
     }
 
 public:
-    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const override {
+    virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
         return Buckets.GetBucketPositions();
     }
 

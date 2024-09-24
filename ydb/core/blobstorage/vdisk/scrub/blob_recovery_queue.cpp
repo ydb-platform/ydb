@@ -14,7 +14,7 @@ namespace NKikimr {
             Info->GetTotalVDisksNum() + Info->GetOrderNumber(VCtx->ShortSelfVDisk)); // distinct queue client id
         CreateQueuesForVDisks(Queues, SelfId(), Info, VCtx, Info->GetVDisks(), Counters,
             clientId, NKikimrBlobStorage::EVDiskQueueId::GetLowRead, "PeerScrub",
-            TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, TQueueActorIdWrapper());
+            TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, false, TQueueActorIdWrapper());
     }
 
     void TBlobRecoveryActor::StopQueues() {

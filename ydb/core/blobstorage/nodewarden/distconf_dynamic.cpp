@@ -72,15 +72,15 @@ namespace NKikimr::NStorage {
         if (drop) {
             Y_ABORT_UNLESS(!PartOfNodeQuorum());
             DynamicConfigSubscribers.clear();
-            for (ui32 nodeId : std::exchange(ConnectedDynamicNodes, {})) {
-                UnsubscribeInterconnect(nodeId);
-            }
+            UnsubscribeQueue.insert(ConnectedDynamicNodes.begin(), ConnectedDynamicNodes.end());
+            ConnectedDynamicNodes.clear();
         }
     }
 
     void TDistributedConfigKeeper::OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId) {
         ConnectedDynamicNodes.erase(nodeId);
         DynamicConfigSubscribers.erase(sessionId);
+        UnsubscribeQueue.insert(nodeId);
     }
 
     void TDistributedConfigKeeper::HandleDynamicConfigSubscribe(STATEFN_SIG) {
@@ -96,10 +96,7 @@ namespace NKikimr::NStorage {
         }
 
         const ui32 peerNodeId = ev->Sender.NodeId();
-        if (const auto [it, inserted] = SubscribedSessions.try_emplace(peerNodeId); inserted) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Subscribe, IEventHandle::FlagTrackDelivery,
-                sessionId, SelfId(), nullptr, 0));
-        }
+        SubscribeToPeerNode(peerNodeId, sessionId);
         ConnectedDynamicNodes.insert(peerNodeId);
         const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
         Y_ABORT_UNLESS(inserted);

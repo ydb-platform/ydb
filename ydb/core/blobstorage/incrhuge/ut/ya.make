@@ -2,6 +2,10 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:9)
+ENDIF()
+
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -24,7 +28,5 @@ SRCS(
     incrhuge_id_dict_ut.cpp
     incrhuge_log_merger_ut.cpp
 )
-
-REQUIREMENTS(ram:9)
 
 END()

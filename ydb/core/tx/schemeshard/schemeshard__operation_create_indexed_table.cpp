@@ -212,11 +212,20 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         if (tx.HasAlterUserAttributes()) {
             scheme.MutableAlterUserAttributes()->CopyFrom(tx.GetAlterUserAttributes());
         }
+        if (tx.HasModifyACL()) {
+            scheme.MutableModifyACL()->CopyFrom(tx.GetModifyACL());
+        }
 
         result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences));
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
+
+        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree && !context.SS->EnableVectorIndex) {
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+        }
+
+
         {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
@@ -238,14 +247,14 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
-        auto createIndexImplTable = [&] (const NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
-            *scheme.MutableCreateTable() = implTableDesc;
+            *scheme.MutableCreateTable() = std::move(implTableDesc);
 
             return CreateNewTable(NextPartId(nextId, result), scheme);    
         };

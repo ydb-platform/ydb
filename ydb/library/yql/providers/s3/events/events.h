@@ -100,9 +100,10 @@ struct TEvS3Provider {
 
         TEvObjectPathReadError() = default;
 
-        TEvObjectPathReadError(TIssues issues, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvObjectPathReadError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode code, const NDqProto::TMessageTransportMeta& transportMeta) {
             NYql::IssuesToMessage(issues, Record.MutableIssues());
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
+            Record.SetFatalCode(code);
         }
     };
 
@@ -207,13 +208,27 @@ struct TEvS3Provider {
     };
 
     struct TEvDecompressDataResult : public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
-        TEvDecompressDataResult(TString&& data) : Data(std::move(data)) {}
-        TEvDecompressDataResult(std::exception_ptr exception) : Exception(exception) {}
+        TEvDecompressDataResult(TString&& data, const TDuration& cpuTime) 
+            : Data(std::move(data))
+            , CpuTime(cpuTime)
+        {}
+
+        TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
+            : Exception(exception)
+            , CpuTime(cpuTime)
+        {}
+
         TString Data;
         std::exception_ptr Exception;
+        TDuration CpuTime;
     };
 
     struct TEvDecompressDataFinish : public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
+        TEvDecompressDataFinish(const TDuration& cpuTime)
+            : CpuTime(cpuTime)
+        {}
+
+        TDuration CpuTime;
     };
 
     struct TReadRange {

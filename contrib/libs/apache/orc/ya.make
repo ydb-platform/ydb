@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.0.1)
+VERSION(2.0.2)
 
-ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-2.0.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-2.0.2.tar.gz)
 
 PEERDIR(
     contrib/libs/apache/orc-format

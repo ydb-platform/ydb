@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 namespace NYql {
 
@@ -69,6 +70,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
     bool AllowAtomicUploadCommit = true;
+    NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
 };
 
 } // NYql

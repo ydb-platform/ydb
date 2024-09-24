@@ -112,6 +112,12 @@ def dict_copy(source: Dict = None, update: Optional[Dict] = None) -> Dict:
     return copy
 
 
+def dict_add(source: Dict, key: str, value: any) -> Dict:
+    if value is not None:
+        source[key] = value
+    return source
+
+
 def empty_gen():
     yield from ()
 

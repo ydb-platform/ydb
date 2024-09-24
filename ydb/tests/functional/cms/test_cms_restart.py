@@ -27,7 +27,6 @@ class AbstractLocalClusterTest(object):
     @classmethod
     def setup_class(cls):
         nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
-        nodes_count *= 2
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,

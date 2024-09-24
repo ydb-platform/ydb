@@ -1,6 +1,6 @@
 /* Output the generated parsing program for bison,
 
-   Copyright (C) 2000-2003, 2006-2007, 2009-2015, 2018-2019 Free
+   Copyright (C) 2000-2003, 2006-2007, 2009-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,15 +16,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef OUTPUT_H_
 # define OUTPUT_H_
 
 /* Output the parsing tables and the parser code to FTABLE.  */
 void output (void);
-
-/* Where our data files are installed.  */
-char const *pkgdatadir (void);
 
 #endif /* !OUTPUT_H_ */

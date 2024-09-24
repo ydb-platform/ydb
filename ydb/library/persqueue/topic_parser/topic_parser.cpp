@@ -75,21 +75,30 @@ TString GetFullTopicPath(const NActors::TActorContext& ctx, const TMaybe<TString
     }
 }
 
-TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+TString ConvertNewConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig) {
+    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         return consumer;
     } else {
         return ConvertNewConsumerName(consumer);
     }
 }
 
-TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
+    return ConvertNewConsumerName(consumer, NKikimr::AppData(ctx)->PQConfig);
+}
+
+TString ConvertOldConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig) {
+    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         return consumer;
     } else {
         return ConvertOldConsumerName(consumer);
     }
 }
+
+TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
+    return ConvertOldConsumerName(consumer, NKikimr::AppData(ctx)->PQConfig);
+}
+
 
 TString MakeConsumerPath(const TString& consumer) {
     TStringBuilder res;

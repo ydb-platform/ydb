@@ -1,6 +1,4 @@
 items:
-- name: Overview
-  href: index.md
 - name: General questions
   href: common.md
 - name: SDK
@@ -10,6 +8,8 @@ items:
   href: errors.md
 - name: YQL
   href: yql.md
+- name: Analytics
+  href: analytics.md
 - name: All questions on one page
   href: all.md
 # Essintial for build with contributors, as it fails without that

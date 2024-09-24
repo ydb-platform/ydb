@@ -11,7 +11,7 @@ Several abbreviated aliases are also defined, for example, `VARPOP` or `STDDEVSA
 
 If all the values passed are `NULL`, it returns `NULL`.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

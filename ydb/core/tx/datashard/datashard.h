@@ -329,6 +329,12 @@ struct TEvDataShard {
         EvOverloadReady,
         EvOverloadUnsubscribe,
 
+        EvSampleKRequest,
+        EvSampleKResponse,
+
+        EvLocalKMeansRequest,
+        EvLocalKMeansProgressResponse,
+
         EvEnd
     };
 
@@ -1437,6 +1443,30 @@ struct TEvDataShard {
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
+    };
+
+    struct TEvSampleKRequest
+        : public TEventPB<TEvSampleKRequest,
+                          NKikimrTxDataShard::TEvSampleKRequest,
+                          TEvDataShard::EvSampleKRequest> {
+    };
+
+    struct TEvSampleKResponse
+        : public TEventPB<TEvSampleKResponse,
+                          NKikimrTxDataShard::TEvSampleKResponse,
+                          TEvDataShard::EvSampleKResponse> {
+    };
+
+    struct TEvLocalKMeansRequest
+        : public TEventPB<TEvLocalKMeansRequest,
+                          NKikimrTxDataShard::TEvLocalKMeansRequest,
+                          TEvDataShard::EvLocalKMeansRequest> {
+    };
+
+    struct TEvLocalKMeansProgressResponse
+        : public TEventPB<TEvLocalKMeansProgressResponse,
+                          NKikimrTxDataShard::TEvLocalKMeansProgressResponse,
+                          TEvDataShard::EvLocalKMeansProgressResponse> {
     };
 
     struct TEvKqpScan

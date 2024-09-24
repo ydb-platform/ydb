@@ -111,7 +111,10 @@ private:
         Finished = true;
         NYql::NDqProto::TQueryResponse queryResult(ev->Get()->Record);
 
-        *queryResult.MutableYson() = ResultBuilder->BuildYson(std::move(Head));
+        for (const auto& x : Head) {
+            queryResult.AddSample()->CopyFrom(x.Proto);
+        }
+
         Head.clear();
         if (!Issues.Empty()) {
             IssuesToMessage(Issues, queryResult.MutableIssues());

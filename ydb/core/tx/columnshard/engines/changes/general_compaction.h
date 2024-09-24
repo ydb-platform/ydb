@@ -9,8 +9,7 @@ class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
     using TBase = TCompactColumnEngineChanges;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
-    std::map<NArrow::NMerger::TSortableBatchPosition, bool> CheckPoints;
-    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+    NArrow::NMerger::TIntervalPositions CheckPoints;
     void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
 
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
@@ -64,7 +63,7 @@ public:
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();
 
-    void AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
+    void AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include);
 
     virtual TString TypeString() const override {
         return StaticTypeName();

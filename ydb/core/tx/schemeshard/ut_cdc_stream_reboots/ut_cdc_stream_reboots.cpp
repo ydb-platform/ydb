@@ -10,7 +10,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     template <typename T>
     void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false) {
         T t;
-        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+        t.GetTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnableChangefeedsOnIndexTables(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -290,7 +292,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     template <typename T>
     void DropStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool onIndex = false) {
         T t;
-        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+        t.GetTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnableChangefeedsOnIndexTables(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const TString path = !onIndex ? "/MyRoot" : "/MyRoot/Table/Index";

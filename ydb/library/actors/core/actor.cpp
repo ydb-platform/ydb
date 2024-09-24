@@ -161,6 +161,10 @@ namespace NActors {
         return NHPTimer::GetSeconds(GetCurrentEventTicks());
     }
 
+    void TActivationContext::EnableMailboxStats() {
+        TlsActivationContext->Mailbox.EnableStats();
+    }
+
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
         return TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfActorId);
     }

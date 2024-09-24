@@ -97,7 +97,7 @@ public:
 
         State_->TypeCtx->DqFallbackPolicy = State_->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
 
-        IGraphTransformer::TStatus status = NDq::DqWrapRead(input, output, ctx, *State_->TypeCtx, *State_->Settings);
+        IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, *State_->Settings);
         if (input != output) {
             YQL_CLOG(INFO, ProviderDq) << "DqsRecapture";
             // TODO: Add before/after recapture transformers

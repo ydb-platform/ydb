@@ -883,6 +883,12 @@ public:
      */
     virtual void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies);
 
+
+    // CommittingOps book keeping
+    const std::optional<TRowVersion>& GetCommittingOpsVersion() const { return CommittingOpsVersion; }
+    void SetCommittingOpsVersion(const TRowVersion& version) { CommittingOpsVersion = version; }
+    void ResetCommittingOpsVersion() { CommittingOpsVersion.reset(); }
+
 protected:
     TOperation()
         : TOperation(TBasicOpInfo())
@@ -955,6 +961,8 @@ private:
     TMonotonic FinishProposeTs;
 
     static NMiniKQL::IEngineFlat::TValidationInfo EmptyKeysInfo;
+
+    std::optional<TRowVersion> CommittingOpsVersion;
 
 public:
     std::optional<TRowVersion> MvccReadWriteVersion;

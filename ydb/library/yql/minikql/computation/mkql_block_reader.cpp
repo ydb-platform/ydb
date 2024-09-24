@@ -40,6 +40,29 @@ public:
 };
 
 template <bool Nullable>
+class TFixedSizeBlockItemConverter<NYql::NDecimal::TInt128, Nullable> : public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+        return NUdf::TUnboxedValuePod(item.GetInt128());
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+        return TBlockItem(value.GetInt128());
+    }
+};
+
+template <bool Nullable>
 class TResourceBlockItemConverter : public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
@@ -283,8 +306,15 @@ struct TConverterTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<IBlockItemConverter>&&) {
+        if (isOptional) {
+            return std::make_unique<TResourceBlockItemConverter<true>>();
+        } else {
+            return std::make_unique<TResourceBlockItemConverter<false>>();
+        }
+    }
+
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
-        Y_UNUSED(isOptional);
         if (isOptional) {
             return std::make_unique<TResourceBlockItemConverter<true>>();
         } else {

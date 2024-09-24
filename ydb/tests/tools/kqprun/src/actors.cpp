@@ -102,12 +102,17 @@ private:
 class TAsyncQueryRunnerActor : public NActors::TActor<TAsyncQueryRunnerActor> {
     using TBase = NActors::TActor<TAsyncQueryRunnerActor>;
 
+    struct TRequestInfo {
+        TInstant StartTime;
+        NThreading::TFuture<TQueryResponse> RequestFuture;
+    };
+
 public:
-    TAsyncQueryRunnerActor(ui64 inFlightLimit)
+    TAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings)
         : TBase(&TAsyncQueryRunnerActor::StateFunc)
-        , InFlightLimit_(inFlightLimit)
+        , Settings_(settings)
     {
-        RunningRequests_.reserve(InFlightLimit_);
+        RunningRequests_.reserve(Settings_.InFlightLimit);
     }
 
     STRICT_STFUNC(StateFunc,
@@ -123,6 +128,7 @@ public:
 
     void Handle(TEvPrivate::TEvAsyncQueryFinished::TPtr& ev) {
         const ui64 requestId = ev->Get()->RequestId;
+        RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
         RunningRequests_.erase(requestId);
 
         const auto& response = ev->Get()->Result.Response->Get()->Record.GetRef();
@@ -130,12 +136,19 @@ public:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Completed_++;
-            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
+                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            }
         } else {
             Failed_++;
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
             Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << status << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << issues.ToString() << CoutColors_.Default();
+        }
+
+        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
+            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            LastReportTime_ = TInstant::Now();
         }
 
         StartDelayedRequests();
@@ -151,18 +164,23 @@ public:
 
 private:
     void StartDelayedRequests() {
-        while (!DelayedRequests_.empty() && (!InFlightLimit_ || RunningRequests_.size() < InFlightLimit_)) {
+        while (!DelayedRequests_.empty() && (!Settings_.InFlightLimit || RunningRequests_.size() < Settings_.InFlightLimit)) {
             auto request = std::move(DelayedRequests_.front());
             DelayedRequests_.pop();
 
             auto promise = NThreading::NewPromise<TQueryResponse>();
             Register(CreateRunScriptActorMock(std::move(request->Get()->Request), promise, nullptr));
-            RunningRequests_[RequestId_] = promise.GetFuture().Subscribe([id = RequestId_, this](const NThreading::TFuture<TQueryResponse>& f) {
-                Send(SelfId(), new TEvPrivate::TEvAsyncQueryFinished(id, std::move(f.GetValue())));
-            });
+            RunningRequests_[RequestId_] = {
+                .StartTime = TInstant::Now(),
+                .RequestFuture = promise.GetFuture().Subscribe([id = RequestId_, this](const NThreading::TFuture<TQueryResponse>& f) {
+                    Send(SelfId(), new TEvPrivate::TEvAsyncQueryFinished(id, std::move(f.GetValue())));
+                })
+            };
 
             MaxInFlight_ = std::max(MaxInFlight_, RunningRequests_.size());
-            Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
+                Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+            }
 
             RequestId_++;
             request->Get()->StartPromise.SetValue();
@@ -174,28 +192,38 @@ private:
             return false;
         }
 
+        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final) {
+            Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+        }
+
         FinalizePromise_->SetValue();
         PassAway();
         return true;
     }
 
     TString GetInfoString() const {
-        return TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
+        TStringBuilder result = TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
+        if (const auto amountRequests = Completed_ + Failed_) {
+            result << ", average latency: " << RequestsLatency_ / amountRequests;
+        }
+        return result;
     }
 
 private:
-    const ui64 InFlightLimit_;
+    const TAsyncQueriesSettings Settings_;
     const TInstant StartTime_ = TInstant::Now();
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
 
     std::optional<NThreading::TPromise<void>> FinalizePromise_;
     std::queue<TEvPrivate::TEvStartAsyncQuery::TPtr> DelayedRequests_;
-    std::unordered_map<ui64, NThreading::TFuture<TQueryResponse>> RunningRequests_;
+    std::unordered_map<ui64, TRequestInfo> RunningRequests_;
+    TInstant LastReportTime_ = TInstant::Now();
 
     ui64 RequestId_ = 1;
     ui64 MaxInFlight_ = 0;
     ui64 Completed_ = 0;
     ui64 Failed_ = 0;
+    TDuration RequestsLatency_;
 };
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
@@ -270,8 +298,8 @@ NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPr
     return new TRunScriptActorMock(std::move(request), promise, progressCallback);
 }
 
-NActors::IActor* CreateAsyncQueryRunnerActor(ui64 inFlightLimit) {
-    return new TAsyncQueryRunnerActor(inFlightLimit);
+NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings) {
+    return new TAsyncQueryRunnerActor(settings);
 }
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {

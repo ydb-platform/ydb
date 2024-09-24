@@ -44,11 +44,11 @@ namespace NYql::NDq {
 
         template <typename T>
         T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
-            //We want to avoid making a copy of data stored in a future.
-            //But there is no direct way to extract data from a const future5
-            //So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
-            //It destructs the value in the original future, but this trick is legal and documented here:
-            //https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
+            // We want to avoid making a copy of data stored in a future.
+            // But there is no direct way to extract data from a const future5
+            // So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
+            // It destructs the value in the original future, but this trick is legal and documented here:
+            // https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
             return NThreading::TFuture<T>(f).ExtractValueSync();
         }
 
@@ -112,7 +112,7 @@ namespace NYql::NDq {
 
         static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
 
-    private: //IDqAsyncLookupSource
+    private: // IDqAsyncLookupSource
         size_t GetMaxSupportedKeysInRequest() const override {
             return MaxKeysInRequest;
         }
@@ -121,7 +121,7 @@ namespace NYql::NDq {
             CreateRequest(std::move(request));
         }
 
-    private: //events
+    private: // events
         STRICT_STFUNC(StateFunc,
                       hFunc(TEvListSplitsIterator, Handle);
                       hFunc(TEvListSplitsPart, Handle);
@@ -152,7 +152,14 @@ namespace NYql::NDq {
             Y_ABORT_UNLESS(response.splits_size() == 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
-            *readRequest.mutable_data_source_instance() = GetDataSourceInstanceWithToken();
+
+            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
+            auto error = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance());
+            if (error) {
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
+                return;
+            }
+
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
             Connector->ReadSplits(readRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
@@ -194,9 +201,16 @@ namespace NYql::NDq {
             YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
             Y_ABORT_IF(InProgress);
             Y_ABORT_IF(request.size() == 0 || request.size() > MaxKeysInRequest);
+
             Request = std::move(request);
             NConnector::NApi::TListSplitsRequest splitRequest;
-            *splitRequest.add_selects() = CreateSelect();
+
+            auto error = FillSelect(*splitRequest.add_selects());
+            if (error) {
+                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
+                return;
+            };
+
             splitRequest.Setmax_split_count(1);
             Connector->ListSplits(splitRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
@@ -238,7 +252,7 @@ namespace NYql::NDq {
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             auto guard = Guard(*Alloc);
-            NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); //todo move to class' member
+            NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
             const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
             Y_ABORT_UNLESS(data.ok());
             const auto& value = data.ValueOrDie();
@@ -259,7 +273,7 @@ namespace NYql::NDq {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
                 if (auto* v = Request.FindPtr(key)) {
-                    *v = std::move(output); //duplicates will be overwritten
+                    *v = std::move(output); // duplicates will be overwritten
                 }
             }
         }
@@ -283,6 +297,12 @@ namespace NYql::NDq {
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status) {
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
+        }
+
+        static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
+            NConnector::NApi::TError dst;
+            *dst.mutable_message() = error;
+            SendError(actorSystem, selfId, std::move(dst));
         }
 
     private:
@@ -314,17 +334,13 @@ namespace NYql::NDq {
             return result;
         }
 
-        NYql::NConnector::NApi::TDataSourceInstance GetDataSourceInstanceWithToken() const {
+        TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
-            //Note: returned token may be stale and we have no way to check or recover here
-            //Consider to redesign ICredentialsProvider
-            TokenProvider->MaybeFillToken(dsi);
-            return dsi;
-        }
-
-        NConnector::NApi::TSelect CreateSelect() {
-            NConnector::NApi::TSelect select;
-            *select.mutable_data_source_instance() = GetDataSourceInstanceWithToken();
+            auto error = TokenProvider->MaybeFillToken(dsi);
+            if (error) {
+                return error;
+            }
+            *select.mutable_data_source_instance() = dsi;
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
@@ -349,7 +365,7 @@ namespace NYql::NDq {
                 *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
-            return select;
+            return {};
         }
 
     private:
@@ -361,13 +377,13 @@ namespace NYql::NDq {
         const NYql::Generic::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
-        const NKikimr::NMiniKQL::TStructType* const SelectResultType; //columns from KeyType + PayloadType
+        const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
         std::atomic_bool InProgress;
         IDqAsyncLookupSource::TUnboxedValueMap Request;
-        NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; //TODO move me to TEvReadSplitsPart
+        NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };
 

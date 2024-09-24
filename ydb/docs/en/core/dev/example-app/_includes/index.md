@@ -1,11 +1,13 @@
 # Example applications working with {{ ydb-short-name }}
 
-This section describes the code of same-type test apps implemented using {{ ydb-short-name }} SDKs in different programming languages:
+This section outlines the implementation of example applications, all designed to perform similar functions, using the {{ ydb-short-name }} SDKs across various programming languages. Each app is developed to demonstrate how a respective SDK can be utilized in a specific language.
 
 {% if oss %}
 
 - [C++](../example-cpp.md)
+
 {% endif %}
+
 - [C# (.NET)](../example-dotnet.md)
 - [Go](../go/index.md)
 - [Java](../java/index.md)
@@ -14,7 +16,7 @@ This section describes the code of same-type test apps implemented using {{ ydb-
 
 {% node info %}
 
-Additional information on how these example applications work is available in [{{ ydb-short-name }} SDK reference documentation](../../../reference/ydb-sdk/index.md).
+Refer to [{{ ydb-short-name }} SDK reference documentation](../../../reference/ydb-sdk/index.md) for more details.
 
 {% endnote %}
 
@@ -39,10 +41,6 @@ A test app performs the following steps:
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
 {% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C# (.NET)](../example-dotnet.md#param-queries) | [Go](../go/index.md#param-queries) | [Java](../java/index.md#param-queries) | Node.js | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries)
-
-{% include [scan_query.md](steps/08_scan_query.md) %}
-
-{% if oss %}C++ | {% endif %} [C# (.NET)](../example-dotnet.md#scan-query) | [Go](../go/index.md#scan-query) | [Java](../java/index.md#scan-query) | [Node.js](../example-nodejs.md#scan-query) | PHP | [Python](../python/index.md#scan-query)
 
 {% include [multistep_transactions.md](steps/09_multistep_transactions.md) %}
 

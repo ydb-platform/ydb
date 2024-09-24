@@ -12,6 +12,16 @@
 
 namespace NKikimr::NKqp::NWorkload {
 
+struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoolChanges, TKqpWorkloadServiceEvents::EvSubscribeOnPoolChanges> {
+    TEvSubscribeOnPoolChanges(const TString& database, const TString& poolId)
+        : Database(database)
+        , PoolId(poolId)
+    {}
+
+    const TString Database;
+    const TString PoolId;
+};
+
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool> {
     TEvPlaceRequestIntoPool(const TString& database, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : Database(database)
@@ -64,6 +74,30 @@ struct TEvCleanupResponse : public NActors::TEventLocal<TEvCleanupResponse, TKqp
 
     const Ydb::StatusIds::StatusCode Status;
     const NYql::TIssues Issues;
+};
+
+struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TKqpWorkloadServiceEvents::EvUpdatePoolInfo> {
+    TEvUpdatePoolInfo(const TString& database, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject)
+        : Database(database)
+        , PoolId(poolId)
+        , Config(config)
+        , SecurityObject(securityObject)
+    {}
+
+    const TString Database;
+    const TString PoolId;
+    const std::optional<NResourcePool::TPoolSettings> Config;
+    const std::optional<NACLib::TSecurityObject> SecurityObject;
+};
+
+struct TEvUpdateDatabaseInfo : public NActors::TEventLocal<TEvUpdateDatabaseInfo, TKqpWorkloadServiceEvents::EvUpdateDatabaseInfo> {
+    TEvUpdateDatabaseInfo(const TString& database, bool serverless)
+        : Database(database)
+        , Serverless(serverless)
+    {}
+
+    const TString Database;
+    const bool Serverless;
 };
 
 }  // NKikimr::NKqp::NWorkload

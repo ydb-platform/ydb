@@ -561,6 +561,24 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
                     return {};
             }
         }
+        case arrow::Type::DECIMAL128: {
+            switch (slotItem) {
+                case NUdf::EDataSlot::Decimal: {
+                    if (targetType->id() == arrow::Type::FIXED_SIZE_BINARY && 
+                        (static_cast<arrow::FixedSizeBinaryType&>(*targetType)).byte_width() == 16
+                    ) {
+                        return [](const std::shared_ptr<arrow::Array>& value) {
+                            auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
+                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values());
+                            return output;
+                        };
+                    }
+                    return {};
+                }
+                default:
+                    return {};
+            }
+        }
         default:
             return {};
     }
@@ -604,12 +622,8 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
 void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
     std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters,
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
-
     for (int i = 0; i < dataSchema->num_fields(); ++i) {
         switch (dataSchema->field(i)->type()->id()) {
-        case arrow::Type::LIST:
-            throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
-                << dataSchema->field(i)->name() << " and can't be parsed");
         case arrow::Type::STRUCT:
             throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
                 << dataSchema->field(i)->name() << " and can't be parsed");

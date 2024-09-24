@@ -124,6 +124,7 @@ class YQLRun(object):
                 'PYTHON_COVERAGE_PREFIX',
                 'NLG_COVERAGE_FILENAME',
                 'YQL_EXPORT_PG_FUNCTIONS_DIR',
+                'YQL_ALLOW_ALL_PG_FUNCTIONS',
                     ]:
                 if var in os.environ:
                     env[var] = os.environ[var]
@@ -172,6 +173,7 @@ class YQLRun(object):
             cmd += " ".join(self.extra_args) + " "
 
         cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
+        cmd += '--validate-result-format '
 
         if files:
             for f in files:
@@ -266,6 +268,7 @@ class YQLRun(object):
             'PYTHON_COVERAGE_PREFIX',
             'NLG_COVERAGE_FILENAME',
             'YQL_EXPORT_PG_FUNCTIONS_DIR',
+            'YQL_ALLOW_ALL_PG_FUNCTIONS',
                 ]:
             if var in os.environ:
                 env[var] = os.environ[var]

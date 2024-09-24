@@ -1,5 +1,8 @@
 #include "print_utils.h"
 
+#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/port_def.inc>
+
 #include <util/string/printf.h>
 
 namespace NYdb {
@@ -37,6 +40,9 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
         break;
     case NScheme::ESchemeEntryType::ExternalTable:
     case NScheme::ESchemeEntryType::ExternalDataSource:
+        o << colors.LightWhite();
+        break;
+    case NScheme::ESchemeEntryType::ResourcePool:
         o << colors.LightWhite();
         break;
     default:
@@ -106,10 +112,33 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "view";
     case NScheme::ESchemeEntryType::Replication:
         return "replication";
+    case NScheme::ESchemeEntryType::ResourcePool:
+        return "resource-pool";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:
         return "unknown";
     }
+}
+
+int PrintProtoJsonBase64(const google::protobuf::Message& msg) {
+    using namespace google::protobuf::util;
+
+    TString json;
+    JsonPrintOptions opts;
+    opts.preserve_proto_field_names = true;
+    const auto status = MessageToJsonString(msg, &json, opts);
+
+    if (!status.ok()) {
+        #if PROTOBUF_VERSION >= 4022005
+        Cerr << "Error occurred while converting proto to json: " << status.message() << Endl;
+        #else
+        Cerr << "Error occurred while converting proto to json: " << status.message().ToString() << Endl;
+        #endif
+        return EXIT_FAILURE;
+    }
+
+    Cout << json << Endl;
+    return EXIT_SUCCESS;
 }
 
 }

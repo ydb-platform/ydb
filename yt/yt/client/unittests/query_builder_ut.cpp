@@ -51,6 +51,17 @@ TEST(TQueryBuilderTest, Simple)
         "LIMIT 43");
 }
 
+TEST(TQueryBuilderTest, SourceAlias)
+{
+    TQueryBuilder b;
+    b.AddSelectExpression("t_alias.x");
+    b.SetSource("//t", "t_alias");
+
+    EXPECT_EQ(b.Build(),
+        "(t_alias.x) "
+        "FROM [//t] AS t_alias");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -1,6 +1,9 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <library/cpp/streams/zstd/zstd.h>
+
 namespace NKikimr::NStorage {
 
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActorBootstrapped<TInvokeRequestHandlerActor> {
@@ -144,6 +147,15 @@ namespace NKikimr::NStorage {
                 case TQuery::kReassignStateStorageNode:
                     return ReassignStateStorageNode(record.GetReassignStateStorageNode());
 
+                case TQuery::kAdvanceGeneration:
+                    return AdvanceGeneration();
+
+                case TQuery::kFetchStorageConfig:
+                    return FetchStorageConfig();
+
+                case TQuery::kReplaceStorageConfig:
+                    return ReplaceStorageConfig(record.GetReplaceStorageConfig().GetYAML());
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
@@ -154,6 +166,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeConfigGather::TPtr ev) {
             auto& record = ev->Get()->Record;
             STLOG(PRI_DEBUG, BS_NODE, NWDC44, "Handle(TEvNodeConfigGather)", (SelfId, SelfId()), (Record, record));
+            if (record.GetAborted()) {
+                return FinishWithError(TResult::ERROR, "scatter task was aborted due to loss of quorum or other error");
+            }
             switch (record.GetResponseCase()) {
                 case TEvGather::kProposeStorageConfig: {
                     std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
@@ -596,7 +611,63 @@ namespace NKikimr::NStorage {
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Storage configuration YAML manipulation
+
+        void FetchStorageConfig() {
+            if (!Self->StorageConfig) {
+                FinishWithError(TResult::ERROR, "no agreed StorageConfig");
+            } else if (!Self->StorageConfig->HasStorageConfigCompressedYAML()) {
+                FinishWithError(TResult::ERROR, "no stored YAML for storage config");
+            } else {
+                auto ev = PrepareResult(TResult::OK, std::nullopt);
+                auto *record = &ev->Record;
+                TStringInput ss(Self->StorageConfig->GetStorageConfigCompressedYAML());
+                record->MutableFetchStorageConfig()->SetYAML(TZstdDecompress(&ss).ReadAll());
+                Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+            }
+        }
+
+        void ReplaceStorageConfig(const TString& yaml) {
+            if (!RunCommonChecks()) {
+                return;
+            }
+
+            NKikimrConfig::TAppConfig appConfig;
+            try {
+                appConfig = NKikimr::NYaml::Parse(yaml);
+            } catch (const std::exception& ex) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while parsing YAML: " << ex.what());
+            }
+
+            TString errorReason;
+            NKikimrBlobStorage::TStorageConfig config(*Self->StorageConfig);
+            const bool success = DeriveStorageConfig(appConfig, &config, &errorReason);
+            if (!success) {
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "error while deriving StorageConfig: "
+                    << errorReason);
+            }
+
+            TStringStream ss;
+            {
+                TZstdCompress zstd(&ss);
+                zstd << yaml;
+            }
+            config.SetStorageConfigCompressedYAML(ss.Str());
+
+            config.SetGeneration(config.GetGeneration() + 1);
+            StartProposition(&config);
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
+
+        void AdvanceGeneration() {
+            if (RunCommonChecks()) {
+                NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+                config.SetGeneration(config.GetGeneration() + 1);
+                StartProposition(&config);
+            }
+        }
 
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config) {
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);

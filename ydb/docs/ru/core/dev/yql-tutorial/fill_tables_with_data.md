@@ -2,12 +2,12 @@
 
 Наполните данными [созданные](create_demo_tables.md) таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
-```sql
+```yql
 REPLACE INTO series (series_id, title, release_date, series_info)
 
 VALUES
 
-    -- По умолчанию числовые литералы имеют тип Int32, 
+    -- По умолчанию числовые литералы имеют тип Int32,
     -- если значение соответствует диапазону.
     -- Иначе тип преобразуется в Int64.
     (

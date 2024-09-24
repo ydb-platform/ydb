@@ -580,81 +580,47 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     auto newPartitionsToLockCount = newPartitionsToLockIt == NewPartitionsToLockOnTime.end() ? 0 : newPartitionsToLockIt->second.size();
 
     auto topicPartitionsIt = TopicPartitions.find(pathIt->second->GetInternalName());
-    Y_ABORT_UNLESS(record.GetCount() <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount);
+    Y_ABORT_UNLESS(1 <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount);
 
-    if (!group) {
-        for (ui32 c = 0; c < record.GetCount(); ++c) {
-            // if some partition not locked yet, then release it without rebalance
-            if (newPartitionsToLockCount > 0) {
-                newPartitionsToLockCount--;
-                InformBalancerAboutPartitionRelease(topicInfoIt->first, newPartitionsToLockIt->second.back().PartitionId, ctx);
-                newPartitionsToLockIt->second.pop_back();
-                continue;
-            }
+    auto partitionToRelease = record.GetGroup() - 1;
 
-            if (!topicPartitionsIt->second.ToLock.empty()) {
-                auto partitionToReleaseIt = topicPartitionsIt->second.ToLock.begin();
-                topicPartitionsIt->second.ToLock.erase(partitionToReleaseIt);
-                InformBalancerAboutPartitionRelease(topicInfoIt->first, *partitionToReleaseIt, ctx);
-                continue;
-            }
+    if (newPartitionsToLockIt != NewPartitionsToLockOnTime.end()) {
+        auto& newPartitions = newPartitionsToLockIt->second;
+        for (auto& newPartition : newPartitions) {
+            if (newPartition.PartitionId == partitionToRelease) {
+                InformBalancerAboutPartitionRelease(topicInfoIt->first, partitionToRelease, ctx);
 
-            NeedRebalance = true;
-            ui32 partitionToRelease = 0;
-            ui32 i = 0;
+                auto tmp = std::move(newPartitions);
+                newPartitions.reserve(tmp.size() - 1);
 
-            for (auto curPartition : topicPartitionsIt->second.ReadingNow) {
-                if (!topicPartitionsIt->second.ToRelease.contains(curPartition)) {
-                    ++i;
-                    if (rand() % i == 0) {
-                        partitionToRelease = curPartition;
+                for (auto& t : tmp) {
+                    if (t.PartitionId != partitionToRelease) {
+                        newPartitions.push_back(t);
                     }
                 }
-            }
 
-            topicPartitionsIt->second.ToRelease.emplace(partitionToRelease);
-        }
-    } else {
-        auto partitionToRelease = record.GetGroup() - 1;
-
-        if (newPartitionsToLockIt != NewPartitionsToLockOnTime.end()) {
-            auto& newPartitions = newPartitionsToLockIt->second;
-            for (auto& newPartition : newPartitions) {
-                if (newPartition.PartitionId == partitionToRelease) {
-                    InformBalancerAboutPartitionRelease(topicInfoIt->first, partitionToRelease, ctx);
-
-                    auto tmp = std::move(newPartitions);
-                    newPartitions.reserve(tmp.size() - 1);
-
-                    for (auto& t : tmp) {
-                        if (t.PartitionId != partitionToRelease) {
-                            newPartitions.push_back(t);
-                        }
-                    }
-
-                    return;
-                }
-            }
-        }
-
-        if (topicPartitionsIt != TopicPartitions.end()) {
-            if (topicPartitionsIt->second.ToLock.contains(partitionToRelease)) {
-                InformBalancerAboutPartitionRelease(topicInfoIt->first, partitionToRelease, ctx);
-                topicPartitionsIt->second.ToLock.erase(partitionToRelease);
-                return;
-            }
-
-            if (topicPartitionsIt->second.ReadingNow.contains(partitionToRelease) && !topicPartitionsIt->second.ToRelease.contains(partitionToRelease)) {
-                InformBalancerAboutPartitionRelease(topicInfoIt->first, partitionToRelease, ctx);
-                NeedRebalance = true;
-                topicPartitionsIt->second.ReadingNow.erase(partitionToRelease);
                 return;
             }
         }
-
-        KAFKA_LOG_I("ignored ev release topic# " << record.GetTopic()
-                 << ", reason# partition " << partitionToRelease << " isn`t locked");
     }
+
+    if (topicPartitionsIt != TopicPartitions.end()) {
+        if (topicPartitionsIt->second.ToLock.contains(partitionToRelease)) {
+            InformBalancerAboutPartitionRelease(topicInfoIt->first, partitionToRelease, ctx);
+            topicPartitionsIt->second.ToLock.erase(partitionToRelease);
+            return;
+        }
+
+        if (topicPartitionsIt->second.ReadingNow.contains(partitionToRelease) && !topicPartitionsIt->second.ToRelease.contains(partitionToRelease)) {
+            InformBalancerAboutPartitionRelease(topicInfoIt->first, partitionToRelease, ctx);
+            NeedRebalance = true;
+            topicPartitionsIt->second.ReadingNow.erase(partitionToRelease);
+            return;
+        }
+    }
+
+    KAFKA_LOG_I("ignored ev release topic# " << record.GetTopic()
+             << ", reason# partition " << partitionToRelease << " isn`t locked");
 }
 
 void TKafkaReadSessionActor::InformBalancerAboutPartitionRelease(const TString& topic, ui64 partition, const TActorContext& ctx) {

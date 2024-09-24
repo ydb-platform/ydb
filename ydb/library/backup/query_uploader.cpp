@@ -102,20 +102,13 @@ bool TUploader::Push(TParams params) {
     }
 
     auto upload = [this, params] (NYdb::NTable::TSession session) -> NYdb::TStatus {
-        auto prepareSettings = NTable::TPrepareDataQuerySettings()
-            .RequestType(DOC_API_REQUEST_TYPE);
-        auto prepareResult = session.PrepareDataQuery(Query, prepareSettings).GetValueSync();
-        if (!prepareResult.IsSuccess()) {
-            return prepareResult;
-        }
-
-        auto dataQuery = prepareResult.GetQuery();
         auto transaction = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
         auto settings = NTable::TExecDataQuerySettings()
+            .KeepInQueryCache(true)
             .RequestType(DOC_API_REQUEST_TYPE)
             .OperationTimeout(TDuration::Seconds(100))
             .ClientTimeout(TDuration::Seconds(120));
-        return dataQuery.Execute(transaction, std::move(params), settings).GetValueSync();
+        return session.ExecuteDataQuery(Query, transaction, std::move(params), settings).GetValueSync();
     };
 
     auto task = [this, upload] () {

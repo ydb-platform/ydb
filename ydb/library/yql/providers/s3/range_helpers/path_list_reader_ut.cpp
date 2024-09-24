@@ -18,63 +18,6 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         return map;
     }
 
-    Y_UNIT_TEST(ReadsFilesListFromSourceSettings) {
-        NS3::TSource src;
-        {
-            auto* p = src.AddDeprecatedPath();
-            p->SetPath("my/path");
-            p->SetSize(100500);
-        }
-        {
-            auto* p = src.AddDeprecatedPath();
-            p->SetPath("other/path");
-            p->SetSize(1);
-        }
-
-        TPathList paths;
-        ReadPathsList(src, {}, {}, paths);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "my/path");
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 100500);
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, false);
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].PathIndex, 0);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths[1].Path, "other/path");
-        UNIT_ASSERT_VALUES_EQUAL(paths[1].Size, 1);
-        UNIT_ASSERT_VALUES_EQUAL(paths[1].IsDirectory, false);
-        UNIT_ASSERT_VALUES_EQUAL(paths[1].PathIndex, 1);
-    }
-
-    Y_UNIT_TEST(ReadsFilesListFromParamsAndSourceSettings) {
-        NS3::TSource src;
-        {
-            auto* p = src.AddDeprecatedPath();
-            p->SetPath("my/path");
-            p->SetSize(100500);
-        }
-        {
-            auto* p = src.AddDeprecatedPath();
-            p->SetPath("other/path");
-            p->SetSize(1);
-        }
-
-        NS3::TRange range;
-        range.SetStartPathIndex(42);
-        range.AddDeprecatedPath("my/path");
-
-        TPathList paths;
-        ReadPathsList(src, MakeParams(range), {}, paths);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
-
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "my/path");
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].Size, 100500);
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].IsDirectory, false);
-        UNIT_ASSERT_VALUES_EQUAL(paths[0].PathIndex, 42);
-    }
-
     NYql::NS3::TRange::TPath* SetPath(NYql::NS3::TRange::TPath* path, const TString& name = {}, ui64 size = 0, bool read = false) {
         path->SetName(name);
         path->SetSize(size);
@@ -84,11 +27,6 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
 
     Y_UNIT_TEST(ReadsFilesListFromTreeParams) {
         NS3::TSource src;
-        {
-            auto* p = src.AddDeprecatedPath();
-            p->SetPath("my/path");
-            p->SetSize(100500);
-        }
 
         NS3::TRange range;
         range.SetStartPathIndex(42);
@@ -110,7 +48,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         }
 
         TPathList paths;
-        ReadPathsList(src, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 5);
 

@@ -65,7 +65,7 @@ DEFINE_REFCOUNTED_TYPE(ITestService)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TTestCreateChannelCallback = TCallback<IChannelPtr(const TString& address)>;
+using TTestCreateChannelCallback = TCallback<IChannelPtr(const std::string& address)>;
 
 ITestServicePtr CreateTestService(
     IInvokerPtr invoker,

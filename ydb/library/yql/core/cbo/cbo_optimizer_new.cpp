@@ -5,8 +5,9 @@
 #include <util/string/builder.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-
-#include <library/cpp/disjoint_sets/disjoint_sets.h>
+#include <util/string/cast.h>
+#include <util/string/join.h>
+#include <util/string/printf.h>
 
 const TString& ToString(NYql::EJoinKind);
 const TString& ToString(NYql::EJoinAlgoType);
@@ -28,6 +29,14 @@ namespace {
         {"LeftSemi",EJoinKind::LeftSemi},
         {"RightSemi",EJoinKind::RightSemi},
         {"Cross",EJoinKind::Cross}};
+
+    THashMap<TString,TCardinalityHints::ECardOperation> HintOpMap = {
+        {"+",TCardinalityHints::ECardOperation::Add},
+        {"-",TCardinalityHints::ECardOperation::Subtract},
+        {"*",TCardinalityHints::ECardOperation::Multiply},
+        {"/",TCardinalityHints::ECardOperation::Divide},
+        {"#",TCardinalityHints::ECardOperation::Replace}};
+
 }
 
 EJoinKind ConvertToJoinKind(const TString& joinString) {
@@ -65,20 +74,30 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     stream << *Stats << "\n";
 }
 
-TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool nonReorderable) :
-    IBaseOptimizerNode(JoinNodeType),
-    LeftArg(left),
-    RightArg(right),
-    JoinConditions(joinConditions),
-    JoinType(joinType),
-    JoinAlgo(joinAlgo) {
-        IsReorderable = !nonReorderable;
-        for (auto [l,r] : joinConditions ) {
-            LeftJoinKeys.push_back(l.AttributeName);
-            RightJoinKeys.push_back(r.AttributeName);
-        }
+TJoinOptimizerNode::TJoinOptimizerNode(
+    const std::shared_ptr<IBaseOptimizerNode>& left, 
+    const std::shared_ptr<IBaseOptimizerNode>& right,
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, 
+    const EJoinKind joinType, 
+    const EJoinAlgoType joinAlgo, 
+    bool leftAny,
+    bool rightAny, 
+    bool nonReorderable
+)   : IBaseOptimizerNode(JoinNodeType)
+    , LeftArg(left)
+    , RightArg(right)
+    , JoinConditions(joinConditions)
+    , JoinType(joinType)
+    , JoinAlgo(joinAlgo)
+    , LeftAny(leftAny)
+    , RightAny(rightAny)
+    , IsReorderable(!nonReorderable)
+{
+    for (const auto& [l,r] : joinConditions ) {
+        LeftJoinKeys.push_back(l.AttributeName);
+        RightJoinKeys.push_back(r.AttributeName);
     }
+}
 
 TVector<TString> TJoinOptimizerNode::Labels() {
     auto res = LeftArg->Labels();
@@ -92,7 +111,14 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "    ";
     }
 
-    stream << "Join: (" << ToString(JoinType) << "," << ToString(JoinAlgo) << ") ";
+    stream << "Join: (" << ToString(JoinType) << "," << ToString(JoinAlgo);
+    if (LeftAny) {
+        stream << ",LeftAny";
+    }
+    if (RightAny) {
+        stream << ",RightAny";
+    }
+    stream << ") ";
 
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
@@ -101,11 +127,10 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     }
     stream << "\n";
 
-    for (int i = 0; i < ntabs; i++){
-        stream << "    ";
-    }
-
     if (Stats) {
+        for (int i = 0; i < ntabs; i++){
+            stream << "    ";
+        }
         stream << *Stats << "\n";
     }
 
@@ -162,7 +187,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& rightStats,
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind) const
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -172,7 +198,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
@@ -181,7 +207,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
-    EJoinKind joinKind) const
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const
 {
     double newCard{};
     EStatisticsType outputType;
@@ -189,7 +216,18 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
-    if (IsPKJoin(rightStats,rightJoinKeys)) {
+    bool isRightPKJoin = IsPKJoin(rightStats,rightJoinKeys);
+    bool isLeftPKJoin = IsPKJoin(leftStats,leftJoinKeys);
+
+    if (isRightPKJoin && isLeftPKJoin) {
+        auto rightPKJoinCard = leftStats.Nrows * rightStats.Selectivity;
+        auto leftPKJoinCard = rightStats.Nrows * leftStats.Selectivity;
+        if (rightPKJoinCard > leftPKJoinCard) {
+            isRightPKJoin = false;
+        }
+    }
+
+    if (isRightPKJoin) {
         switch (joinKind) {
             case EJoinKind::LeftJoin:
             case EJoinKind::LeftOnly:
@@ -206,8 +244,11 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = leftStats.Type;
         }
-    } else if (IsPKJoin(leftStats,leftJoinKeys)) {
+    } else if (isLeftPKJoin) {
         switch (joinKind) {
+            case EJoinKind::RightJoin:
+            case EJoinKind::RightOnly:
+                newCard = rightStats.Nrows; break;
             default: {
                 newCard = leftStats.Selectivity * rightStats.Nrows;
             }
@@ -240,6 +281,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         outputType = EStatisticsType::ManyManyJoin;
     }
 
+    if (maybeHint) {
+        newCard = maybeHint->ApplyHint(newCard);
+    }
+
     int newNCols = leftStats.Ncols + rightStats.Ncols;
     double newByteSize = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0 +
             rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
@@ -258,5 +303,28 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
+TVector<TString> TOptimizerHints::GetUnappliedHintStrings() {
+    TVector<TString> res;
+
+    for (const auto& hint: JoinAlgoHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
+        }
+    }
+
+    for (const auto& hint: JoinOrderHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
+        }
+    }
+
+    for (const auto& hint: CardinalityHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
+        }
+    }
+
+    return res;
+}
 
 } // namespace NYql

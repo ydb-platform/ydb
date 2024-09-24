@@ -4,7 +4,23 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
-namespace NKikimr {
+static inline IOutputStream& operator<<(IOutputStream& o, const std::set<size_t>& t) {
+    o << "[" << JoinRange(", ", t.begin(), t.end()) << "]";
+
+    return o;
+}
+
+static inline IOutputStream& operator<<(IOutputStream& o, const std::unordered_map<TString, std::set<size_t>>& t) {
+    o << "{";
+    for (auto& [k, v] : t) {
+        o << "{" << k <<" : " << v << "}, ";
+    }
+    o << "}";
+
+    return o;
+}
+
+namespace NKikimr::NPQ::NTest {
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -31,71 +47,82 @@ TTopicSdkTestSetup CreateSetup();
 
 std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TEST_TOPIC, bool useCodec = true);
 
-struct TTestReadSession {
-    struct MsgInfo {
-        ui64 PartitionId;
-        ui64 SeqNo;
-        ui64 Offset;
-        TString Data;
-
-        TReadSessionEvent::TDataReceivedEvent::TMessage Msg;
-        bool Commited;
-    };
-
-    static constexpr size_t SemCount = 1;
-
-    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoPartitioningSupport = true);
-
-    void WaitAllMessages();
-
-    void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message);
-    void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message);
-
-    void Run();
-    void Commit();
-
-    void Close();
-
-    std::set<size_t> GetPartitions();
-    void SetOffset(ui32 partitionId, std::optional<ui64> offset);
-
-    struct TImpl {
-
-        TImpl(const TString& name, bool autoCommit)
-            : Name(name)
-            , AutoCommit(autoCommit)
-            , Semaphore(name.c_str(), SemCount) {}
-
-        TString Name;
-        std::unordered_map<ui32, ui64> Offsets;
-
-        bool AutoCommit;
-
-        NThreading::TPromise<std::vector<MsgInfo>> DataPromise = NThreading::NewPromise<std::vector<MsgInfo>>();
-        NThreading::TPromise<std::set<size_t>> PartitionsPromise = NThreading::NewPromise<std::set<size_t>>();
-
-        std::vector<MsgInfo> ReceivedMessages;
-        std::set<size_t> Partitions;
-        std::optional<std::set<size_t>> ExpectedPartitions;
-
-        std::set<size_t> EndedPartitions;
-        std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
-
-        TMutex Lock;
-        TSemaphore Semaphore;
-
-        std::optional<ui64> GetOffset(ui32 partitionId) const;
-        void Modify(std::function<void (std::set<size_t>&)> modifier);
-
-        void Acquire();
-        void Release();
-
-        NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message);
-    };
-
-    std::shared_ptr<IReadSession> Session;
-    std::shared_ptr<TImpl> Impl;
-
+enum class SdkVersion {
+    Topic,
+    PQv1
 };
+
+struct IMessage {
+    virtual void Commit() = 0;
+    virtual ~IMessage() = default;
+};
+
+struct MsgInfo {
+    ui64 PartitionId;
+    ui64 SeqNo;
+    ui64 Offset;
+    TString Data;
+    bool Commited;
+
+    std::shared_ptr<IMessage> Msg;
+
+    MsgInfo(ui64 partitionId,
+            ui64 seqNo,
+            ui64 offset,
+            const TString& data,
+            bool commited)
+        : PartitionId(partitionId)
+        , SeqNo(seqNo)
+        , Offset(offset)
+        , Data(data)
+        , Commited(commited) {}
+
+    MsgInfo& WithMsg(IMessage* v) {
+        Msg = std::shared_ptr<IMessage>(v);
+        return *this;
+    }
+};
+
+struct EvEndMsg {
+    std::vector<ui32> AdjacentPartitionIds;
+    std::vector<ui32> ChildPartitionIds;
+};
+
+struct TestReadSessionSettings {
+    TString Name;
+    TTopicSdkTestSetup& Setup;
+    SdkVersion Sdk;
+
+    size_t ExpectedMessagesCount = Max<size_t>();
+    bool AutoCommit = true;
+    std::set<ui32> Partitions = {};
+    bool AutoPartitioningSupport = true;
+    std::vector<TString> Topics = {TEST_TOPIC};
+};
+
+struct ITestReadSession {
+    virtual void WaitAllMessages() = 0;
+
+    virtual void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) = 0;
+    virtual void Assert(const std::unordered_map<TString, std::set<size_t>>& expected, NThreading::TFuture<std::unordered_map<TString, std::set<size_t>>> f, const TString& message) = 0;
+    virtual void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) = 0;
+    virtual void WaitAndAssert(std::unordered_map<TString, std::set<size_t>> partitions, const TString& message) = 0;
+
+    virtual void Run() = 0;
+    virtual void Commit() = 0;
+    virtual void SetAutoCommit(bool value) = 0;
+
+    virtual void Close() = 0;
+
+    virtual std::set<size_t> GetPartitions() = 0;
+    virtual std::unordered_map<TString, std::set<size_t>> GetPartitionsA() = 0;
+    virtual std::vector<MsgInfo> GetReceivedMessages() = 0;
+    virtual std::vector<EvEndMsg> GetEndedPartitionEvents() = 0;
+
+    virtual void SetOffset(ui32 partitionId, std::optional<ui64> offset) = 0;
+    virtual ~ITestReadSession() = default;
+};
+
+std::shared_ptr<ITestReadSession> CreateTestReadSession(TestReadSessionSettings settings);
 
 }

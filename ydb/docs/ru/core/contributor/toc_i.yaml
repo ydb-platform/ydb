@@ -18,9 +18,8 @@ items:
     - name: Распределённые транзакции
       href: datashard-distributed-txs.md
   - name: Тестирование с помощью нагружающих акторов
+    href: load-actors-overview.md
     items:
-    - name: Обзор
-      href: load-actors-overview.md
     - name: KqpLoad
       href: load-actors-kqp.md
     - name: KeyValueLoad

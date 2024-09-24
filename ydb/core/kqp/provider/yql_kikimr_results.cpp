@@ -5,7 +5,7 @@
 #include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/public/result_format/yql_codec_results.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 namespace NYql {
@@ -26,8 +26,8 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
     return false;
 }
 
-void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
+void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
+    const NKikimrMiniKQL::TValue& value, const TColumnOrder* fieldsOrder,
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
     switch (type.GetKind()) {
@@ -203,13 +203,13 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
             };
 
             if (fieldsOrder) {
-                YQL_ENSURE(fieldsOrder->size() == structType.MemberSize());
+                YQL_ENSURE(fieldsOrder->Size() == structType.MemberSize());
                 TMap<TString, size_t> memberIndices;
                 for (size_t i = 0; i < structType.MemberSize(); ++i) {
                     memberIndices[structType.GetMember(i).GetName()] = i;
                 }
                 for (auto& field : *fieldsOrder) {
-                    auto* memberIndex = memberIndices.FindPtr(field);
+                    auto* memberIndex = memberIndices.FindPtr(field.PhysicalName);
                     YQL_ENSURE(memberIndex);
 
                     writeMember(*memberIndex);
@@ -330,11 +330,11 @@ Y_FORCE_INLINE bool ExportStructTypeToKikimrProto(const TStructExprType* type, T
 } // namespace
 
 void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
-    const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
+    const TColumnOrder& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
-    NCommon::TYsonResultWriter resultWriter(writer);
-    WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.empty() ? nullptr : &columnHints,
+    NResult::TYsonResultWriter resultWriter(writer);
+    WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.Size() == 0 ? nullptr : &columnHints,
         fillSettings, truncated, true);
 }
 
@@ -352,7 +352,7 @@ bool IsRawKikimrResult(const NKikimrMiniKQL::TResult& result) {
     return structType.GetMember(0).GetName() != "Data" || structType.GetMember(1).GetName() != "Truncated";
 }
 
-NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints,
+NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TColumnOrder& columnHints,
     const IDataProvider::TFillSettings& fillSettings, google::protobuf::Arena* arena)
 {
     NKikimrMiniKQL::TResult* packedResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena);
@@ -375,7 +375,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
         const auto& itemType = result.GetType().GetList().GetItem();
 
         TMap<TString, size_t> memberIndices;
-        if (itemType.GetKind() == NKikimrMiniKQL::ETypeKind::Struct && !columnHints.empty()) {
+        if (itemType.GetKind() == NKikimrMiniKQL::ETypeKind::Struct && columnHints.Size() != 0) {
             const auto& structType = itemType.GetStruct();
 
             for (size_t i = 0; i < structType.MemberSize(); ++i) {
@@ -386,11 +386,11 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
             auto* newItem = dataType->MutableList()->MutableItem();
             newItem->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
             auto* newStructType = newItem->MutableStruct();
-            for (auto& column : columnHints) {
-                auto* memberIndex = memberIndices.FindPtr(column);
+            for (auto& [column, gen_col] : columnHints) {
+                auto* memberIndex = memberIndices.FindPtr(gen_col);
                 YQL_ENSURE(memberIndex);
 
-                *newStructType->AddMember() = structType.GetMember(*memberIndex);
+                (*newStructType->AddMember() = structType.GetMember(*memberIndex)).SetName(column);
             }
         } else {
             *dataType = result.GetType();
@@ -403,11 +403,10 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
                 truncated = true;
                 break;
             }
-
             if (!memberIndices.empty()) {
                 auto* newStruct = dataValue->AddList();
-                for (auto& column : columnHints) {
-                    auto* memberIndex = memberIndices.FindPtr(column);
+                for (auto& [column, gen_column] : columnHints) {
+                    auto* memberIndex = memberIndices.FindPtr(gen_column);
                     YQL_ENSURE(memberIndex);
 
                     *newStruct->AddStruct() = item.GetStruct(*memberIndex);
@@ -888,7 +887,7 @@ const TTypeAnnotationNode* ParseTypeFromYdbType(const Ydb::Type& type, TExprCont
         case Ydb::Type::kPgType: {
             if (!type.pg_type().type_name().empty()) {
                 const auto& typeName = type.pg_type().type_name();
-                auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
                 return ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
             }
             return ctx.MakeType<TPgExprType>(type.pg_type().Getoid());

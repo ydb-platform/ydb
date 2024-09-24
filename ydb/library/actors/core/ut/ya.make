@@ -12,9 +12,6 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     TIMEOUT(600)
-    REQUIREMENTS(
-        ram:16
-    )
 ENDIF()
 
 
@@ -29,10 +26,12 @@ SRCS(
     actor_ut.cpp
     actorsystem_ut.cpp
     performance_ut.cpp
+    process_stats_ut.cpp
     ask_ut.cpp
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp
+    harmonizer_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp

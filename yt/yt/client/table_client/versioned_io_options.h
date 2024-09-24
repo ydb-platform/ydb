@@ -23,6 +23,14 @@ struct TVersionedReadOptions
     static void Register(TRegistrar registrar);
 };
 
+void ToProto(
+    NProto::TVersionedReadOptions* protoOptions,
+    const NTableClient::TVersionedReadOptions& options);
+
+void FromProto(
+    NTableClient::TVersionedReadOptions* options,
+    const NProto::TVersionedReadOptions& protoOptions);
+
 std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name);
 
 ////////////////////////////////////////////////////////////////////////////////

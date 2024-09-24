@@ -160,7 +160,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const TNodeId nodeId = Record.GetNodeId();
 
-        State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
         State->CheckConsistency();
 
         auto updateIsSuccessful = true;
@@ -547,7 +547,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
                 .IsReady = it->second->IsReady,
-                .VDiskStatus = it->second->Status,
+                .VDiskStatus = it->second->GetStatus(),
             });
             ScrubState.UpdateVDiskState(&*it->second);
             SysViewChangedVSlots.insert(it->second->VSlotId);

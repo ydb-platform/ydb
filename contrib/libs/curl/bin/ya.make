@@ -11,6 +11,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(8.5.0)
+
 PEERDIR(
     contrib/libs/c-ares
     contrib/libs/curl

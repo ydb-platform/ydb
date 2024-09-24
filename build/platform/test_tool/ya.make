@@ -1,7 +1,6 @@
 RESOURCES_LIBRARY()
 SUBSCRIBER(
     g:yatest
-    heretic
 )
 
 IF (TEST_TOOL_HOST_LOCAL)

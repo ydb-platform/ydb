@@ -52,6 +52,7 @@ public:
 
     const TString& GetDiscoveryEndpoint() const;
     const TString& GetDatabase() const;
+    bool GetEnableSsl() const;
 
     ECredentials GetCredentials() const;
     const TStaticCredentials& GetStaticCredentials() const;

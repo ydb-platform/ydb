@@ -26,7 +26,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPS01", "Handle TEvVStatusResult"
+        DSP_LOG_LOG_S(PriorityForStatusInbound(status), "DSPS01", "Handle TEvVStatusResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
             << " StatusFlags# " << (record.HasStatusFlags() ? Sprintf("%" PRIx32, record.GetStatusFlags()).data() : "NA")
@@ -63,7 +63,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
             result->ApproximateFreeSpaceShare = *ApproximateFreeSpaceShare;
         }
         result->ErrorReason = ErrorReason;
-        A_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
+        DSP_LOG_DEBUG_S("DSPS03", "ReplyAndDie Result# " << result->Print(false));
         SendResponseAndDie(std::move(result));
     }
 
@@ -83,22 +83,16 @@ public:
         return ERequestType::Status;
     }
 
-    TBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
-            ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_STATUS, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(traceId), "DSProxy.Status", ev, std::move(ev->ExecutionRelay),
-                NKikimrServices::TActivity::BS_PROXY_STATUS_ACTOR)
-        , Deadline(ev->Deadline)
+    TBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , Deadline(params.Common.Event->Deadline)
         , Requests(0)
         , Responses(0)
         , QuorumTracker(Info.Get())
     {}
 
     void Bootstrap() override {
-        A_LOG_INFO_S("DSPS05", "bootstrap"
+        DSP_LOG_INFO_S("DSPS05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " Deadline# " << Deadline
@@ -108,7 +102,7 @@ public:
             const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw();
 
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            A_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
+            DSP_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
                 << " vDiskId# " << vd
                 << " node# " << Info->GetActorId(vd).NodeId());
 
@@ -134,11 +128,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupStatusRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
+IActor* CreateBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters params) {
+    return new TBlobStorageGroupStatusRequest(params);
 }
 
 } // NKikimr

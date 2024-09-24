@@ -55,6 +55,7 @@ class IScalarBuilder {
 public:
     virtual ~IScalarBuilder() = default;
     virtual arrow::Datum Build(TBlockItem value) const = 0;
+    virtual arrow::Datum Build(NUdf::TUnboxedValuePod value) const = 0;
 };
 
 inline std::shared_ptr<arrow::DataType> GetArrowType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
@@ -542,6 +543,37 @@ public:
 
     void DoAddNotNull(TBlockItem value, size_t count) {
         std::fill(this->DataPtr + this->GetCurrLen(), this->DataPtr + this->GetCurrLen() + count, value.Get<TLayout>());
+    }
+};
+
+template<bool Nullable>
+class TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable> final: public TFixedSizeArrayBuilderBase<NYql::NDecimal::TInt128, Nullable, TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<NYql::NDecimal::TInt128, Nullable, TSelf>;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
+    {}
+
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
+    {}
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        this->PlaceItem(value.GetInt128());
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        this->PlaceItem(value.GetInt128());
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->DoAdd(TBlockItem(input.PopNumber<NYql::NDecimal::TInt128>()));
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        std::fill(this->DataPtr + this->GetCurrLen(), this->DataPtr + this->GetCurrLen() + count, value.GetInt128());
     }
 };
 
@@ -1422,6 +1454,8 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
             return std::make_unique<TTzDateArrayBuilder<TTzDatetime64, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::TzTimestamp64:
             return std::make_unique<TTzDateArrayBuilder<TTzTimestamp64, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::Decimal:
+            return std::make_unique<TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }

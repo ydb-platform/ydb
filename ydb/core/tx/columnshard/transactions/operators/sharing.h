@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-class TSharingTransactionOperator: public IProposeTxOperator {
+class TSharingTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSharingTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
 
@@ -24,6 +24,9 @@ private:
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
     }
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+    }
+    virtual TString DoGetOpType() const override {
+        return "Sharing";
     }
     virtual bool DoIsAsync() const override {
         AFL_VERIFY(SharingTask);

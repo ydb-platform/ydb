@@ -149,6 +149,8 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
             return node.Q("asyncGlobal");
         case TIndexDescription::EType::GlobalSyncUnique:
             return node.Q("syncGlobalUnique");
+        case TIndexDescription::EType::GlobalVectorKmeansTree:
+            return node.Q("globalVectorKmeansTree");
     }
 }
 
@@ -222,6 +224,10 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.MaxPartitions) {
         settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.MaxPartitions)));
     }
+    if (tableSettings.PartitionCount) {
+        settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.PartitionCount)));
+        settings = L(settings, Q(Y(Q("minPartitions"), tableSettings.PartitionCount)));
+    }
     if (tableSettings.KeyBloomFilter) {
         const auto& ref = tableSettings.KeyBloomFilter.GetRef();
         settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
@@ -270,6 +276,28 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     return settings;
 }
 
+static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorIndexSettings, const INode& node) {
+    // short aliases for member function calls
+    auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
+    auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
+    auto L = [&node](auto&&... args) { return node.L(std::forward<decltype(args)>(args)...); };
+
+    auto settings = Y();
+
+    if (const auto* distance = std::get_if<TVectorIndexSettings::EDistance>(&vectorIndexSettings.Metric)) {
+        settings = L(settings, Q(Y(Q("distance"), Q(ToString(*distance)))));
+    } else if (const auto* similarity = std::get_if<TVectorIndexSettings::ESimilarity>(&vectorIndexSettings.Metric)) {
+        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*similarity)))));
+    } else {
+        Y_ENSURE(false, "Metric should be set");
+    }
+
+    settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
+    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
+    
+    return settings;
+}
+
 static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
     auto indexColumns = node.Y();
     for (const auto& col : index.IndexColumns) {
@@ -293,6 +321,12 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
             node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
         );
         indexNode = node.L(indexNode, tableSettings);
+    }
+    if (const auto* indexSettingsPtr = std::get_if<TVectorIndexSettings>(&index.IndexSettings)) {
+        const auto& indexSettings = node.Q(node.Y(
+            node.Q("indexSettings"), 
+            node.Q(CreateVectorIndexSettings(*indexSettingsPtr, node))));
+        indexNode = node.L(indexNode, indexSettings);
     }
     return indexNode;
 }
@@ -471,7 +505,7 @@ public:
                     } else {
                         sb << "Possible arguments are: prefix, pattern, suffix, view." << Endl;
                     }
-                    sb << "Pass [] to arguments you want to skip.";
+                    sb << "Pass empty string in arguments if you want to skip.";
 
                     ctx.Error(Pos) << sb;
                     return nullptr;
@@ -919,7 +953,7 @@ public:
             auto options = tr.Options ? Q(tr.Options) : Q(Y());
             Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options)));
 
-            if (tr.Service != YtProviderName && InSubquery) {
+            if (IsIn({KikimrProviderName, YdbProviderName}, tr.Service) && InSubquery) {
                 ctx.Error() << "Using of system '" << tr.Service << "' is not allowed in SUBQUERY";
                 return false;
             }
@@ -1329,15 +1363,31 @@ public:
         if (Params.AlterColumns) {
             auto columns = Y();
             for (auto& col : Params.AlterColumns) {
-                auto columnDesc = Y();
-                columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
-                auto familiesDesc = Y();
-                for (const auto& family : col.Families) {
-                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
-                }
+                if (col.TypeOfChange == TColumnSchema::ETypeOfChange::DropNotNullConstraint) {
+                    auto columnDesc = Y();
+                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
 
-                columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
-                columns = L(columns, Q(columnDesc));
+                    auto columnConstraints = Y();
+                    columnConstraints = L(columnConstraints, Q(Y(Q("drop_not_null"))));
+                    columnDesc = L(columnDesc, Q(Y(Q("changeColumnConstraints"), Q(columnConstraints))));
+                    columns = L(columns, Q(columnDesc));
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNotNullConstraint) {
+                    // todo flown4qqqq
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamily) {
+                    auto columnDesc = Y();
+                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
+                    auto familiesDesc = Y();
+                    for (const auto& family : col.Families) {
+                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                    }
+
+                    columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
+                    columns = L(columns, Q(columnDesc));
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::Nothing) {
+                    // do nothing
+                } else {
+                    ctx.Error(Pos) << " action is not supported";
+                }
             }
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
         }
@@ -1584,7 +1634,8 @@ public:
         }
 
         auto opts = Y();
-        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+        TString mode = Params.ExistingOk ? "create_if_not_exists" : "create";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params.Consumers) {
             const auto& desc = CreateConsumerDesc(consumer, *this, false);
@@ -1603,13 +1654,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1691,7 +1746,8 @@ public:
         }
 
         auto opts = Y();
-        opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
+        TString mode = Params.MissingOk ? "alter_if_exists" : "alter";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params.AddConsumers) {
             const auto& desc = CreateConsumerDesc(consumer, *this, false);
@@ -1720,13 +1776,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1761,9 +1821,10 @@ TNodePtr BuildAlterTopic(
 
 class TDropTopicNode final: public TAstListNode {
 public:
-    TDropTopicNode(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped)
+    TDropTopicNode(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Topic(tr)
+        , Params(params)
         , Scoped(scoped)
     {
         scoped->UseCluster(TString(KikimrProviderName), Topic.Cluster);
@@ -1778,7 +1839,8 @@ public:
 
         auto opts = Y();
 
-        opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
+        TString mode = Params.MissingOk ? "drop_if_exists" : "drop";
+        opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
 
         Add("block", Q(Y(
@@ -1796,12 +1858,13 @@ public:
     }
 private:
     TTopicRef Topic;
+    TDropTopicParameters Params;
     TScopedStatePtr Scoped;
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, tr, params, scoped);
 }
 
 class TCreateRole final: public TAstListNode {
@@ -3141,4 +3204,346 @@ private:
 TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel) {
     return new TWorldFor(pos, list, bodyNode, elseNode, isEvaluate, isParallel);
 }
+
+class TAnalyzeNode final: public TAstListNode {
+public:
+    TAnalyzeNode(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Service(service)
+        , Cluster(cluster)
+        , Params(params)
+        , Scoped(scoped)
+    {
+        FakeSource = BuildFakeSource(pos);
+        scoped->UseCluster(Service, Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        auto keys = Params.Table->Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP);
+        if (!keys || !keys->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        auto opts = Y();
+
+        auto columns = Y();
+        for (const auto& column: Params.Columns) {
+            columns->Add(Q(column));
+        }
+        opts->Add(Q(Y(Q("columns"), Q(columns))));
+
+        opts->Add(Q(Y(Q("mode"), Q("analyze"))));
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    TString Service;
+    TDeferredAtom Cluster;
+    TAnalyzeParams Params;
+
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped) {
+    return new TAnalyzeNode(pos, service, cluster, params, scoped);
+}
+
+class TBaseBackupCollectionNode
+    : public TAstListNode
+    , public TObjectOperatorContext
+{
+    using TBase = TAstListNode;
+public:
+    TBaseBackupCollectionNode(
+        TPosition pos,
+        const TString& objectId,
+        const TObjectOperatorContext& context)
+            : TBase(pos)
+            , TObjectOperatorContext(context)
+            , Id(objectId)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        auto keys = Y("Key");
+        keys = L(keys, Q(Y(Q("backupCollection"), Y("String", BuildQuotedAtom(Pos, Id)))));
+        auto options = this->FillOptions(ctx, Y());
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, ServiceId), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const = 0;
+
+protected:
+    TString Id;
+};
+
+class TCreateBackupCollectionNode
+    : public TBaseBackupCollectionNode
+{
+    using TBase = TBaseBackupCollectionNode;
+public:
+    TCreateBackupCollectionNode(
+        TPosition pos,
+        const TString& objectId,
+        const TCreateBackupCollectionParameters& params,
+        const TObjectOperatorContext& context)
+            : TBase(pos, objectId, context)
+            , Params(params)
+    {}
+
+    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+        options->Add(Q(Y(Q("mode"), Q("create"))));
+
+        auto settings = Y();
+        for (auto& [key, value] : Params.Settings) {
+            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), value.Build())));
+        }
+        options->Add(Q(Y(Q("settings"), Q(settings))));
+
+        auto entries = Y();
+        if (Params.Database) {
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))))));
+        }
+        for (auto& table : Params.Tables) {
+            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)))));
+        }
+        options->Add(Q(Y(Q("entries"), Q(entries))));
+
+        return options;
+    }
+
+    TPtr DoClone() const final {
+        return new TCreateBackupCollectionNode(GetPos(), Id, Params, *this);
+    }
+
+private:
+    TCreateBackupCollectionParameters Params;
+};
+
+class TAlterBackupCollectionNode
+    : public TBaseBackupCollectionNode
+{
+    using TBase = TBaseBackupCollectionNode;
+public:
+    TAlterBackupCollectionNode(
+        TPosition pos,
+        const TString& objectId,
+        const TAlterBackupCollectionParameters& params,
+        const TObjectOperatorContext& context)
+            : TBase(pos, objectId, context)
+            , Params(params)
+    {}
+
+    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+        options->Add(Q(Y(Q("mode"), Q("alter"))));
+
+        auto settings = Y();
+        for (auto& [key, value] : Params.Settings) {
+            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), value.Build())));
+        }
+        options->Add(Q(Y(Q("settings"), Q(settings))));
+
+        auto resetSettings = Y();
+        for (auto& key : Params.SettingsToReset) {
+            resetSettings->Add(BuildQuotedAtom(Pos, key));
+        }
+        options->Add(Q(Y(Q("resetSettings"), Q(resetSettings))));
+
+        auto entries = Y();
+        if (Params.Database != TAlterBackupCollectionParameters::EDatabase::Unchanged) {
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))), Q(Y(Q("action"), Q(Params.Database == TAlterBackupCollectionParameters::EDatabase::Add ? "add" : "drop"))))));
+        }
+        for (auto& table : Params.TablesToAdd) {
+            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("add"))))));
+        }
+        for (auto& table : Params.TablesToDrop) {
+            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("drop"))))));
+        }
+        options->Add(Q(Y(Q("alterEntries"), Q(entries))));
+
+        return options;
+    }
+
+    TPtr DoClone() const final {
+        return new TAlterBackupCollectionNode(GetPos(), Id, Params, *this);
+    }
+
+private:
+    TAlterBackupCollectionParameters Params;
+};
+
+class TDropBackupCollectionNode
+    : public TBaseBackupCollectionNode
+{
+    using TBase = TBaseBackupCollectionNode;
+public:
+    TDropBackupCollectionNode(
+        TPosition pos,
+        const TString& objectId,
+        const TDropBackupCollectionParameters&,
+        const TObjectOperatorContext& context)
+            : TBase(pos, objectId, context)
+    {}
+
+    virtual INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
+        options->Add(Q(Y(Q("mode"), Q("drop"))));
+
+        return options;
+    }
+
+    TPtr DoClone() const final {
+        TDropBackupCollectionParameters params;
+        return new TDropBackupCollectionNode(GetPos(), Id, params, *this);
+    }
+};
+
+TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+    const TCreateBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return new TCreateBackupCollectionNode(pos, id, params, context);
+}
+
+TNodePtr BuildAlterBackupCollection(TPosition pos, const TString& id,
+    const TAlterBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return new TAlterBackupCollectionNode(pos, id, params, context);
+}
+
+TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
+    const TDropBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return new TDropBackupCollectionNode(pos, id, params, context);
+}
+
+class TBackupNode final
+    : public TAstListNode
+    , public TObjectOperatorContext
+{
+    using TBase = TAstListNode;
+public:
+    TBackupNode(
+        TPosition pos,
+        const TString& id,
+        const TBackupParameters& params,
+        const TObjectOperatorContext& context)
+            : TBase(pos)
+            , TObjectOperatorContext(context)
+            , Id(id)
+            , Params(params)
+    {
+        Y_UNUSED(Params);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        auto keys = Y("Key");
+        keys = L(keys, Q(Y(Q("backup"), Y("String", BuildQuotedAtom(Pos, Id)))));
+
+        auto opts = Y();
+        opts->Add(Q(Y(Q("mode"), Q("backup"))));
+
+        if (Params.Incremental) {
+            opts->Add(Q(Y(Q("incremental"))));
+        }
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, ServiceId), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return new TBackupNode(GetPos(), Id, Params, *this);
+    }
+private:
+    TString Id;
+    TBackupParameters Params;
+};
+
+TNodePtr BuildBackup(TPosition pos, const TString& id,
+    const TBackupParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return new TBackupNode(pos, id, params, context);
+}
+
+class TRestoreNode final
+    : public TAstListNode
+    , public TObjectOperatorContext
+{
+    using TBase = TAstListNode;
+public:
+    TRestoreNode(
+        TPosition pos,
+        const TString& id,
+        const TRestoreParameters& params,
+        const TObjectOperatorContext& context)
+            : TBase(pos)
+            , TObjectOperatorContext(context)
+            , Id(id)
+            , Params(params)
+    {
+        Y_UNUSED(Params);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        auto keys = Y("Key");
+        keys = L(keys, Q(Y(Q("restore"), Y("String", BuildQuotedAtom(Pos, Id)))));
+
+        auto opts = Y();
+        opts->Add(Q(Y(Q("mode"), Q("restore"))));
+
+        if (Params.At) {
+            opts->Add(Q(Y(Q("at"), BuildQuotedAtom(Pos, Params.At))));
+        }
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, ServiceId), Scoped->WrapCluster(Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return new TRestoreNode(GetPos(), Id, Params, *this);
+    }
+private:
+    TString Id;
+    TRestoreParameters Params;
+};
+
+TNodePtr BuildRestore(TPosition pos, const TString& id,
+    const TRestoreParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return new TRestoreNode(pos, id, params, context);
+}
+
 } // namespace NSQLTranslationV1

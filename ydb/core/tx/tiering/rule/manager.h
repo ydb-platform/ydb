@@ -9,7 +9,7 @@ class TTieringRulesManager: public NMetadata::NModifications::TGenericOperations
 protected:
     virtual void DoPrepareObjectsBeforeModification(std::vector<TTieringRule>&& objects,
         NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-        const TInternalModificationContext& context) const override;
+        const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext) const override;
 
     virtual NMetadata::NModifications::TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         TInternalModificationContext& context) const override;

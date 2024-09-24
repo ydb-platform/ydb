@@ -82,7 +82,7 @@ public:
     TString GetHexDigestUpperCase() const;
 
 private:
-    constexpr static int CtxSize = 112;
+    static constexpr int CtxSize = 112;
     std::array<char, CtxSize> CtxStorage_;
 };
 

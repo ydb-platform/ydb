@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Развертывание
   include:
     mode: link

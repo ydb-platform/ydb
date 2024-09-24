@@ -53,8 +53,10 @@ namespace NKikimr::NSchemeShard {
                 errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
                 return false;
             }
-            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-        } else {
+            Type = NScheme::TTypeInfo(typeDesc);
+        } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
+            Type = NScheme::TTypeInfo(*decimalType);
+        }else {
             Y_ABORT_UNLESS(AppData()->TypeRegistry);
             const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
             if (!type) {
@@ -119,6 +121,11 @@ namespace NKikimr::NSchemeShard {
             serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
+        if (columnSchema.HasDataAccessorConstructor()) {
+            NArrow::NAccessor::TConstructorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
+            AccessorConstructor = container;
+        }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
             Y_ABORT_UNLESS(settings.IsSuccess());
@@ -140,6 +147,9 @@ namespace NKikimr::NSchemeShard {
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
+        if (AccessorConstructor) {
+            *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+        }
         if (DictionaryEncoding) {
             *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
         }
@@ -159,6 +169,14 @@ namespace NKikimr::NSchemeShard {
                 errors.AddError(conclusion.GetErrorMessage());
                 return false;
             }
+        }
+        if (!!diffColumn.GetAccessorConstructor()) {
+            auto conclusion = diffColumn.GetAccessorConstructor()->BuildConstructor();
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return false;
+            }
+            AccessorConstructor = conclusion.DetachResult();
         }
         if (diffColumn.GetStorageId()) {
             StorageId = *diffColumn.GetStorageId();

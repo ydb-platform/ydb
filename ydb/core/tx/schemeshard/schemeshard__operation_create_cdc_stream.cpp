@@ -131,6 +131,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotBackupTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting();
 
@@ -183,6 +184,7 @@ public:
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+        case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
             break;
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
             if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
@@ -787,7 +789,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore) {
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -796,15 +798,26 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .IsResolved()
         .NotDeleted()
         .IsTable()
-        .NotAsyncReplicaTable()
         .NotUnderDeleting()
         .NotUnderOperation();
+
+    if (!restore) {
+        checks
+            .NotAsyncReplicaTable();
+    }
 
     if (checks) {
         if (!tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
-        } else if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
-            return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot add changefeed to index table");
+        } else {
+            if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot add changefeed to index table");
+            }
+            if (!AppData()->FeatureFlags.GetEnableChangefeedsOnIndexTables()) {
+                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Changefeed on index table is not supported yet");
+            }
         }
     }
 
@@ -849,10 +862,11 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TPath& workingDirPath,
     const TString& tableName,
     const TString& streamName,
-    bool acceptExisted)
+    bool acceptExisted,
+    bool restore)
 {
     const auto tablePath = workingDirPath.Child(tableName);
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
         return reject;
     }
 
@@ -911,6 +925,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     case NKikimrSchemeOp::ECdcStreamModeNewImage:
     case NKikimrSchemeOp::ECdcStreamModeOldImage:
     case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+    case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
         break;
     default:
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
@@ -953,6 +968,14 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     if (initialScan) {
         DoCreateLock(result, opId, workingDirPath, tablePath);
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));

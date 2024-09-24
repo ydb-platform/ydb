@@ -37,7 +37,7 @@ public:
     explicit TArrowInputSpec(const TVector<NYT::TNode>& schemas);
     const TVector<NYT::TNode>& GetSchemas() const override;
     const NYT::TNode& GetSchema(ui32 index) const;
-    static constexpr bool ProvidesBlocks = true;
+    bool ProvidesBlocks() const override { return true; }
 };
 
 /**
@@ -70,7 +70,7 @@ private:
 public:
     explicit TArrowOutputSpec(const NYT::TNode& schema);
     const NYT::TNode& GetSchema() const override;
-    static constexpr bool AcceptsBlocks = true;
+    bool AcceptsBlocks() const override { return true; }
 };
 
 template <>

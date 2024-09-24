@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 6,
+                "PlanNodeId": 7,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 4
+                                        "ExternalPlanNodeId": 5
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 5,
+                        "PlanNodeId": 6,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 4,
+                                "PlanNodeId": 5,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -43,39 +43,46 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 2
+                                                        "ExternalPlanNodeId": 3
                                                     }
                                                 ],
                                                 "Name": "Sort",
                                                 "SortBy": "row.salary"
                                             }
                                         ],
-                                        "PlanNodeId": 3,
+                                        "PlanNodeId": 4,
                                         "Plans": [
                                             {
                                                 "Node Type": "UnionAll",
-                                                "PlanNodeId": 2,
+                                                "PlanNodeId": 3,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TableFullScan",
-                                                        "Operators": [
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 2,
+                                                        "Plans": [
                                                             {
-                                                                "Inputs": [],
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "salary"
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "ReadColumns": [
+                                                                            "salary"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "empno (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_window.test_plan/empsalary"
+                                                                    }
                                                                 ],
-                                                                "ReadRanges": [
-                                                                    "empno (-\u221e, +\u221e)"
-                                                                ],
-                                                                "Scan": "Parallel",
-                                                                "Table": "postgres_window.test_plan/empsalary"
+                                                                "PlanNodeId": 1,
+                                                                "Tables": [
+                                                                    "postgres_window.test_plan/empsalary"
+                                                                ]
                                                             }
-                                                        ],
-                                                        "PlanNodeId": 1,
-                                                        "Tables": [
-                                                            "postgres_window.test_plan/empsalary"
                                                         ]
                                                     }
                                                 ]
@@ -88,7 +95,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

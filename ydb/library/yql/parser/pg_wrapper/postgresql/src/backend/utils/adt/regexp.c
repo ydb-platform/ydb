@@ -114,10 +114,9 @@ static __thread int	num_res = 0;		/* # of cached re's */
 static __thread cached_re_str re_array[MAX_CACHED_RES];	/* cached re's */
 
 void RE_cleanup_cache(void) {
-    int i;
-    for (i = 0; i < num_res; ++i) {
-        pg_regfree(&re_array[i].cre_re);
-        free(re_array[i].cre_pat);
+    if (RegexpCacheMemoryContext) {
+        MemoryContextDelete(RegexpCacheMemoryContext);
+        RegexpCacheMemoryContext = NULL;
     }
 
     num_res = 0;

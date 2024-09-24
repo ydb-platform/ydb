@@ -65,17 +65,20 @@ namespace NActors {
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity)
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
         , ThreadsAffinity(affinity)
-#ifdef RING_ACTIVATION_QUEUE
-        , Activations(threads == 1)
-#endif
-    {}
+    {
+        if (useRingQueue) {
+            Activations.emplace<TRingActivationQueue>(threads == 1);
+        } else {
+            Activations.emplace<TUnorderedCacheActivationQueue>();
+        }
+    }
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (Activations.Pop(0))
+        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
             ;
     }
 

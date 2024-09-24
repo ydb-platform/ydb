@@ -10,6 +10,7 @@ items:
 - { name: Math,                   href: math.md }
 - { name: Pcre,                   href: pcre.md }
 - { name: Pire,                   href: pire.md }
+- { name: PostgreSQL,             href: postgres.md }
 - { name: Re2,                    href: re2.md }
 - { name: String,                 href: string.md }
 - { name: Unicode,                href: unicode.md }

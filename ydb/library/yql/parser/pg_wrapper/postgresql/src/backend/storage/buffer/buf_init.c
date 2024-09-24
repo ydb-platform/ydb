@@ -20,6 +20,7 @@
 
 __thread BufferDescPadded *BufferDescriptors;
 __thread char	   *BufferBlocks;
+char** ImplPtrBufferBlocks() { return &BufferBlocks; }
 __thread ConditionVariableMinimallyPadded *BufferIOCVArray;
 __thread WritebackContext BackendWritebackContext;
 __thread CkptSortItem *CkptBufferIds;

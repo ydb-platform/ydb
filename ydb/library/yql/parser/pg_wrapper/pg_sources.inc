@@ -712,6 +712,7 @@ SRCS(
     postgresql/src/backend/utils/misc/guc-file.c
     postgresql/src/backend/utils/misc/guc_funcs.c
     postgresql/src/backend/utils/misc/guc_tables.c
+    postgresql/src/backend/utils/misc/help_config.c
     postgresql/src/backend/utils/misc/pg_config.c
     postgresql/src/backend/utils/misc/pg_controldata.c
     postgresql/src/backend/utils/misc/pg_rusage.c

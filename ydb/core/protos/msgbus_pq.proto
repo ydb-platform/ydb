@@ -446,6 +446,8 @@ message TPersQueuePartitionResponse {
         optional uint32 TopicQuotedTimeMs = 11;
         optional uint32 TotalTimeInPartitionQueueMs = 9;
         optional uint32 WriteTimeMs = 10;
+
+        optional bool WrittenInTx = 12;
     }
 
     message TCmdGetMaxSeqNoResult {

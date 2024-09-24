@@ -5,9 +5,10 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -30,6 +31,7 @@ namespace NYdb::NBackup {
 
 
 static constexpr const char *SCHEME_FILE_NAME = "scheme.pb";
+static constexpr const char *PERMISSIONS_FILE_NAME = "permissions.pb";
 static constexpr const char *INCOMPLETE_DATA_FILE_NAME = "incomplete.csv";
 static constexpr const char *INCOMPLETE_FILE_NAME = "incomplete";
 static constexpr const char *EMPTY_FILE_NAME = "empty_dir";
@@ -372,7 +374,7 @@ NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTable
     NTable::TTableClient client(driver);
 
     TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
-        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true);
+        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true).WithSetVal(true);
         auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);
@@ -429,6 +431,16 @@ Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDes
     return proto;
 }
 
+NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
+    NScheme::TSchemeClient client(driver);
+    
+    auto status = NDump::DescribePath(client, fullPath);
+    VerifyStatus(status);
+    LOG_DEBUG("Path is described, fullPath: " << fullPath);
+
+    return status.GetEntry();
+}
+
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
     NTable::TTableClient client(driver);
 
@@ -480,6 +492,19 @@ void DropTable(TDriver driver, const TString& path) {
     LOG_DEBUG("Table is dropped, path: " << path.Quote());
 }
 
+void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+    auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
+    Ydb::Scheme::ModifyPermissionsRequest proto;
+    entry.SerializeTo(proto);
+
+    TString permissionsStr;
+    google::protobuf::TextFormat::PrintToString(proto, &permissionsStr);
+    LOG_DEBUG("ModifyPermissionsRequest.proto: " << permissionsStr);
+
+    TFile outFile(folderPath.Child(PERMISSIONS_FILE_NAME), CreateAlways | WrOnly);
+    outFile.Write(permissionsStr.data(), permissionsStr.size());
+}
+
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
         const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered) {
     Y_ENSURE(!path.empty());
@@ -489,6 +514,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
         << " backupPrefix: " << backupPrefix << " path: " << path);
 
     auto desc = DescribeTable(driver, JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path));
+
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
 
     TString schemaStr;
@@ -496,6 +522,8 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     LOG_DEBUG("CreateTableRequest.proto: " << schemaStr);
     TFile outFile(folderPath.Child(SCHEME_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(schemaStr.data(), schemaStr.size());
+
+    BackupPermissions(driver, dbPrefix, path, folderPath);
 
     if (!schemaOnly) {
         const TString pathToTemporal = JoinDatabasePath(backupPrefix, path);
@@ -533,6 +561,14 @@ static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusio
     }
 
     return false;
+}
+
+static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
+    TVector<TString> children;
+    folderPath.ListNames(children);
+    if (children.empty() || (children.size() == 1 && children[0] == INCOMPLETE_FILE_NAME)) {
+        TFile(folderPath.Child(EMPTY_FILE_NAME), CreateAlways);
+    }
 }
 
 void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, TString path,
@@ -594,13 +630,8 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 // so control flow can't reach this line. Check it just to be sure
                 Y_ENSURE(!childFolderPath.Child(INCOMPLETE_FILE_NAME).Exists());
             } else if (dbIt.IsDir()) {
-                childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
-
-                TVector<TString> children;
-                childFolderPath.ListNames(children);
-                if (children.empty()) {
-                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways);
-                }
+                MaybeCreateEmptyFile(childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             }
 
             childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
@@ -639,14 +670,8 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                     DropTable(driver, tmpTablePath);
                 }
             } else if (dbIt.IsDir()) {
-                childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
-
-                TVector<TString> children;
-                childFolderPath.ListNames(children);
-                if (children.empty()) {
-                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways);
-                }
-
+                MaybeCreateEmptyFile(childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 if (!avoidCopy) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
@@ -718,19 +743,26 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
 //                               Restore
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTableBuilder *builder) {
+TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTableBuilder *builder, std::optional<NTable::TSequenceDescription> sequenceDescription) {
     TStringStream ss;
     ss << "name: " << name << "; ";
     if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
         ss << " optional; ";
         parser.OpenOptional();
     }
+    if (sequenceDescription.has_value()) {
+        ss << "serial; ";
+    }
     ss << "kind: " << parser.GetKind() << "; ";
     switch (parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
             ss << " type_id: " << parser.GetPrimitive() << "; ";
             if (builder) {
-                builder->AddNullableColumn(name, parser.GetPrimitive());
+                if (sequenceDescription.has_value()) {
+                    builder->AddSerialColumn(name, parser.GetPrimitive(), std::move(*sequenceDescription));
+                } else {
+                    builder->AddNullableColumn(name, parser.GetPrimitive());
+                }
             }
             break;
         case TTypeParser::ETypeKind::Decimal:
@@ -751,8 +783,19 @@ TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTabl
 NTable::TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
     NTable::TTableBuilder builder;
 
+    std::optional<NTable::TSequenceDescription> sequenceDescription;
     for (const auto &col : proto.Getcolumns()) {
-        LOG_DEBUG("AddNullableColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder));
+        if (col.from_sequence().name() == "_serial_column_" + col.name()) {
+            NTable::TSequenceDescription currentSequenceDescription;
+            if (col.from_sequence().has_set_val()) {
+                NTable::TSequenceDescription::TSetVal setVal;
+                setVal.NextUsed = col.from_sequence().set_val().next_used();
+                setVal.NextValue = col.from_sequence().set_val().next_value();
+                currentSequenceDescription.SetVal = std::move(setVal);
+            }
+            sequenceDescription = std::move(currentSequenceDescription);
+        }
+        LOG_DEBUG("AddColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder, std::move(sequenceDescription)));
     }
 
     for (const auto &primary : proto.Getprimary_key()) {
@@ -781,7 +824,7 @@ TString SerializeColumnsToString(const TVector<TColumn>& columns, TVector<TStrin
         if (BinarySearch(primary.cbegin(), primary.cend(), col.Name)) {
             ss << "primary; ";
         }
-        ss << ProcessColumnType(col.Name, col.Type, nullptr) << Endl;
+        ss << ProcessColumnType(col.Name, col.Type, nullptr, std::nullopt) << Endl;
     }
     // Cerr << "Parse column to : " << ss.Str() << Endl;
     return ss.Str();

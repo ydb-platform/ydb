@@ -201,6 +201,9 @@ static NTi::TTypePtr OldTypeToTypeV3(EValueType type)
             return NTi::Timestamp64();
         case VT_INTERVAL64:
             return NTi::Interval64();
+
+        case VT_UUID:
+            return NTi::Uuid();
     }
 }
 
@@ -259,7 +262,7 @@ static std::pair<EValueType, bool> Simplify(const NTi::TTypePtr& type)
         case ETypeName::Decimal:
             return {VT_STRING, true};
         case ETypeName::Uuid:
-            break;
+            return {VT_UUID, true};
         case ETypeName::Yson:
             return {VT_ANY, true};
 
@@ -660,6 +663,9 @@ TString ToString(EValueType type)
             return "timestamp64";
         case VT_INTERVAL64:
             return "interval64";
+
+        case VT_UUID:
+            return "uuid";
     }
     ythrow yexception() << "Invalid value type " << static_cast<int>(type);
 }

@@ -19,4 +19,6 @@ struct TTypeInfoMod {
 
 TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo);
 
+NKikimrProto::TTypeInfo DefaultDecimalProto();
+
 } // namespace NKikimr::NScheme

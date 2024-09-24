@@ -87,6 +87,7 @@ YT_DEFINE_ERROR_ENUM(
     ((LockFileIsFound)                       (758))
     ((DiskHealthCheckFailed)                 (759))
     ((TooManyChunksToFetch)                  (760))
+    ((TotalMemoryLimitExceeded)              (761))
 );
 
 using TChunkId = NObjectClient::TObjectId;
@@ -140,6 +141,8 @@ using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, Typi
 
 class TChunkReplicaWithLocation;
 using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, TypicalReplicaCount>;
+
+struct TWrittenChunkReplicasInfo;
 
 class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;

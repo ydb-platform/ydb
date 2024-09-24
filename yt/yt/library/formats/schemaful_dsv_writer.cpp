@@ -248,6 +248,11 @@ public:
         return Result_;
     }
 
+    std::optional<NCrypto::TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
+    }
+
 private:
     std::unique_ptr<IOutputStream> Output_;
 

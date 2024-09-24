@@ -10,11 +10,11 @@ namespace NConsoleClient {
 
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     switch (InputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
+        case EDataFormat::Default:
+        case EDataFormat::JsonUnicode:
             InputEncoding = EBinaryStringEncoding::Unicode;
             break;
-        case EOutputFormat::JsonBase64:
+        case EDataFormat::JsonBase64:
             InputEncoding = EBinaryStringEncoding::Base64;
             break;
         default:
@@ -22,19 +22,19 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     }
 
     switch (StdinFormat) {
-        case EOutputFormat::Csv:
+        case EDataFormat::Csv:
             Delimiter = ',';
             break;
-        case EOutputFormat::Tsv:
+        case EDataFormat::Tsv:
             Delimiter = '\t';
             break;
-        case EOutputFormat::Raw:
+        case EDataFormat::Raw:
             break;
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
+        case EDataFormat::Default:
+        case EDataFormat::JsonUnicode:
             StdinEncoding = EBinaryStringEncoding::Unicode;
             break;
-        case EOutputFormat::JsonBase64:
+        case EDataFormat::JsonBase64:
             StdinEncoding = EBinaryStringEncoding::Base64;
             break;
         default:
@@ -77,10 +77,10 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             ParameterSources[name] = "param file " + file;
         }
     }
-    if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("skip-rows"))) {
+    if (StdinFormat != EDataFormat::Csv && StdinFormat != EDataFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("skip-rows"))) {
         throw TMisuseException() << "Options \"--columns\" and  \"--skip-rows\" requires \"csv\" or \"tsv\" formats";
     }
-    if (StdinParameters.empty() && StdinFormat == EOutputFormat::Raw) {
+    if (StdinParameters.empty() && StdinFormat == EDataFormat::Raw) {
         throw TMisuseException() << "For \"raw\" format \"--stdin-par\" option should be used.";
     }
     if (!StdinParameters.empty() && IsStdinInteractive()) {
@@ -181,9 +181,9 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
 
 void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
      switch (InputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::JsonUnicode:
-        case EOutputFormat::JsonBase64: {
+        case EDataFormat::Default:
+        case EDataFormat::JsonUnicode:
+        case EDataFormat::JsonBase64: {
             for (const auto&[name, value] : Parameters) {
                 auto paramIt = ParamTypes.find(name);
                 if (paramIt == ParamTypes.end()) {
@@ -212,7 +212,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
             AddParams(*paramBuilder);
             return true;
         }
-        if (StdinFormat == EOutputFormat::Csv || StdinFormat == EOutputFormat::Tsv) {
+        if (StdinFormat == EDataFormat::Csv || StdinFormat == EDataFormat::Tsv) {
             Input = MakeHolder<TCsvParamStream>();
             TString headerRow, temp;
             if (Columns) {
@@ -249,17 +249,17 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 return true;
             }
             switch (StdinFormat) {
-                case EOutputFormat::Default:
-                case EOutputFormat::JsonUnicode:
-                case EOutputFormat::JsonBase64: {
+                case EDataFormat::Default:
+                case EDataFormat::JsonUnicode:
+                case EDataFormat::JsonBase64: {
                     std::map<TString, TString> result;
                     ParseJson(std::move(*data), result);
                     ApplyJsonParams(result, *paramBuilder);
                     break;
                 }
-                case EOutputFormat::Csv:
-                case EOutputFormat::Tsv: {
-                    CsvParser.GetParams(std::move(*data), *paramBuilder);
+                case EDataFormat::Csv:
+                case EDataFormat::Tsv: {
+                    CsvParser.GetParams(std::move(*data), *paramBuilder, TCsvParser::TParseMetadata{});
                     break;
                 }
                 default:
@@ -279,13 +279,13 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
 
                 const TType &type = (*paramIt).second;
                 switch (StdinFormat) {
-                    case EOutputFormat::Default:
-                    case EOutputFormat::JsonUnicode:
-                    case EOutputFormat::JsonBase64: {
+                    case EDataFormat::Default:
+                    case EDataFormat::JsonUnicode:
+                    case EDataFormat::JsonBase64: {
                         paramBuilder->AddParam(fullname, JsonToYdbValue(*data, type, StdinEncoding));
                         break;
                     }
-                    case EOutputFormat::Raw: {
+                    case EDataFormat::Raw: {
                         TTypeParser parser(type);
                         if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
                             throw TMisuseException() << "Wrong type of parameter \"" << fullname << "\".";
@@ -299,10 +299,10 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                         }
                         break;
                     }
-                    case EOutputFormat::Csv:
-                    case EOutputFormat::Tsv: {
+                    case EDataFormat::Csv:
+                    case EDataFormat::Tsv: {
                         TValueBuilder valueBuilder;
-                        CsvParser.GetValue(std::move(*data), valueBuilder, type);
+                        CsvParser.GetValue(std::move(*data), valueBuilder, type, TCsvParser::TParseMetadata{});
                         paramBuilder->AddParam(fullname, valueBuilder.Build());
                         break;
                     }
@@ -359,13 +359,13 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 endTime = Now() + BatchMaxDelay;
             }
             switch (StdinFormat) {
-                case EOutputFormat::Default:
-                case EOutputFormat::JsonUnicode:
-                case EOutputFormat::JsonBase64: {
+                case EDataFormat::Default:
+                case EDataFormat::JsonUnicode:
+                case EDataFormat::JsonBase64: {
                     valueBuilder.AddListItem(JsonToYdbValue(*data, type.GetProto().list_type().item(), StdinEncoding));
                     break;
                 }
-                case EOutputFormat::Raw: {
+                case EDataFormat::Raw: {
                     if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
                         throw TMisuseException() << "Wrong type of list \"" << fullname << "\" elements.";
                     }
@@ -378,10 +378,10 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                     }
                     break;
                 }
-                case EOutputFormat::Csv:
-                case EOutputFormat::Tsv: {
+                case EDataFormat::Csv:
+                case EDataFormat::Tsv: {
                     valueBuilder.AddListItem();
-                    CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item());
+                    CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
                     break;
                 }
                 default:
@@ -431,14 +431,14 @@ void TCommandWithParameters::ApplyJsonParams(const std::map<TString, TString> &p
 
 TMaybe<TString> TCommandWithParameters::ReadData() {
     TString result;
-    if (FramingFormat == EOutputFormat::Default || FramingFormat == EOutputFormat::NoFraming) {
+    if (FramingFormat == EDataFormat::Default || FramingFormat == EDataFormat::NoFraming) {
         static bool isFirstLine = true;
         if (!isFirstLine) {
             return Nothing();
         }
         result = Input->ReadAll();
         isFirstLine = false;
-    } else if (FramingFormat == EOutputFormat::NewlineDelimited) {
+    } else if (FramingFormat == EDataFormat::NewlineDelimited) {
         if (!Input->ReadLine(result)) {
             return Nothing();
         }

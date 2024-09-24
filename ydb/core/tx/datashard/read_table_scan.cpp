@@ -187,7 +187,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         break;
     }
     case NScheme::NTypeIds::Pg: {
-        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetTypeDesc());
+        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
         if (result.Error) {
             err = Sprintf("Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
             return false;
@@ -355,7 +355,7 @@ private:
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
                 auto* pg = meta->mutable_type()->mutable_pg_type();
-                auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
+                auto typeDesc = typeInfoMod.TypeInfo.GetPgTypeDesc();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                 pg->set_type_modifier(typeInfoMod.TypeMod);
                 pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));

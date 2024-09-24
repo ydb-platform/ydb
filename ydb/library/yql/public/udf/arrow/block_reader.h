@@ -7,6 +7,7 @@
 
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 
 namespace NYql {
 namespace NUdf {
@@ -53,9 +54,15 @@ public:
             }
         }
 
-        return static_cast<TDerived*>(this)->MakeBlockItem(
-            *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
-        );
+        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+            auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
+            return static_cast<TDerived*>(this)->MakeBlockItem(value);
+        } else {
+            return static_cast<TDerived*>(this)->MakeBlockItem(
+                *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
+            );
+        }
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -96,7 +103,13 @@ public:
             out.PushChar(1);
         }
 
-        out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+            auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
+            out.PushNumber(value);
+        } else {
+            out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        }
     }
 };
 
@@ -272,6 +285,190 @@ public:
 
         static_cast<const TDerived*>(this)->SaveChildrenScalarItems(structScalar, out);
     }
+};
+
+struct TListArrowRef: public NUdf::TBoxedValue {
+    struct TListArrowIterator: public TBoxedValue {
+        TListArrowIterator(const std::shared_ptr<arrow::ArrayData>& arrayData, arrow::ListType::offset_type from, arrow::ListType::offset_type to, IBlockReader& inner)
+            : ArrayData(arrayData)
+            , From(from)
+            , To(to)
+            , Inner(inner)
+        {}
+
+        bool Next(NUdf::TUnboxedValue& value) final {
+            if (From == To) {
+                return false;
+            }
+            auto item = Inner.GetItem(*ArrayData, From++);
+            if (item.IsEmbedded()) {
+                NUdf::TUnboxedValuePod embedded;
+                std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+                value = embedded;
+            } else if (item.IsBoxed()) {
+                value = NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+            } else {
+                value = NYql::NUdf::TUnboxedValuePod(TStringValue{item.AsStringRef()});
+            }
+            return true;
+        }
+
+    private:
+        std::shared_ptr<arrow::ArrayData> ArrayData;
+        arrow::ListType::offset_type From;
+        arrow::ListType::offset_type To;
+        IBlockReader& Inner;
+    };
+
+    TListArrowRef(const std::shared_ptr<arrow::ArrayData>& arrayData, arrow::ListType::offset_type from, arrow::ListType::offset_type to, IBlockReader& inner)
+        : ArrayData(arrayData)
+        , From(from)
+        , To(to)
+        , Inner(inner)
+    {}
+
+    bool HasFastListLength() const override {
+        return true;
+    }
+
+    ui64 GetListLength() const override {
+        return To - From;
+    }
+
+    ui64 GetEstimatedListLength() const override {
+        return To - From;
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const override {
+        return NUdf::TUnboxedValuePod(new TListArrowIterator(ArrayData, From, To, Inner));
+    }
+
+private:
+    std::shared_ptr<arrow::ArrayData> ArrayData;
+    arrow::ListType::offset_type From;
+    arrow::ListType::offset_type To;
+    IBlockReader& Inner;
+};
+
+struct TListArrowScalarRef: public NUdf::TBoxedValue {
+    struct TListArrowIterator: public TBoxedValue {
+        TListArrowIterator(const std::shared_ptr<arrow::Array>& array, IBlockReader& inner)
+            : Array(array)
+            , Inner(inner)
+        {}
+
+        bool Next(NUdf::TUnboxedValue& value) final {
+            if (From >= Array->length()) {
+                return false;
+            }
+            auto item = Inner.GetScalarItem(**Array->GetScalar(From++));
+            if (item.IsEmbedded()) {
+                NUdf::TUnboxedValuePod embedded;
+                std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+                value = embedded;
+            } else if (item.IsBoxed()) {
+                value = NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+            } else {
+                value = NYql::NUdf::TUnboxedValuePod(TStringValue{item.AsStringRef()});
+            }
+            return true;
+        }
+
+    private:
+        std::shared_ptr<arrow::Array> Array;
+        arrow::ListType::offset_type From;
+        IBlockReader& Inner;
+    };
+
+    TListArrowScalarRef(const std::shared_ptr<arrow::Array>& array, IBlockReader& inner)
+        : Array(array)
+        , Inner(inner)
+    {}
+
+    bool HasFastListLength() const override {
+        return true;
+    }
+
+    ui64 GetListLength() const override {
+        return Array->length();
+    }
+
+    ui64 GetEstimatedListLength() const override {
+        return Array->length();
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const override {
+        return NUdf::TUnboxedValuePod(new TListArrowIterator(Array, Inner));
+    }
+
+private:
+    std::shared_ptr<arrow::Array> Array;
+    IBlockReader& Inner;
+};
+
+template<bool Nullable>
+class TListBlockReader : public IBlockReader {
+public:
+    TListBlockReader(std::unique_ptr<IBlockReader>&& inner)
+        : Inner(std::move(inner))
+    {}
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return {};
+            }
+        }
+        auto r = data.child_data[0];
+        const arrow::ListType::offset_type* offsets = data.GetValues<arrow::ListType::offset_type>(1);
+        NUdf::IBoxedValuePtr boxed(new TListArrowRef(r, offsets[index], offsets[index + 1], *Inner));
+        return TBlockItem(std::move(boxed));
+    }
+
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return {};
+            }
+        }
+        const auto& listScalar = arrow::internal::checked_cast<const arrow::ListScalar&>(scalar);
+        NUdf::IBoxedValuePtr boxed(new TListArrowScalarRef(listScalar.value,  *Inner));
+        return TBlockItem(std::move(boxed));
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        if constexpr (Nullable) {
+            return Inner->GetDataWeight(*data.child_data[0]) * data.length + 1;
+        }
+        return Inner->GetDataWeight(*data.child_data[0]) * data.length;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        if constexpr (Nullable) {
+            return Inner->GetDataWeight(item) + 1;
+        }
+        return Inner->GetDataWeight(item);
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        if constexpr (Nullable) {
+            return Inner->GetDefaultValueWeight() + 1;
+        }
+        return Inner->GetDefaultValueWeight();
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        Y_UNUSED(data, index, out);
+        ythrow yexception() << "SaveItem not implemented for list";
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        Y_UNUSED(scalar, out);
+        ythrow yexception() << "SaveScalarItem not implemented for list";
+    }
+
+private:
+    const std::unique_ptr<IBlockReader> Inner;
 };
 
 template<bool Nullable>
@@ -495,6 +692,14 @@ struct TReaderTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<IBlockReader>&& inner) {
+        if (isOptional) {
+            return std::make_unique<TListBlockReader<true>>(std::move(inner));
+        } else {
+            return std::make_unique<TListBlockReader<false>>(std::move(inner));
+        }
+    }
+
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         if (isOptional) {
             return std::make_unique<TResource<true>>();
@@ -540,6 +745,11 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
         return std::make_unique<typename TTraits::template TStrings<T, false, TOriginal>>();
     }
 }
+
+template<typename TTraits>
+concept CanInstantiateBlockReaderForDecimal = requires {
+    typename TTraits::template TFixedSize<NYql::NDecimal::TInt128, true>;
+};
 
 template <typename TTraits>
 std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder) {
@@ -605,6 +815,11 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(children));
     }
 
+    TListTypeInspector typeList(typeInfoHelper, type);
+    if (typeList) {
+        return TTraits::MakeList(isOptional, std::move(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeList.GetItemType(), pgBuilder)));
+    }
+
     TDataTypeInspector typeData(typeInfoHelper, type);
     if (typeData) {
         auto typeId = typeData.GetTypeId();
@@ -660,8 +875,14 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return TTraits::template MakeTzDate<TTzDatetime64>(isOptional);
         case NUdf::EDataSlot::TzTimestamp64:
             return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional);
+        case NUdf::EDataSlot::Decimal: {
+            if constexpr (CanInstantiateBlockReaderForDecimal<TTraits>) {
+                return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
+            } else {
+                Y_ENSURE(false, "Unsupported data slot");
+            }
+        }
         case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");
         }
@@ -721,7 +942,9 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
         auto typeId = typeData.GetTypeId();
         auto slot = GetDataSlot(typeId);
         auto& dataTypeInfo = GetDataTypeInfo(slot);
-        if (dataTypeInfo.Features & StringType) {
+        if (dataTypeInfo.Features & DecimalType) {
+            *props.MaxSize += 16;
+        } else if (dataTypeInfo.Features & StringType) {
             props.MaxSize = {};
             props.IsFixed = false;
         } else if (dataTypeInfo.Features & TzDateType) {

@@ -22,6 +22,7 @@ public:
     TDuration MinRto;
     TDuration MaxRto;
     double RtoScale;
+    TDuration ConnectTimeout;
 
     REGISTER_YSON_STRUCT(TDialerConfig);
 

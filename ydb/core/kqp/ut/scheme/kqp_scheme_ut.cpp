@@ -8381,47 +8381,47 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             builder.BeginList();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(1)
-                .AddMember("dec").Decimal(TString("10.1"))
+                .AddMember("dec").Decimal(TDecimalValue("10.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(2)
-                .AddMember("dec").Decimal(TString("inf"))
+                .AddMember("dec").Decimal(TDecimalValue("inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(3)
-                .AddMember("dec").Decimal(TString("-inf"))
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(4)
-                .AddMember("dec").Decimal(TString("nan"))
+                .AddMember("dec").Decimal(TDecimalValue("nan", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(5)
-                .AddMember("dec").Decimal(TString("-nan"))
+                .AddMember("dec").Decimal(TDecimalValue("-nan", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(6)
-                .AddMember("dec").Decimal(TString("1.1"))
+                .AddMember("dec").Decimal(TDecimalValue("1.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(7)
-                .AddMember("dec").Decimal(TString("12.1"))
+                .AddMember("dec").Decimal(TDecimalValue("12.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(8)
-                .AddMember("dec").Decimal(TString("inf"))
+                .AddMember("dec").Decimal(TDecimalValue("inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(9)
-                .AddMember("dec").Decimal(TString("-inf"))
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(10)
-                .AddMember("dec").Decimal(TString("2.1"))
+                .AddMember("dec").Decimal(TDecimalValue("2.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(11)
-                .AddMember("dec").Decimal(TString("15.1"))
+                .AddMember("dec").Decimal(TDecimalValue("15.1", 22, 9))
             .EndStruct();
             builder.EndList();
             const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
@@ -8440,7 +8440,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(22,9))", "[]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"1.1\"];[\"2.1\"];[\"12.1\"];[\"15.1\"];[\"inf\"]]");
     }
-
+    
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

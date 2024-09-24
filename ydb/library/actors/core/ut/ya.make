@@ -33,6 +33,7 @@ SRCS(
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp
+    harmonizer_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp

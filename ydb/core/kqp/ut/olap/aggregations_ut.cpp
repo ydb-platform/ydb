@@ -9,6 +9,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {

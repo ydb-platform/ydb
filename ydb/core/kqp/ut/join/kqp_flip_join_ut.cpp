@@ -5,6 +5,7 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+
 TKikimrRunner GetKikimrRunnerWithStats() {
     static TString STATS = R"(
             {

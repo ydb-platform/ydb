@@ -7,6 +7,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+
 namespace {
 
 TKikimrRunner RunnerWithArrowFormatEnabled(bool forceSources = false) {

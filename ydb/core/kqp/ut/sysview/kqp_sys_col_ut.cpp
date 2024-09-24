@@ -21,6 +21,7 @@ TDataQueryResult ExecuteDataQuery(TKikimrRunner& kikimr, const TString& query) {
     return result;
 }
 
+
 TDataQueryResult ExecuteDataQuery(const TString& query) {
     TKikimrRunner kikimr;
     return ExecuteDataQuery(kikimr, query);

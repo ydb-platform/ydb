@@ -10,7 +10,8 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
-
+    
+    
 void CreateSampleTables(TKikimrRunner& kikimr) {
     kikimr.GetTestClient().CreateTable("/Root", R"(
         Name: "FourShard"

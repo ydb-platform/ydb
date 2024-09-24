@@ -12,7 +12,9 @@ using namespace NKikimr::NKqp;
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+
 namespace {
+
 
 void EnableViewsFeatureFlag(TKikimrRunner& kikimr) {
     kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);

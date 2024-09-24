@@ -13,6 +13,7 @@ struct TRunSettings {
     const bool UniqIndex;
 };
 
+
 static const TString TABLE_PATH = "Root/TestIdx";
 
 static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRunSettings& settings) {

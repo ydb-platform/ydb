@@ -8,6 +8,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+
 void PrepareTablesToUnpack(TSession session) {
     auto result1 = session.ExecuteSchemeQuery(R"(
         CREATE TABLE `/Root/ComplexKey` (

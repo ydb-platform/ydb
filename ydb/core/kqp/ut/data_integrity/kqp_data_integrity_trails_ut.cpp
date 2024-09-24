@@ -16,6 +16,7 @@ namespace {
     }
 }
 
+
 Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_TWIN(Upsert, LogEnabled) {
         TKikimrSettings serverSettings;

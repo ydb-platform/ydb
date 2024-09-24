@@ -16,6 +16,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScripting;
 
+
 namespace {
 
 const NKikimrSchemeOp::EIndexType IG_ASYNC = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;

@@ -3,6 +3,8 @@
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
 
+#include <util/generic/fwd.h>
+
 #include <regex>
 
 namespace NYdb {
@@ -38,10 +40,10 @@ namespace NYdb {
             explicit YQLHighlight(ColorSchema color);
 
         public:
-            void Apply(std::string_view query, Colors& colors);
+            void Apply(TStringBuf queryUtf8, Colors& colors);
 
         private:
-            TParsedTokenList Tokenize(const TString& query);
+            TParsedTokenList Tokenize(const TString& queryUtf8);
             YQLHighlight::Color ColorOf(const TParsedToken& token, size_t index);
             bool IsKeyword(const TParsedToken& token) const;
             bool IsOperation(const TParsedToken& token) const;

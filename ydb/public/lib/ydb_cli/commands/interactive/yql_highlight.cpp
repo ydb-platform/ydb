@@ -122,8 +122,8 @@ namespace NYdb {
         {
         }
 
-        void YQLHighlight::Apply(std::string_view query, Colors& colors) {
-            Tokens = Tokenize(TString(query));
+        void YQLHighlight::Apply(TStringBuf queryUtf8, Colors& colors) {
+            Tokens = Tokenize(TString(queryUtf8));
             for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
                 const auto& token = Tokens.at(i);
                 const auto color = ColorOf(token, i);
@@ -136,10 +136,10 @@ namespace NYdb {
             }
         }
 
-        TParsedTokenList YQLHighlight::Tokenize(const TString& query) {
+        TParsedTokenList YQLHighlight::Tokenize(const TString& queryUtf8) {
             TParsedTokenList tokens;
             TIssues issues;
-            NSQLTranslation::Tokenize(*Lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+            NSQLTranslation::Tokenize(*Lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
             return tokens;
         }
 

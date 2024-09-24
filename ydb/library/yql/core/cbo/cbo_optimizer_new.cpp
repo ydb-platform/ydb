@@ -303,7 +303,7 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
-TVector<TString> TOptimizerHints::GetUnappliedHintStrings() {
+TVector<TString> TOptimizerHints::GetUnappliedString() {
     TVector<TString> res;
 
     for (const auto& hint: JoinAlgoHints->Hints) {

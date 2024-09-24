@@ -22,6 +22,7 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
+
 def get_all_tests(job_id=None, branch=None):
     print(f'Getting all tests')
 
@@ -31,18 +32,15 @@ def get_all_tests(job_id=None, branch=None):
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
-        
+
         # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
-            
+
         # geting last date from history
         today = datetime.date.today().strftime('%Y-%m-%d')
-        if job_id and branch: # extend all tests from main by new tests from pr
-            
+        if job_id and branch:  # extend all tests from main by new tests from pr
+
             tests = f"""
             SELECT * FROM (
                 SELECT 
@@ -64,7 +62,7 @@ def get_all_tests(job_id=None, branch=None):
                     and branch = '{branch}'
             )
             """
-        else: #only all tests from main
+        else:  # only all tests from main
             tests = f"""
             SELECT 
                 suite_folder,
@@ -90,11 +88,12 @@ def get_all_tests(job_id=None, branch=None):
         return results
 
 
-def create_tables(pool,  table_path):
+def create_tables(pool, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
     def callee(session):
-        session.execute_scheme(f"""
+        session.execute_scheme(
+            f"""
             CREATE table IF NOT EXISTS `{table_path}` (
                 `date` Date NOT NULL,
                 `test_name` Utf8 NOT NULL,
@@ -108,7 +107,8 @@ def create_tables(pool,  table_path):
             )
                 PARTITION BY HASH(date,branch)
                 WITH (STORE = COLUMN)
-            """)
+            """
+        )
 
     return pool.retry_operation_sync(callee)
 
@@ -127,12 +127,13 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
     )
     table_client.bulk_upsert(table_path, rows, column_types)
-        
-        
+
+
 def write_to_file(text, file):
     os.makedirs(os.path.dirname(file), exist_ok=True)
     with open(file, 'w') as f:
         f.writelines(text)
+
 
 def upload_muted_tests(tests):
     with ydb.Driver(
@@ -145,15 +146,15 @@ def upload_muted_tests(tests):
         # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
-        
+
         table_path = f'test_results/all_tests_with_owner_and_mute'
-        
+
         with ydb.SessionPool(driver) as pool:
             create_tables(pool, table_path)
             full_path = posixpath.join(DATABASE_PATH, table_path)
             bulk_upsert(driver.table_client, full_path, tests)
 
- 
+
 def to_str(data):
     if isinstance(data, str):
         return data
@@ -161,19 +162,16 @@ def to_str(data):
         return data.decode('utf-8')
     else:
         raise ValueError("Unsupported type")
-    
+
+
 def mute_applier(args):
     output_path = args.output_folder
 
-
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
-     
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-        )
+        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
         return 1
     else:
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
@@ -182,20 +180,20 @@ def mute_applier(args):
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
 
-    #all muted
+    # all muted
     mute_check = YaMuteCheck()
     mute_check.load(muted_ya_path)
-    
+
     if args.mode == 'upload_muted_tests':
-        all_tests= get_all_tests(branch=args.branch)
+        all_tests = get_all_tests(branch=args.branch)
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             test['branch'] = 'main'
             test['is_muted'] = int(mute_check(testsuite, testcase))
-                
+
         upload_muted_tests(all_tests)
-        
+
     elif args.mode == 'get_mute_diff':
         all_tests = get_all_tests(job_id=args.job_id, branch=args.branch)
         all_tests.sort(key=lambda test: test['full_name'])
@@ -207,10 +205,10 @@ def mute_applier(args):
             all_tests_names_and_suite.append(testsuite + ' ' + testcase + '\n')
             if mute_check(testsuite, testcase):
                 muted_tests.append(testsuite + ' ' + testcase + '\n')
-                
+
         write_to_file(all_tests_names_and_suites, all_tests_file)
-        write_to_file(muted_tests,all_muted_tests_file)
-        
+        write_to_file(muted_tests, all_muted_tests_file)
+
         added_mute_lines_file = os.path.join(output_path, '2_added_mute_lines.txt')
         new_muted_tests_file = os.path.join(output_path, '2_new_muted_tests.txt')
         removed_mute_lines_file = os.path.join(output_path, '3_removed_mute_lines.txt')
@@ -219,29 +217,29 @@ def mute_applier(args):
         added_texts, removed_texts = extract_diff_lines(args.base_sha, args.head_sha, muted_ya_path)
         write_to_file('\n'.join(added_texts), added_mute_lines_file)
         write_to_file('\n'.join(removed_texts), removed_mute_lines_file)
-        
-        #checking added lines
+
+        # checking added lines
         mute_check.load(added_mute_lines_file)
-        added_muted_tests=[]
+        added_muted_tests = []
         print("New muted tests captured")
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             if mute_check(testsuite, testcase):
-                added_muted_tests.append(testsuite + ' '+ testcase + '\n')
-                
-        #checking removed lines
+                added_muted_tests.append(testsuite + ' ' + testcase + '\n')
+
+        # checking removed lines
         mute_check.load(removed_mute_lines_file)
-    
-        removed_muted_tests=[]
+
+        removed_muted_tests = []
         print("Unmuted tests captured")
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             if mute_check(testsuite, testcase):
-                removed_muted_tests.append(testsuite + ' '+ testcase + '\n')
-        
-        # geting only uniq items in both lists because not uniq items= this tests was muted before    
+                removed_muted_tests.append(testsuite + ' ' + testcase + '\n')
+
+        # geting only uniq items in both lists because not uniq items= this tests was muted before
         added_set = set(added_muted_tests)
         removed_set = set(removed_muted_tests)
         added_unique = added_set - removed_set
@@ -251,47 +249,50 @@ def mute_applier(args):
 
         write_to_file(added_muted_tests, new_muted_tests_file)
         write_to_file(removed_muted_tests, unmuted_tests_file)
-        
+
         print(f"All tests have been written to {all_tests_file}.")
         print(f"All mutes tests have been written to {all_muted_tests_file}.")
         print(f"Added lines have been written to {added_mute_lines_file}.")
         print(f"New muted tests have been written to {new_muted_tests_file}.")
         print(f"Removed lines have been written to {removed_mute_lines_file}.")
         print(f"Unmuted tests have been written to {unmuted_tests_file}.")
-        
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
-    
-    parser.add_argument('--output_folder',
-        type=str, 
-        default=repo_path + '.github/config/mute_info/'  , 
-        help=f'The folder to output results. Default is the value of repo_path = {repo_path}.github/config/mute_info/.')
-    
+
+    parser.add_argument(
+        '--output_folder',
+        type=str,
+        default=repo_path + '.github/config/mute_info/',
+        help=f'The folder to output results. Default is the value of repo_path = {repo_path}.github/config/mute_info/.',
+    )
+
     subparsers = parser.add_subparsers(dest='mode', help="Mode to perform")
-    
-    upload_muted_tests_parser = subparsers.add_parser('upload_muted_tests',
-        help='apply mute rules for all tests in main and upload to database')
-    upload_muted_tests_parser.add_argument('--branch', 
-        required= True,
-        default='main',
-        help='branch for getting all tests')
-    
-    get_mute_details_parser = subparsers.add_parser('get_mute_diff',
-        help='apply mute rules for all tests in main extended by new tests from pr and collect new muted and unmuted')
-    get_mute_details_parser.add_argument('--base_sha', 
-        required= True, 
-        help='Base sha of PR')
-    get_mute_details_parser.add_argument('--head_sha', 
-        required= True, 
-        help='Head sha of PR')
-    get_mute_details_parser.add_argument('--branch', 
-        required= True,
-        help='pass branch to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')
-    get_mute_details_parser.add_argument('--job-id',  
-        required= True,
-        help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)')    
+
+    upload_muted_tests_parser = subparsers.add_parser(
+        'upload_muted_tests', help='apply mute rules for all tests in main and upload to database'
+    )
+    upload_muted_tests_parser.add_argument(
+        '--branch', required=True, default='main', help='branch for getting all tests'
+    )
+
+    get_mute_details_parser = subparsers.add_parser(
+        'get_mute_diff',
+        help='apply mute rules for all tests in main extended by new tests from pr and collect new muted and unmuted',
+    )
+    get_mute_details_parser.add_argument('--base_sha', required=True, help='Base sha of PR')
+    get_mute_details_parser.add_argument('--head_sha', required=True, help='Head sha of PR')
+    get_mute_details_parser.add_argument(
+        '--branch',
+        required=True,
+        help='pass branch to extend list of tests by new tests from this pr (by job-id of PR-check and branch)',
+    )
+    get_mute_details_parser.add_argument(
+        '--job-id',
+        required=True,
+        help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)',
+    )
     args = parser.parse_args()
 
     mute_applier(args)

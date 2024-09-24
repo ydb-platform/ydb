@@ -380,6 +380,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeDropCdcStream:
         res = CheckDropCdcStream(activeTx);
         break;
+    case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
+        res = true; // FIXME: CheckDropCdcStream(activeTx);
+        break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                     "Unknown scheme tx type detected at tablet "

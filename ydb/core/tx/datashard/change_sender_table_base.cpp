@@ -151,8 +151,11 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         record.SetPathOwnerId(TargetTablePathId.OwnerId);
         record.SetLocalPathId(TargetTablePathId.LocalPathId);
 
-        Y_ABORT_UNLESS(record.HasAsyncIndex());
-        AdjustTags(*record.MutableAsyncIndex());
+        // Y_ABORT_UNLESS(record.HasAsyncIndex());
+        // AdjustTags(*record.MutableAsyncIndex());
+        //
+         Y_ABORT_UNLESS(record.HasIncrementalRestore());
+         AdjustTags(*record.MutableIncrementalRestore());
     }
 
     void AdjustTags(NKikimrChangeExchange::TDataChange& record) const {

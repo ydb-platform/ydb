@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         auto* scan = CreateIncrementalRestoreScan(
             sender,
-            [&](const TActorContext&) {
+            [&](const TActorContext&, TActorId) {
                 return sender2;
             },
             sourcePathId,

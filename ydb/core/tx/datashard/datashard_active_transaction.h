@@ -54,6 +54,7 @@ struct TSchemaOperation {
         ETypeAlterCdcStream = 14,
         ETypeDropCdcStream = 15,
         ETypeMoveIndex = 16,
+        ETypeCreateIncrementalRestoreSrc = 17,
 
         ETypeUnknown = Max<ui32>()
     };

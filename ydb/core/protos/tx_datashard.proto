@@ -480,6 +480,8 @@ message TFlatSchemeTransaction {
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
     optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
     optional TMoveIndex MoveIndex = 21;
+
+    optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
 }
 
 message TDistributedEraseTransaction {

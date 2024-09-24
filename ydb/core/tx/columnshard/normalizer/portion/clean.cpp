@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
+#include <ydb/core/tx/columnshard/common/log.h>
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 
@@ -30,10 +32,10 @@ public:
             portion->RemoveFromDatabase(db);
             NColumnShard::TColumnShard* cs = static_cast<NColumnShard::TColumnShard*>(txc.Owner);
             txc.DB.OnCommit([cs, portion = portion->GetPortion(), pathId = portion->GetPathId(), schema = portion->GetSchemaVersionVerified(), db = &txc.DB]() {
-                LOG_S_CRIT("Removing portion from normalizer");
+                TEMPLOG("Removing portion from normalizer");
                 ui32 refCount = cs->VersionRemoveRef(portion, pathId, schema);
                 if (refCount == 0) {
-                    LOG_S_CRIT("Ref count is set to 0 for version " << schema << " need to delete");
+                    TEMPLOG("Ref count is set to 0 for version " << schema << " need to delete");
                     cs->RemoveUnusedSchemaVersion(db, schema);
                 }
             });
@@ -95,7 +97,6 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
 }
 
  TConclusion<bool> TCleanPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
-    LOG_S_CRIT("TCleanPortionsNormalizer init");
     return true;
 }
 

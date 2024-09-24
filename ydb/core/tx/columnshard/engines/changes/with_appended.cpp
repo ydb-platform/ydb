@@ -9,7 +9,6 @@
 namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-//    LOG_S_CRIT("SaveToDatabase from TChangesWithAppend");
     THashSet<ui64> usedPortionIds;
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     for (auto& [_, portionInfo] : PortionsToRemove) {

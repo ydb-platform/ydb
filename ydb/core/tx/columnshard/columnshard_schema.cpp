@@ -2,6 +2,8 @@
 #include "transactions/tx_controller.h"
 #include "columnshard_impl.h"
 
+#include "common/log.h"
+
 namespace NKikimr::NColumnShard {
 
 ui64 GetPlanStep(const NOlap::TInsertTableRecordLoadContext& constructor) {
@@ -19,7 +21,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         constructor.ParseFromDatabase(rowset);
         ui64 planStep = GetPlanStep(constructor);
 
-        LOG_S_CRIT("Loaded schema version " << constructor.GetSchemaVersion() << " planstep " << planStep << " txid " << constructor.GetWriteTxId() << " dedup id " << constructor.GetDedupId() << " rec type " << (ui32)constructor.GetRecType());
+        TEMPLOG("Loaded schema version " << constructor.GetSchemaVersion() << " planstep " << planStep << " txid " << constructor.GetWriteTxId() << " dedup id " << constructor.GetDedupId() << " rec type " << (ui32)constructor.GetRecType());
         insertTable.CS->VersionAddRef(planStep, constructor.GetWriteTxId(), constructor.GetPathId(), constructor.GetDedupId(), (ui8)constructor.GetRecType(), constructor.GetSchemaVersion());
         switch (constructor.GetRecType()) {
             case Schema::EInsertTableIds::Inserted:

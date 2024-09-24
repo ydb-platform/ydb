@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 
+#include <ydb/core/tx/columnshard/common/log.h>
+
 namespace NKikimr::NOlap {
 
 bool TVersionedIndex::RemoveVersion(ui64 version) {
@@ -40,7 +42,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
     const bool needActualization = indexInfo.GetSchemeNeedActualization();
     auto newVersion = indexInfo.GetVersion();
     if (LastNotDeletedVersion.has_value() && (*LastNotDeletedVersion < newVersion)) {
-        LOG_S_CRIT("Removing schema version " << *LastNotDeletedVersion << " from memory, but not from db")
+        TEMPLOG("Removing schema version " << *LastNotDeletedVersion << " from memory, but not from db")
         RemoveVersionNoCheck(*LastNotDeletedVersion);
         LastNotDeletedVersion.reset();
     }

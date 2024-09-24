@@ -20,14 +20,12 @@ public:
     {}
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
-        LOG_S_CRIT("SaveToDatabase from Portions normalizer");
         using namespace NColumnShard;
         TDbWrapper db(txc.DB, nullptr);
 
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
-            LOG_S_CRIT("Saving normalized");
             portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;
@@ -47,7 +45,6 @@ INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr
 }
 
  TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
-    LOG_S_CRIT("SaveToDatabase from Portions normalizer init");
     using namespace NColumnShard;
 
     NIceDb::TNiceDb db(txc.DB);

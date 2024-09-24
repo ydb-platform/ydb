@@ -7,6 +7,8 @@
 #include "columnshard_private_events.h"
 #include "tables_manager.h"
 
+#include "common/log.h"
+
 #include "blobs_action/events/delete_blobs.h"
 #include "bg_tasks/events/local.h"
 #include "transactions/tx_controller.h"
@@ -187,14 +189,14 @@ public:
     void VersionAddRef(Versions& versions, const Key& portion, ui64 version) {
         ui64& curVer = versions[portion];
         if (curVer != 0) {// Portion is already in the local database, no need to increase ref count
-            LOG_S_CRIT("Schema version is already written");
+            TEMPLOG("Schema version is already written");
             AFL_VERIFY(version == curVer);
             return;
         }
         curVer = version;
         ui32& refCount = VersionCounts[version];
         refCount++;
-        LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount - 1 << " to " << refCount << " this " << (ui64)this);
+        TEMPLOG("Ref count of schema version " << version << " changed from " << refCount - 1 << " to " << refCount << " this " << (ui64)this);
     }
 
     template<class Key, class Versions>
@@ -206,7 +208,7 @@ public:
         versions.erase(iter);
         ui32& refCount = VersionCounts[version];
         AFL_VERIFY(refCount > 0);
-        LOG_S_CRIT("Ref count of schema version " << version << " changed from " << refCount << " to " << refCount - 1 << " this " << (ui64)this);
+        TEMPLOG("Ref count of schema version " << version << " changed from " << refCount << " to " << refCount - 1 << " this " << (ui64)this);
         return --refCount;
     }
 

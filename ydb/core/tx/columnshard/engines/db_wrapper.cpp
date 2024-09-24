@@ -3,43 +3,44 @@
 #include "portions/constructor.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/log.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
 
 void TDbWrapper::Insert(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
-    LOG_S_CRIT("Writing inserted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
+    TEMPLOG("Writing inserted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
     NColumnShard::Schema::InsertTable_Insert(db, data);
 }
 
 void TDbWrapper::Commit(const TCommittedData& data) {
     NIceDb::TNiceDb db(Database);
-    LOG_S_CRIT("Writing committed data, schema version " << data.GetSchemaVersion() << " planstep " << data.GetSnapshot().GetPlanStep() << " path id " << data.GetPathId() << " write id " << data.GetSnapshot() << " dedup id " << data.GetDedupId()  << " database " << (ui64)&Database);
+    TEMPLOG("Writing committed data, schema version " << data.GetSchemaVersion() << " planstep " << data.GetSnapshot().GetPlanStep() << " path id " << data.GetPathId() << " write id " << data.GetSnapshot() << " dedup id " << data.GetDedupId()  << " database " << (ui64)&Database);
     NColumnShard::Schema::InsertTable_Commit(db, data);
 }
 
 void TDbWrapper::Abort(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
-    LOG_S_CRIT("Writing aborted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
+    TEMPLOG("Writing aborted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
     NColumnShard::Schema::InsertTable_Abort(db, data);
 }
 
 void TDbWrapper::EraseInserted(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
-    LOG_S_CRIT("Erasing inserted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
+    TEMPLOG("Erasing inserted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
     NColumnShard::Schema::InsertTable_EraseInserted(db, data);
 }
 
 void TDbWrapper::EraseCommitted(const TCommittedData& data) {
     NIceDb::TNiceDb db(Database);
-    LOG_S_CRIT("Erasing committed data, schema version " << data.GetSchemaVersion() << " planstep " << data.GetSnapshot().GetPlanStep() << " path id " << data.GetPathId() << " write id " << data.GetSnapshot() << " dedup id " << data.GetDedupId()  << " database " << (ui64)&Database);
+    TEMPLOG("Erasing committed data, schema version " << data.GetSchemaVersion() << " planstep " << data.GetSnapshot().GetPlanStep() << " path id " << data.GetPathId() << " write id " << data.GetSnapshot() << " dedup id " << data.GetDedupId()  << " database " << (ui64)&Database);
     NColumnShard::Schema::InsertTable_EraseCommitted(db, data);
 }
 
 void TDbWrapper::EraseAborted(const TInsertedData& data) {
     NIceDb::TNiceDb db(Database);
-    LOG_S_CRIT("Erasing aborted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
+    TEMPLOG("Erasing aborted data, schema version " << data.GetSchemaVersion() << " planstep 0 " << " path id " << data.GetPathId() << " write id " << data.GetInsertWriteId() << " dedup id "  << " database " << (ui64)&Database);
     NColumnShard::Schema::InsertTable_EraseAborted(db, data);
 }
 
@@ -70,7 +71,7 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
 }
 
 void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
-    LOG_S_CRIT("Writing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
+    TEMPLOG("Writing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
     NIceDb::TNiceDb db(Database);
     auto metaProto = portion.GetMeta().SerializeToProto();
     using IndexPortions = NColumnShard::Schema::IndexPortions;
@@ -84,7 +85,7 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
 }
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
-    LOG_S_CRIT("Erasing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
+    TEMPLOG("Erasing portion, schema version " << portion.GetSchemaVersionVerified() << " path id " << portion.GetPathId() << " portion id " << portion.GetPortion() << " database " << (ui64)&Database);
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Delete();
@@ -132,7 +133,7 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
     }
 
     while (!rowset.EndOfSet()) {
-        LOG_S_CRIT("Loaded portion, path id " << rowset.GetValue<IndexPortions::PathId>() << " portion id " << rowset.GetValue<IndexPortions::PortionId>() << " schema version " << rowset.GetValue<IndexPortions::SchemaVersion>() << " database " << (ui64)&Database);
+        TEMPLOG("Loaded portion, path id " << rowset.GetValue<IndexPortions::PathId>() << " portion id " << rowset.GetValue<IndexPortions::PortionId>() << " schema version " << rowset.GetValue<IndexPortions::SchemaVersion>() << " database " << (ui64)&Database);
         NOlap::TPortionInfoConstructor portion(rowset.GetValue<IndexPortions::PathId>(), rowset.GetValue<IndexPortions::PortionId>());
         portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
         if (rowset.HaveValue<IndexPortions::ShardingVersion>() && rowset.GetValue<IndexPortions::ShardingVersion>()) {

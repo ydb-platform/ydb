@@ -171,7 +171,7 @@ private:
     NColumnShard::TColumnShard* CS = nullptr;
 
 public:
-    THashMap<ui64, TVector<TSchemaKey>> VersionToKey;
+    THashMap<ui64, std::vector<TSchemaKey>> VersionToKey;
 
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, NColumnShard::TColumnShard* cs);

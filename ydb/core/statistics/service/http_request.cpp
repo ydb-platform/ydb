@@ -6,7 +6,7 @@
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
+
 
 namespace NKikimr {
 namespace NStat {
@@ -93,14 +93,10 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
 void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    const auto& operationIdParam = Params[EParamType::OPERATION_ID];
     TULID operationId;
-    operationId.ParseString(operationIdParam);
 
-    if (record.GetOperationId() != operationId.ToBinary()) {
-        ALOG_ERROR(NKikimrServices::STATISTICS, 
-            "THttpRequest, TEvAnalyzeStatusResponse has operationId=" << record.GetOperationId() 
-            << " , but expected " << operationId);
+    if (!operationId.ParseString(Params[EParamType::OPERATION_ID])
+            || record.GetOperationId() != operationId.ToBinary()) {
         HttpReply("Wrong OperationId");
     }
 
@@ -140,9 +136,6 @@ void THttpRequest::Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& e
         HttpReply("Cell value parsing error: " + error);
         return;
     }
-
-NActors::IActor* CreateLoadStatisticsQuery(const NActors::TActorId& replyActorId,
-    const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie);
 
     auto countMinSketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(msg->Data->Data(), msg->Data->Size()));
     const auto probe = countMinSketch->Probe(cell.Data(), cell.Size());
@@ -213,6 +206,15 @@ void THttpRequest::DoStatus(const TNavigate::TEntry& entry) {
 
 void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
     const auto& columnName = Params[EParamType::COLUMN_NAME];
+    if (columnName.empty()) {
+        HttpReply("Column is not set");
+        return;
+    }
+
+    if (Params[EParamType::CELL_VALUE].empty()) {
+        HttpReply("Value is not set");
+        return;
+    }
 
     for (const auto& [_, tableInfo]: entry.Columns) {
         if (tableInfo.Name == columnName) {
@@ -224,7 +226,7 @@ void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
         }
     }
 
-    HttpReply("Column is not set");
+    HttpReply("Column not found");
 }
 
 void THttpRequest::HttpReply(const TString& msg) {

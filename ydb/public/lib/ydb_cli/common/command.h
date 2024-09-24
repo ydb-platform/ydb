@@ -222,13 +222,17 @@ public:
                 }
                 if (count == 0) {
                     Cerr << errorMessage << Endl;
-                    NLastGetopt::TOptsParser parser(Opts, ArgC, ArgV);
-                    parser.PrintUsage(Cerr);
-                    throw TMisuseWithHelpException();
+                    PrintHelpAndExit();
                 } else {
                     throw TMisuseException() << errorMessage;
                 }
             }
+        }
+
+        void PrintHelpAndExit() {
+            NLastGetopt::TOptsParser parser(Opts, ArgC, ArgV);
+            parser.PrintUsage(Cerr);
+            throw TMisuseWithHelpException();
         }
 
     private:

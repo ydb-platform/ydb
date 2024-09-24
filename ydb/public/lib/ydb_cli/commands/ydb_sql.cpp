@@ -98,6 +98,11 @@ void TCommandSql::Parse(TConfig& config) {
             Query = ReadFromFile(QueryFile, "query");
         }
     }
+    if (Query.Empty()) {
+        Cerr << "Neither text of script (\"--script\", \"-s\") "
+            << "nor path to file with script text (\"--file\", \"-f\") were provided.";
+        config.PrintHelpAndExit();
+    }
     // Should be called after setting ReadingSomethingFromStdin
     ParseParameters(config);
 }

@@ -68,6 +68,11 @@ void TCommandYql::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
+    if (Script.Empty()) {
+        Cerr << "Neither text of script (\"--script\", \"-s\") "
+            << "nor path to file with script text (\"--file\", \"-f\") were provided.";
+        config.PrintHelpAndExit();
+    }
     if(FlameGraphPath && FlameGraphPath->Empty())
     {
         throw TMisuseException() << "FlameGraph path can not be empty.";

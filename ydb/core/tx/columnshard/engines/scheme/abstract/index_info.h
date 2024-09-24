@@ -16,8 +16,8 @@ public:
     enum class ESpecialColumn : ui32 {
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
         TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
-        WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX,
         DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX,
+        WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX,
     };
 
     using TSystemColumnsSet = ui64;
@@ -29,8 +29,8 @@ public:
 
     static constexpr const char* SPEC_COL_PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP;
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
-    static constexpr const char* SPEC_COL_WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID;
     static constexpr const char* SPEC_COL_DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG;
+    static constexpr const char* SPEC_COL_WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID;
 
     static const char* GetDeleteFlagColumnName() {
         return SPEC_COL_DELETE_FLAG;
@@ -81,7 +81,7 @@ public:
     }
 
     static const std::vector<std::string>& SnapshotColumnNames() {
-        static std::vector<std::string> result = { SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID };
+        static std::vector<std::string> result = { SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID, SPEC_COL_WRITE_ID };
         return result;
     }
 
@@ -105,13 +105,13 @@ public:
 
     static const std::vector<std::string>& GetSystemColumnNames() {
         static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
-            std::string(SPEC_COL_WRITE_ID), std::string(SPEC_COL_DELETE_FLAG) };
+            std::string(SPEC_COL_DELETE_FLAG), std::string(SPEC_COL_WRITE_ID) };
         return result;
     }
 
     static const std::vector<ui32>& GetSystemColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID,
-            (ui32)ESpecialColumn::DELETE_FLAG };
+        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID,
+            (ui32)ESpecialColumn::DELETE_FLAG, (ui32) ESpecialColumn::WRITE_ID };
         return result;
     }
 

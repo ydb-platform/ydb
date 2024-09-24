@@ -86,7 +86,6 @@ public:
         std::vector<INormalizerChanges::TPtr> changes;
 
         {
-            bool emptyUsed = usedSchemaVersions.size() == 0;
             auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
             if (rowset.IsReady()) {
                 while (!rowset.EndOfSet()) {
@@ -95,7 +94,7 @@ public:
                     Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
                     if (info.HasSchema()) {
                         ui64 version = info.GetSchema().GetVersion();
-                        if (emptyUsed && ((!maxVersion.has_value()) || (version > maxVersion))) {
+                        if (!maxVersion.has_value() || (version > *maxVersion)) {
                             maxVersion = version;
                         }
                         if (!usedSchemaVersions.contains(version)) {

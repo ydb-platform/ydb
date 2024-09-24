@@ -3055,6 +3055,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
         hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
+        hFunc(TEvPrivate::TEvGenerateTestData, Handle);
     }
 }
 
@@ -3159,6 +3160,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvGenerateTestData::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3463,6 +3465,12 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
 void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
     auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
     Send(ev->Sender, response.release());
+}
+
+void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
+    for (int i = 0; i < 4; ++i) {
+        Execute(CreateGenerateTestData(i));
+    }
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

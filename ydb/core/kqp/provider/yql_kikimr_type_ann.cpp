@@ -281,12 +281,9 @@ namespace {
             if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
                 ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
                 ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
-                if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Decimal precision " << precision << " should be less or equal " << NKikimr::NScheme::DECIMAL_MAX_PRECISION);
-                    return false;
-                }
-                if (scale > precision) {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() <<"Decimal precision " << precision << " should be greater than scale " << scale);
+                TString error;
+                if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
+                    columnTypeError(typeNode.Pos(), columnName, error);
                     return false;
                 }
             } else {

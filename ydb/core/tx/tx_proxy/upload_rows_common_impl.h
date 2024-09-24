@@ -506,14 +506,9 @@ private:
             } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 ui32 precision = typeInProto.decimal_type().precision();
                 ui32 scale = typeInProto.decimal_type().scale();
-                if (precision > NScheme::DECIMAL_MAX_PRECISION) {
-                    errorMessage = Sprintf("Decimal precision %u should be less or equal %u for column %s",
-                                    precision, NScheme::DECIMAL_MAX_PRECISION, name.c_str());
-                    return false;
-                }
-                if (scale > precision) {
-                    errorMessage = Sprintf("Decimal precision %u should be greater than scale %u for column %s",
-                                    precision, scale, name.c_str());
+                TString error;
+                if (!NScheme::TDecimalType::Validate(precision, scale, error)) {
+                    errorMessage = Sprintf("%s for column %s", error.c_str(), name.c_str());
                     return false;
                 }
             } else if (typeInProto.has_pg_type()) {

@@ -201,12 +201,7 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type&
             auto dataExprTypeNode = typeNode->Cast<TDataExprParamsType>();  
             ui32 precision = FromString(dataExprTypeNode->GetParamOne());
             ui32 scale = FromString(dataExprTypeNode->GetParamTwo());
-            if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
-                error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
-                return false;
-            }
-            if (scale > precision) {
-                error = Sprintf("Decimal precision %u should be more than scale %u", precision, scale);
+            if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
                 return false;
             }
             auto decimal = notNull ? protoType.mutable_decimal_type() :

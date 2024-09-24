@@ -43,5 +43,18 @@ const std::optional<TDecimalType> TDecimalType::ParseTypeName(const TStringBuf& 
     }
 }
 
+bool TDecimalType::Validate(ui32 precision, ui32 scale, TString& error) {
+    if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
+        error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
+        return false;
+    }
+    if (scale > precision) {
+        error = Sprintf("Decimal precision %u should be more than scale %u", precision, scale);
+        return false;
+    }
+    return true;   
+}
+
+
 } // namespace NKikimr::NScheme
 

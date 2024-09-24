@@ -617,17 +617,8 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
         case Ydb::Type::kDecimalType: {
             ui32 precision = itemType.decimal_type().precision();
             ui32 scale = itemType.decimal_type().scale();
-            if (precision > NScheme::DECIMAL_MAX_PRECISION) {
+            if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Decimal precision %u should be less or equal %u",
-                                    precision,
-                                    NScheme::DECIMAL_MAX_PRECISION);
-                return false;
-            }
-            if (scale > precision) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Decimal precision %u should be greater than scale %u",
-                                    precision, scale);
                 return false;
             }
             outTypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));

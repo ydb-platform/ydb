@@ -238,7 +238,8 @@ public:
     using TArrayType = arrow::Decimal128Array;
     static void Validate(const arrow::Decimal128Array& array) {
         const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array.type());
-        YQL_ENSURE(static_cast<ui32>(type.precision()) <= NScheme::DECIMAL_MAX_PRECISION, "Unsupported Decimal precision.");
+        TString error;
+        YQL_ENSURE(NScheme::TDecimalType::Validate(type.precision(), type.scale(), error), "" << error);
     }
 
     static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::Decimal128Array& array, const ui32 rowIndex) {

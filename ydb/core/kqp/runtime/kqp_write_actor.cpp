@@ -115,6 +115,57 @@ struct IKqpTableWriterCallbacks {
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
 
+/*class TKqpReadOnlyCommitActor : public TActorBootstrapped<TKqpReadOnlyCommitActor> {
+    using TBase = TActorBootstrapped<TKqpReadOnlyCommitActor>;
+
+    struct TEvPrivate {
+        enum EEv {
+            EvTerminate,
+        };
+
+        struct TEvTerminate : public TEventLocal<TEvTerminate, EvTerminate> {
+        };
+    };
+
+public:
+    TKqpReadOnlyCommitActor(
+        IKqpTableWriterCallbacks* callbacks,
+        IKqpTransactionManagerPtr txManager) {
+    }
+
+    void Bootstrap() {
+        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
+        Become(&TKqpReadOnlyCommitActor::StatePreparing);
+    }
+
+    static constexpr char ActorName[] = "KQP_TABLE_WRITE_ACTOR";
+
+    STFUNC(StateProcessing) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+            }
+        } catch (const yexception& e) {
+            RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+        }
+    }
+
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        Callbacks->OnError(message, statusCode, subIssues);
+    }
+
+    void PassAway() override {;
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        TActorBootstrapped<TKqpReadOnlyCommitActor>::PassAway();
+    }
+
+    void Terminate() {
+        Send(this->SelfId(), new TEvPrivate::TEvTerminate{});
+    }
+
+private:
+    IKqpTransactionManagerPtr TxManager;
+};*/
+
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
 
@@ -156,7 +207,8 @@ public:
         const ui64 lockNodeId,
         const bool inconsistentTx,
         const NMiniKQL::TTypeEnvironment& typeEnv,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const IKqpTransactionManagerPtr& txManager)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
         , TableId(tableId)
@@ -165,7 +217,9 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , Callbacks(callbacks)
+ //       , TxManager(txManager)
     {
+        Y_UNUSED(txManager);
         try {
             ShardedWriteController = CreateShardedWriteController(
                 TShardedWriteControllerSettings {
@@ -646,17 +700,17 @@ public:
 
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result && (Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT)) {
+        if (result && result->IsShardEmpty && (Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT)) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
             Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), SchemeEntry->TableId, result->DataSize, result->HasRead);
         }
     }
 
-    void SetPrepare(const std::shared_ptr<TPrepareSettings>& prepareSettings) {
+    void SetPrepare() {
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::PREPARE;
-        PrepareSettings = prepareSettings;
+        //PrepareSettings = prepareSettings;
         ShardedWriteController->AddCoveringMessages();
     }
 
@@ -670,7 +724,7 @@ public:
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::IMMEDIATE_COMMIT;
 
-        // TODO: check only one shard
+        YQL_ENSURE(ShardedWriteController->GetShardsCount() == 1);
         ShardedWriteController->AddCoveringMessages();
     }
 
@@ -720,7 +774,7 @@ public:
                 }
             }
         } else if (isPrepare) {
-            evWrite->Record.SetTxId(PrepareSettings->TxId);
+            /*evWrite->Record.SetTxId(PrepareSettings->TxId);
             auto* locks = evWrite->Record.MutableLocks();
             locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
             
@@ -752,12 +806,12 @@ public:
                 if (PrepareSettings->ReceivingShards.contains(shardId)) {
                     locks->AddReceivingShards(shardId);
                 }
-            }
+            }*/
 
             // TODO: multi locks (for tablestore support)
             const auto lock = LocksManager.GetLock(shardId);
             if (lock) {
-                *locks->AddLocks() = *lock;
+                //*locks->AddLocks() = *lock;
             }
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
@@ -873,7 +927,7 @@ public:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
-    TWriteActorSettings MessageSettings; // TODO: fill it
+    TWriteActorSettings MessageSettings;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -891,10 +945,11 @@ public:
     ui64 ResolveAttempts = 0;
 
     TLocksManager LocksManager;
+    //IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
     EMode Mode = EMode::WRITE;
     
-    std::shared_ptr<TPrepareSettings> PrepareSettings;
+    //std::shared_ptr<TPrepareSettings> PrepareSettings;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -935,7 +990,8 @@ public:
             Settings.GetLockNodeId(),
             Settings.GetInconsistentTx(),
             TypeEnv,
-            Alloc);
+            Alloc,
+            nullptr);
 
         WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
@@ -1216,7 +1272,8 @@ public:
                     LockNodeId,
                     InconsistentTx,
                     TypeEnv,
-                    Alloc);
+                    Alloc,
+                    TxManager);
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
             }
 
@@ -1358,12 +1415,15 @@ public:
         Process();
     }
 
-    void Prepare(const std::shared_ptr<TPrepareSettings>& prepareSettings) {
+    void Prepare(const ui64 txId) {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
-        for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetPrepare(prepareSettings);
-        }
+        Y_UNUSED(txId);
+        // TODO: Additional actor for reads commit
+        //for (auto& [_, info] : WriteInfos) {
+            //info.WriteTableActor->SetPrepare(prepareSettings);
+            //GetShardsIds()
+        //}
         Close();
         Process();
     }
@@ -1450,10 +1510,11 @@ public:
         ExecuterActorId = ev->Get()->ExecuterActorId;
         YQL_ENSURE(!TxManager->IsReadOnly());
         if (TxManager->IsSingleShard()) {
-            TxManager->StartExecuting();
+            TxManager->StartExecute();
             ImmediateCommit();
         } else {
-            //Prepare();
+            TxManager->StartPrepare();
+            Prepare(ev->Get()->TxId);
         }
     }
 

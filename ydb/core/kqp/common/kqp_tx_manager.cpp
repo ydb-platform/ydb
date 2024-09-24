@@ -245,7 +245,7 @@ public:
         return ShardsToWait.empty();
     }
 
-    void StartExecuting() override {
+    void StartExecute() override {
         AFL_ENSURE(State == ETransactionState::PREPARING
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));

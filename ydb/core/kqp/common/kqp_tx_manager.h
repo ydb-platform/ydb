@@ -105,7 +105,7 @@ public:
 
     virtual bool ConsumePrepareTransactionResult(TPrepareResult&& result) = 0;
 
-    virtual void StartExecuting() = 0;
+    virtual void StartExecute() = 0;
 
     struct TCommitShardInfo {
         ui64 ShardId;

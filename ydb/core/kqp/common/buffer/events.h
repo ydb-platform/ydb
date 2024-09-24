@@ -8,14 +8,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TPrepareSettings {
-    ui64 TxId;
-    THashSet<ui64> SendingShards;
-    THashSet<ui64> ReceivingShards;
-    std::optional<ui64> ArbiterShard;
-    std::optional<ui64> ArbiterColumnShard;
-};
-
 struct TPreparedInfo {
     ui64 ShardId;
     ui64 MinStep;
@@ -31,6 +23,7 @@ struct TEvPrepare : public TEventLocal<TEvPrepare, TKqpBufferWriterEvents::EvPre
 
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
+    ui64 TxId;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {

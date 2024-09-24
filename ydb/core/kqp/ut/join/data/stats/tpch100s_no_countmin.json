@@ -1,0 +1,68 @@
+{
+    "/Root/customer": {
+        "byte_size": 1578400481,
+        "n_rows": 15000000,
+        "n_attrs": 8,
+        "key_columns": [
+            "c_custkey"
+        ]
+    },
+    "/Root/lineitem": {
+        "byte_size": 41682657607,
+        "n_rows": 600037902,
+        "n_attrs": 16,
+        "key_columns": [
+            "l_linenumber",
+            "l_orderkey"
+        ]
+    },
+    "/Root/nation": {
+        "byte_size": 3758,
+        "n_rows": 25,
+        "n_attrs": 4,
+        "key_columns": [
+            "n_nationkey"
+        ]
+    },
+    "/Root/orders": {
+        "byte_size": 9159017758,
+        "n_rows": 150000000,
+        "n_attrs": 9,
+        "key_columns": [
+            "o_orderkey"
+        ]
+    },
+    "/Root/part": {
+        "byte_size": 1460288880,
+        "n_rows": 20000000,
+        "n_attrs": 9,
+        "key_columns": [
+            "p_partkey"
+        ]
+    },
+    "/Root/partsupp": {
+        "byte_size": 5068061409,
+        "n_rows": 80000000,
+        "n_attrs": 5,
+        "key_columns": [
+            "ps_partkey",
+            "ps_suppkey"
+        ]
+    },
+    "/Root/region": {
+        "byte_size": 1280,
+        "n_rows": 5,
+        "n_attrs": 3,
+        "key_columns": [
+            "r_regionkey"
+        ]
+    },
+    "/Root/supplier": {
+        "byte_size": 95577702,
+        "n_rows": 1000000,
+        "n_attrs": 7,
+        "key_columns": [
+            "s_suppkey"
+        ]
+    }
+}

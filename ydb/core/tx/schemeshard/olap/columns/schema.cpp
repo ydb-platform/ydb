@@ -178,6 +178,18 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
             return false;
         }
 
+        if (colProto.HasColumnFamilyId() && colProto.GetColumnFamilyId() != col->GetColumnFamilyId()) {
+            errors.AddError(
+                "Column '" + colName + "' has column family id " + colProto.GetColumnFamilyId() + " that does not match schema preset");
+            return false;
+        }
+
+        if (colProto.HasColumnFamilyName() && colProto.GetColumnFamilyName() != col->GetColumnFamilyName()) {
+            errors.AddError(
+                "Column '" + colName + "' has column family name `" + colProto.GetColumnFamilyName() + "` that does not match schema preset");
+            return false;
+        }
+
         if (!usedColumns.insert(col->GetId()).second) {
             errors.AddError("Column '" + colName + "' is specified multiple times");
             return false;

@@ -9,9 +9,11 @@ NKikimr::TConclusion<std::shared_ptr<NArrow::NSerialization::ISerializer>> TOlap
     std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
     if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {
         Serializer = std::make_shared<NArrow::NSerialization::TNativeSerializer>();
-        Serializer->DeserializeFromProto(serializer);
+        if (Serializer->DeserializeFromProto(serializer).IsFail()) {
+            return NKikimr::TConclusionStatus::Fail("Can't parse serializer in TOlapColumnFamily");
+        }
     } else {
-        return NKikimr::TConclusionStatus::Fail("Parse serializer in TOlapColumnFamilu: Unknow ClassName");
+        return NKikimr::TConclusionStatus::Fail("Parse serializer in TOlapColumnFamily: Unknow ClassName");
     }
     return Serializer;
 }

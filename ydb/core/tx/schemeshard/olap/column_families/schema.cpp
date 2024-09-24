@@ -114,13 +114,10 @@ bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTabl
             return false;
         }
 
-        if (!familyProto.GetSerializer().HasArrowCompression()) {
-            errors.AddError("Missing compression for column family '" + columnFamilyName + "'");
-            return false;
-        }
-
-        if (!familyProto.GetSerializer().GetArrowCompression().HasCodec()) {
-            errors.AddError("Missing codec for column family '" + columnFamilyName + "'");
+        NArrow::NSerialization::TSerializerContainer serializer;
+        AFL_VERIFY(serializer.DeserializeFromProto(familyProto.GetSerializer()));
+        if (!family->GetSerializerContainer().IsEqualTo(serializer)) {
+            errors.AddError("Compression from column family '" + columnFamilyName + "` is not matching schema preset");
             return false;
         }
     }

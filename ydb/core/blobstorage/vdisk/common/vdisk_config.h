@@ -220,6 +220,20 @@ namespace NKikimr {
         TControlWrapper EnableVPatch = true;
         TControlWrapper DefaultHugeGarbagePerMille;
 
+        ///////////// BALANCING SETTINGS ////////////////////
+        bool BalancingEnableSend;
+        bool BalancingEnableDelete;
+        TDuration BalancingJobGranularity;
+        bool BalancingBalanceOnlyHugeBlobs;
+        ui64 BalancingBatchSize;
+        ui64 BalancingMaxToSendPerEpoch;
+        ui64 BalancingMaxToDeletePerEpoch;
+        TDuration BalancingReadBatchTimeout;
+        TDuration BalancingSendBatchTimeout;
+        TDuration BalancingRequestBlobsOnMainTimeout;
+        TDuration BalancingDeleteBatchTimeout;
+        TDuration BalancingEpochTimeout;
+
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;

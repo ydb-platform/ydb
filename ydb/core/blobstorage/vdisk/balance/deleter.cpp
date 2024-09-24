@@ -186,7 +186,7 @@ namespace {
 
             PartsRequester.SendRequestsToCheckPartsOnMain(SelfId());
 
-            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(REQUEST_TIMEOUT_TAG)); // read timeout
+            Schedule(Ctx->Cfg.RequestBlobsOnMainTimeout, new NActors::TEvents::TEvWakeup(REQUEST_TIMEOUT_TAG)); // read timeout
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
@@ -248,7 +248,7 @@ namespace {
 
             PartsDeleter.DeleteParts(SelfId(), PartsRequester.GetResult());
 
-            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(DELETE_TIMEOUT_TAG)); // delete timeout
+            Schedule(Ctx->Cfg.DeleteBatchTimeout, new NActors::TEvents::TEvWakeup(DELETE_TIMEOUT_TAG)); // delete timeout
         }
 
         void HandleDelLogoBlobResult(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
@@ -269,7 +269,7 @@ namespace {
         }
 
         void PassAway() override {
-            Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
+            Send(NotifyId, new NActors::TEvents::TEvCompleted());
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB32, VDISKP(Ctx->VCtx, "TDeleter::PassAway"));
             TActorBootstrapped::PassAway();
         }

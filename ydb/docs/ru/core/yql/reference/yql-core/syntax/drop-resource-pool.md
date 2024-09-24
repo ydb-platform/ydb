@@ -14,16 +14,15 @@ DROP RESOURCE POOL <name>
 
 ## Разрешения
 
-Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`
+Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`, пример выдачи такого разрешения:
 
-Пример выдачи такого разрешения:
 ```yql
 GRANT 'REMOVE SCHEMA`' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 ```
 
 ## Примеры
 
-Следующая команда удалит пул ресурсов olap:
+Следующая команда удалит пул ресурсов с именем "olap":
 
 ```yql
 DROP RESOURCE POOL olap;
@@ -31,6 +30,6 @@ DROP RESOURCE POOL olap;
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
-* [CREATE RESOURCE POOL](create-resource-pool.md)
-* [ALTER RESOURCE POOL](alter-resource-pool.md)
+* [{#T}](../../../dev/resource-consumption-management.md)
+* [{#T}](create-resource-pool.md)
+* [{#T}](alter-resource-pool.md)

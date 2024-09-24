@@ -1,6 +1,6 @@
 # DROP RESOURCE POOL CLASSIFIER
 
-`DROP RESOURCE POOL CLASSIFIER` удаляет [классификатор пула ресурсов](../../../../concepts/gloassary#resource-pool-classifier).
+`DROP RESOURCE POOL CLASSIFIER` удаляет [классификатор пулов ресурсов](../../../../concepts/gloassary#resource-pool-classifier).
 
 ## Синтаксис
 
@@ -14,16 +14,15 @@ DROP RESOURCE POOL CLASSIFIER <name>
 
 ## Разрешения
 
-Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALL` на базу данных
+Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALL` на базу данных, пример выдачи такого разрешения:
 
-Пример выдачи такого разрешения:
 ```yql
 GRANT 'ALL' ON `/my_db` TO `user1@domain`;
 ```
 
 ## Примеры
 
-Следующая команда удалит классификатор пула ресурсов с именем olap_classifier:
+Следующая команда удалит классификатор пула ресурсов с именем "olap_classifier":
 
 ```yql
 DROP RESOURCE POOL CLASSIFIER olap_classifier;
@@ -31,6 +30,6 @@ DROP RESOURCE POOL CLASSIFIER olap_classifier;
 
 ## См. также
 
-* [Управление потреблением ресурсов](../../../dev/resource-pools-and-classifiers.md)
-* [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
-* [ALTER RESOURCE POOL CLASSIFIER](alter-resource-pool-classifier.md)
+* [{#T}](../../../dev/resource-consumption-management.md)
+* [{#T}](create-resource-pool-classifier.md)
+* [{#T}](alter-resource-pool-classifier.md)

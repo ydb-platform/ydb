@@ -191,8 +191,8 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, штуки | Средняя загрузка базы данных, по этой метрики работает `DATABASE_LOAD_CPU_THRESHOLD`
-`kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, штуки | Лимит на число одновременно работающих запросов
-`kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, штуки | Текущее число одновременно работающих запросов. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`
-`kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, штуки | Размер очереди
-`kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, штуки | Количество запросов ожидающих в очереди на выполнение. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`
+`kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, штуки | Средняя загрузка базы данных, по этой метрики работает `DATABASE_LOAD_CPU_THRESHOLD`.
+`kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, штуки | Лимит на число одновременно работающих запросов.
+`kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, штуки | Текущее число одновременно работающих запросов. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.
+`kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, штуки | Размер очереди запросов, ожидающих выполнения.
+`kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, штуки | Количество запросов, ожидающих в очереди на выполнение. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.

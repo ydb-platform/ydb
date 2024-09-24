@@ -538,7 +538,7 @@ runs:
       if: inputs.run_tests
       shell: bash
       run: |
-        if [ $IS_TEST_RESULT_IGNORED == 0 ]
+        if [ $IS_TEST_RESULT_IGNORED == 0 ];then
           .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
         fi
 

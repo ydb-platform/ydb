@@ -47,22 +47,27 @@ class TRealBlockDevice : public IBlockDevice {
     class TCompletionThread : public TThread {
         static constexpr ui32 NumOfWriters = 2;
     public:
-        TCompletionThread(TRealBlockDevice &device, ui32 maxQueuedActions)
+        TCompletionThread(TRealBlockDevice &device, ui32 maxQueuedActions, bool iAmSecond)
             : TThread(&ThreadProc, this)
             , Device(device)
             , QueuedActions(0)
             , MaxQueuedActions(maxQueuedActions)
+            , IAmSecond(iAmSecond)
         {}
 
         static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdCmpl");
             static_cast<TCompletionThread*>(_this)->Exec();
             return nullptr;
         }
 
         void Exec() {
+            if (IAmSecond) {
+                SetCurrentThreadName("PdCmpl2");
+            } else {
+                SetCurrentThreadName("PdCmpl");
+            }
             ui32 exitSignalsReceived = 0;
-            Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
+            //Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
@@ -96,7 +101,11 @@ class TRealBlockDevice : public IBlockDevice {
                         }
                     }
                 } else {
-                    *Device.Mon.CompletionThreadCPU = ThreadCPUTime();
+                    if (IAmSecond) {
+                        *Device.Mon.Completion2ThreadCPU = ThreadCPUTime();
+                    } else {
+                        *Device.Mon.CompletionThreadCPU = ThreadCPUTime();
+                    }
                     CompletionActions.ProducedWaitI();
                 }
 
@@ -106,25 +115,29 @@ class TRealBlockDevice : public IBlockDevice {
                 }
                 prevCycleEnd = cycleEnd;
             }
+
+        }
+
+        TAtomicBase GetQueuedActions() const {
+            return AtomicGet(QueuedActions);
         }
 
         // Schedule action execution
         // pass action = nullptr to quit
         void Schedule(TCompletionAction *action) noexcept {
             if (AtomicGet(QueuedActions) >= MaxQueuedActions) {
-                Device.Mon.L7.Set(true, AtomicGetAndIncrement(SeqnoL7));
+                //Device.Mon.L7.Set(true, AtomicGetAndIncrement(SeqnoL7));
                 while (AtomicGet(QueuedActions) >= MaxQueuedActions) {
                     SpinLockPause();
                 }
-                Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
+                //Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
             }
             AtomicIncrement(QueuedActions);
             CompletionActions.Push(action);
             return;
         }
 
-        // Schedule action execution
-        // pass action = nullptr to quit
+        // This hack make it possible to execute some completion action beside of device but in ComplitionThread
         void ScheduleHackForLogReader(TCompletionAction *action) noexcept {
             AtomicIncrement(QueuedActions);
             action->Result = EIoResult::Ok;
@@ -137,7 +150,8 @@ class TRealBlockDevice : public IBlockDevice {
         TRealBlockDevice &Device;
         TAtomic QueuedActions;
         const TAtomicBase MaxQueuedActions;
-        TAtomic SeqnoL7 = 0;
+        //TAtomic SeqnoL7 = 0;
+        bool IAmSecond = false;
     };
 
     class TSubmitThreadBase : public TThread {
@@ -145,7 +159,7 @@ class TRealBlockDevice : public IBlockDevice {
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
         TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> OperationsToBeSubmit;
-        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 15;
+        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 20;
         TMutex SubmitMtx;
         TCondVar SubmitCondVar;
         TAtomicBlockCounter SubmitQuitCounter;
@@ -370,7 +384,11 @@ class TRealBlockDevice : public IBlockDevice {
 
         void ExecuteOrScheduleCompletion(TCompletionAction *action) {
             if (action->ShouldBeExecutedInCompletionThread) {
-                Device.CompletionThread->Schedule(action);
+                if (action->CanBeExecutedInCompletionThread2 && Device.CompletionThread->GetQueuedActions() > Device.Completion2Thread->GetQueuedActions()) {
+                    Device.Completion2Thread->Schedule(action);
+                } else {
+                    Device.CompletionThread->Schedule(action);
+                }
             } else {
                 if (action->CanHandleResult()) {
                     action->Exec(Device.PCtx->ActorSystem);
@@ -512,6 +530,7 @@ class TRealBlockDevice : public IBlockDevice {
             }
             // Stop the completion thread
             Device.CompletionThread->Schedule(nullptr);
+            Device.Completion2Thread->Schedule(nullptr);
         }
     };
 
@@ -697,6 +716,7 @@ class TRealBlockDevice : public IBlockDevice {
                         IAsyncIoOperation *op = TrimOperations.Pop();
                         if (op == nullptr) {
                             Device.CompletionThread->Schedule(nullptr);
+                            Device.Completion2Thread->Schedule(nullptr);
                             return;
                         }
                         Y_ABORT_UNLESS(op->GetType() == IAsyncIoOperation::EType::PTrim);
@@ -746,6 +766,7 @@ protected:
 
 private:
     THolder<TCompletionThread> CompletionThread;
+    THolder<TCompletionThread> Completion2Thread;
     THolder<TTrimThread> TrimThread;
     THolder<TGetThread> GetEventsThread;
     THolder<TSubmitGetThread> SpdkSubmitGetThread;
@@ -758,7 +779,7 @@ private:
     ui64 Reordering;
     ui64 SeekCostNs;
     bool IsTrimEnabled;
-    ui32 MaxQueuedCompletionActions;
+    ui32 MaxQueuedCompletionActions; // for both threads
 
     TIdleCounter IdleCounter; // Includes reads, writes and trims
 
@@ -786,6 +807,7 @@ public:
         : Mon(mon)
         , Path(path)
         , CompletionThread(nullptr)
+        , Completion2Thread(nullptr)
         , TrimThread(nullptr)
         , GetEventsThread(nullptr)
         , SharedCallback(nullptr)
@@ -857,7 +879,8 @@ protected:
         }
         if (IsFileOpened) {
             IoContext->SetActorSystem(PCtx->ActorSystem);
-            CompletionThread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions);
+            CompletionThread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions, false);
+            Completion2Thread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions, true);
             TrimThread = MakeHolder<TTrimThread>(*this);
             SharedCallback = MakeHolder<TSharedCallback>(*this);
             if (Flags & TDeviceMode::UseSpdk) {
@@ -875,6 +898,7 @@ protected:
                 }
             }
             CompletionThread->Start();
+            Completion2Thread->Start();
             TrimThread->Start();
             IsInitialized = true;
         }
@@ -1128,6 +1152,7 @@ protected:
             if (IsInitialized) {
                 Y_ABORT_UNLESS(TrimThread);
                 Y_ABORT_UNLESS(CompletionThread);
+                Y_ABORT_UNLESS(Completion2Thread);
                 TrimThread->Schedule(nullptr); // Stop the Trim thread
                 if (Flags & TDeviceMode::UseSpdk) {
                     Y_ABORT_UNLESS(SpdkSubmitGetThread);
@@ -1146,12 +1171,14 @@ protected:
                 SharedCallback->Destroy();
                 TrimThread->Join();
                 CompletionThread->Join();
+                Completion2Thread->Join();
                 IsInitialized = false;
             } else {
                 Y_ABORT_UNLESS(SubmitThread.Get() == nullptr);
                 Y_ABORT_UNLESS(GetEventsThread.Get() == nullptr);
                 Y_ABORT_UNLESS(TrimThread.Get() == nullptr);
                 Y_ABORT_UNLESS(CompletionThread.Get() == nullptr);
+                Y_ABORT_UNLESS(Completion2Thread.Get() == nullptr);
             }
             if (IsFileOpened) {
                 EIoResult ret = IoContext->Destroy();

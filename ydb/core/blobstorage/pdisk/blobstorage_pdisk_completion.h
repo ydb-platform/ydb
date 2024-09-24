@@ -23,6 +23,7 @@ struct TCompletionAction {
     // to BlockDevice from Exec() and it's more safe to use WhiteList to allow only
     // LogWrite and ChunkWrite to be executed from GetThread
     bool ShouldBeExecutedInCompletionThread = true;
+    bool CanBeExecutedInCompletionThread2 = false;
 
     mutable NLWTrace::TOrbit Orbit;
 protected:

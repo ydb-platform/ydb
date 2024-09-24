@@ -109,7 +109,8 @@ protected:
                              const TString& messageGroupId,
                              NYdb::EStatus status);
     void CloseTopicWriteSession(const TString& topicPath,
-                                const TString& messageGroupId);
+                                const TString& messageGroupId,
+                                bool force = false);
     void CloseTopicReadSession(const TString& topicPath,
                                const TString& consumerName);
 
@@ -694,7 +695,8 @@ void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::
 }
 
 void TFixture::CloseTopicWriteSession(const TString& topicPath,
-                                      const TString& messageGroupId)
+                                      const TString& messageGroupId,
+                                      bool force)
 {
     std::pair<TString, TString> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
@@ -703,7 +705,7 @@ void TFixture::CloseTopicWriteSession(const TString& topicPath,
 
     TTopicWriteSessionContext& context = i->second;
 
-    context.Session->Close();
+    context.Session->Close(force ? TDuration::MilliSeconds(0) : TDuration::Max());
     TopicWriteSessions.erase(key);
 }
 
@@ -1617,20 +1619,24 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_14, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
 {
+    // the session of writing to the topic can be closed before the commit
     CreateTopic("topic_A");
 
     NTable::TSession tableSession = CreateTableSession();
     NTable::TTransaction tx = BeginTx(tableSession);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
     CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_1);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #2", &tx);
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
     CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_2);
 
     CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
@@ -2151,6 +2157,42 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
     // And they wanted to continue reading their messages
     messages = ReadFromTopic(TEST_TOPIC, "consumer-1", TDuration::Seconds(2));
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
+{
+    // The recording stream will run into a quota. Before the commit, the client will receive confirmations
+    // for some of the messages. The `CommitTx` call will wait for the rest.
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
+{
+    // If the recording session does not wait for confirmations, the commit will fail
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
+    }
+
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID, true); // force close
+
+    CommitTx(tx, EStatus::SESSION_EXPIRED);
 }
 
 }

@@ -22,7 +22,6 @@ struct TEvPrivate {
         EvRefreshPoolState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvResolvePoolResponse,
         EvFetchPoolResponse,
-        EvFetchDatabaseResponse,
         EvCreatePoolResponse,
         EvPrepareTablesRequest,
         EvPlaceRequestIntoPoolResponse,
@@ -46,8 +45,6 @@ struct TEvPrivate {
         EvDelayRequestResponse,
         EvStartRequestResponse,
         EvCleanupRequestsResponse,
-
-        EvRanksCheckerResponse,
 
         EvEnd
     };
@@ -90,22 +87,6 @@ struct TEvPrivate {
         const TString Database;
         const TString PoolId;
         const NResourcePool::TPoolSettings PoolConfig;
-        const TPathId PathId;
-        const NYql::TIssues Issues;
-    };
-
-    struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, EvFetchDatabaseResponse> {
-        TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, TPathId pathId, NYql::TIssues issues)
-            : Status(status)
-            , Database(database)
-            , Serverless(serverless)
-            , PathId(pathId)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const TString Database;
-        const bool Serverless;
         const TPathId PathId;
         const NYql::TIssues Issues;
     };
@@ -334,21 +315,6 @@ struct TEvPrivate {
 
         const Ydb::StatusIds::StatusCode Status;
         const std::vector<TString> SesssionIds;
-        const NYql::TIssues Issues;
-    };
-
-    // Resource pool classifier events
-    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
-        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
-            : Status(status)
-            , MaxRank(maxRank)
-            , NumberClassifiers(numberClassifiers)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const i64 MaxRank;
-        const ui64 NumberClassifiers;
         const NYql::TIssues Issues;
     };
 };

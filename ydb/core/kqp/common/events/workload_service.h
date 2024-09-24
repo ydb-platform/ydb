@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -88,6 +89,32 @@ struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TKqpWo
     const TString PoolId;
     const std::optional<NResourcePool::TPoolSettings> Config;
     const std::optional<NACLib::TSecurityObject> SecurityObject;
+};
+
+struct TEvUpdateDatabaseInfo : public NActors::TEventLocal<TEvUpdateDatabaseInfo, TKqpWorkloadServiceEvents::EvUpdateDatabaseInfo> {
+    TEvUpdateDatabaseInfo(const TString& database, bool serverless)
+        : Database(database)
+        , Serverless(serverless)
+    {}
+
+    const TString Database;
+    const bool Serverless;
+};
+
+struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, TKqpWorkloadServiceEvents::EvFetchDatabaseResponse> {
+    TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, TPathId pathId, NYql::TIssues issues)
+        : Status(status)
+        , Database(database)
+        , Serverless(serverless)
+        , PathId(pathId)
+        , Issues(std::move(issues))
+    {}
+
+    const Ydb::StatusIds::StatusCode Status;
+    const TString Database;
+    const bool Serverless;
+    const TPathId PathId;
+    const NYql::TIssues Issues;
 };
 
 }  // NKikimr::NKqp::NWorkload

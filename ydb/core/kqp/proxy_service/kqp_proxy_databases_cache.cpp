@@ -10,6 +10,35 @@ namespace NKikimr::NKqp {
 
 namespace {
 
+
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvSubscribeOnDatabase = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvPingDatabaseSubscription,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+    struct TEvSubscribeOnDatabase : public TEventLocal<TEvSubscribeOnDatabase, EvSubscribeOnDatabase> {
+        explicit TEvSubscribeOnDatabase(const TString& database)
+            : Database(database)
+        {}
+
+        TString Database;
+    };
+
+    struct TEvPingDatabaseSubscription : public TEventLocal<TEvSubscribeOnDatabase, EvPingDatabaseSubscription> {
+        explicit TEvPingDatabaseSubscription(const TString& database)
+            : Database(database)
+        {}
+
+        TString Database;
+    };
+};
+
 class TDatabaseSubscriberActor : public TActor<TDatabaseSubscriberActor> {
     using TBase = TActor<TDatabaseSubscriberActor>;
 
@@ -27,7 +56,7 @@ public:
         : TBase(&TDatabaseSubscriberActor::StateFunc)
     {}
 
-    void Handle(TEvKqp::TEvSubscribeOnDatabase::TPtr& ev) {
+    void Handle(TEvPrivate::TEvSubscribeOnDatabase::TPtr& ev) {
         const TString& database = CanonizePath(ev->Get()->Database);
         auto& databaseState = Subscriptions[database];
 
@@ -41,7 +70,7 @@ public:
         databaseState.Subscribers.insert(ev->Sender);
     }
 
-    void Handle(NWorkload::TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
         const TString& database = CanonizePath(ev->Get()->Database);
         auto& databaseState = Subscriptions[database];
 
@@ -104,8 +133,8 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvKqp::TEvSubscribeOnDatabase, Handle);
-        hFunc(NWorkload::TEvPrivate::TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvPrivate::TEvSubscribeOnDatabase, Handle);
+        hFunc(NWorkload::TEvFetchDatabaseResponse, Handle);
         hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
         sFunc(TEvents::TEvPoison, HandlePoison);
@@ -142,6 +171,42 @@ private:
 };
 
 }  // anonymous namespace
+
+const TString& TDatabasesCache::GetTenantName() {
+    if (!TenantName) {
+        TenantName = CanonizePath(AppData()->TenantName);
+    }
+    return TenantName;
+}
+
+void TDatabasesCache::UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext) {
+    const auto& database = event->Get()->Database;
+    auto it = DatabasesCache.find(database);
+    if (it == DatabasesCache.end()) {
+        it = DatabasesCache.insert({database, TDatabaseInfo{}}).first;
+    }
+    it->second.DatabaseId = event->Get()->DatabaseId;
+
+    bool success = event->Get()->Status == Ydb::StatusIds::SUCCESS;
+    for (auto& delayedEvent : it->second.DelayedEvents) {
+        if (success) {
+            actorContext.Send(std::move(delayedEvent.Event));
+        } else {
+            delayedEvent.ErrorHandler(event->Get()->Status, event->Get()->Issues);
+        }
+    }
+    it->second.DelayedEvents.clear();
+
+    if (!success) {
+        DatabasesCache.erase(it);
+    }
+}
+
+void TDatabasesCache::StopSubscriberActor(TActorContext actorContext) const {
+    if (SubscriberActor) {
+        actorContext.Send(SubscriberActor, new TEvents::TEvPoison());
+    }
+}
 
 void TDatabasesCache::CreateDatabaseSubscriberActor(TActorContext actorContext) {
     SubscriberActor = actorContext.Register(new TDatabaseSubscriberActor());

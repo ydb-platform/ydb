@@ -538,7 +538,7 @@ private:
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchDatabaseResponse(status, Database, Serverless, PathId, std::move(Issues)));
+        Send(ReplyActorId, new TEvFetchDatabaseResponse(status, Database, Serverless, PathId, std::move(Issues)));
         PassAway();
     }
 

@@ -25,7 +25,7 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be canceled with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
 
-A unique secondary index is a synchronous index, so the update process is the same as in the [{#T}](#sync) section described above from a transaction perspective.
+A unique secondary index is a synchronous index, so the update process is the same as in the [Synchronous secondary index](#sync) section described above from a transaction perspective.
 
 ### Limitations
 

@@ -35,7 +35,8 @@ public:
         IMetricsRegistryPtr metricsRegistry,
         const std::function<IActor*(void)>& metricsPusherFactory,
         bool withSpilling,
-        NFq::NConfig::TConfig fqConfig)
+        NFq::NConfig::TConfig fqConfig,
+        const NYql::IPqGateway::TPtr& pqGateway)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
             : CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq))
@@ -108,7 +109,8 @@ public:
                 yqSharedResources,
                 credentialsFactory,
                 "/tenant",
-                MakeIntrusive<NMonitoring::TDynamicCounters>());
+                MakeIntrusive<NMonitoring::TDynamicCounters>(),
+                pqGateway);
 
             ServiceNode->AddLocalService(
                 NFq::RowDispatcherServiceActorId(),
@@ -274,7 +276,8 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling,
-    NFq::NConfig::TConfig fqConfig)
+    NFq::NConfig::TConfig fqConfig,
+    const NYql::IPqGateway::TPtr& pqGateway)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
         compFactory,
@@ -287,7 +290,8 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
         metricsRegistry,
         metricsPusherFactory,
         withSpilling,
-        fqConfig);
+        fqConfig,
+        pqGateway);
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -296,7 +300,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory,
-    NFq::NConfig::TConfig fqConfig)
+    NFq::NConfig::TConfig fqConfig,
+    const NYql::IPqGateway::TPtr& pqGateway)
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
@@ -316,7 +321,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             metricsRegistry,
             metricsPusherFactory,
             withSpilling,
-            fqConfig),
+            fqConfig,
+            pqGateway),
         CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 

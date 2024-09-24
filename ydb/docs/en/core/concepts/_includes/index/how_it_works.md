@@ -22,9 +22,10 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 
 ![Table](https://storage.yandexcloud.net/ydb-www-prod-site-assets/howitworks/table.png)
 
-{{ ydb-short-name }} provides users with the well-known abstraction — tables. In {{ ydb-short-name }}, there are two main types of tables:
-* [Row tables](../../datamodel/table.md#row-tables) are designed for OLTP workloads.
-* [Column tables](../../datamodel/table.md#column-tables) are designed for OLAP workloads.
+{{ ydb-short-name }} provides users with a well-known abstraction — tables. In {{ ydb-short-name }}, there are two main types of tables:
+
+* [Row-oriented tables](../../datamodel/table.md#row-tables) are designed for OLTP workloads.
+* [Column-oriented tables](../../datamodel/table.md#column-tables) are designed for OLAP workloads.
 
 Logically, from the user's point of view, both types of tables look the same. The main difference between row tables and column tables lies in the way data is stored. In row tables, the values of all columns in each row are stored together, while in column tables — on the contrary, each column is stored separately, so cells related to different rows are stored next to each other.
 

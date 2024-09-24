@@ -177,8 +177,8 @@ private:
     size_t ChainSize; 
 };
 
-void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLookupJoin, bool useColumnStore) {
-    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin);
+void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
+    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -192,24 +192,6 @@ void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         PrintPlan(result.GetPlan());
-    }
-}
-
-void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLookupJoin, bool useColumnStore) {
-    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin);
-    auto db = kikimr.GetTableClient();
-    auto session = db.CreateSession().GetValueSync().GetSession();
-
-    CreateSampleTable(session, useColumnStore);
-
-    /* join with parameters */
-    {
-        const TString query = GetStatic(queryPath);
-        
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        PrintPlan(result.GetQueryPlan());
     }
 }
 
@@ -375,6 +357,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 UNIT_ASSERT_EQUAL(std::stod(eRows), card);
             }
         }
+    }
+
+    /* tpcds23 has > 1 result sets */
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS23, StreamLookupJoin, ColumnStore) {
+        ExplainJoinOrderTestDataQueryWithStats(
+            "queries/tpcds23.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore
+        );
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoin, StreamLookupJoin, ColumnStore) {
@@ -545,8 +534,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             PrintPlan(result.GetPlan());
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-            queryPlanPrinter.Print(result.GetPlan());
             if (useStreamLookupJoin) {
                 return;
             }

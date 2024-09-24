@@ -530,6 +530,8 @@ private:
 
     bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
+
+    void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
 };
 
 

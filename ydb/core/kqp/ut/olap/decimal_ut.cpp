@@ -53,14 +53,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
             {
                 TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(4).Add(TDecimalValue("3.14"));
-                inserter.AddRow().Add(2).Add(3).Add(TDecimalValue("8.16"));
+                inserter.AddRow().Add(1).Add(4).Add(TDecimalValue("3.14", 22, 9));
+                inserter.AddRow().Add(2).Add(3).Add(TDecimalValue("8.16", 22, 9));
                 Upsert(inserter);
             }
             {
                 TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(4).Add(1).Add(TDecimalValue("12.46"));
-                inserter.AddRow().Add(3).Add(2).Add(TDecimalValue("8.492"));
+                inserter.AddRow().Add(4).Add(1).Add(TDecimalValue("12.46", 22, 9));
+                inserter.AddRow().Add(3).Add(2).Add(TDecimalValue("8.492", 22, 9));
 
                 Upsert(inserter);
             }
@@ -77,10 +77,10 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
             {
                 TTestHelper::TUpdatesBuilder inserter = Inserter();
-                inserter.AddRow().Add(1).Add(1).Add(TDecimalValue("12.46"));
-                inserter.AddRow().Add(2).Add(1).Add(TDecimalValue("8.16"));
-                inserter.AddRow().Add(3).Add(2).Add(TDecimalValue("12.46"));
-                inserter.AddRow().Add(4).Add(2).Add(TDecimalValue("8.16"));
+                inserter.AddRow().Add(1).Add(1).Add(TDecimalValue("12.46", 22, 9));
+                inserter.AddRow().Add(2).Add(1).Add(TDecimalValue("8.16", 22, 9));
+                inserter.AddRow().Add(3).Add(2).Add(TDecimalValue("12.46", 22, 9));
+                inserter.AddRow().Add(4).Add(2).Add(TDecimalValue("8.16", 22, 9));
                 Upsert(inserter);
             }
         }
@@ -156,8 +156,8 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         tester.PrepareTable1();
 
         TTestHelper::TUpdatesBuilder inserter = tester.Inserter();
-        inserter.AddRow().Add(5).Add(12).Add(TDecimalValue("8.492"));
-        inserter.AddRow().Add(6).Add(30).Add(TDecimalValue("12.46"));
+        inserter.AddRow().Add(5).Add(12).Add(TDecimalValue("8.492", 22, 9));
+        inserter.AddRow().Add(6).Add(30).Add(TDecimalValue("12.46", 22, 9));
         tester.Upsert(inserter);
 
         tester.CheckQuery("SELECT dec, count(*) FROM `/Root/Table1` group by dec order by dec",

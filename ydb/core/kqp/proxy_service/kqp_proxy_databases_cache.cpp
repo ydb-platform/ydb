@@ -216,9 +216,10 @@ const TString& TDatabasesCache::GetTenantName() {
 }
 
 void TDatabasesCache::UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext) {
-    const auto& database = event->Get()->Database;
-    auto it = DatabasesCache.find(database);
-    Y_ABORT_UNLESS(it != DatabasesCache.end());
+    auto it = DatabasesCache.find(event->Get()->Database);
+    if (it == DatabasesCache.end()) {
+        return;
+    }
     it->second.DatabaseId = event->Get()->DatabaseId;
 
     const bool success = event->Get()->Status == Ydb::StatusIds::SUCCESS;

@@ -70,7 +70,7 @@ void TCommandYql::Parse(TConfig& config) {
     }
     if (Script.Empty()) {
         Cerr << "Neither text of script (\"--script\", \"-s\") "
-            << "nor path to file with script text (\"--file\", \"-f\") were provided.";
+            << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
     if(FlameGraphPath && FlameGraphPath->Empty())

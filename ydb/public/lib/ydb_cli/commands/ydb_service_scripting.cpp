@@ -74,8 +74,9 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     ParseInputFormats();
     ParseOutputFormats();
     if (!Script && !ScriptFile) {
-        throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
-            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
+        Cerr << "Neither \"Text of script\" (\"--script\", \"-s\") "
+            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
     }
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
@@ -83,11 +84,6 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     }
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
-    }
-    if (Script.Empty()) {
-        Cerr << "Neither text of script (\"--script\", \"-s\") "
-            << "nor path to file with script text (\"--file\", \"-f\") were provided.";
-        config.PrintHelpAndExit();
     }
     if(FlameGraphPath && FlameGraphPath->Empty())
     {

@@ -330,7 +330,7 @@ int TCommandDropTable::Run(TConfig& config) {
 void TCommandQueryBase::CheckQueryOptions(TClientCommand::TConfig& config) const {
     if (!Query && !QueryFile) {
         Cerr << "Neither \"Text of query\" (\"--query\", \"-q\") "
-            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
     if (Query && QueryFile) {

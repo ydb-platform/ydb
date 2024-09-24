@@ -100,7 +100,7 @@ void TCommandSql::Parse(TConfig& config) {
     }
     if (Query.Empty()) {
         Cerr << "Neither text of script (\"--script\", \"-s\") "
-            << "nor path to file with script text (\"--file\", \"-f\") were provided.";
+            << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
     // Should be called after setting ReadingSomethingFromStdin

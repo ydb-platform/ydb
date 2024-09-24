@@ -109,9 +109,9 @@ public:
 
         std::vector<TKey> portion;
         portion.reserve(10000);
-        for (auto iter = unusedSchemaIds.begin(); iter != unusedSchemaIds.end(); iter++) {
-            if (!maxVersion.has_value() || (iter->Version != *maxVersion)) {
-                portion.push_back(*iter);
+        for (const auto& id: unusedSchemaIds) {
+            if (!maxVersion.has_value() || (id.Version != *maxVersion)) {
+                portion.push_back(id);
                 if (portion.size() >= 10000) {
                     changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion)));
                 }

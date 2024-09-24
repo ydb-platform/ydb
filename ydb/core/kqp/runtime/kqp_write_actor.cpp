@@ -54,6 +54,58 @@ namespace {
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED;
         }
     }
+
+    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+        evWrite->Record.SetTxId(txId);
+        auto* protoLocks = evWrite->Record.MutableLocks();
+        protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        
+        const auto prepareSettings = txManager->GetPrepareTransactionInfo();
+        if (!prepareSettings.ArbiterColumnShard) {
+            for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                protoLocks->AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                protoLocks->AddReceivingShards(receivingShardId);
+            }
+            if (prepareSettings.Arbiter) {
+                protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
+            }
+        } else if (prepareSettings.ArbiterColumnShard == shardId) {
+            protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
+            for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                protoLocks->AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                protoLocks->AddReceivingShards(receivingShardId);
+            }
+        } else {
+            protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
+            protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
+            protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+            if (prepareSettings.SendingShards.contains(shardId)) {
+                protoLocks->AddSendingShards(shardId);
+            }
+            if (prepareSettings.ReceivingShards.contains(shardId)) {
+                protoLocks->AddReceivingShards(shardId);
+            }
+        }
+
+        const auto locks = txManager->GetLocks(shardId);
+        for (const auto& lock : locks) {
+            *protoLocks->AddLocks() = lock;
+        }
+    }
+
+    void FillEvWriteRollback(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+        auto* protoLocks = evWrite->Record.MutableLocks();
+        protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
+
+        const auto locks = txManager->GetLocks(shardId);
+        for (const auto& lock : locks) {
+            *protoLocks->AddLocks() = lock;
+        }
+    }
 }
 
 
@@ -74,56 +126,6 @@ struct IKqpTableWriterCallbacks {
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
 
-/*class TKqpShardsCommitActor : public TActorBootstrapped<TKqpShardsCommitActor> {
-    using TBase = TActorBootstrapped<TKqpShardsCommitActor>;
-
-    struct TEvPrivate {
-        enum EEv {
-            EvTerminate,
-        };
-
-        struct TEvTerminate : public TEventLocal<TEvTerminate, EvTerminate> {
-        };
-    };
-
-public:
-    TKqpShardsCommitActor(
-        IKqpTableWriterCallbacks* callbacks,
-        IKqpTransactionManagerPtr txManager) {
-    }
-
-    void Bootstrap() {
-        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TKqpShardsCommitActor::StatePreparing);
-    }
-
-    static constexpr char ActorName[] = "KQP_TABLE_WRITE_ACTOR";
-
-    STFUNC(StateProcessing) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-            }
-        } catch (const yexception& e) {
-            RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-        }
-    }
-
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        Callbacks->OnError(message, statusCode, subIssues);
-    }
-
-    void PassAway() override {;
-        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
-        TActorBootstrapped<TKqpReadShardsCommitActor>::PassAway();
-    }
-
-    void Terminate() {
-        Send(this->SelfId(), new TEvPrivate::TEvTerminate{});
-    }
-
-private:
-    IKqpTransactionManagerPtr TxManager;
-};*/
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
@@ -312,7 +314,6 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
-                hFunc(TEvPrivate::TEvTerminate, Handle);
                 hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
@@ -323,7 +324,13 @@ public:
     }
 
     STFUNC(StateTerminating) {
-        Y_UNUSED(ev);
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvPrivate::TEvTerminate, Handle);
+            }
+        } catch (const yexception& e) {
+            CA_LOG_E(e.what());
+        }
     }
 
     bool IsResolving() const {
@@ -705,8 +712,11 @@ public:
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::IMMEDIATE_COMMIT;
 
-        YQL_ENSURE(ShardedWriteController->GetShardsCount() == 1);
-        ShardedWriteController->AddCoveringMessages();
+        if (ShardedWriteController->GetShardsCount() == 1) {
+            ShardedWriteController->AddCoveringMessages();
+        } else {
+            YQL_ENSURE(ShardedWriteController->GetShardsCount() == 0);
+        }
     }
 
     void Flush() {
@@ -756,45 +766,7 @@ public:
             }
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
-            evWrite->Record.SetTxId(*TxId);
-            auto* protoLocks = evWrite->Record.MutableLocks();
-            protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-            
-            const auto prepareSettings = TxManager->GetPrepareTransactionInfo();
-            if (!prepareSettings.ArbiterColumnShard) {
-                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                    protoLocks->AddSendingShards(sendingShardId);
-                }
-                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                    protoLocks->AddReceivingShards(receivingShardId);
-                }
-                if (prepareSettings.Arbiter) {
-                    protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
-                }
-            } else if (prepareSettings.ArbiterColumnShard == shardId) {
-                protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
-                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                    protoLocks->AddSendingShards(sendingShardId);
-                }
-                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                    protoLocks->AddReceivingShards(receivingShardId);
-                }
-            } else {
-                protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
-                protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
-                protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
-                if (prepareSettings.SendingShards.contains(shardId)) {
-                    protoLocks->AddSendingShards(shardId);
-                }
-                if (prepareSettings.ReceivingShards.contains(shardId)) {
-                    protoLocks->AddReceivingShards(shardId);
-                }
-            }
-
-            const auto locks = TxManager->GetLocks(shardId);
-            for (const auto& lock : locks) {
-                *protoLocks->AddLocks() = lock;
-            }
+            FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
         }
@@ -1205,21 +1177,24 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TKqpBufferWriteActor::StateFunc);
+        Become(&TKqpBufferWriteActor::StateWrite);
     }
 
     static constexpr char ActorName[] = "KQP_BUFFER_WRITE_ACTOR";
 
-    STFUNC(StateFunc) {
+    // TODO: split states
+    STFUNC(StateWrite) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
                 hFunc(TEvKqpBuffer::TEvFlush, Handle);
                 hFunc(TEvKqpBuffer::TEvCommit, Handle);
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
-                hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvBufferWrite, Handle);
+
+                hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
@@ -1371,9 +1346,9 @@ public:
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetPrepare(txId);
         }
-        // TODO: Additional actor for reads commit
         Close();
         Process();
+        SendToExternalShards();
     }
 
     void ImmediateCommit() {
@@ -1392,8 +1367,56 @@ public:
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetDistributedCommit();
         }
-        // TODO: Additional actor for reads commit
         SendCommitToCoordinator();
+    }
+
+    void Rollback() {
+        YQL_ENSURE(State == EState::ROLLINGBACK);
+        SendToExternalShards();
+    }
+
+    void SendToExternalShards() {
+        const bool isRollback = (State == EState::ROLLINGBACK);
+    
+        THashSet<ui64> ExternalShards = TxManager->GetShards();
+        for (auto& [_, info] : WriteInfos) {
+            for (const auto& shardId : info.WriteTableActor->GetShardsIds()) {
+                ExternalShards.erase(shardId);
+            }
+        }
+
+        for (const ui64 shardId : ExternalShards) {
+            
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isRollback
+                ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+                : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+
+            if (isRollback) {
+                FillEvWriteRollback(evWrite.get(), shardId, TxManager);
+            } else {
+                YQL_ENSURE(TxId);
+                FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
+            }
+
+            CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
+            << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Size=" << 0 << ", Cookie=" << 0
+            << ", OperationsCount=" << 0 << ", IsFinal=" << 1
+            << ", Attempts=" << 0);
+
+            Send(
+                NKikimr::MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
+                0,
+                0);
+        }
     }
 
     void SendCommitToCoordinator() {
@@ -1515,7 +1538,8 @@ public:
         }
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ReplyErrorAndDie(TStringBuilder() << "Failed to deviler message.", NYql::NDqProto::StatusIds::UNAVAILABLE, {});
     }
 
@@ -1531,7 +1555,7 @@ public:
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         YQL_ENSURE(!TxManager->IsReadOnly());
-        if (TxManager->IsSingleShard()) {
+        if (TxManager->IsSingleShard() && !WriteInfos.empty()) {
             TxManager->StartExecute();
             ImmediateCommit();
         } else {
@@ -1541,9 +1565,187 @@ public:
     }
 
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
-        // TODO: rollback using only commit actor
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        Rollback();
         Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+    }
+
+    void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        auto getIssues = [&ev]() {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            return issues;
+        };
+
+        CA_LOG_D("Recv EvWriteResult from ShardID=" << ev->Get()->Record.GetOrigin()
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Cookie=" << ev->Cookie);
+
+        // TODO: get rid of copy-paste
+        switch (ev->Get()->GetStatus()) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
+            CA_LOG_E("Got UNSPECIFIED for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Unspecified error for table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::UNSPECIFIED,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
+            ProcessWritePreparedShard(ev);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+            ProcessWriteCompletedShard(ev);
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
+            CA_LOG_E("Got ABORTED for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Aborted for table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::ABORTED,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
+            CA_LOG_E("Got INTERNAL ERROR for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            
+            ReplyErrorAndDie(
+                TStringBuilder() << "Internal error for table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
+            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            
+            ReplyErrorAndDie(
+                TStringBuilder() << "Disk space exhausted for table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                getIssues());
+                return;
+        }        
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+            CA_LOG_W("Got OVERLOADED for table ."
+                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                << " Sink=" << this->SelfId() << "."
+                << " Ignored this error."
+                << getIssues().ToOneLineString());
+            // TODO: support waiting
+            ReplyErrorAndDie(
+                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::OVERLOADED,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
+            CA_LOG_E("Got CANCELLED for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Cancelled request to table."
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::CANCELLED,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
+            CA_LOG_E("Got BAD REQUEST for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Bad request. Table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::BAD_REQUEST,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
+            CA_LOG_E("Got SCHEME CHANGED for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Scheme changed. Table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+            CA_LOG_E("Got LOCKS BROKEN for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Transaction locks invalidated.. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::ABORTED,
+                getIssues());
+            return;
+        }
+        }
+    }
+
+    void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        YQL_ENSURE(State == EState::COMMITTING);
+        const auto& record = ev->Get()->Record;
+        IKqpTransactionManager::TPrepareResult preparedInfo;
+        preparedInfo.ShardId = record.GetOrigin();
+        preparedInfo.MinStep = record.GetMinStep();
+        preparedInfo.MaxStep = record.GetMaxStep();
+
+        preparedInfo.Coordinator = 0;
+        if (record.DomainCoordinatorsSize()) {
+            auto domainCoordinators = TCoordinators(TVector<ui64>(record.GetDomainCoordinators().begin(),
+                                                                  record.GetDomainCoordinators().end()));
+            preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
+        }
+
+        OnPrepared(std::move(preparedInfo), 0);
+    }
+
+    void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        YQL_ENSURE(State == EState::COMMITTING);
+        CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie
+            << ", Locks=" << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
+
+        OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
 
     void OnReady() override {
@@ -1585,7 +1787,7 @@ public:
         ReplyErrorAndDie(message, statusCode, subIssues);
     }
 
-    void ReplyErrorAndDie(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) {
+    void ReplyErrorAndDie(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
         CA_LOG_E(message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString());
         Send(SessionActorId, new TEvKqpBuffer::TEvError{
             message,

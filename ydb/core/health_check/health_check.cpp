@@ -1968,6 +1968,8 @@ public:
             }
         }
 
+        // do not propagate RED status to vdisk - so that vdisk is not considered down when computing group status
+        context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::ORANGE);
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 

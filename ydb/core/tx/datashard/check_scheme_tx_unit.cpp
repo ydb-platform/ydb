@@ -38,6 +38,7 @@ private:
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
+    bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
 
@@ -381,7 +382,7 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         res = CheckDropCdcStream(activeTx);
         break;
     case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
-        res = true; // FIXME: CheckDropCdcStream(activeTx);
+        res = CheckCreateIncrementalRestoreSrc(activeTx);
         break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -744,6 +745,16 @@ bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) {
     }
 
     return CheckSchemaVersion(activeTx, notice);
+}
+
+bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateIncrementalRestoreSrc", &TPipeline::HasCreateIncrementalRestoreSrc)) {
+        return false;
+    }
+
+    // TODO: add additional checks
+
+    return true;
 }
 
 void TCheckSchemeTxUnit::Complete(TOperation::TPtr,

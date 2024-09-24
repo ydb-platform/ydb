@@ -15,6 +15,7 @@ topic=<topic-name>
 ```
 
 ## Из {{ ydb-short-name }} в PostgreSQL
+
 Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу PostgreSQL. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
 
 ```ini
@@ -40,6 +41,7 @@ auto.evolve=true
 ```
 
 ## Из PostgreSQL в {{ ydb-short-name }}
+
 Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в топик. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
 
 ```ini
@@ -58,6 +60,7 @@ validate.non.null=false
 ```
 
 ## Из {{ ydb-short-name }} в S3
+
 Пример файла настроек S3Sink коннектора `/etc/kafka-connect-worker/s3-sink.properties` для переноса данных из топика в S3. Используется коннектор [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka).
 
 ```ini

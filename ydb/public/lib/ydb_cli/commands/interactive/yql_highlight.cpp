@@ -127,8 +127,8 @@ namespace NYdb {
                 const auto& token = Tokens.at(i);
                 const auto color = ColorOf(token, i);
 
-                const std::ptrdiff_t start = token.StartIndex;
-                const std::ptrdiff_t stop = token.StartIndex + token.Content.Size();
+                const std::ptrdiff_t start = token.RawPos;
+                const std::ptrdiff_t stop = token.RawPos + token.Content.Size();
 
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);

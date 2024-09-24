@@ -21,8 +21,8 @@ struct TParsedToken {
     // Position of first token symbol
     ui32 Line = 0;    // starts from 1
     ui32 LinePos = 0; // starts from 0
-    // Position in character array
-    ui32 StartIndex;
+    // Position in character array, starts from 0
+    ui32 RawPos;
 };
 
 class ILexer {

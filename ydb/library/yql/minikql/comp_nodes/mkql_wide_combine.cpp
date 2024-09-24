@@ -360,6 +360,7 @@ class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
 
     enum class EOperatingMode {
         InMemory,
+        SplittingState,
         Spilling,
         ProcessSpilled
     };
@@ -415,11 +416,22 @@ public:
 
                 return EUpdateResult::ReadInput;
             }
-            case EOperatingMode::Spilling: {
+            case EOperatingMode::SplittingState: {
                 UpdateSpillingBuckets();
 
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) {
-                        return EUpdateResult::Yield;
+                    return EUpdateResult::Yield;
+                }
+                if (!IsInMemoryProcessingStateSplitted) {
+                    SplitStateIntoBuckets();
+                }
+            }
+            case EOperatingMode::Spilling: {
+                UpdateSpillingBuckets();
+
+
+                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) {
+                    return EUpdateResult::Yield;
                 }
 
                 if (BufferForUsedInputItems.size()) {
@@ -522,7 +534,7 @@ private:
         return ProcessSpilledData();
     }
 
-    void SplitStateIntoBuckets() {
+    bool SplitStateIntoBucketsAndWait() {
        while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
@@ -540,16 +552,22 @@ private:
                 //jumping into unsafe world, refusing ownership
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
+
+            if (!HasMemoryForProcessing() && TryToReduceMemoryAndWait()) {
+                return true;
+            }
         }
 
         InMemoryProcessingState.ReadMore<false>();
+        IsInMemoryProcessingStateSplitted = true;
+        SwitchMode(EOperatingMode::Spilling);
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             LogMemoryUsage();
 
-            SwitchMode(EOperatingMode::Spilling);
+            SwitchMode(EOperatingMode::SplittingState);
             return true;
         }
 
@@ -701,8 +719,8 @@ private:
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
-            case EOperatingMode::Spilling: {
-                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+            case EOperatingMode::SplittingState: {
+                YQL_LOG(INFO) << "switching Memory mode to SplittingState";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -711,7 +729,10 @@ private:
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
-                SplitStateIntoBuckets();
+            }
+            case EOperatingMode::Spilling: {
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                MKQL_ENSURE(EOperatingMode::SplittingState == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
                 break;
@@ -744,6 +765,7 @@ private:
     bool IsEverythingExtracted = false;
 
     TState InMemoryProcessingState;
+    bool IsInMemoryProcessingStateSplitted = false;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
     const size_t KeyWidth;

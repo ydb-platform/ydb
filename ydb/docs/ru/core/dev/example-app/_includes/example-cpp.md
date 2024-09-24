@@ -77,8 +77,6 @@ static TStatus CreateColumnTable(TSession session, const TString& path,
 }    
 ```
 
-Подробное использование метода `ExecuteDataQuery` описано в разделе [Запись данных](#write-queries).
-
 ### Получение структуры таблиц (DescribeTable) {#get-tables-structure}
 
 С помощью метода `DescribeTable` можно вывести информацию о структуре таблицы и убедиться, что она была успешно создана:

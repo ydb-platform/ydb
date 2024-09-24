@@ -1,18 +1,17 @@
 #pragma once
 
 #include <util/generic/yexception.h>
-#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 
-namespace NFq {
+namespace NYql {
 
 // This exception can separate code line and file name from the error message 
 struct TCodeLineException: public yexception {
 
     TSourceLocation SourceLocation;
     mutable TString Message;
-    TIssuesIds::EIssueCode Code;
+    ui32 Code;
 
-    TCodeLineException(TIssuesIds::EIssueCode code);
+    TCodeLineException(ui32 code);
 
     TCodeLineException(const TSourceLocation& sl, const TCodeLineException& t);
 
@@ -24,4 +23,11 @@ struct TCodeLineException: public yexception {
 
 TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t);
 
-} // namespace NFq
+#define YQL_ENSURE_CODELINE(CONDITION, CODE, ...)     \
+    do {                                   \
+        if (Y_UNLIKELY(!(CONDITION))) {    \
+            ythrow TCodeLineException(CODE) << __VA_ARGS__; \
+        }                                  \
+    } while (0)
+
+} // namespace NYql

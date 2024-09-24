@@ -2,9 +2,9 @@
 
 #include <util/string/builder.h>
 
-namespace NFq {
+namespace NYql {
 
-TCodeLineException::TCodeLineException(TIssuesIds::EIssueCode code)
+TCodeLineException::TCodeLineException(ui32 code)
     : SourceLocation("", 0)
     , Code(code)
 {}

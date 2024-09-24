@@ -1,5 +1,7 @@
 #include "connection_pool.h"
 
+#include "private.h"
+
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/net/connection.h>
@@ -8,6 +10,10 @@ namespace NYT::NHttp {
 
 using namespace NNet;
 using namespace NConcurrency;
+
+////////////////////////////////////////////////////////////////////////////////
+
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,7 +62,11 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
 
         while (auto item = Connections_.Extract(address)) {
             if (item->GetIdleTime() < Config_->ConnectionIdleTimeout && item->IsOK()) {
-                return MakeFuture<IConnectionPtr>(std::move(item->Connection));
+                auto&& connection = item->Connection;
+                YT_LOG_DEBUG("Connection is extracted from cache (Address: %v, ConnectionId: %v)",
+                    address,
+                    connection->GetId());
+                return MakeFuture<IConnectionPtr>(std::move(connection));
             }
         }
     }
@@ -66,21 +76,28 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
 
 void TConnectionPool::Release(const IConnectionPtr& connection)
 {
+    YT_LOG_DEBUG("Connection is put to cache (Address: %v, ConnectionId: %v)",
+        connection->GetRemoteAddress(),
+        connection->GetId());
+
     auto guard = Guard(SpinLock_);
-    Connections_.Insert(connection->RemoteAddress(), {connection, TInstant::Now()});
+    Connections_.Insert(connection->GetRemoteAddress(), {connection, TInstant::Now()});
 }
 
 void TConnectionPool::DropExpiredConnections()
 {
     auto guard = Guard(SpinLock_);
 
-    TMultiLruCache<TNetworkAddress, TIdleConnection> validConnections(
-        Config_->MaxIdleConnections);
+    decltype(Connections_) validConnections(Config_->MaxIdleConnections);
 
     while (Connections_.GetSize() > 0) {
         auto idleConnection = Connections_.Pop();
         if (idleConnection.GetIdleTime() < Config_->ConnectionIdleTimeout && idleConnection.IsOK()) {
-            validConnections.Insert(idleConnection.Connection->RemoteAddress(), idleConnection);
+            validConnections.Insert(idleConnection.Connection->GetRemoteAddress(), idleConnection);
+        } else {
+            YT_LOG_DEBUG("Connection expired from cache (Address: %v, ConnectionId: %v)",
+                idleConnection.Connection->GetRemoteAddress(),
+                idleConnection.Connection->GetId());
         }
     }
 

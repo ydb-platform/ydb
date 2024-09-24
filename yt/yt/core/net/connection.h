@@ -68,8 +68,10 @@ struct IConnection
     : public IConnectionReader
     , public IConnectionWriter
 {
-    virtual const TNetworkAddress& LocalAddress() const = 0;
-    virtual const TNetworkAddress& RemoteAddress() const = 0;
+    virtual TConnectionId GetId() const = 0;
+
+    virtual const TNetworkAddress& GetLocalAddress() const = 0;
+    virtual const TNetworkAddress& GetRemoteAddress() const = 0;
 
     // Returns true if connection is not is failed state and has no
     // active IO operations.

@@ -1,17 +1,23 @@
 ## FileContent и FilePath {#file-content-path}
 
+{% if oss != true %}
+
 Как [консольный](../../../interfaces/cli.md), так и [веб](../../../interfaces/web.md)-интерфейсы позволяют «прикладывать» к запросу произвольные именованные файлы. С помощью этих функций можно по имени приложенного файла получить его содержимое или путь в «песочнице» и в дальнейшем использовать в запросе произвольным образом.
 
-**Сигнатуры**
-```
+{% endif %}
+
+### Сигнатуры
+
+```yql
 FilePath(String)->String
 FileContent(String)->String
 ```
 
 Аргумент `FileContent` и `FilePath` — строка с алиасом.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT "Content of "
   || FilePath("my_file.txt")
   || ":\n"
@@ -21,8 +27,9 @@ SELECT "Content of "
 
 Получение пути до корня директории с несколькими «приложенными» файлами с указанным общим префиксом.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 FolderPath(String)->String
 ```
 
@@ -30,8 +37,9 @@ FolderPath(String)->String
 
 Также см. [PRAGMA File](../../../syntax/pragma.md#file) и [PRAGMA Folder](../../../syntax/pragma.md#folder).
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
 PRAGMA File("foo/2.txt", "http://url/to/somewhere/else");
 PRAGMA File("bar/3.txt", "http://url/to/some/other/place");
@@ -42,12 +50,13 @@ SELECT FolderPath("foo"); -- в директории по возвращённо
 
 ## ParseFile
 
-Получить из приложенного текстового файла список значений. Может использоваться в сочетании с [IN](../../../syntax/expressions.md#in) и прикладыванием файла по URL <span style="color:gray;">(инструкции по прикладыванию файлов для {% if feature_webui %}[веб-интерфейса](../../../interfaces/web.md#attach) и {% endif %} [клиента](../../../interfaces/cli.md#attach))</span>.
+Получить из приложенного текстового файла список значений. Может использоваться в сочетании с [IN](../../../syntax/expressions.md#in) и прикладыванием файла по URL{% if oss != true %} (инструкции по прикладыванию файлов для {% if feature_webui %}[веб-интерфейса](../../../interfaces/web.md#attach) и {% endif %} [клиента](../../../interfaces/cli.md#attach)){% endif %}.
 
-Поддерживается только один формат файла — по одному значению на строку.{% if feature_udf_noncpp %} Для чего-то более сложного прямо сейчас придется написать небольшую UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md). {% endif %}
+Поддерживается только один формат файла — по одному значению на строку.{% if feature_udf_noncpp and oss != true %} Для чего-то более сложного прямо сейчас придется написать небольшую UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md).{% endif %}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 ParseFile(String, String)->List<T>
 ```
 
@@ -56,17 +65,19 @@ ParseFile(String, String)->List<T>
 1. Тип ячейки списка: поддерживаются только строки и числовые типы;
 2. Имя приложенного файла.
 
-{% note info "Примечание" %}
+{% note info %}
 
 Возвращаемое значение - ленивый список. Для многократного использования его нужно обернуть в функцию [ListCollect](../../list.md#listcollect)
 
 {% endnote %}
 
-**Примеры:**
-``` yql
+### Примеры
+
+```yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
 ```
-``` yql
+
+```yql
 SELECT * FROM my_table
-WHERE int_column IN ParseFile("Int64", "my_file.txt"));
+WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```

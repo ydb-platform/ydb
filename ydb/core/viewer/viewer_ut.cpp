@@ -310,6 +310,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(2)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -376,6 +377,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(nodesTotal)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -464,7 +466,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         settings.InitKikimrRunConfig()
                 .SetNodeCount(1)
                 .SetUseRealThreads(false)
-                .SetDomainName("Root");
+                .SetDomainName("Root")
+                .SetUseSectorMap(true);
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
@@ -529,7 +532,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         settings.InitKikimrRunConfig()
                 .SetNodeCount(1)
                 .SetUseRealThreads(false)
-                .SetDomainName("Root");
+                .SetDomainName("Root")
+                .SetUseSectorMap(true);
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
@@ -603,16 +607,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
             entry.Status = TSchemeCacheNavigate::EStatus::Ok;
             entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
             entry.DomainInfo = MakeIntrusive<TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            entry.Path = {"Root", "serverless"};
         } else if (path == "/Root/shared" || entry.TableId.PathId == SHARED_DOMAIN_KEY) {
             entry.Status = TSchemeCacheNavigate::EStatus::Ok;
             entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
             entry.DomainInfo = MakeIntrusive<TDomainInfo>(SHARED_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            entry.Path = {"Root", "shared"};
             auto domains = runtime.GetAppData().DomainsInfo;
             entry.DomainInfo->Params.SetHive(domains->GetHive());
         } else if (path == "/Root/serverless/users" || entry.TableId.PathId == SERVERLESS_TABLE) {
             entry.Status = TSchemeCacheNavigate::EStatus::Ok;
             entry.Kind = TSchemeCacheNavigate::EKind::KindTable;
             entry.DomainInfo = MakeIntrusive<TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            entry.Path = {"Root", "serverless", "users"};
             auto dirEntryInfo = MakeIntrusive<TSchemeCacheNavigate::TDirEntryInfo>();
             dirEntryInfo->Info.SetSchemeshardId(SERVERLESS_TABLE.OwnerId);
             dirEntryInfo->Info.SetPathId(SERVERLESS_TABLE.LocalPathId);
@@ -682,6 +689,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDynamicNodeCount(1)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -693,11 +701,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("path", "/Root/serverless");
+        httpReq.CgiParameters.emplace("database", "/Root/serverless");
         httpReq.CgiParameters.emplace("tablets", "true");
         httpReq.CgiParameters.emplace("enums", "true");
         httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("type", "any");
+        httpReq.CgiParameters.emplace("direct", "1");
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
@@ -748,8 +756,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
         }
-        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "0");
-        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "0");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
     }
 
     Y_UNIT_TEST(ServerlessWithExclusiveNodes)
@@ -762,6 +770,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDynamicNodeCount(2)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -773,11 +782,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("path", "/Root/serverless");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        httpReq.CgiParameters.emplace("enums", "true");
-        httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("type", "any");
+        httpReq.CgiParameters.emplace("database", "/Root/serverless");
+        httpReq.CgiParameters.emplace("direct", "1");
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
@@ -847,6 +853,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDynamicNodeCount(2)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -858,11 +865,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("path", "/Root/shared");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        httpReq.CgiParameters.emplace("enums", "true");
-        httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("type", "any");
+        httpReq.CgiParameters.emplace("database", "/Root/shared");
+        httpReq.CgiParameters.emplace("direct", "1");
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
@@ -932,6 +936,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDynamicNodeCount(3)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         TServer server(settings);
         server.EnableGRpc(grpcPort);
@@ -943,11 +948,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("database", "/Root/serverless");
         httpReq.CgiParameters.emplace("path", "/Root/serverless/users");
+        httpReq.CgiParameters.emplace("direct", "1");
         httpReq.CgiParameters.emplace("tablets", "true");
-        httpReq.CgiParameters.emplace("enums", "true");
-        httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("type", "any");
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
@@ -1039,12 +1043,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
     TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
 
     void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
-        auto fuzzy = FuzzySearcher<TString>(dictionary);
-        auto result = fuzzy.Search(search, limit);
+        auto result = FuzzySearcher::Search(dictionary, search, limit);
 
         UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
         for (ui32 i = 0; i < expectations.size(); i++) {
-            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            UNIT_ASSERT_VALUES_EQUAL(expectations[i], *result[i]);
         }
     }
 
@@ -1087,7 +1090,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         settings.InitKikimrRunConfig()
                 .SetNodeCount(1)
                 .SetUseRealThreads(false)
-                .SetDomainName("Root");
+                .SetDomainName("Root")
+                .SetUseSectorMap(true);
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
@@ -1307,7 +1311,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
+            "name",
             "id",
+            "id",
+            "description",
             "description",
         });
     }
@@ -1317,7 +1324,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
+            "name",
             "id",
+            "id",
+            "description",
             "description",
         });
     }
@@ -1400,7 +1410,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         settings.InitKikimrRunConfig()
                 .SetNodeCount(9)
                 .SetUseRealThreads(false)
-                .SetDomainName("Root");
+                .SetDomainName("Root")
+                .SetUseSectorMap(true);
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
@@ -1623,6 +1634,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(1)
                 .SetUseRealThreads(true)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
 
         TServer server(settings);
@@ -1655,6 +1667,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(1)
                 .SetUseRealThreads(true)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
 
         TServer server(settings);
@@ -1689,6 +1702,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(1)
                 .SetUseRealThreads(true)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
 
         TServer server(settings);
@@ -1709,7 +1723,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "database": "/Root",
             "action": "execute-script",
             "syntax": "yql_v1",
-            "stats": "profile"
+            "stats": "none"
         })json";
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody, &responseStream, headers);
         const TString response = responseStream.ReadAll();
@@ -1739,6 +1753,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(1)
                 .SetUseRealThreads(true)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true); // authorization is implemented only in async mon
 
         auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
@@ -1796,6 +1811,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetNodeCount(1)
                 .SetUseRealThreads(true)
                 .SetDomainName("Root")
+                .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
 
         TServer server(settings);
@@ -1805,8 +1821,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
-        headers["Content-Type"] = "application/json";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags?timeout=600000&base64=false", &responseStream, headers);
+        headers["Accept"] = "application/json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/feature_flags", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         NJson::TJsonReaderConfig jsonCfg;

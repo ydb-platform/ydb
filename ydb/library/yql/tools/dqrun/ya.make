@@ -89,6 +89,7 @@ ENDIF()
         ydb/library/yql/parser/pg_wrapper
         ydb/library/yql/utils/log/proto
         ydb/library/yql/core/qplayer/storage/file
+        ydb/library/yql/public/result_format
 
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors

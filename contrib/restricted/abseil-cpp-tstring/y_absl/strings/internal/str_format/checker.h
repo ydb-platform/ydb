@@ -30,7 +30,7 @@
 // more details.
 #if Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__) && \
     !defined(__INTELLISENSE__)
-#define Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
+//#define Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
 #endif  // Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__) &&
         // !defined(__INTELLISENSE__)
 #endif  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER

@@ -9,6 +9,7 @@ import argparse
 import re
 import json
 import os
+import shutil
 import sys
 import urllib.parse
 import zipfile
@@ -145,7 +146,7 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
                             break
                         out_fp.write(buf)
         else:
-            os.symlink(fn, out_fn)
+            shutil.copyfile(fn, out_fn)
     quoted_fpath = urllib.parse.quote(fpath)
     return f"{log_url_prefix}{quoted_fpath}"
 
@@ -234,7 +235,7 @@ def main():
     parser.add_argument(
         "--log_truncate_size",
         type=int,
-        default=134217728,
+        default=134217728,  # 128 kb
         help="truncate log after specific size, 0 disables truncation",
     )
     parser.add_argument("--ya_out", help="ya make output dir (for searching logs and artifacts)")

@@ -3,7 +3,7 @@ import pkgutil
 import yaml
 
 
-def create_userdata(repo_url, gh_token, runner_name, runner_labels, ssh_keys, agent_mirror_url_prefix):
+def create_userdata(repo_url, gh_token, runner_name, runner_labels, ssh_keys, agent_mirror_url_prefix, preset_name):
     runner_username = "runner"
 
     install_script = pkgutil.get_data(__name__, "scripts/install_runner.sh")
@@ -17,6 +17,7 @@ GITHUB_TOKEN="{gh_token}"
 RUNNER_NAME="{runner_name}"
 RUNNER_LABELS="{runner_labels}"
 AGENT_MIRROR_URL_PREFIX="{agent_mirror_url_prefix}"
+PRESET_NAME="{preset_name}"
 """.strip().encode(
         "utf8"
     )

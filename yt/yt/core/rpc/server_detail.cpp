@@ -328,7 +328,7 @@ const IAttributeDictionary& TServiceContextBase::GetEndpointAttributes() const
     return EmptyAttributes();
 }
 
-const TString& TServiceContextBase::GetEndpointDescription() const
+const std::string& TServiceContextBase::GetEndpointDescription() const
 {
     static const TString EmptyEndpointDescription;
     return EmptyEndpointDescription;
@@ -530,7 +530,7 @@ const NYTree::IAttributeDictionary& TServiceContextWrapper::GetEndpointAttribute
     return UnderlyingContext_->GetEndpointAttributes();
 }
 
-const TString& TServiceContextWrapper::GetEndpointDescription() const
+const std::string& TServiceContextWrapper::GetEndpointDescription() const
 {
     return UnderlyingContext_->GetEndpointDescription();
 }

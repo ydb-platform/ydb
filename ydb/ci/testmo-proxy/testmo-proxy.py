@@ -45,14 +45,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         start_time = time.monotonic()
 
         response = None
+        sleep_for_5xx = 30  # sec
+        sleep_for_timeout = 0.25  # sec
 
         while time.monotonic() - start_time < self._max_request_time:
             try:
                 response = requests.request(method, url, data=body, headers=headers, timeout=self._timeout)
-                break
+                if 500 <= response.status_code < 600:
+                    self.log_message(f"! received status={response.status_code}, content={response.content}")
+                    self.log_message(f"sleep for {sleep_for_5xx} sec")
+                    time.sleep(sleep_for_5xx)
+                else:
+                    break
             except requests.exceptions.RequestException as e:
                 self.log_message("! catch %s, retry", e)
-                time.sleep(0.25)
+                time.sleep(sleep_for_timeout)
                 continue
 
         if response is None:
@@ -82,6 +89,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         self._proxy_request("POST")
+
+    def do_PUT(self):
+        self._proxy_request("PUT")
+
+    def do_DELETE(self):
+        self._proxy_request("DELETE")
 
 
 def main():

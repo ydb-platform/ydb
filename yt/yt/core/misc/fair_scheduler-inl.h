@@ -34,12 +34,14 @@ public:
         bucket->Tasks.push(std::move(task));
     }
 
-    TTask Dequeue() override
+    std::optional<TTask> TryDequeue() override
     {
         auto guard = Guard(Lock_);
 
         while (true) {
-            YT_VERIFY(!BucketHeap_.empty());
+            if (BucketHeap_.empty()) {
+                return std::nullopt;
+            }
 
             auto* bucket = BucketHeap_.front();
             YT_ASSERT(bucket->InHeap);
@@ -75,13 +77,6 @@ public:
         }
 
         YT_ABORT();
-    }
-
-    bool IsEmpty() const override
-    {
-        auto guard = Guard(Lock_);
-
-        return BucketHeap_.empty();
     }
 
     void ChargeUser(const std::string& user, TDuration time) override

@@ -78,6 +78,8 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTCMallocControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TVDiskControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TVDiskControls::descriptor(), ctx);
+            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TPDiskControls")
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TPDiskControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTabletControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTabletControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDSProxyControls")
@@ -94,7 +96,7 @@ protected:
         NJson::TJsonValue json;
 
         if (settings) {
-            for (NLog::EComponent i = settings->MinVal; i < settings->MaxVal; i++) {
+            for (NLog::EComponent i = settings->MinVal; i <= settings->MaxVal; i++) {
                 auto name = settings->ComponentName(i);
                 if (!*name) {
                     continue;

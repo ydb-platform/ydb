@@ -203,7 +203,7 @@ void InitViewerStorageUsageJsonHandler(TJsonHandlers &handlers) {
 }
 
 void InitViewerClusterJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()));
+    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 3);
 }
 
 void InitViewerLabeledCountersJsonHandler(TJsonHandlers &handlers) {
@@ -227,7 +227,7 @@ void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 2);
+    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 3);
 }
 
 void InitViewerNetInfoJsonHandler(TJsonHandlers& handlers) {
@@ -243,7 +243,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()));
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 6);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
@@ -259,7 +259,7 @@ void InitViewerRenderJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerAutocompleteJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/autocomplete", new TJsonHandler<TJsonAutocomplete>(TJsonAutocomplete::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/autocomplete", new TJsonHandler<TJsonAutocomplete>(TJsonAutocomplete::GetSwagger()), 2);
 }
 
 void InitViewerCheckAccessJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -267,7 +267,7 @@ void InitViewerCheckAccessJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()));
+    handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()), 2);
 }
 
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {

@@ -7,6 +7,7 @@ The main entity of the DSL is **selectors**. They allow the overriding of parts 
 ## Labels {#labels}
 
 Labels are special tags used to mark nodes or groups of nodes. Each node has a set of automatically assigned labels:
+
 * `node_id` — the internal identifier of the node in the system
 * `node_host` — the node's `hostname` obtained at startup
 * `tenant` — the database served by this node
@@ -49,13 +50,16 @@ selector_config:
 A mapping in which you can set the allowable values for labels. This section is used as a hint when generating possible configurations using the resolve command. Values are not validated at node startup.
 
 There are two types of labels available:
+
 * string;
 * enum.
 
 ### string
+
 It can take any value or be unset.
 
 Example:
+
 ```yaml
 dynamic:
   type: string
@@ -64,9 +68,11 @@ host_name:
 ```
 
 ### enum
+
 It can take values from the `values` list or be unset.
 
 Example:
+
 ```yaml
 flavour:
   type: enum
@@ -83,6 +89,7 @@ Selectors represent a simple predicate language. Selectors for each label are co
 ### Simple selector
 
 The following selector will select nodes where the `label1` is equal to `value1` **and** the `label2` is equal to `value2`:
+
 ```yaml
 selector:
   label1: value1
@@ -90,6 +97,7 @@ selector:
 ```
 
 The following selector will select **ALL** nodes in the cluster, as no conditions are specified:
+
 ```yaml
 selector: {}
 ```
@@ -99,6 +107,7 @@ selector: {}
 This operator allows for selecting nodes with label values from a list.
 
 The following selector will select all nodes where `label1` is equal to `value1` **or** `value2`:
+
 ```yaml
 selector:
   label1:
@@ -112,6 +121,7 @@ selector:
 This operator allows selecting nodes where the chosen label does not match any value from a list.
 
 The following selector will select all nodes where `label1` is equal to `value1` **and** `label2` is not equal to `value2` **and** `value3`:
+
 ```yaml
 selector:
   label1: value1
@@ -134,6 +144,7 @@ Tags are necessary for partial or complete reuse of configurations from previous
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -141,13 +152,17 @@ config:
     second_entry: 2
     third_entry: 3
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
     second_entry: 100
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -155,6 +170,7 @@ config:
     second_entry: 100
     third_entry: 3
 ```
+
 ||
 |#
 
@@ -167,6 +183,7 @@ config:
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -177,7 +194,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -187,7 +206,9 @@ config:
     - abc: 3
       value: 40
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -199,6 +220,7 @@ config:
     - abc: 3
       value: 40
 ```
+
 ||
 |#
 
@@ -211,6 +233,7 @@ config:
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -221,7 +244,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -229,7 +254,9 @@ config:
     - !remove
       abc: 1
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -237,6 +264,7 @@ config:
     - abc: 2
       value: 10
 ```
+
 ||
 |#
 
@@ -249,6 +277,7 @@ config:
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -259,7 +288,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -269,7 +300,9 @@ config:
     - abc: 3
       value: 40
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -284,12 +317,14 @@ config:
     - abc: 3
       value: 40
 ```
+
 ||
 |#
 
 ## Generating final configurations {#selectors-resolve}
 
 Configurations can contain complex sets of overrides. With the [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md), you can view the final configurations for:
+
 * specific nodes
 * sets of labels
 * all possible combinations for the current configuration
@@ -307,9 +342,8 @@ Configurations can contain complex sets of overrides. With the [{{ ydb-short-nam
 
 The configuration transformation command is described in more detail in the section [{#T}](../../reference/ydb-cli/configs.md).
 
-Example output of `{{ ydb-cli }} admin config
+Example output of `{{ ydb-cli }} admin config resolve --all -f cluster.yaml` for the following configuration file:
 
- resolve --all -f cluster.yaml` for the following configuration file:
 ```yaml
 metadata:
   cluster: ""
@@ -331,7 +365,9 @@ selector_config:
       node_type: COMPUTE
       cpu_count: 8
 ```
+
 Output:
+
 ```yaml
 ---
 label_sets: # sets of labels for which the configuration is generated

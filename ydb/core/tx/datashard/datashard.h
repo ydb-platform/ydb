@@ -332,6 +332,9 @@ struct TEvDataShard {
         EvSampleKRequest,
         EvSampleKResponse,
 
+        EvLocalKMeansRequest,
+        EvLocalKMeansProgressResponse,
+
         EvEnd
     };
 
@@ -1452,6 +1455,18 @@ struct TEvDataShard {
         : public TEventPB<TEvSampleKResponse,
                           NKikimrTxDataShard::TEvSampleKResponse,
                           TEvDataShard::EvSampleKResponse> {
+    };
+
+    struct TEvLocalKMeansRequest
+        : public TEventPB<TEvLocalKMeansRequest,
+                          NKikimrTxDataShard::TEvLocalKMeansRequest,
+                          TEvDataShard::EvLocalKMeansRequest> {
+    };
+
+    struct TEvLocalKMeansProgressResponse
+        : public TEventPB<TEvLocalKMeansProgressResponse,
+                          NKikimrTxDataShard::TEvLocalKMeansProgressResponse,
+                          TEvDataShard::EvLocalKMeansProgressResponse> {
     };
 
     struct TEvKqpScan

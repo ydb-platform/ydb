@@ -8,6 +8,16 @@ SRCS(
     tpch.cpp
 )
 
+IF (OS_MACOS OR OS_DARWIN)
+    CFLAGS(-DLINUX)
+ELSEIF (OS_WINDOWS)
+    CONLYFLAGS(-DWIN32)
+    CXXFLAGS(-D_POSIX_ -DLINUX)
+ELSEIF (OS_LINUX)
+    CONLYFLAGS(-D_POSIX_SOURCE)
+    CFLAGS(-DLINUX)
+ENDIF()
+
 RESOURCE(
     tpch_schema.sql tpch_schema.sql
     ydb/library/benchmarks/gen/tpch-dbgen/dists.dss dists.dss

@@ -14,6 +14,7 @@
 
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/yql/sql/settings/translation_settings.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -77,6 +78,7 @@ public:
         YDB_ACCESSOR_DEF(TString, Database);
         using TActorSystemPtr = TActorSystem*;
         YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
+        YDB_ACCESSOR_DEF(NSQLTranslation::TTranslationSettings, TranslationSettings);
     };
 
     class TInternalModificationContext {

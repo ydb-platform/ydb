@@ -86,8 +86,8 @@ class TestS3Formats:
         [
             ("test.csv", "csv_with_names"),
             ("test.tsv", "tsv_with_names"),
-            ("test.json", "json_each_row"),
-            ("test.json", "json_list"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
             ("test.parquet", "parquet"),
         ],
     )
@@ -130,6 +130,8 @@ class TestS3Formats:
         [
             ("test.csv", "csv_with_names"),
             ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
             ("test.parquet", "parquet"),
         ],
     )
@@ -186,7 +188,7 @@ class TestS3Formats:
         describe_result = client.describe_query(query_id).result
         issues = describe_result.query.issue[0].issues
         assert "Error while reading file btct.parquet" in issues[0].message
-        assert "File contains LIST field outputs and can\'t be parsed" in issues[0].issues[0].message
+        assert "nanosecond accuracy does not fit into the datetime" in issues[0].issues[0].message
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

@@ -8,8 +8,8 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TServiceMap = THashMap<TString, NRpc::IServicePtr>;
-using TRealmIdServiceMap = THashMap<TGuid, TServiceMap>;
+using TServiceMap = THashMap<std::string, NRpc::IServicePtr>;
+using TRealmIdServiceMap = THashMap<NRpc::TRealmId, TServiceMap>;
 
 DECLARE_REFCOUNTED_CLASS(TTestService);
 DECLARE_REFCOUNTED_CLASS(TTestChannelFactory);
@@ -24,7 +24,7 @@ DECLARE_REFCOUNTED_CLASS(TTestBus);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NRpc
+} // namespace NRpc
 
 ////////////////////////////////////////////////////////////////////////////////
 

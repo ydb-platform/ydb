@@ -17,6 +17,7 @@ PY3TEST()
     PEERDIR(
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
+        contrib/python/boto3
         contrib/python/pandas
         contrib/python/requests
         ydb/public/sdk/python

@@ -53,6 +53,7 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
+    std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache = std::make_shared<TSchemaObjectsCache>();
 
 public:
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
@@ -108,7 +109,7 @@ public:
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
     }
 
-    std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
+    std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<ui64>& pathsToDrop) noexcept override;
@@ -147,6 +148,10 @@ public:
     }
 
     const TGranuleMeta& GetGranuleVerified(const ui64 pathId) const {
+        return *GetGranulePtrVerified(pathId);
+    }
+
+    TGranuleMeta& MutableGranuleVerified(const ui64 pathId) const {
         return *GetGranulePtrVerified(pathId);
     }
 

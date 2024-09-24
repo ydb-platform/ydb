@@ -66,6 +66,10 @@ namespace NKikimrConfig {
     class TMemoryControllerConfig;
 }
 
+namespace NKikimrReplication {
+    class TReplicationDefaults;
+}
+
 namespace NKikimrNetClassifier {
     class TNetClassifierDistributableConfig;
     class TNetClassifierConfig;
@@ -215,6 +219,7 @@ struct TAppData {
     NKikimrSharedCache::TSharedCacheConfig& SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig& MetadataCacheConfig;
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
+    NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

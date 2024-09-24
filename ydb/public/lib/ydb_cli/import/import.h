@@ -40,7 +40,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     // Allowed values: Csv, Tsv, JsonUnicode, JsonBase64. Default means Csv
     FLUENT_SETTING_DEFAULT(TDuration, OperationTimeout, TDuration::Seconds(5 * 60));
     FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, OperationTimeout_ + TDuration::Seconds(5));
-    FLUENT_SETTING_DEFAULT(EOutputFormat, Format, EOutputFormat::Default);
+    FLUENT_SETTING_DEFAULT(EDataFormat, Format, EDataFormat::Default);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
@@ -80,9 +80,17 @@ private:
 
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
 
-    TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
-                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
-    TStatus UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings);
+    TStatus UpsertCsv(IInputStream& input,
+                      const TString& dbPath,
+                      const TImportFileSettings& settings,
+                      const TString& filePath,
+                      std::optional<ui64> inputSizeHint,
+                      ProgressCallbackFunc & progressCallback);
+
+    TStatus UpsertCsvByBlocks(const TString& filePath,
+                              const TString& dbPath,
+                              const TImportFileSettings& settings);
+
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
 
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,

@@ -1,4 +1,6 @@
-# App in C++
+# Example app in C++
+
+<!-- markdownlint-disable blanks-around-fences -->
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example) that is available as part of the {{ ydb-short-name }} [C++SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp).
 
@@ -153,8 +155,6 @@ The given code snippet prints the following text to the console at startup:
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
-
-
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 

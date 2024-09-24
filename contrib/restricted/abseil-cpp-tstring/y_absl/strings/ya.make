@@ -21,6 +21,10 @@ NO_COMPILER_WARNINGS()
 
 SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl)
 
+IF(Y_ABSL_DONT_USE_DEBUG)
+    CFLAGS(-DY_ABSL_DONT_USE_DEBUG_LIBRARY=1)
+ENDIF()
+
 SRCS(
     crc/crc32c.cc
     crc/internal/cpu_detect.cc

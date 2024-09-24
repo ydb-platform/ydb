@@ -412,6 +412,9 @@ enum EValueType : int
     VT_TIMESTAMP64,
     // Interval64, difference between two timestamps64 (signed)
     VT_INTERVAL64,
+
+    // Universally unique identifier according to RFC-4122.
+    VT_UUID,
 };
 
 ///

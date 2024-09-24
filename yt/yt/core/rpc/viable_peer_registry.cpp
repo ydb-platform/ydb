@@ -38,7 +38,7 @@ public:
         }
     }
 
-    bool RegisterPeer(const TString& address) override
+    bool RegisterPeer(const std::string& address) override
     {
         int priority = 0;
         if (Config_->PeerPriorityStrategy == EPeerPriorityStrategy::PreferLocal) {
@@ -60,7 +60,7 @@ public:
         return peerAdded;
     }
 
-    bool UnregisterPeer(const TString& address) override
+    bool UnregisterPeer(const std::string& address) override
     {
         auto guard = WriterGuard(SpinLock_);
         bool peerUnregistered = GuardedUnregisterPeer(address);
@@ -72,7 +72,7 @@ public:
         return peerUnregistered;
     }
 
-    bool UnregisterChannel(const TString& address, const IChannelPtr& channel) override
+    bool UnregisterChannel(const std::string& address, const IChannelPtr& channel) override
     {
         auto guard = WriterGuard(SpinLock_);
 
@@ -119,7 +119,7 @@ public:
         InitPeersAvailablePromise();
     }
 
-    std::optional<TString> MaybeRotateRandomPeer() override
+    std::optional<std::string> MaybeRotateRandomPeer() override
     {
         auto guard = WriterGuard(SpinLock_);
 
@@ -177,14 +177,14 @@ public:
             return nullptr;
         }
 
-        auto it = HashToActiveChannel_.lower_bound(std::pair(hash, TString()));
+        auto it = HashToActiveChannel_.lower_bound(std::pair(hash, std::string()));
         auto rebaseIt = [&] {
             if (it == HashToActiveChannel_.end()) {
                 it = HashToActiveChannel_.begin();
             }
         };
 
-        TCompactSet<TStringBuf, 16> seenAddresses;
+        TCompactSet<std::string, 16> seenAddresses;
         auto currentRandomIndex = randomIndex % ActivePeerToPriority_.Size();
         while (true) {
             rebaseIt();
@@ -224,7 +224,7 @@ public:
         return result;
     }
 
-    std::vector<std::pair<TString, IChannelPtr>> PickRandomPeers(int peerCount = 1) const
+    std::vector<std::pair<std::string, IChannelPtr>> PickRandomPeers(int peerCount = 1) const
     {
         VERIFY_READER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -232,7 +232,7 @@ public:
 
         int minPeersToPickFrom = std::max(Config_->MinPeerCountForPriorityAwareness, peerCount);
 
-        std::vector<std::pair<TString, IChannelPtr>> peers;
+        std::vector<std::pair<std::string, IChannelPtr>> peers;
 
         const auto& smallestPriorityPool = PriorityToActivePeers_.begin()->second;
 
@@ -314,7 +314,7 @@ public:
         return channel;
     }
 
-    IChannelPtr GetChannel(const TString& address) const override
+    IChannelPtr GetChannel(const std::string& address) const override
     {
         auto guard = ReaderGuard(SpinLock_);
 
@@ -338,7 +338,7 @@ public:
 
 private:
     const TViablePeerRegistryConfigPtr Config_;
-    const TCallback<IChannelPtr(TString address)> CreateChannel_;
+    const TCallback<IChannelPtr(const std::string& address)> CreateChannel_;
     const NLogging::TLogger Logger;
 
     const size_t ClientStickinessRandomNumber_ = RandomNumber<size_t>();
@@ -347,16 +347,16 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
     // Information for active peers with created channels.
-    std::map<int, TIndexedHashMap<TString, IChannelPtr>> PriorityToActivePeers_;
-    TIndexedHashMap<TString, int> ActivePeerToPriority_;
+    std::map<int, TIndexedHashMap<std::string, IChannelPtr>> PriorityToActivePeers_;
+    TIndexedHashMap<std::string, int> ActivePeerToPriority_;
     // A consistent-hashing storage for serving sticky requests.
-    std::map<std::pair<size_t, TString>, IChannelPtr> HashToActiveChannel_;
+    std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
 
     // Information for non-active peers which go over the max peer count limit.
-    TIndexedHashMap<TString, int> BacklogPeers_;
+    TIndexedHashMap<std::string, int> BacklogPeers_;
 
-    THashMap<TString, int> BacklogPeerToPriority_;
-    std::map<int, TIndexedHashMap<TString, std::monostate>> PriorityToBacklogPeers_;
+    THashMap<std::string, int> BacklogPeerToPriority_;
+    std::map<int, TIndexedHashMap<std::string, std::monostate>> PriorityToBacklogPeers_;
 
     TPromise<void> PeersAvailablePromise_;
 
@@ -398,7 +398,7 @@ private:
 
     //! Returns true if a new peer was successfully registered and false if it already existed.
     //! Trying to call this method for a currently viable address with a different priority than stored leads to failure.
-    bool RegisterPeerWithPriority(const TString& address, int priority)
+    bool RegisterPeerWithPriority(const std::string& address, int priority)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -463,7 +463,7 @@ private:
     }
 
     template <class F>
-    void GeneratePeerHashes(const TString& address, F f)
+    void GeneratePeerHashes(const std::string& address, F f)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -473,7 +473,7 @@ private:
         }
     }
 
-    bool GuardedUnregisterPeer(const TString& address)
+    bool GuardedUnregisterPeer(const std::string& address)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -520,7 +520,7 @@ private:
         }
     }
 
-    void AddActivePeer(const TString& address, int priority)
+    void AddActivePeer(const std::string& address, int priority)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -537,7 +537,7 @@ private:
         PriorityToActivePeers_[priority].Set(address, channel);
     }
 
-    void AddBacklogPeer(const TString& address, int priority)
+    void AddBacklogPeer(const std::string& address, int priority)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -545,7 +545,7 @@ private:
         PriorityToBacklogPeers_[priority].Set(address, {});
     }
 
-    bool EraseActivePeer(const TString& address)
+    bool EraseActivePeer(const std::string& address)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -571,7 +571,7 @@ private:
         return true;
     }
 
-    bool EraseBacklogPeer(const TString& address)
+    bool EraseBacklogPeer(const std::string& address)
     {
         VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 

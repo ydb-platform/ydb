@@ -150,7 +150,7 @@ struct TKqpSessionInfo {
 
 class TLocalSessionsRegistry {
     THashMap<TString, TKqpSessionInfo> LocalSessions;
-    std::map<TString, TKqpSessionInfo*> OrderedSessions;
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*> OrderedSessions;
     THashMap<TActorId, TString> TargetIdIndex;
     THashSet<TString> ShutdownInFlightSessions;
     THashMap<TString, ui32> SessionsCountPerDatabase;
@@ -208,7 +208,7 @@ public:
         auto result = LocalSessions.emplace(sessionId,
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
                 sessionStartedAt + idleDuration, IdleSessions.end(), pgWire, startedAt));
-        OrderedSessions.emplace(sessionId, &result.first->second);
+        OrderedSessions.emplace(std::make_pair(database, sessionId), &result.first->second);
         SessionsCountPerDatabase[database]++;
         Y_ABORT_UNLESS(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -302,11 +302,11 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
-    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& continuation) const {
-        return OrderedSessions.lower_bound(continuation);
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& tenant, const TString& continuation) const {
+        return OrderedSessions.lower_bound(std::make_pair(tenant, continuation));
     }
 
-    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
         return OrderedSessions.end();
     }
 
@@ -339,7 +339,7 @@ public:
                 }
             }
 
-            OrderedSessions.erase(sessionId);
+            OrderedSessions.erase(std::make_pair(it->second.Database, sessionId));
             LocalSessions.erase(it);
         }
 
@@ -422,17 +422,19 @@ class TResourcePoolsCache {
     struct TClassifierInfo {
         const TString Membername;
         const TString PoolId;
+        const i64 Rank;
 
         TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
             : Membername(classifierSettings.Membername)
             , PoolId(classifierSettings.ResourcePool)
+            , Rank(classifierSettings.Rank)
         {}
     };
 
     struct TDatabaseInfo {
         std::unordered_map<TString, TResourcePoolClassifierConfig> ResourcePoolsClassifiers = {};
         std::map<i64, TClassifierInfo> RankToClassifierInfo = {};
-        std::unordered_map<TString, TString> UserToResourcePool = {};
+        std::unordered_map<TString, std::pair<TString, i64>> UserToResourcePool = {};
         bool Serverless = false;
     };
 
@@ -452,7 +454,7 @@ public:
             return true;
         }
 
-        const auto databaseInfo = GetDatabaseInfo(database); 
+        const auto databaseInfo = GetDatabaseInfo(database);
         return !databaseInfo || !databaseInfo->Serverless;
     }
 
@@ -462,16 +464,16 @@ public:
         }
 
         TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(database);
-        if (const auto& poolId = GetPoolIdFromClassifiers(database, userToken->GetUserSID(), databaseInfo, userToken, actorContext)) {
-            return poolId;
-        }
+        auto [resultPoolId, resultRank] = GetPoolIdFromClassifiers(database, userToken->GetUserSID(), databaseInfo, userToken, actorContext);
         for (const auto& userSID : userToken->GetGroupSIDs()) {
-            if (const auto& poolId = GetPoolIdFromClassifiers(database, userSID, databaseInfo, userToken, actorContext)) {
-                return poolId;
+            const auto& [poolId, rank] = GetPoolIdFromClassifiers(database, userSID, databaseInfo, userToken, actorContext);
+            if (poolId && (!resultPoolId || resultRank > rank)) {
+                resultPoolId = poolId;
+                resultRank = rank;
             }
         }
 
-        return NResourcePool::DEFAULT_POOL_ID;
+        return resultPoolId ? resultPoolId : NResourcePool::DEFAULT_POOL_ID;
     }
 
     std::optional<TPoolInfo> GetPoolInfo(const TString& database, const TString& poolId, TActorContext actorContext) const {
@@ -582,13 +584,14 @@ private:
         }
     }
 
-    TString GetPoolIdFromClassifiers(const TString& database, const TString& userSID, TDatabaseInfo& databaseInfo, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) const {
+    std::pair<TString, i64> GetPoolIdFromClassifiers(const TString& database, const TString& userSID, TDatabaseInfo& databaseInfo, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) const {
         auto& usersMap = databaseInfo.UserToResourcePool;
         if (const auto it = usersMap.find(userSID); it != usersMap.end()) {
             return it->second;
         }
 
         TString poolId = "";
+        i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
             if (classifier.Membername != userSID) {
                 continue;
@@ -605,11 +608,12 @@ private:
             }
 
             poolId = classifier.PoolId;
+            rank = classifier.Rank;
             break;
         }
 
-        usersMap[userSID] = poolId;
-        return poolId;
+        usersMap[userSID] = {poolId, rank};
+        return {poolId, rank};
     }
 
     TDatabaseInfo* GetOrCreateDatabaseInfo(const TString& database) {

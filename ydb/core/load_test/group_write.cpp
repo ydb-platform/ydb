@@ -111,7 +111,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             BytesInFlight -= size;
             --RequestsInFlight;
         }
-    
+
         TString ToString()  const{
             return TStringBuilder() << "{"
                 << " Requests# " << RequestsInFlight << "/" << MaxRequestsInFlight
@@ -311,7 +311,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             Now = now;
             while (now >= CurrentEpochEnd) {
                 CurrentEpochEnd += EpochDuration;
-                RequestsPerEpoch = CalculateRequestRate(now); 
+                RequestsPerEpoch = CalculateRequestRate(now);
                 PlannedForCurrentEpoch += RequestsPerEpoch;
             }
 
@@ -401,11 +401,13 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TDeque<std::pair<ui64, ui64>> WritesInFlightTimestamps;
         TSpeedTracker<ui64> MegabytesPerSecondST;
         TQuantileTracker<ui64> MegabytesPerSecondQT;
+        TSpeedTracker<ui64> PutsPerSecondST;
+        TQuantileTracker<ui64> PutsPerSecondQT;
         std::unique_ptr<TLatencyTrackerUs> ResponseQT;
         TQuantileTracker<ui32> WritesInFlightQT;
         TQuantileTracker<ui64> WriteBytesInFlightQT;
         TDeque<TMonotonic> IssuedWriteTimestamp;
-    
+
         // Reads
         const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
         TRequestDispatchingSettings ReadSettings;
@@ -420,7 +422,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TQuantileTracker<ui32> ReadsInFlightQT;
         TQuantileTracker<ui64> ReadBytesInFlightQT;
 
-        TIntrusivePtr<NMonitoring::TCounterForPtr> MaxInFlightLatency;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MaxInFlightLatency;
+        ::NMonitoring::TDynamicCounters::TCounterPtr OkPutResultsCounter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr BadPutResultsCounter;
+
         bool IsWorkingNow = true;
 
         TMonotonic LastLatencyTrackerUpdate;
@@ -476,6 +481,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , MegabytesPerSecondST(TDuration::Seconds(3)) // average speed at last 3 seconds
             , MegabytesPerSecondQT(ExposePeriod, Counters->GetSubgroup("metric", "writeSpeed"),
                     "bytesPerSecond", Percentiles)
+            , PutsPerSecondST(TDuration::Seconds(3)) // average speed at last 3 seconds
+            , PutsPerSecondQT(ExposePeriod, Counters->GetSubgroup("metric", "writeSpeed"),
+                    "putsPerSecond", Percentiles)
             , ResponseQT(new TLatencyTrackerUs())
             , WritesInFlightQT(ExposePeriod, Counters->GetSubgroup("metric", "writesInFlight"),
                     "items", Percentiles)
@@ -502,6 +510,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             *Counters->GetCounter("tabletId") = tabletId;
             const auto& percCounters = Counters->GetSubgroup("sensor", "microseconds");
             MaxInFlightLatency = percCounters->GetCounter("MaxInFlightLatency");
+            OkPutResultsCounter = percCounters->GetCounter("OkPutResults", true);
+            BadPutResultsCounter = percCounters->GetCounter("BadPutResults", true);
             ResponseQT->Initialize(percCounters->GetSubgroup("metric", "writeResponse"), Percentiles);
             ReadResponseQT->Initialize(percCounters->GetSubgroup("metric", "readResponse"), Percentiles);
         }
@@ -662,7 +672,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(event);
                 Y_ABORT_UNLESS(res);
-                
+
                 if (!MainCycleStarted) {
                     Self.InitialAllocationCompleted(ctx);
                 }
@@ -701,6 +711,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             MegabytesPerSecondST.Add(now, 0);
             MegabytesPerSecondQT.Add(now, 0);
 
+            PutsPerSecondST.Add(now, 0);
+            PutsPerSecondQT.Add(now, 0);
+
             ReadMegabytesPerSecondST.Add(now, 0);
             ReadMegabytesPerSecondQT.Add(now, 0);
 
@@ -715,6 +728,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             MegabytesPerSecondST.Add(now, TotalBytesWritten);
             if (MegabytesPerSecondST.CalculateSpeed(&speed)) {
                 MegabytesPerSecondQT.Add(now, speed);
+            }
+            PutsPerSecondST.Add(now, OkPutResults);
+            if (PutsPerSecondST.CalculateSpeed(&speed)) {
+                PutsPerSecondQT.Add(now, speed);
             }
             ReadMegabytesPerSecondST.Add(now, TotalBytesRead);
             if (ReadMegabytesPerSecondST.CalculateSpeed(&speed)) {
@@ -741,6 +758,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         void ExposeCounters(const TActorContext &ctx) {
             MegabytesPerSecondQT.CalculateQuantiles();
+            PutsPerSecondQT.CalculateQuantiles();
             ReadMegabytesPerSecondQT.CalculateQuantiles();
 
             WritesInFlightQT.CalculateQuantiles();
@@ -798,8 +816,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
                 static constexpr size_t count = 5;
                 std::array<size_t, count> nums{{9000, 9900, 9990, 9999, 10000}};
-                std::array<ui64, count> qSpeed;
+                std::array<ui64, count> qSpeed, qPPS;
                 MegabytesPerSecondQT.CalculateQuantiles(count, nums.data(), 10000, qSpeed.data());
+                PutsPerSecondQT.CalculateQuantiles(count, nums.data(), 10000, qPPS.data());
 
                 TABLER() {
                     TABLED() { str << "Writes per second"; }
@@ -817,6 +836,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                         TABLED() { str << Sprintf("WriteSpeed@ %d.%02d%%", int(nums[i] / 100), int(nums[i] % 100)); }
                         ui64 x = qSpeed[i] * 100 / 1048576;
                         TABLED() { str << Sprintf("%" PRIu64 ".%02d MB/s", x / 100, int(x % 100)); }
+                    }
+
+                    TABLER() {
+                        TABLED() { str << Sprintf("WriteSpeed@ %d.%02d%%", int(nums[i] / 100), int(nums[i] % 100)); }
+                        ui64 x = qPPS[i] * 100;
+                        TABLED() { str << Sprintf("%" PRIu64 ".%02d Puts/s", x / 100, int(x % 100)); }
                     }
                 }
 
@@ -894,6 +919,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 WriteSettings.DelayManager->CountResponse();
                 const bool ok = CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK});
                 ++ (ok ? OkPutResults : BadPutResults);
+                ++ *(ok ? OkPutResultsCounter : BadPutResultsCounter);
 
                 const TLogoBlobID& id = res->Id;
                 const ui32 size = id.BlobSize();
@@ -1045,7 +1071,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ui32 initialBlobs = InitialAllocation.ConfirmedSize();
             Y_ABORT_UNLESS(confirmedBlobs + initialBlobs > 0);
             ui32 blobIdx = RandomNumber(confirmedBlobs + initialBlobs);
-    
+
             if (blobIdx < confirmedBlobs) {
                 auto iter = ConfirmedBlobIds.begin();
                 std::advance(iter, blobIdx);

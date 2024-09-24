@@ -142,7 +142,8 @@ class TDefaultNodeBrokerClient
             const NYdb::NDiscovery::TNodeRegistrationResult& result,
             NKikimrConfig::TAppConfig& appConfig,
             ui32& nodeId,
-            TKikimrScopeId& outScopeId)
+            TKikimrScopeId& outScopeId,
+            TString& outNodeName)
         {
             nodeId = result.GetNodeId();
             NActors::TScopeId scopeId;
@@ -168,6 +169,7 @@ class TDefaultNodeBrokerClient
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
                     if (result.HasNodeName()) {
                         nodeInfo.SetName(result.GetNodeName());
+                        outNodeName = result.GetNodeName();
                     }
                 } else {
                     auto &info = *nsConfig.AddNode();
@@ -187,8 +189,13 @@ class TDefaultNodeBrokerClient
             : Result(std::move(result))
         {}
 
-        void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) const override {
-            ProcessRegistrationDynamicNodeResult(Result, appConfig, nodeId, scopeId);
+        void Apply(
+            NKikimrConfig::TAppConfig& appConfig,
+            ui32& nodeId,
+            TKikimrScopeId& scopeId,
+            TString& nodeName) const override
+        {
+            ProcessRegistrationDynamicNodeResult(Result, appConfig, nodeId, scopeId, nodeName);
         }
     };
 

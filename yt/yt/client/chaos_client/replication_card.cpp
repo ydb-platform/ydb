@@ -17,6 +17,8 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
 
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NDetail {
 
 void FormatProgressWithProjection(
@@ -702,7 +704,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName)
+    const std::string& clusterName)
 {
     return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
 }

@@ -345,7 +345,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
             if (!IsOutputUsedMultipleTimes(map.Ref(), *getParents())) {
                 TYtOutTableInfo mapOut(map.Output().Item(0));
                 if (mapOut.RowSpec->IsSorted()) {
-                    mapOut.RowSpec->ClearSortness();
+                    mapOut.RowSpec->ClearSortness(ctx);
                     input = Build<TYtOutput>(ctx, input.Pos())
                         .InitFrom(input.Cast<TYtOutput>())
                         .Operation<TYtMap>()

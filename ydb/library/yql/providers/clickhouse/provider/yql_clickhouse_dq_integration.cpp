@@ -75,7 +75,7 @@ public:
         return 0ULL;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TClSourceSettings>()) {
             const auto settings = maySettings.Cast();

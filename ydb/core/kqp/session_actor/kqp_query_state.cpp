@@ -138,6 +138,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
 
 
 bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
+    CompilationRunning = false;
     CompileResult = ev->CompileResult;
     YQL_ENSURE(CompileResult);
     MaxReadType = CompileResult->MaxReadType;

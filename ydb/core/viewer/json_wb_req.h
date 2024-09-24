@@ -63,6 +63,13 @@ public:
         if (params.Has("static")) {
             TBase::RequestSettings.StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static"), false);
         }
+        if (params.Has("fields_required")) {
+            if (params.Get("fields_required") == "all") {
+                TBase::RequestSettings.FieldsRequired = {-1};
+            } else {
+                SplitIds(params.Get("fields_required"), ',', TBase::RequestSettings.FieldsRequired);
+            }
+        }
         TBase::RequestSettings.Format = params.Get("format");
         TBase::Bootstrap();
     }
@@ -82,18 +89,21 @@ public:
 
     void ReplyAndPassAway() override {
         try {
+            auto perNodeStateInfo = TBase::GetPerNodeStateInfo();
             TStringStream json;
             if (!TBase::RequestSettings.MergeFields.empty()) {
                 ui32 errors = 0;
                 TString error;
                 if (!TBase::RequestSettings.FilterNodeIds.empty()) {
                     for (TNodeId nodeId : TBase::RequestSettings.FilterNodeIds) {
-                        auto it = TBase::NodeErrors.find(nodeId);
-                        if (it != TBase::NodeErrors.end()) {
-                            if (error.empty()) {
-                                error = it->second;
+                        auto it = TBase::NodeResponses.find(nodeId);
+                        if (it != TBase::NodeResponses.end()) {
+                            if (it->second.IsError()) {
+                                if (error.empty()) {
+                                    error = it->second.GetError();
+                                }
+                                errors++;
                             }
-                            errors++;
                         }
                     }
                 }
@@ -101,14 +111,14 @@ public:
                     json << "{\"Error\":\"" << TProtoToJson::EscapeJsonString(error) << "\"}";
                 } else {
                     TResponseType response;
-                    MergeWhiteboardResponses(response, TBase::PerNodeStateInfo, TBase::RequestSettings.MergeFields); // PerNodeStateInfo will be invalidated
+                    MergeWhiteboardResponses(response, perNodeStateInfo, TBase::RequestSettings.MergeFields);
                     FilterResponse(response);
                     RenderResponse(json, response);
                 }
             } else {
                 json << '{';
-                for (auto it = TBase::PerNodeStateInfo.begin(); it != TBase::PerNodeStateInfo.end(); ++it) {
-                    if (it != TBase::PerNodeStateInfo.begin()) {
+                for (auto it = perNodeStateInfo.begin(); it != perNodeStateInfo.end(); ++it) {
+                    if (it != perNodeStateInfo.begin()) {
                         json << ',';
                     }
                     json << '"' << it->first << "\":";

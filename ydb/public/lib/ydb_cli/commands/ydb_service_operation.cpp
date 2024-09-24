@@ -16,7 +16,7 @@ using namespace NKikimr::NOperationId;
 namespace {
 
     template <typename T>
-    int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EOutputFormat format) {
+    int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
         switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
@@ -32,7 +32,7 @@ namespace {
     }
 
     template <typename T>
-    void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EOutputFormat format) {
+    void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EDataFormat format) {
         NOperation::TOperationsList<T> operations = client.List<T>(pageSize, pageToken).GetValueSync();
         ThrowOnError(operations);
         PrintOperationsList(operations, format);
@@ -74,7 +74,7 @@ TCommandGetOperation::TCommandGetOperation()
 void TCommandGetOperation::Config(TConfig& config) {
     TCommandWithOperationId::Config(config);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
@@ -178,7 +178,7 @@ void TCommandListOperations::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "page-token", "Page token")
         .RequiredArgument("STRING").StoreResult(&PageToken);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);

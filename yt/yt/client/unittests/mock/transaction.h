@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yt/client/api/distributed_table_sessions.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -149,6 +150,16 @@ public:
     MOCK_METHOD(IJournalWriterPtr, CreateJournalWriter, (
         const NYPath::TYPath& path,
         const TJournalWriterOptions& options), (override));
+
+    MOCK_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionFinishOptions& options),
+        (override));
 
     // ITransaction
     IClientPtr Client;

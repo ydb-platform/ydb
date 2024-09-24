@@ -2963,7 +2963,9 @@ void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
 
     db.Table<Schema::View>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::View::AlterVersion>{viewInfo->AlterVersion},
-        NIceDb::TUpdate<Schema::View::QueryText>{viewInfo->QueryText});
+        NIceDb::TUpdate<Schema::View::QueryText>{viewInfo->QueryText},
+        NIceDb::TUpdate<Schema::View::CapturedContext>{viewInfo->CapturedContext.SerializeAsString()}
+    );
 }
 
 void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
@@ -4456,6 +4458,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
+    EnableParameterizedDecimal = appData->FeatureFlags.GetEnableParameterizedDecimal();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4711,6 +4714,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvIndexBuilder::TEvListRequest, Handle);
         HFuncTraced(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
+        HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
+        HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 
         //namespace NCdcStreamScan {
@@ -7036,6 +7041,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
+    EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
+    EnableParameterizedDecimal = featureFlags.GetEnableParameterizedDecimal();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7304,6 +7311,10 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        << ", at schemeshard: " << TabletID());
+
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     std::unique_ptr<TNavigate> request(ev->Get()->Request.Release());
     if (request->ResultSet.size() != 1) {
@@ -7316,12 +7327,18 @@ void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
         StatisticsAggregatorId = TTabletId(entry.DomainInfo->Params.GetStatisticsAggregator());
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, StatisticsAggregatorId=" << StatisticsAggregatorId
+            << ", at schemeshard: " << TabletID()); 
         ConnectToSA();
     }
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorContext& ctx) {
     TDuration delta = SendBaseStatsToSA();
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "Schedule next SendBaseStatsToSA in " << delta
+        << ", at schemeshard: " << TabletID());    
     ctx.Schedule(delta, new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
@@ -7346,16 +7363,25 @@ void TSchemeShard::ResolveSA() {
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
     } else {
         StatisticsAggregatorId = subDomainInfo->GetTenantStatisticsAggregatorID();
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "ResolveSA(), StatisticsAggregatorId=" << StatisticsAggregatorId
+            << ", at schemeshard: " << TabletID());         
         ConnectToSA();
     }
 }
 
 void TSchemeShard::ConnectToSA() {
-    if (!EnableStatistics || !StatisticsAggregatorId) {
+    if (!EnableStatistics)
+        return;
+    
+    if (!StatisticsAggregatorId) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "ConnectToSA(), no StatisticsAggregatorId"
+            << ", at schemeshard: " << TabletID());        
         return;
     }
     auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    NTabletPipe::TClientConfig pipeConfig{policy};
+    NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
     SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), (ui64)StatisticsAggregatorId, pipeConfig));
 
     auto connect = std::make_unique<NStat::TEvStatistics::TEvConnectSchemeShard>();
@@ -7366,7 +7392,10 @@ void TSchemeShard::ConnectToSA() {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "ConnectToSA()"
         << ", pipe client id: " << SAPipeClientId
-        << ", at schemeshard: " << TabletID());
+        << ", at schemeshard: " << TabletID()
+        << ", StatisticsAggregatorId: " << StatisticsAggregatorId
+        << ", at schemeshard: " << TabletID()
+    );
 }
 
 TDuration TSchemeShard::SendBaseStatsToSA() {
@@ -7377,7 +7406,14 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     if (!SAPipeClientId) {
         ResolveSA();
         if (!StatisticsAggregatorId) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "SendBaseStatsToSA(), no StatisticsAggregatorId"
+                << ", at schemeshard: " << TabletID());
             return TDuration::Seconds(30);
+        } else {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "SendBaseStatsToSA(), StatisticsAggregatorId=" << StatisticsAggregatorId
+                << ", at schemeshard: " << TabletID());
         }
     }
 

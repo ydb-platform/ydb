@@ -2,12 +2,12 @@
 
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/core/util/templates.h>
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <type_traits>
 #include <utility>
 
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
@@ -230,7 +230,6 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
@@ -245,7 +244,7 @@ template <NScheme::TTypeId ValType>
 class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(ValType))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo() : NScheme::TTypeInfo(ValType))
     {}
 
     template <typename ValueType> static typename NSchemeTypeMapper<ValType>::Type ConvertFrom(ValueType value) {
@@ -258,7 +257,7 @@ template <>
 class TConvertTypeValue<NScheme::NTypeIds::String> : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(NScheme::NTypeIds::String))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo() : NScheme::TTypeInfo(NScheme::NTypeIds::String))
     {}
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TString& value) {
@@ -1437,7 +1436,7 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(SFINAE::special())) const {
+                auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>()) const {
                     Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
                     Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
@@ -1462,24 +1461,19 @@ struct Schema {
                     return DbgPrintTuple(Iterator.GetKey(), typeRegistry) + " -> " + DbgPrintTuple(Iterator.GetValues(), typeRegistry);
                 }
 
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetNullValue(SFINAE::special) {
-                    return ColumnType::Default;
+                template <typename ColumnType>
+                static typename ColumnType::Type GetNullValue() {
+                    return GetDefaultValue<ColumnType>();
                 }
 
                 template <typename ColumnType>
-                static typename ColumnType::Type GetNullValue(SFINAE::general) {
-                    return typename ColumnType::Type();
-                }
-
-                template <typename ColumnType, typename SFINAE::type_check<decltype(ColumnType::Default)>::type = 0>
-                static decltype(ColumnType::Default) GetDefaultValue(SFINAE::special) {
-                    return ColumnType::Default;
-                }
-
-                template <typename ColumnType>
-                static typename ColumnType::Type GetDefaultValue(SFINAE::general) {
-                    return typename ColumnType::Type();
+                static typename ColumnType::Type GetDefaultValue() {
+                    constexpr bool hasDefault = requires {ColumnType::Default;};
+                    if constexpr (hasDefault) {
+                        return ColumnType::Default;
+                    } else {
+                        return typename ColumnType::Type();
+                    }
                 }
 
                 NTable::TIteratorStats* Stats() const {
@@ -1499,7 +1493,7 @@ struct Schema {
                     auto& cell = tuple.Columns[index];
                     auto type = tuple.Types[index];
                     if (cell.IsNull())
-                        return GetNullValue<ColumnType>(SFINAE::special());
+                        return GetNullValue<ColumnType>();
                     return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type));
                 }
 

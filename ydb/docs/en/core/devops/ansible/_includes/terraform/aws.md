@@ -1,4 +1,4 @@
-Create an [account](https://console.aws.amazon.com) in AWS and add enough balance to run 9 VMs. Using the [calculator] (https://calculator.aws/#/createCalculator/ec2-enhancement), you can estimate the approximate cost of maintaining infrastructure depending on the region and other circumstances.
+Create an [account](https://console.aws.amazon.com) in AWS and add enough balance to run 9 VMs. Using the [calculator](https://calculator.aws/#/createCalculator/ec2-enhancement), you can estimate the approximate cost of maintaining infrastructure depending on the region and other circumstances.
 
 Create a user and connection key in AWS Cloud to run the AWS CLI:
 

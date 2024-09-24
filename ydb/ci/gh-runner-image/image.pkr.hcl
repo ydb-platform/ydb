@@ -20,6 +20,10 @@ source "yandex" "this" {
   state_timeout = "10m"
 
   use_ipv4_nat = true
+  metadata = {
+    user-data : "#cloud-config\npackage_update: false\npackage_upgrade: false"
+    serial-port-enable : "1"
+  }
 
 }
 
@@ -30,16 +34,16 @@ build {
 
   provisioner "file" {
     content     = <<EOF
-set -x
+set -xe
 apt-get update
 # wait for unattended-upgrade is finished
 apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends dist-upgrade
 apt-get -y install --no-install-recommends \
   antlr3 clang-12 clang-14 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 lld-14 llvm-14 m4 make ninja-build parallel postgresql-client postgresql-client \
-  python-is-python3 python3-pip s3cmd s3cmd zlib1g
+  python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic
 
-apt-get -y purge lxd-agent-loader snapd modemanager
+apt-get -y purge lxd-agent-loader snapd modemmanager
 apt-get -y autoremove
 
 pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setproctitle==1.3.2 \
@@ -61,6 +65,7 @@ EOF
   provisioner "file" {
     content     = <<EOF
 #!/bin/env/sh
+set -xe
 
 mkdir -p /opt/cache/actions-runner/latest
 
@@ -73,12 +78,34 @@ EOF
     destination = "/tmp/install-agent.sh"
   }
 
+  provisioner "file" {
+    content = templatefile("conf/unified-agent-linux.yml", {
+      FOLDER_ID = var.folder_id
+    })
+    destination = "/tmp/yc-vm.yml"
+  }
+
+  provisioner "file" {
+    content     = <<EOF
+#!/bin/env/sh
+set -xe
+curl -s -O "https://storage.yandexcloud.net/yc-unified-agent/releases/${var.unified_agent_version}/deb/${var.unified_agent_ubuntu_name}/yandex-unified-agent_${var.unified_agent_version}_amd64.deb"
+dpkg -i yandex-unified-agent_${var.unified_agent_version}_amd64.deb
+
+mv /tmp/yc-vm.yml /etc/yandex/unified_agent/conf.d/
+chown unified_agent:unified_agent /etc/yandex/unified_agent/conf.d/yc-vm.yml
+EOF
+    destination = "/tmp/install-unified-agent.sh"
+  }
+
   provisioner "shell" {
     inline = [
       "sudo bash /tmp/install-packages.sh",
       "sudo bash /tmp/install-agent.sh",
-      "sudo rm /tmp/install-packages.sh /tmp/install-agent.sh",
+      "sudo bash /tmp/install-unified-agent.sh",
+      "sudo rm /tmp/install-packages.sh /tmp/install-agent.sh /tmp/install-unified-agent.sh",
       "sudo time sync",
     ]
   }
+
 }

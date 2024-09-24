@@ -1,9 +1,10 @@
-## Variant, AsVariant {#variant}
+## Variant {#variant}
 
 `Variant()` создает значение варианта над кортежем или структурой.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 Variant(T, String, Type<Variant<...>>)->Variant<...>
 ```
 
@@ -13,8 +14,9 @@ Variant(T, String, Type<Variant<...>>)->Variant<...>
 * Строка с именем поля или индексом кортежа
 * Тип варианта
 
-**Пример**
-``` yql
+### Пример
+
+```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
 
 SELECT
@@ -22,10 +24,13 @@ SELECT
    Variant(false, "bar", $var_type) as Variant2Value;
 ```
 
+## AsVariant {#asvariant}
+
 `AsVariant()` создает значение [варианта над структурой](../../../types/containers.md) с одним полем. Это значение может быть неявно преобразовано к любому варианту над структурой, в которой совпадает для этого имени поля тип данных и могут быть дополнительные поля с другими именами.
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 AsVariant(T, String)->Variant
 ```
 
@@ -34,8 +39,9 @@ AsVariant(T, String)->Variant
 * Значение
 * Строка с именем поля
 
-**Пример**
-``` yql
+### Пример
+
+```yql
 SELECT
    AsVariant(6, "foo") as VariantValue
 ```

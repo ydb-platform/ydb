@@ -92,6 +92,70 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                                  << " after=" << GetUint64(rows[0].at("RawBytes")));
         }
     }
+
+    Y_UNIT_TEST(TieringRuleValidation) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        TLocalHelper localHelper(testHelper.GetKikimr());
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        localHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+
+        {
+            const TString query = R"(
+            CREATE OBJECT IF NOT EXISTS empty_tiering_rule (TYPE TIERING_RULE)
+                WITH (defaultColumn = timestamp, description = `{"rules": []}`))";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = R"(
+            CREATE OBJECT IF NOT EXISTS empty_default_column (TYPE TIERING_RULE)
+                WITH (defaultColumn = ``, description = `{"rules": [{ "tierName" : "tier1", "durationForEvict" : "10d" }]}`))";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = R"(
+            CREATE OBJECT IF NOT EXISTS no_default_column (TYPE TIERING_RULE)
+                WITH (description = `{"rules": [{ "tierName" : "tier1", "durationForEvict" : "10d" }]}`))";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        const TString correctTieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET description `{"rules": []}`)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET description `{"rules": []}`)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) SET defaultColumn ``)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+
+        {
+            const TString query = "ALTER OBJECT " + correctTieringRule + R"( (TYPE TIERING_RULE) RESET defaultColumn)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

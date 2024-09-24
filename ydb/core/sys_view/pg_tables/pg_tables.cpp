@@ -25,7 +25,7 @@ TStringBuf TPgTablesScanBase::GetColumnName(NTable::TTag tag) const {
 
 TCell TPgTablesScanBase::MakePgCell(const Schema::PgColumn& column, const TString& value, TVector<TString>& cellData) {
     NYql::NUdf::TStringRef ref;
-    auto convert = NPg::PgNativeBinaryFromNativeText(value, NPg::PgTypeIdFromTypeDesc(column._ColumnTypeInfo.GetTypeDesc()));
+    auto convert = NPg::PgNativeBinaryFromNativeText(value, NPg::PgTypeIdFromTypeDesc(column._ColumnTypeInfo.GetPgTypeDesc()));
     if (convert.Error) {
         ConvertError_ = *convert.Error;
         return TCell();
@@ -102,7 +102,8 @@ void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeRe
     switch (status) {
         case NKikimrScheme::StatusSuccess: {
             const auto& pathDescription = record.GetPathDescription();
-            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir);
+            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir 
+                || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain);
             break;
         }
         case NKikimrScheme::StatusPathDoesNotExist:

@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "datashard_write_operation.h"
 #include "execution_unit_ctors.h"
@@ -165,6 +166,10 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                     "Errors while proposing transaction txid " << op->GetTxId()
                     << " at tablet " << DataShard.TabletID() << " " << res->GetError());
+    }
+
+    if (op->IsImmediate() && !op->IsReadOnly()) {
+        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
     }
 
     if (res->IsPrepared()) {

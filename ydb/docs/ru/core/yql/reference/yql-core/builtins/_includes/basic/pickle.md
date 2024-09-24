@@ -4,15 +4,17 @@
 
 `Unpickle()` — обратная операция (десериализация), где первым аргументом передается тип данных результата, а вторым — строка с результатом `Pickle()` или `StablePickle()`.
 
-**Сигнатуры**
-```
+### Сигнатуры
+
+```yql
 Pickle(T)->String
 StablePickle(T)->String
 Unpickle(Type<T>, String)->T
 ```
 
-Примеры:
-``` yql
+### Примеры
+
+```yql
 SELECT *
 FROM my_table
 WHERE Digest::MurMurHash32(

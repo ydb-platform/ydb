@@ -122,7 +122,12 @@ public:
 
     TDataStatistics GetDataStatistics() const override
     {
-        return TDataStatistics();
+        return DataStatistics_;
+    }
+
+    void SetDataStatistics(TDataStatistics dataStatistics)
+    {
+        DataStatistics_ = std::move(dataStatistics);
     }
 
     NChunkClient::TCodecStatistics GetDecompressionStatistics() const override
@@ -142,9 +147,9 @@ public:
 
 private:
     const TDataPtr Data_;
+    TDataStatistics DataStatistics_;
 
     TFuture<void> ReadyEvent_ = VoidFuture;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,7 +238,6 @@ public:
 
 private:
     const TDataPtr Data_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -253,7 +257,7 @@ public:
         return Reader_;
     }
 
-    IUnversionedRowsetWriterPtr  GetWriter() const
+    IUnversionedRowsetWriterPtr GetWriter() const
     {
         return Writer_;
     }
@@ -263,11 +267,15 @@ public:
         Data_->Fail(error);
     }
 
+    void SetDataStatistics(TDataStatistics dataStatistics)
+    {
+        Reader_->SetDataStatistics(std::move(dataStatistics));
+    }
+
 private:
     TDataPtr Data_;
     TReaderPtr Reader_;
     TWriterPtr Writer_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,6 +299,11 @@ IUnversionedRowsetWriterPtr TSchemafulPipe::GetWriter() const
 void TSchemafulPipe::Fail(const TError& error)
 {
     Impl_->Fail(error);
+}
+
+void TSchemafulPipe::SetDataStatistics(TDataStatistics dataStatistics)
+{
+    return Impl_->SetDataStatistics(std::move(dataStatistics));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

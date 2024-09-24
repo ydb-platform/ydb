@@ -83,7 +83,10 @@ def preprocess_args(args):
         if f.endswith('.gosrc'):
             with tarfile.open(f, 'r') as tar:
                 srcs.extend(os.path.join(args.output_root, src) for src in tar.getnames())
-                tar.extractall(path=args.output_root)
+                if sys.version_info >= (3, 12):
+                    tar.extractall(path=args.output_root, filter='data')
+                else:
+                    tar.extractall(path=args.output_root)
         else:
             srcs.append(f)
     args.srcs = srcs

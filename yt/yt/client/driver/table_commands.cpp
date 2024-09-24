@@ -47,13 +47,17 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NLogging::TLogger WithCommandTag(
+namespace  {
+
+NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
     return logger.WithTag("Command: %v",
         context->Request().CommandName);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -261,7 +265,17 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-void TWriteTableCommand::DoExecute(ICommandContextPtr context)
+TFuture<ITableWriterPtr> TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context) const
+{
+    PutMethodInfoInTraceContext("write_table");
+
+    return context->GetClient()->CreateTableWriter(
+        Path,
+        Options);
+}
+
+void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
 {
     auto transaction = AttachTransaction(context, false);
 
@@ -273,11 +287,7 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    PutMethodInfoInTraceContext("write_table");
-
-    auto apiWriter = WaitFor(context->GetClient()->CreateTableWriter(
-        Path,
-        Options))
+    auto apiWriter = WaitFor(CreateTableWriter(context))
         .ValueOrThrow();
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
@@ -298,7 +308,11 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
 
     WaitFor(schemalessWriter->Close())
         .ThrowOnError();
+}
 
+void TWriteTableCommand::DoExecute(ICommandContextPtr context)
+{
+    DoExecuteImpl(context);
     ProduceEmptyOutput(context);
 }
 
@@ -820,6 +834,12 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         "versioned_read_options",
         [] (TThis* command) -> auto& {
             return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_lookup_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseLookupCache;
         })
         .Optional(/*init*/ false);
 }

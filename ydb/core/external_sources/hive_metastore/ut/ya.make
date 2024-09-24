@@ -29,6 +29,7 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
+ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)

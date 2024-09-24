@@ -419,8 +419,8 @@ bool TPathElement::CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStor
             CheckSpaceChanged(FileStoreSpaceHDD, newSpace.HDD, oldSpace.HDD, errStr, "filestore", " (hdd)"));
 }
 
-void TPathElement::SetAsyncReplica() {
-    IsAsyncReplica = true;
+void TPathElement::SetAsyncReplica(bool value) {
+    IsAsyncReplica = value;
 }
 
 void TPathElement::SetRestoreTable() {

@@ -365,7 +365,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     const NScheme::TTypeRegistry* typeRegistry = AppData(ctx)->TypeRegistry;
     const auto* tableInfoPtr = Self->Tables.FindPtr(pathId);
     Y_ASSERT(tableInfoPtr);
-    auto& tableInfo = **tableInfoPtr;
+    auto& tableInfo = *tableInfoPtr->Get();
     auto pathDescription = Result->Record.MutablePathDescription();
     auto entry = pathDescription->MutableTable();
 
@@ -570,7 +570,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
         if (tableInfo->GetStats().TableStats.contains(pathId)) {
-            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
+            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId).Aggregated);
         } else {
             FillTableStats(*pathDescription, TPartitionStats());
         }
@@ -1052,6 +1052,7 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(viewInfo->AlterVersion);
     entry->SetQueryText(viewInfo->QueryText);
+    *entry->MutableCapturedContext() = viewInfo->CapturedContext;
 }
 
 void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1322,7 +1323,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     const auto* indexPathPtr = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPathPtr);
-    const auto& indexPath = **indexPathPtr;
+    const auto& indexPath = *indexPathPtr->Get();
     if (const auto size = indexPath.GetChildren().size(); indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         // For vector index we have 2 impl tables and 2 tmp impl tables
         Y_VERIFY_S(2 <= size && size <= 4, size);
@@ -1337,7 +1338,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             continue; // it's possible because of dropping tmp index impl tables without dropping index
         }
         Y_ABORT_UNLESS(tableInfoPtr);
-        const auto& tableInfo = **tableInfoPtr;
+        const auto& tableInfo = *tableInfoPtr->Get();
 
         const auto& tableStats = tableInfo.GetStats().Aggregated;
         dataSize += tableStats.DataSize + tableStats.IndexSize;

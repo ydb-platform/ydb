@@ -6,3 +6,5 @@ udfs
 *.sql
 *.bin
 *.txt
+*.svg
+*.old

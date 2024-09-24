@@ -6,6 +6,8 @@
 
 #include "error.h"
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 namespace NYT {
@@ -128,6 +130,16 @@ inline void FromProto(TDuration* original, ::google::protobuf::int64 serialized)
     *original = TDuration::MicroSeconds(serialized);
 }
 
+inline void ToProto(::google::protobuf::Duration* serialized, TDuration original)
+{
+    *serialized = NProtoInterop::CastToProto(original);
+}
+
+inline void FromProto(TDuration* original, ::google::protobuf::Duration serialized)
+{
+    *original = NProtoInterop::CastFromProto(serialized);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline void ToProto(::google::protobuf::int64* serialized, TInstant original)
@@ -140,8 +152,6 @@ inline void FromProto(TInstant* original, ::google::protobuf::int64 serialized)
     *original = TInstant::MicroSeconds(serialized);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 inline void ToProto(::google::protobuf::uint64* serialized, TInstant original)
 {
     *serialized = original.MicroSeconds();
@@ -150,6 +160,16 @@ inline void ToProto(::google::protobuf::uint64* serialized, TInstant original)
 inline void FromProto(TInstant* original, ::google::protobuf::uint64 serialized)
 {
     *original = TInstant::MicroSeconds(serialized);
+}
+
+inline void ToProto(::google::protobuf::Timestamp* serialized, TInstant original)
+{
+    *serialized = NProtoInterop::CastToProto(original);
+}
+
+inline void FromProto(TInstant* original, ::google::protobuf::Timestamp serialized)
+{
+    *original = NProtoInterop::CastFromProto(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

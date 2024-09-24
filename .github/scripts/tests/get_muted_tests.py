@@ -8,8 +8,9 @@ import re
 import requests
 import sys
 import ydb
-from mute_utils import pattern_to_re
 from get_file_diff import extract_diff_lines
+from mute_utils import pattern_to_re
+from transform_ya_junit import YaMuteCheck
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -21,47 +22,8 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
-#copied as is from .github/scripts/tests/transform-ya-junit.py:26 to simulate working of mute algorythm
-class YaMuteCheck:
-    def __init__(self):
-        self.regexps = set()
-        self.regexps = []
-
-    def load(self, fn):
-        with open(fn, "r") as fp:
-            for line in fp:
-                line = line.strip()
-                try:
-                    testsuite, testcase = line.split(" ", maxsplit=1)
-                except ValueError:
-                    log_print(f"SKIP INVALID MUTE CONFIG LINE: {line!r}")
-                    continue
-                self.populate(testsuite, testcase)
-
-    def populate(self, testsuite, testcase):
-        check = []
-
-        for p in (pattern_to_re(testsuite), pattern_to_re(testcase)):
-            try:
-                check.append(re.compile(p))
-            except re.error:
-                log_print(f"Unable to compile regex {p!r}")
-                return
-
-        self.regexps.append(tuple(check))
-
-    def __call__(self, suite_name, test_name):
-        for ps, pt in self.regexps:
-            if ps.match(suite_name) and pt.match(test_name):
-                return True
-        return False
-#end of copy as is from .github/scripts/tests/transform-ya-junit.py:56
-
-def get_all_tests(**kwargs):
+def get_all_tests(job_id=None, branch=None):
     print(f'Getting all tests')
-    path_to_save = kwargs.get('path', None)
-    job_id = kwargs.get('job_id', None)
-    branch = kwargs.get('branch', None)
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -82,41 +44,39 @@ def get_all_tests(**kwargs):
         if job_id and branch: # extend all tests from main by new tests from pr
             
             tests = f"""
-            select * from (
-                select 
+            SELECT * FROM (
+                SELECT 
                     suite_folder,
                     test_name,
                     full_name
                     from `test_results/analytics/testowners`
-                where  
+                WHERE  
                     run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                     and run_timestamp_last <= Date('{today}') + Interval("P1D")
-                union
-                select distinct
+                UNION
+                SELECT DISTINCT
                     suite_folder,
                     test_name,
                     suite_folder || '/' || test_name as full_name
-                from `test_results/test_runs_column`
-                where
+                FROM `test_results/test_runs_column`
+                WHERE
                     job_id = {job_id} 
                     and branch = '{branch}'
             )
-            order by full_name
             """
         else: #only all tests from main
             tests = f"""
-            select 
+            SELECT 
                 suite_folder,
                 test_name,
                 full_name,
                 owners,
                 run_timestamp_last,
                 Date('{today}') as date
-            from `test_results/analytics/testowners`
-            where  
+            FROM `test_results/analytics/testowners`
+            WHERE  
                 run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                 and run_timestamp_last <= Date('{today}') + Interval("P1D")
-            order by full_name
             """
         query = ydb.ScanQuery(tests, {})
         it = table_client.scan_query(query)
@@ -127,12 +87,6 @@ def get_all_tests(**kwargs):
                 results = results + result.result_set.rows
             except StopIteration:
                 break
-        lines=[]
-        if path_to_save :
-            for row in results: 
-                lines.append(row['suite_folder'] + ' '+ row['test_name'] + '\n')
-                
-            write_to_file(lines, path_to_save)
         return results
 
 
@@ -212,8 +166,8 @@ def mute_applier(args):
     output_path = args.output_folder
 
 
-    all_tests_file = os.path.join(output_path, '3_all_tests.txt')
-    all_muted_tests_file = os.path.join(output_path, '3_all_muted_tests.txt')
+    all_tests_file = os.path.join(output_path, '1_all_tests.txt')
+    all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
      
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -233,7 +187,7 @@ def mute_applier(args):
     mute_check.load(muted_ya_path)
     
     if args.mode == 'upload_muted_tests':
-        all_tests= get_all_tests(path=all_tests_file,branch=args.branch)
+        all_tests= get_all_tests(branch=args.branch)
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
@@ -241,29 +195,33 @@ def mute_applier(args):
             test['is_muted'] = int(mute_check(testsuite, testcase))
                 
         upload_muted_tests(all_tests)
+        
     elif args.mode == 'get_mute_diff':
-        all_tests= get_all_tests(path=all_tests_file, job_id=args.job_id, branch=args.branch)
+        all_tests = get_all_tests(job_id=args.job_id, branch=args.branch)
+        all_tests.sort(key=lambda test: test['full_name'])
         muted_tests = []
+        all_tests_names_and_suites = []
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
+            all_tests_names_and_suite.append(testsuite + ' ' + testcase + '\n')
             if mute_check(testsuite, testcase):
                 muted_tests.append(testsuite + ' ' + testcase + '\n')
-   
-        write_to_file(muted_tests,os.path.join(repo_path, all_muted_tests_file))
+                
+        write_to_file(all_tests_names_and_suites, all_tests_file)
+        write_to_file(muted_tests,all_muted_tests_file)
         
-        added_lines_file = os.path.join(output_path, '1_added_mute_lines.txt')
-        added_lines_file_muted = os.path.join(output_path, '1_new_muted_tests.txt')
-        removed_lines_file = os.path.join(output_path, '2_removed_mute_lines.txt')
-        removed_lines_file_muted = os.path.join(output_path, '2_unmuted_tests.txt')
+        added_mute_lines_file = os.path.join(output_path, '2_added_mute_lines.txt')
+        new_muted_tests_file = os.path.join(output_path, '2_new_muted_tests.txt')
+        removed_mute_lines_file = os.path.join(output_path, '3_removed_mute_lines.txt')
+        unmuted_tests_file = os.path.join(output_path, '3_unmuted_tests.txt')
 
         added_texts, removed_texts = extract_diff_lines(args.base_sha, args.head_sha, muted_ya_path)
-        write_to_file('\n'.join(added_texts), added_lines_file)
-        write_to_file('\n'.join(removed_texts), removed_lines_file)
+        write_to_file('\n'.join(added_texts), added_mute_lines_file)
+        write_to_file('\n'.join(removed_texts), removed_mute_lines_file)
         
         #checking added lines
-        mute_check = YaMuteCheck()
-        mute_check.load(added_lines_file)
+        mute_check.load(added_mute_lines_file)
         added_muted_tests=[]
         print("New muted tests captured")
         for test in all_tests:
@@ -273,8 +231,7 @@ def mute_applier(args):
                 added_muted_tests.append(testsuite + ' '+ testcase + '\n')
                 
         #checking removed lines
-        mute_check = YaMuteCheck()
-        mute_check.load(removed_lines_file)
+        mute_check.load(removed_mute_lines_file)
     
         removed_muted_tests=[]
         print("Unmuted tests captured")
@@ -292,15 +249,15 @@ def mute_applier(args):
         added_muted_tests = list(sorted(added_unique))
         removed_muted_tests = list(sorted(removed_unique))
 
-        write_to_file(added_muted_tests, added_lines_file_muted)
-        write_to_file(removed_muted_tests, removed_lines_file_muted)
+        write_to_file(added_muted_tests, new_muted_tests_file)
+        write_to_file(removed_muted_tests, unmuted_tests_file)
         
         print(f"All tests have been written to {all_tests_file}.")
         print(f"All mutes tests have been written to {all_muted_tests_file}.")
-        print(f"Added lines have been written to {added_lines_file}.")
-        print(f"New muted tests have been written to {added_lines_file_muted}.")
-        print(f"Removed lines have been written to {removed_lines_file}.")
-        print(f"Unmuted tests have been written to {removed_lines_file_muted}.")
+        print(f"Added lines have been written to {added_mute_lines_file}.")
+        print(f"New muted tests have been written to {new_muted_tests_file}.")
+        print(f"Removed lines have been written to {removed_mute_lines_file}.")
+        print(f"Unmuted tests have been written to {unmuted_tests_file}.")
         
 
 

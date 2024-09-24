@@ -399,7 +399,7 @@ runs:
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
           # postprocess junit report
-          .github/scripts/tests/transform-ya-junit.py -i \
+          .github/scripts/tests/transform_ya_junit.py -i \
             -m .github/config/muted_ya.txt \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
@@ -555,14 +555,14 @@ runs:
               LINE_COUNT=$(wc -l < "$FILE_PATH")
               if [ "$LINE_COUNT" -gt 0 ]; then
                 SEPARATOR=', '
-                MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/1_new_muted_tests.txt)"
+                MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_new_muted_tests.txt)"
               fi
             fi
             FILE_PATH=$PUBLIC_DIR/mute_info/2_unmuted_tests.txt
             if [ -f "$FILE_PATH" ]; then
               LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
               if [ "$LINE_COUNT_unmute" -gt 0 ]; then
-                MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/2_unmuted_tests.txt)"
+                MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/3_unmuted_tests.txt)"
               fi
             fi
             printf "$MESSAGE" | .github/scripts/tests/comment-pr.py --color orange

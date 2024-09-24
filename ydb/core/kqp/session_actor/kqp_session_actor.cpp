@@ -2242,7 +2242,6 @@ public:
     }
 
     void EndCleanup(bool isFinal) {
-        Cerr << "EndCleanup, isFinal: " << isFinal << Endl;
         LOG_D("EndCleanup, isFinal: " << isFinal);
 
         if (QueryResponse)

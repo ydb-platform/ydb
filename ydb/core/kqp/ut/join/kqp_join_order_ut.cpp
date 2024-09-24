@@ -94,6 +94,10 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     return TKikimrRunner(serverSettings);
 }
 
+void PrintPlan(const TString& plan) {
+    Cout << plan << Endl;
+}
+
 class TChainTester {
 public:
     TChainTester(size_t chainSize)
@@ -158,9 +162,10 @@ private:
                 );
         }
 
-        auto result = Session.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = Session.ExplainDataQuery(joinRequest).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        PrintPlan(result.GetPlan());
     }
 
     TKikimrRunner Kikimr;
@@ -208,28 +213,8 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    //Y_UNIT_TEST(Chain65Nodes) {
-    //    TChainTester(65).Test();
-    //}
-
-    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTable(session, useColumnStore);
-
-        /* join with parameters */
-        {
-            const TString query = GetStatic(queryPath);
-            
-            auto execRes = db.StreamExecuteScanQuery(query, TStreamExecScanQuerySettings().Explain(true)).ExtractValueSync();
-            execRes.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            auto plan = CollectStreamResult(execRes).PlanJson;
-            Cerr << plan.GetRef();
-            return plan.GetRef();
-        }
+    Y_UNIT_TEST(Chain65Nodes) {
+        TChainTester(65).Test();
     }
 
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {

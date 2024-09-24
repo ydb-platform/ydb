@@ -1305,10 +1305,10 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        if (Settings.TableService.GetEnableOltpSink() && request.AcquireLocksTxId.Defined()) {
+        if (Settings.TableService.GetEnableOltpSink()) {
             txCtx->TxManager = CreateKqpTransactionManager();
         }
-        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId && txCtx->HasOltpTable && request.AcquireLocksTxId.Defined()) {
+        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId) {
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,

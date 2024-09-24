@@ -418,7 +418,7 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // At current time sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !HasTxSinkInTx(tx)) {
+            while (tx && tx->GetHasEffects() /*&& !HasTxSinkInTx(tx)*/) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);

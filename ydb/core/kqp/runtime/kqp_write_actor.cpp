@@ -200,6 +200,7 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
+        CA_LOG_D("New TKqpTableWriteActor for table `" << TablePath << "` (" << TableId << ").");
         ResolveTable();
         Become(&TKqpTableWriteActor::StateProcessing);
     }
@@ -954,6 +955,8 @@ public:
         }
         WriteToken = WriteTableActor->Open(GetOperation(Settings.GetType()), std::move(columnsMetadata));
         WaitingForTableActor = true;
+
+        CA_LOG_D("New TKqpDirectWriteActor for table `" << Settings.GetTable().GetPath() << "` (" << TableId << ").");
     }
 
     static constexpr char ActorName[] = "KQP_DIRECT_WRITE_ACTOR";
@@ -1221,6 +1224,7 @@ public:
 
             auto& writeInfo = WriteInfos[settings.TableId];
             if (!writeInfo.WriteTableActor) {
+                CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId);
                 writeInfo.WriteTableActor = new TKqpTableWriteActor(
                     this,
                     settings.TableId,

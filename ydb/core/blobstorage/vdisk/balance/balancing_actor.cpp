@@ -145,6 +145,7 @@ namespace NBalancing {
                     continue;
                 }
 
+                merger.Clear();
                 It.PutToMerger(&merger);
 
                 auto [moveMask, delMask] = merger.Ingress.HandoffParts(&top, Ctx->VCtx->ShortSelfVDisk, key);
@@ -182,8 +183,6 @@ namespace NBalancing {
                         }
                     }
                 }
-
-                merger.Clear();
 
                 if (SendOnMainParts.Size() >= Ctx->Cfg.MaxToSendPerEpoch && TryDeleteParts.Size() >= Ctx->Cfg.MaxToDeletePerEpoch) {
                     // reached the limit of parts to send and delete

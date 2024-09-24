@@ -240,6 +240,8 @@ runs:
             exit 1
             ;;
         esac
+        
+        echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ $TEST_RETRY_COUNT -z ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
@@ -536,7 +538,9 @@ runs:
       if: inputs.run_tests
       shell: bash
       run: |
-        .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+        if [ $IS_TEST_RESULT_IGNORED == 0 ]
+          .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+        fi
 
     - name: sync results to s3 and publish links
       if: always()

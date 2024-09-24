@@ -1644,11 +1644,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
   ```
 
-{% note warning %}
-
   When processing `events`, you do not need to confirm processing for `TDataReceivedEvent` events explicitly.
-
-{% endnote %}
 
   Confirmation of the `TStopPartitionSessionEvent` event processing must be done after calling `Commit`.
 

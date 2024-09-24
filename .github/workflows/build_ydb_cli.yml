@@ -36,11 +36,48 @@ jobs:
     
     - name: Print YDB CLI version
       run: cat ydb/apps/ydb/version.txt
+    
+    - name: Print YDB CLI version
+      run: ./ya make ydb/apps/ydb
+
+    - name: Upload binary to artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-binary
+        path: ydb/apps/ydb/ydb
+        if-no-files-found: error
+        retention-days: 1
 
   gather-and-push-to-s3:
     name: Gather built binaries and push to s3
     needs: build-platform-specific-binary
     runs-on: ubuntu-latest
     steps:
+      - name: prepare directories
+        run: mkdir -p binaries/darwin/amd64
+             mkdir -p binaries/darwin/arm64
+             mkdir -p binaries/linux/amd64
+             mkdir -p binaries/windows/amd64
+      - name: copy darwin amd64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-13-binary
+          path: binaries/darwin/amd64/
+      - name: copy darwin arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-latest-binary
+          path: binaries/darwin/arm64/
+      - name: copy linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ubuntu-latest-binary
+          path: binaries/linux/amd64/
+      - name: copy windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-latest-binary
+          path: binaries/windows/amd64/
       - name: Print result
         run: echo "all done"
+             ls -R binaries

@@ -1094,7 +1094,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
             minParts = std::max<ui32>(1, settings.min_active_partitions());
-            if (appData->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
+            if (appData->FeatureFlags.GetEnableTopicSplitMerge() &&
+                request.partitioning_settings().has_auto_partitioning_settings() &&
+                request.partitioning_settings().auto_partitioning_settings().strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {
+
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.auto_partitioning_settings();
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);

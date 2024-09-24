@@ -25,7 +25,8 @@ bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     NOlap::TCommittedData commitData(userData, Self->GetLastPlannedSnapshot(), Self->Generation(), writeId);
     if (Self->TablesManager.HasTable(userData->GetPathId())) {
-        Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
+        auto counters = Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
+        Self->Counters.GetTabletCounters()->OnWriteCommitted(counters);
     }
     Self->UpdateInsertTableCounters();
     return true;

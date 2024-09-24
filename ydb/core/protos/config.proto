@@ -322,6 +322,8 @@ message TBlobStorageConfig {
         optional uint64 RequestBlobsOnMainTimeoutMs = 10 [default=10000];
         optional uint64 DeleteBatchTimeoutMs = 11 [default=10000];
         optional uint64 EpochTimeoutMs = 12 [default=60000];
+
+        optional uint64 SecondsToSleepIfNothingToDo = 13 [default=600];
     }
 
     reserved 7;  // TCostMetricsSettings, moved to ICB

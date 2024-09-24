@@ -151,11 +151,16 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         record.SetPathOwnerId(TargetTablePathId.OwnerId);
         record.SetLocalPathId(TargetTablePathId.LocalPathId);
 
-        // Y_ABORT_UNLESS(record.HasAsyncIndex());
-        // AdjustTags(*record.MutableAsyncIndex());
-        //
-         Y_ABORT_UNLESS(record.HasIncrementalRestore());
-         AdjustTags(*record.MutableIncrementalRestore());
+        switch(Type) {
+            case ETableChangeSenderType::AsyncIndex:
+                Y_ABORT_UNLESS(record.HasAsyncIndex());
+                AdjustTags(*record.MutableAsyncIndex());
+                break;
+            case ETableChangeSenderType::IncrementalRestore:
+                Y_ABORT_UNLESS(record.HasIncrementalRestore());
+                AdjustTags(*record.MutableIncrementalRestore());
+                break;
+        }
     }
 
     void AdjustTags(NKikimrChangeExchange::TDataChange& record) const {
@@ -285,15 +290,21 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_PARTITION;
     }
 
-    TTableChangeSenderShard(const TActorId& parent, const TDataShardId& dataShard, ui64 shardId,
-            const TPathId& indexTablePathId, const TMap<TTag, TTag>& tagMap)
-        : Parent(parent)
-        , DataShard(dataShard)
-        , ShardId(shardId)
-        , TargetTablePathId(indexTablePathId)
-        , TagMap(tagMap)
-        , LeaseConfirmationCookie(0)
-        , LastRecordOrder(0)
+    TTableChangeSenderShard(
+        const TActorId& parent,
+        const TDataShardId& dataShard,
+        ui64 shardId,
+        const TPathId& targetTablePathId,
+        const TMap<TTag, TTag>& tagMap,
+        ETableChangeSenderType type)
+            : Type(type)
+            , Parent(parent)
+            , DataShard(dataShard)
+            , ShardId(shardId)
+            , TargetTablePathId(targetTablePathId)
+            , TagMap(tagMap)
+            , LeaseConfirmationCookie(0)
+            , LastRecordOrder(0)
     {
     }
 
@@ -311,6 +322,7 @@ public:
     }
 
 private:
+    const ETableChangeSenderType Type;
     const TActorId Parent;
     const TDataShardId DataShard;
     const ui64 ShardId;
@@ -334,10 +346,17 @@ IActor* CreateTableChangeSenderShard(
     const TActorId& parent,
     const TDataShardId& dataShard,
     ui64 shardId,
-    const TPathId& indexTablePathId,
-    const TMap<TTag, TTag>& tagMap)
+    const TPathId& targetTablePathId,
+    const TMap<TTag, TTag>& tagMap,
+    ETableChangeSenderType type)
 {
-    return new TTableChangeSenderShard(parent, dataShard, shardId, indexTablePathId, tagMap);
+    return new TTableChangeSenderShard(
+        parent,
+        dataShard,
+        shardId,
+        targetTablePathId,
+        tagMap,
+        type);
 }
 
 } // namespace NKikimr::NDataShard

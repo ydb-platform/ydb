@@ -394,9 +394,9 @@ void ExplicitTcl(TQueryClient client) {
 }
 
 void StreamQuerySelect(TQueryClient client) {
-    std::vector <TResultSet> resultSets;
-    ThrowOnError(client.RetryQuerySync([&resultSets](TQueryClient client) -> TStatus {
-        resultSets.clear();
+    Cout << "> StreamQuery:" << Endl;
+
+    ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
         auto query = Sprintf(R"(
             DECLARE $series AS List<UInt64>;
 
@@ -406,15 +406,19 @@ void StreamQuerySelect(TQueryClient client) {
             ORDER BY season_id;
         )");
 
-        auto parameters = TParamsBuilder()
-            .AddParam("$series")
-            .BeginList()
-                .AddListItem().Uint64(1)
-                .AddListItem().Uint64(10)
-            .EndList().Build()
-            .Build();
-
-        auto parameters = TParamsBuilder().Build();
+        auto paramsBuilder = TParamsBuilder();
+        auto& listParams = paramsBuilder
+                                    .AddParam("$series")
+                                    .BeginList();
+        
+        for (auto x : {1, 10}) {
+            listParams.AddListItem().Uint64(x);
+        }
+                
+        auto parameters = listParams
+                                .EndList()
+                                .Build()
+                                .Build();
 
         // Executes stream query
         auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
@@ -437,26 +441,23 @@ void StreamQuerySelect(TQueryClient client) {
                 continue;
             }
 
+            // It is possible to duplicate lines in the output stream due to an external retryer.
             if (streamPart.HasResultSet()) {
                 auto rs = streamPart.ExtractResultSet();
-                resultSets.push_back(rs);
+                TResultSetParser parser(rs);
+                while (parser.TryNextRow()) {
+                    Cout << "Season"
+                            << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
+                            << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
+                            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
+                            << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
+                            << Endl;
+                }
             }
         }
         return TStatus(EStatus::SUCCESS, NYql::TIssues());
     }));
-    
-    Cout << "> StreamQuery:" << Endl;
-    for (auto rs : resultSets) {
-        TResultSetParser parser(rs);
-        while (parser.TryNextRow()) {
-            Cout << "Season"
-                    << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
-                    << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
-                    << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-                    << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
-                    << Endl;
-        }
-    }
+
 }
 
 

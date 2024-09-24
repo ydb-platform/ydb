@@ -17,6 +17,7 @@
 - [{#T}](system-views.md)
 - [{#T}](cdc.md)
 - [{#T}](custom-attributes.md)
+- [{#T}](resource-consumption-management.md)
 - Справка:
 
   - [{#T}](../yql/reference/index.md)

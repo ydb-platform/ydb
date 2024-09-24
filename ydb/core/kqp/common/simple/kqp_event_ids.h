@@ -43,7 +43,7 @@ struct TKqpEvents {
         EvListSessionsRequest,
         EvListSessionsResponse,
         EvListProxyNodesRequest,
-        EvListProxyNodesResponse,
+        EvListProxyNodesResponse
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -174,8 +174,8 @@ struct TKqpWorkloadServiceEvents {
         EvCleanupRequest,
         EvCleanupResponse,
         EvUpdatePoolInfo,
-        EvSubscribeOnPoolChanges,
         EvUpdateDatabaseInfo,
+        EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
     };
 };

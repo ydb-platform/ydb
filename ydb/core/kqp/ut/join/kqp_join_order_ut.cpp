@@ -97,7 +97,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 class TChainTester {
 public:
     TChainTester(size_t chainSize)
-        : Kikimr(GetKikimrWithJoinSettings())
+        : Kikimr(GetKikimrWithJoinSettings(false, GetStats(chainSize)))
         , TableClient(Kikimr.GetTableClient())
         , Session(TableClient.CreateSession().GetValueSync().GetSession())
         , ChainSize(chainSize)
@@ -107,6 +107,21 @@ public:
     void Test() {
         CreateTables();
         JoinTables();
+    }
+
+    static TString GetStats(size_t chainSize) {
+        srand(228);
+        NJson::TJsonValue stats;
+        for (size_t i = 0; i < chainSize; ++i) {
+            ui64 nRows = rand();
+            NJson::TJsonValue tableStat;
+            tableStat["n_rows"] = nRows;
+            tableStat["byte_size"] = nRows * 10;
+
+            TString table = Sprintf("/Root/table_%ld", i);
+            stats[table] = std::move(tableStat);
+        }
+        return stats.GetStringRobust();
     }
 
 private:

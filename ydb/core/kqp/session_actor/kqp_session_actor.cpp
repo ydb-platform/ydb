@@ -2319,7 +2319,6 @@ public:
         FillTxInfo(response);
 
         ExecuterId = TActorId{};
-        Cerr << "HERE" << Endl;
         Cleanup(IsFatalError(ydbStatus));
     }
 

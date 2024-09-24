@@ -203,13 +203,16 @@ public:
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(!IsReadOnly());
 
-        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+        for (auto& [shardId, shardInfo] : ShardsInfo) {
             if (shardInfo.Flags & EAction::WRITE) {
                 ReceivingShards.insert(shardId);
             }
-            if (shardInfo.Flags & EAction::READ) {
+            if (!shardInfo.Locks.empty()) {
                 SendingShards.insert(shardId);
             }
+
+            AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+            shardInfo.State = EShardState::PREPARING;
         }
 
         ShardsToWait = ShardsIds;
@@ -267,8 +270,6 @@ public:
                     && IsSingleShard()));
             shardInfo.State = EShardState::EXECUTING;
         }
-
-        ShardsToWait = ShardsIds;
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -284,8 +285,7 @@ public:
                 .AffectedFlags = shardInfo.Flags,
             });
 
-            AFL_ENSURE(shardInfo.State == EShardState::PREPARED || shardInfo.State == EShardState::PROCESSING);
-            shardInfo.State = EShardState::EXECUTING;
+            AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
         }
         return result;
     }
@@ -296,9 +296,9 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
         shardInfo.State = EShardState::FINISHED;
 
-        ShardsToWait.erase(shardId);
-
-        return ShardsToWait.empty();
+        // Either all shards committed or all shards failed,
+        // so we need to wait only for one answer.
+        return true;
     }
 
 private:

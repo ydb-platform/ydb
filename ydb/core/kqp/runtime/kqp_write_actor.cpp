@@ -67,7 +67,7 @@ struct IKqpTableWriterCallbacks {
     virtual void OnReady() = 0;
 
     // EvWrite statuses
-    virtual void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) = 0;
+    virtual void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) = 0;
     virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
     virtual void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) = 0;
 
@@ -629,12 +629,18 @@ public:
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         YQL_ENSURE(Mode == EMode::PREPARE);
         const auto& record = ev->Get()->Record;
-        TPreparedInfo preparedInfo;
+        IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
         preparedInfo.MinStep = record.GetMinStep();
         preparedInfo.MaxStep = record.GetMaxStep();
-        preparedInfo.Coordinators = TVector<ui64>(record.GetDomainCoordinators().begin(),
-                                                                record.GetDomainCoordinators().end());
+
+        preparedInfo.Coordinator = 0;
+        if (record.DomainCoordinatorsSize()) {
+            auto domainCoordinators = TCoordinators(TVector<ui64>(record.GetDomainCoordinators().begin(),
+                                                                  record.GetDomainCoordinators().end()));
+            preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
+        }
+
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
@@ -669,27 +675,31 @@ public:
             }
         }
 
+        if (Mode == EMode::COMMIT) {
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+            return;
+        }
+
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result && result->IsShardEmpty && (Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT)) {
+        if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
             Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), SchemeEntry->TableId, result->DataSize, false);
         }
     }
 
-    void SetPrepare() {
+    void SetPrepare(ui64 txId) {
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::PREPARE;
-        //PrepareSettings = prepareSettings;
+        TxId = txId;
         ShardedWriteController->AddCoveringMessages();
     }
 
-    //void SetCommit() {
-    //    //TODO: do we need it?
-    //    YQL_ENSURE(Mode == EMode::PREPARE);
-    //    Mode = EMode::COMMIT;
-    //}
+    void SetDistributedCommit() {
+        YQL_ENSURE(Mode == EMode::PREPARE);
+        Mode = EMode::COMMIT;
+    }
 
     void SetImmediateCommit() {
         YQL_ENSURE(Mode == EMode::WRITE);
@@ -745,45 +755,46 @@ public:
                 }
             }
         } else if (isPrepare) {
-            /*evWrite->Record.SetTxId(PrepareSettings->TxId);
-            auto* locks = evWrite->Record.MutableLocks();
-            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            YQL_ENSURE(TxId);
+            evWrite->Record.SetTxId(*TxId);
+            auto* protoLocks = evWrite->Record.MutableLocks();
+            protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
             
-            if (!PrepareSettings->ArbiterColumnShard) {
-                for (const ui64 sendingShardId : PrepareSettings->SendingShards) {
-                    locks->AddSendingShards(sendingShardId);
+            const auto prepareSettings = TxManager->GetPrepareTransactionInfo();
+            if (!prepareSettings.ArbiterColumnShard) {
+                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                    protoLocks->AddSendingShards(sendingShardId);
                 }
-                for (const ui64 receivingShardId : PrepareSettings->ReceivingShards) {
-                    locks->AddReceivingShards(receivingShardId);
+                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                    protoLocks->AddReceivingShards(receivingShardId);
                 }
-                if (PrepareSettings->ArbiterShard) {
-                    locks->SetArbiterShard(*PrepareSettings->ArbiterShard);
+                if (prepareSettings.Arbiter) {
+                    protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
                 }
-            } else if (PrepareSettings->ArbiterColumnShard == shardId) {
-                locks->SetArbiterColumnShard(*PrepareSettings->ArbiterColumnShard);
-                for (const ui64 sendingShardId : PrepareSettings->SendingShards) {
-                    locks->AddSendingShards(sendingShardId);
+            } else if (prepareSettings.ArbiterColumnShard == shardId) {
+                protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
+                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                    protoLocks->AddSendingShards(sendingShardId);
                 }
-                for (const ui64 receivingShardId : PrepareSettings->ReceivingShards) {
-                    locks->AddReceivingShards(receivingShardId);
+                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                    protoLocks->AddReceivingShards(receivingShardId);
                 }
             } else {
-                locks->SetArbiterColumnShard(*PrepareSettings->ArbiterColumnShard);
-                locks->AddSendingShards(*PrepareSettings->ArbiterColumnShard);
-                locks->AddReceivingShards(*PrepareSettings->ArbiterColumnShard);
-                if (PrepareSettings->SendingShards.contains(shardId)) {
-                    locks->AddSendingShards(shardId);
+                protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
+                protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
+                protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+                if (prepareSettings.SendingShards.contains(shardId)) {
+                    protoLocks->AddSendingShards(shardId);
                 }
-                if (PrepareSettings->ReceivingShards.contains(shardId)) {
-                    locks->AddReceivingShards(shardId);
+                if (prepareSettings.ReceivingShards.contains(shardId)) {
+                    protoLocks->AddReceivingShards(shardId);
                 }
-            }*/
+            }
 
-            // TODO: multi locks (for tablestore support)
-            //const auto lock = LocksManager.GetLock(shardId);
-            //if (lock) {
-                //*locks->AddLocks() = *lock;
-            //}
+            const auto locks = TxManager->GetLocks(shardId);
+            for (const auto& lock : locks) {
+                *protoLocks->AddLocks() = lock;
+            }
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
         }
@@ -905,6 +916,7 @@ public:
     const TTableId TableId;
     const TString TablePath;
 
+    std::optional<ui64> TxId;
     const ui64 LockTxId;
     const ui64 LockNodeId;
     const bool InconsistentTx;
@@ -918,8 +930,6 @@ public:
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
     EMode Mode = EMode::WRITE;
-    
-    //std::shared_ptr<TPrepareSettings> PrepareSettings;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
@@ -1074,7 +1084,7 @@ private:
         Process();
     }
 
-    void OnPrepared(TPreparedInfo&&, ui64) override {
+    void OnPrepared(IKqpTransactionManager::TPrepareResult&&, ui64) override {
         AFL_ENSURE(false);
     }
 
@@ -1206,6 +1216,9 @@ public:
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
                 hFunc(TEvKqpBuffer::TEvFlush, Handle);
                 hFunc(TEvKqpBuffer::TEvCommit, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
+                hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvBufferWrite, Handle);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
@@ -1334,15 +1347,6 @@ public:
             }
         }
 
-        /*if (State == EState::PREPARING) {
-            bool isFinished = true;
-            for (auto& [_, info] : WriteInfos) {
-                isFinished &= info.WriteTableActor->IsFinished();
-            }
-            if (isFinished) {
-                OnFinished();
-            }
-        }*/
         if (State == EState::FLUSHING) {
             bool isEmpty = true;
             for (auto& [_, info] : WriteInfos) {
@@ -1354,29 +1358,6 @@ public:
         }
     }
 
-    /*THashMap<ui64, NKikimrDataEvents::TLock> GetLocks(TWriteToken token) const {
-        auto& info = WriteInfos.at(token.TableId);
-        THashMap<ui64, NKikimrDataEvents::TLock> result;
-        for (const auto& [shardId, lockInfo] : info.WriteTableActor->GetLocks()) {
-            if (const auto lock = lockInfo.GetLock(); lock) {
-                result.emplace(shardId, *lock);
-            }
-        }
-        return result;
-    }
-
-    THashMap<ui64, NKikimrDataEvents::TLock> GetLocks() const {
-        THashMap<ui64, NKikimrDataEvents::TLock> result;
-        for (const auto& [_, info] : WriteInfos) {
-            for (const auto& [shardId, lockInfo] : info.WriteTableActor->GetLocks()) {
-                if (const auto lock = lockInfo.GetLock(); lock) {
-                    result.emplace(shardId, *lock);
-                }
-            }
-        }
-        return result;
-    }*/
-
     void Flush() {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::FLUSHING;
@@ -1386,12 +1367,11 @@ public:
     void Prepare(const ui64 txId) {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
-        Y_UNUSED(txId);
+        TxId = txId;
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->SetPrepare(txId);
+        }
         // TODO: Additional actor for reads commit
-        //for (auto& [_, info] : WriteInfos) {
-            //info.WriteTableActor->SetPrepare(prepareSettings);
-            //GetShardsIds()
-        //}
         Close();
         Process();
     }
@@ -1404,6 +1384,44 @@ public:
         }
         Close();
         Process();
+    }
+
+    void DistributedCommit() {
+        YQL_ENSURE(State == EState::PREPARING);
+        State = EState::COMMITTING;
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->SetDistributedCommit();
+        }
+        // TODO: Additional actor for reads commit
+        SendCommitToCoordinator();
+    }
+
+    void SendCommitToCoordinator() {
+        const auto commitInfo = TxManager->GetCommitInfo();
+
+        auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
+
+        YQL_ENSURE(commitInfo.Coordinator);
+        ev->Record.SetCoordinatorID(commitInfo.Coordinator);
+
+        auto& transaction = *ev->Record.MutableTransaction();
+        auto& affectedSet = *transaction.MutableAffectedSet();
+        affectedSet.Reserve(commitInfo.ShardsInfo.size());
+
+        YQL_ENSURE(TxId);
+        transaction.SetTxId(*TxId);
+        transaction.SetMinStep(commitInfo.MinStep);
+        transaction.SetMaxStep(commitInfo.MaxStep);
+
+        for (const auto& shardInfo : commitInfo.ShardsInfo) {
+            auto& item = *affectedSet.Add();
+            item.SetTabletId(shardInfo.ShardId);
+            item.SetFlags(shardInfo.AffectedFlags);
+        }
+
+        //TODO: NDataIntegrity & Volatile
+        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator);
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
     }
 
     void Close() {
@@ -1465,6 +1483,42 @@ public:
         TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
     }
 
+    void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev) {
+        // TODO: move it to commit actor???
+        TEvTxProxy::TEvProposeTransactionStatus* res = ev->Get();
+        CA_LOG_D("Got transaction status, status: " << res->GetStatus());
+
+        switch (res->GetStatus()) {
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
+                // TODO: metrics
+                break;
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
+                break;
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
+                break;
+
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
+                break;
+
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
+                // TODO: CancelProposal
+                ReplyErrorAndDie(TStringBuilder() << "Failed to plan transaction, status: " << res->GetStatus(), NYql::NDqProto::StatusIds::UNAVAILABLE, {});
+                break;
+
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusUnknown:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAborted:
+                ReplyErrorAndDie(TStringBuilder() << "Unexpected TEvProposeTransactionStatus status: " << res->GetStatus(), NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
+                break;
+        }
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        ReplyErrorAndDie(TStringBuilder() << "Failed to deviler message.", NYql::NDqProto::StatusIds::UNAVAILABLE, {});
+    }
+
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         PassAway();
     }
@@ -1486,14 +1540,24 @@ public:
         }
     }
 
+    void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
+        // TODO: rollback using only commit actor
+        ExecuterActorId = ev->Get()->ExecuterActorId;
+        Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+    }
+
     void OnReady() override {
         Process();
     }
 
-    void OnPrepared(TPreparedInfo&& preparedInfo, ui64 dataSize) override {
+    void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) override {
         AFL_ENSURE(State == EState::PREPARING);
         Y_UNUSED(preparedInfo, dataSize);
-        // TODO: collect info for commit
+        if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
+            TxManager->StartExecute();
+            DistributedCommit();
+            return;
+        }
         Process();
     }
 
@@ -1504,16 +1568,11 @@ public:
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
             ExecuterActorId = {};
         }
-        // Process(); // Don't need it?
     }
 
     void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
         Y_UNUSED(dataSize, shardId, tableId, hasRead); // TODO: delete unused
         Process();
-    }
-
-    void OnFinished() {
-        // TODO: send collected data
     }
 
     void OnFlushed() {
@@ -1544,6 +1603,7 @@ private:
     TActorId ExecuterActorId;
     IKqpTransactionManagerPtr TxManager;
 
+    std::optional<ui64> TxId;
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;

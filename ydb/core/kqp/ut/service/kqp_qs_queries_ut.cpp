@@ -3713,7 +3713,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]]])");
@@ -3723,7 +3723,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 'null');
                 REPLACE INTO `/Root/DataShard` (Col1) VALUES (1u);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
@@ -3731,7 +3731,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[0u;#;["null"]];[1u;#;#]])");

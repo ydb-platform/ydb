@@ -8,13 +8,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TPreparedInfo {
-    ui64 ShardId;
-    ui64 MinStep;
-    ui64 MaxStep;
-    TVector<ui64> Coordinators;
-};
-
 struct TEvKqpBuffer {
 
 struct TEvPrepare : public TEventLocal<TEvPrepare, TKqpBufferWriterEvents::EvPrepare> {

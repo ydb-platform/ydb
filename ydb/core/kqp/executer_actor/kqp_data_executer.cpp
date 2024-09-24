@@ -1909,6 +1909,7 @@ private:
             YQL_ENSURE(Request.Transactions.empty());
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
+            event->TxId = TxId;
             Send(BufferActorId, event.release());
             Become(&TKqpDataExecuter::FinalizeState);
             return;

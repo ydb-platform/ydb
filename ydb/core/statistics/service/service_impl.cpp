@@ -685,7 +685,7 @@ private:
                 }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
-                Register(CreateLoadStatisticsQuery(SelfId(),
+                Register(CreateLoadStatisticsQuery(SelfId(), "",
                     req.PathId, request.StatType, *req.ColumnTag, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;

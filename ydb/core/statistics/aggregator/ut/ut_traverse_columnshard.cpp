@@ -43,6 +43,18 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
     }
 
+    Y_UNIT_TEST(TraverseServerlessColumnTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateServerlessDatabaseColumnTables(env, 1, 10)[0];
+
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
+
+        auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
+
+        UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
+    }
+
     Y_UNIT_TEST(TraverseColumnTableRebootColumnshard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

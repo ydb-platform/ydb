@@ -851,7 +851,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - Go
 
-  To write to a topic within a transaction, you need to create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter) with the tx argument. Once created, you can write messages as usual. There's no need to close the transactional writer manually - it will be closed automatically when the transaction ends.
+  To write to a topic within a transaction, create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter) with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
 

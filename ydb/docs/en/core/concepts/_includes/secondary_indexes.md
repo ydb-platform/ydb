@@ -21,6 +21,14 @@ Unlike a synchronous index, an asynchronous index doesn't use distributed transa
 
 You can copy the contents of columns into a covering index. This eliminates the need to read data from the main table when performing reads by index and significantly reduces delays. At the same time, such denormalization leads to increased usage of disk space and may slow down inserts and updates due to the need for additional data copying.
 
+## Unique secondary index {#unique}
+
+This type of index allows to get unique constraint behaviour. The query processor uses it to perform additional checks to guarantee indexed set of columns present just once in the table. If SQL modification of table brokes the constraint the coresponding query will be canceled with PRECONDITION_FAILED status. So user code must be ready to handle this status. Unique secondaty indes is a synchronous index so update process is same as in the [Synchronous secondary](#sync) described above from transaction perspective.
+
+As other this index allows to perform efficient point lookup query.
+
+Currently unique index can't be added in to existed table.
+
 ## Creating a secondary index online {#index-add}
 
 {{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.

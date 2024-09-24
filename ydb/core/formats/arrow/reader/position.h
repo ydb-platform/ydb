@@ -484,7 +484,7 @@ public:
 
     void AddPosition(TIntervalPosition&& intervalPosition) {
         if (Positions.size()) {
-            AFL_VERIFY_DEBUG(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+            AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
         }
         Positions.emplace_back(std::move(intervalPosition));
     }

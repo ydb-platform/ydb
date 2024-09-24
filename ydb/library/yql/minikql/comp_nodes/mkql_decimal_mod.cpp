@@ -10,7 +10,7 @@ namespace NMiniKQL {
 namespace {
 
 template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalModWrapper : public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>> {
+class TDecimalModWrapper : public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalRemainder<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
 public:
     TDecimalModWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
@@ -29,7 +29,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::Mod(left.GetInt128(), right.GetInt128()));
+        return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -109,15 +109,16 @@ private:
 };
 
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> {
+class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+    using NYql::NDecimal::TDecimalRemainder<TRight>::Divider;
+    using NYql::NDecimal::TDecimalRemainder<TRight>::Bound;
 public:
     TDecimalModIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
+        , NYql::NDecimal::TDecimalRemainder<TRight>(precision, scale)
         , Left(left)
         , Right(right)
-        , Bound(NYql::NDecimal::GetDivider(precision - scale))
-        , Divider(NYql::NDecimal::GetDivider(scale))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -130,17 +131,7 @@ public:
         if (IsRightOptional && !right)
             return NUdf::TUnboxedValuePod();
 
-        const auto r = NYql::NDecimal::TInt128(right.Get<TRight>());
-
-        if constexpr (std::is_signed<TRight>::value) {
-            if (r >= +Bound || r <= -Bound)
-                return left.Release();
-        } else {
-            if (r >= Bound)
-                return left.Release();
-        }
-
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::Mod(left.GetInt128(), NYql::NDecimal::Mul(Divider, r)));
+        return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.Get<TRight>()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -235,8 +226,6 @@ private:
 
     IComputationNode* const Left;
     IComputationNode* const Right;
-    const NYql::NDecimal::TInt128 Bound;
-    const NYql::NDecimal::TInt128 Divider;
 };
 
 }

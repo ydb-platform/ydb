@@ -1645,7 +1645,7 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
-        UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
     }
 
@@ -1666,7 +1666,7 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
 
         res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
 
         for (int i = 0; i < 20; ++i) {
@@ -1911,8 +1911,8 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
         auto succesful0 = json["Successful"][0];
         UNIT_ASSERT(succesful0["Id"] == "Id-0");
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageAttributes").empty());
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
     }
 

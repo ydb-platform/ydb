@@ -40,7 +40,17 @@ public:
     }
 };
 
-NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
+    auto lastSeqNo = owner.LastSchemaSeqNo;
+
+    // Check if proposal is outdated
+    if (seqNo < lastSeqNo) {
+        auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId " << GetTxId()
+                                             << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo " << lastSeqNo;
+        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+    }
+
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
         {
@@ -65,21 +75,6 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
-    }
-
-    auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
-    auto lastSeqNo = owner.LastSchemaSeqNo;
-
-    // Check if proposal is outdated
-    if (seqNo < lastSeqNo) {
-        auto errorMessage = TStringBuilder()
-            << "Ignoring outdated schema tx proposal at tablet "
-            << owner.TabletID()
-            << " txId " << GetTxId()
-            << " ssId " << owner.CurrentSchemeShardId
-            << " seqNo " << seqNo
-            << " lastSeqNo " << lastSeqNo;
-        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
@@ -124,12 +119,14 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
     TVector<TString> columnErrors;
     for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
         TString name = column.GetName();
-        void* typeDescr = nullptr;
+        NScheme::TTypeId typeId = column.GetTypeId();
+        NScheme::TTypeInfo schemeType;
         if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
-            typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
+            schemeType = {NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())};
+        } else {
+            schemeType = {typeId};
         }
 
-        NScheme::TTypeInfo schemeType(column.GetTypeId(), typeDescr);
         if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {
             columnErrors.emplace_back("key column " + name + " has unsupported type " + column.GetTypeName());
         }

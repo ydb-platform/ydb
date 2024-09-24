@@ -9,7 +9,7 @@ Required arguments:
 
 The arguments can be of the `String` or `Utf8` type and can be optional.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT StartsWith("abc_efg", "abc") AND EndsWith("abc_efg", "efg"); -- true

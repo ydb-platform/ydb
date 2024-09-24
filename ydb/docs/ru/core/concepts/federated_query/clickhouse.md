@@ -3,12 +3,16 @@
 В этом разделе описана основная информация про работу с внешней базой данных [ClickHouse](https://clickhouse.com).
 
 Для работы с внешней базой данных ClickHouse необходимо выполнить следующие шаги:
+
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-    ```sql
+
+    ```yql
     CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
+
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse. Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-    ```sql
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
         SOURCE_TYPE="ClickHouse",
         LOCATION="<host>:<port>",
@@ -22,17 +26,18 @@
     ```
 
 1. {% include [!](_includes/connector_deployment.md) %}
-1. [Выполнить запрос](#query) к базе данных.
-
+2. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов {#query}
+
 Для работы с ClickHouse используется следующая форма SQL-запроса:
 
-```sql
+```yql
 SELECT * FROM clickhouse_datasource.<table_name>
 ```
 
 где:
+
 - `clickhouse_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 

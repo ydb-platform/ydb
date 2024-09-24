@@ -35,8 +35,6 @@ common:
     to: /concepts/glossary.md
   - from: /postgresql/pg-dump.md
     to: /postgresql/import.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
@@ -300,6 +298,30 @@ common:
   - from: /reference/ydb-cli/export_import/tools_restore.md
     to: /reference/ydb-cli/export-import/tools-restore.md
 
+# Redirects for integrations
+  - from: /integrations/grafana.md
+    to: /integrations/visualization/grafana.md
+  - from: /integrations/ide/dbeaver.md
+    to: /integrations/gui/dbeaver.md
+  - from: /integrations/ide/datagrip.md
+    to: /integrations/gui/datagrip.md
+  - from: /integrations/fluent-bit.md
+    to: /integrations/ingestion/fluent-bit.md
+  - from: /integrations/import-jdbc.md
+    to: /integrations/ingestion/import-jdbc.md
+  - from: /integrations/logstash.md
+    to: /integrations/ingestion/logstash.md
+  - from: /integrations/spring-data-jdbc.md
+    to: /integrations/orm/spring-data-jdbc.md
+  - from: /integrations/flyway.md
+    to: /integrations/migration/flyway.md
+  - from: /integrations/goose.md
+    to: /integrations/migration/goose.md
+  - from: /integrations/hibernate.md
+    to: /integrations/orm/hibernate.md
+  - from: /integrations/liquibase.md
+    to: /integrations/migration/liquibase.md
+
 ru:
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
@@ -307,3 +329,5 @@ ru:
     to: /postgresql/intro.md
   - from: /db/terraform.md
     to: /dev/terraform.md
+  - from: /postgresql/docker-connect.md
+    to: /postgresql/connect.md

@@ -18,6 +18,7 @@
 - [{#T}](cdc.md)
 - [{#T}](custom-attributes.md)
 - Справка:
+
   - [{#T}](../yql/reference/index.md)
   - [{#T}](../reference/ydb-sdk/index.md)
   - [{#T}](../reference/ydb-cli/index.md)

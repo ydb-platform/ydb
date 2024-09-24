@@ -10,6 +10,7 @@
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_simple_non_local.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NYql::NDqs {
@@ -50,8 +51,7 @@ namespace NYql::NDqs {
         explicit TEvReadyState(NDqProto::TReadyState&& proto);
     };
 
-    struct TEvPullResult : NActors::TEventBase<TEvPullResult, TDqExecuterEvents::ES_PULL_RESULT> {
-        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPullResult, "");
+    struct TEvPullResult : NActors::TEventSimpleNonLocal<TEvPullResult, TDqExecuterEvents::ES_PULL_RESULT> {
     };
 
     struct TEvGraphExecutionEvent
@@ -99,8 +99,7 @@ namespace NYql::NDqs {
         explicit TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data);
     };
 
-    struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
-        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, "");
+    struct TEvGraphFinished : NActors::TEventSimpleNonLocal<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
     };
 
     struct TEvFullResultWriterWriteRequest

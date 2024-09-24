@@ -101,7 +101,11 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         resType.set_type_id(Ydb::Type::DATETIME64);
         return true;
     case arrow::Type::TIMESTAMP:
-        resType.set_type_id(Ydb::Type::TIMESTAMP);
+        if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
+            maybeOptionalType.set_type_id(Ydb::Type::UTF8);
+        } else {
+            resType.set_type_id(Ydb::Type::TIMESTAMP);
+        }
         return true;
     case arrow::Type::TIME32: // TODO: is there anything?
         return false;
@@ -122,32 +126,10 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     case arrow::Type::LIST: { // TODO: is ok?
         return false;
     }
-    case arrow::Type::STRUCT: { // TODO: is ok?
-        auto& structType = *resType.mutable_struct_type();
-        for (const auto& field : type.fields()) {
-            auto& member = *structType.add_members();
-            auto& memberType = *member.mutable_type();
-            if (!ArrowToYdbType(memberType, *field->type(), config)) {
-                return false;
-            }
-            member.mutable_name()->assign(field->name().data(), field->name().size());
-        }
-        return true;
-    }
+    case arrow::Type::STRUCT:
     case arrow::Type::SPARSE_UNION:
-    case arrow::Type::DENSE_UNION: { // TODO: is ok?
-        auto& variant = *resType.mutable_variant_type()->mutable_struct_items();
-        for (const auto& field : type.fields()) {
-            auto& member = *variant.add_members();
-            if (!ArrowToYdbType(*member.mutable_type(), *field->type(), config)) {
-                return false;
-            }
-            if (field->name().empty()) {
-                return false;
-            }
-            member.mutable_name()->assign(field->name().data(), field->name().size());
-        }
-        return true;
+    case arrow::Type::DENSE_UNION: {
+        return false;
     }
     case arrow::Type::DICTIONARY: // TODO: is representable?
         return false;
@@ -321,14 +303,15 @@ public:
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
-            ydbFields.emplace_back();
-            auto& ydbField = ydbFields.back();
-            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type(), file.Config)) {
-                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
-                RequesterId_ = {};
-                return;
+            Ydb::Column column;
+            if (!ArrowToYdbType(*column.mutable_type(), *field->type(), file.Config)) {
+                continue;
             }
-            ydbField.mutable_name()->assign(field->name());
+            if (field->name().empty()) {
+                continue;
+            }
+            column.mutable_name()->assign(field->name());
+            ydbFields.push_back(column);
         }
 
         ctx.Send(RequesterId_, new TEvInferredFileSchema(file.Path, std::move(ydbFields)));

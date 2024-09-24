@@ -447,6 +447,11 @@ void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSche
     } else {
         protoSchema->clear_expression();
     }
+    if (schema.Materialized()) {
+        protoSchema->set_materialized(*schema.Materialized());
+    } else {
+        protoSchema->clear_materialized();
+    }
     if (schema.Aggregate()) {
         protoSchema->set_aggregate(*schema.Aggregate());
     } else {
@@ -520,12 +525,13 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     }
 
     schema->SetLogicalType(std::move(columnType));
-    schema->SetLock(protoSchema.has_lock() ? std::make_optional(protoSchema.lock()) : std::nullopt);
-    schema->SetExpression(protoSchema.has_expression() ? std::make_optional(protoSchema.expression()) : std::nullopt);
-    schema->SetAggregate(protoSchema.has_aggregate() ? std::make_optional(protoSchema.aggregate()) : std::nullopt);
-    schema->SetSortOrder(protoSchema.has_sort_order() ? std::make_optional(ESortOrder(protoSchema.sort_order())) : std::nullopt);
-    schema->SetGroup(protoSchema.has_group() ? std::make_optional(protoSchema.group()) : std::nullopt);
-    schema->SetMaxInlineHunkSize(protoSchema.has_max_inline_hunk_size() ? std::make_optional(protoSchema.max_inline_hunk_size()) : std::nullopt);
+    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
+    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
+    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
+    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
 
 void ToProto(NProto::TTableSchema* protoSchema, const NTableClient::TTableSchema& schema)

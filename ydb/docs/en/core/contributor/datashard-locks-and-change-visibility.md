@@ -65,12 +65,14 @@ Even more complicated is the case where change visibility writes happen over com
 4. Tx1 performs an uncommitted blind `UPSERT` with `C = 3` and `TxId` 101
 5. At this point Tx1 may still commit successfully, because it didn't read key K and change with `C = 3` may still move to some future commit timestamp
 6. Tx1 performs a read of key K, which happens at snapshot `v5000/max`:
+
     * This read will have `[101] => v{min}` in its custom transaction map
     * The iteration will be positioned at the first delta with `C = 3` (since `v{min} <= v5000/max`), which will be applied to the row state
     * All other committed deltas and rows will also be applied, i.e. the row state would include `B = 2` which is currently committed
     * However, there is a conflict: `B = 2` is committed above the MVCC read snapshot (`v6000/102 > v5000/max`)
     * This will be detected in [OnApplyCommitted](https://github.com/ydb-platform/ydb/blob/efe5b5f8d2da503eda4d172f6f2e85aac64ba6a6/ydb/core/tx/datashard/datashard__engine_host.cpp#L698) callback, which calls [CheckReadConflict](https://github.com/ydb-platform/ydb/blob/efe5b5f8d2da503eda4d172f6f2e85aac64ba6a6/ydb/core/tx/datashard/datashard__engine_host.cpp#L751)
     * Since this introduces a read inconsistency, the lock will be immediately broken, and an inconsistent read flag will be raised
+
 7. Not only the above read would fail, Tx1 would not be able to commit since serializable isolation can no longer be provided
 8. The application will get a "transaction locks invalidated" error and retry the transaction from the beginning
 

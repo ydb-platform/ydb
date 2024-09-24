@@ -15,6 +15,8 @@ DECLARE_REFCOUNTED_STRUCT(TLagPenaltyProviderCounters)
 
 // TODO(bulatman) Rename to THedgingClientConfig.
 DECLARE_REFCOUNTED_STRUCT(THedgingClientOptions)
+DECLARE_REFCOUNTED_STRUCT(TConnectionWithPenaltyConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicationLagPenaltyProviderOptions)
 
 DECLARE_REFCOUNTED_STRUCT(IPenaltyProvider)
 

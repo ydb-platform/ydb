@@ -52,7 +52,7 @@ namespace {
     TTestDirectory::~TTestDirectory() {
         Path_.ForceDelete();
     }
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TFsPathTests) {
     Y_UNIT_TEST(TestMkDirs) {
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         // mkdir(2) places umask(2) on mode argument.
         const int mask = Umask(0);
         Umask(mask);
-        UNIT_ASSERT_VALUES_EQUAL(stat.Mode& MODE0777, mode & ~mask);
+        UNIT_ASSERT_VALUES_EQUAL(stat.Mode & MODE0777, mode & ~mask);
     }
 #endif
 
@@ -894,4 +894,4 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
             UNIT_ASSERT_VALUES_EQUAL(split2.at(1), DIR_B);
         }
     }
-}
+} // Y_UNIT_TEST_SUITE(TFsPathTests)

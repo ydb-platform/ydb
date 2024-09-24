@@ -134,9 +134,9 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
 
     looper->Stop();
 
-    EXPECT_TRUE(promise.IsCanceled());
-
     queue->Shutdown();
+
+    EXPECT_TRUE(promise.IsCanceled());
 }
 
 TEST(TAsyncLooperTest, CancelSyncStep)
@@ -168,9 +168,9 @@ TEST(TAsyncLooperTest, CancelSyncStep)
 
     looper->Stop();
 
-    EXPECT_TRUE(promise.IsCanceled());
-
     queue->Shutdown();
+
+    EXPECT_TRUE(promise.IsCanceled());
 }
 
 TEST(TAsyncLooperTest, StopDuringAsyncStep)

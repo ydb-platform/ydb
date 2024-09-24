@@ -128,6 +128,7 @@ public:
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NActors::TMonotonic StartedAt;
+    bool CompilationRunning = false;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;
 
@@ -345,6 +346,11 @@ public:
 
         if (HasTxSinkInTx(tx)) {
             // At current time transactional internal sinks require separate tnx with commit.
+            return false;
+        }
+
+        if (TxCtx->HasOlapTable) {
+            // HTAP/OLAP transactions always use separate commit.
             return false;
         }
 

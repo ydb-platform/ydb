@@ -8,6 +8,8 @@
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 #include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -63,6 +65,29 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         }
 
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
+    }
+
+    if (type->IsList()) {
+        auto listType = AS_TYPE(TListType, type);
+        std::shared_ptr<arrow::DataType> itemType;
+        MKQL_ENSURE(ConvertArrowType(listType->GetItemType(), itemType), "Unsupported type of scalar " << *listType->GetItemType());
+
+        std::unique_ptr<arrow::ArrayBuilder> builder;
+        auto status = arrow::MakeBuilder(&pool, itemType, &builder);
+        MKQL_ENSURE(status.ok(), "Couldn't create arrow list builder: " << status.ToString());
+
+        auto boxed = value.AsBoxed();
+        auto iterator = NUdf::TBoxedValueAccessor::GetListIterator(*boxed);
+        NYql::NUdf::TUnboxedValue unboxed;
+        while (iterator.Next(unboxed)) {
+            auto status = builder->AppendScalar(*DoConvertScalar(listType->GetItemType(), unboxed, pool).scalar());
+            MKQL_ENSURE(status.ok(), "Couldn't append scalar to arrow list builder: " << status.ToString());
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        status = builder->Finish(&array);
+        MKQL_ENSURE(status.ok(), "Couldn't finish arrow list builder: " << status.ToString());
+        return arrow::Datum(std::make_shared<arrow::ListScalar>(array));
     }
 
     if (type->IsTuple()) {
@@ -343,6 +368,7 @@ void TBlockState::ClearValues() {
 }
 
 void TBlockState::FillArrays() {
+    MKQL_ENSURE(Count == 0, "All existing arrays have to be processed");
     auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
     MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
     Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;

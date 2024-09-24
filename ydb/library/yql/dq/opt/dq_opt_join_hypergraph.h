@@ -2,6 +2,7 @@
 
 
 #include <numeric>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include "bitset.h"
 
@@ -27,12 +28,16 @@ public:
             const TNodeSet& left,
             const TNodeSet& right,
             EJoinKind joinKind,
+            bool leftAny,
+            bool rightAny,
             bool isCommutative,
             const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions
         )
             : Left(left)
             , Right(right)
             , JoinKind(joinKind)
+            , LeftAny(leftAny)
+            , RightAny(rightAny)
             , IsCommutative(isCommutative)
             , JoinConditions(joinConditions)
             , IsReversed(false)
@@ -51,6 +56,7 @@ public:
         TNodeSet Left;
         TNodeSet Right;
         EJoinKind JoinKind;
+        bool LeftAny, RightAny;
         bool IsCommutative;
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
@@ -96,8 +102,11 @@ public:
         TVector<TString> relNameByNodeId(Nodes_.size());
         res.append("Nodes: ").append("\n");
         for (const auto& [name, idx]: NodeIdByRelationName_) {
-            res.append(Sprintf("%ld: %s\n", idx, name.c_str()));
             relNameByNodeId[idx] = name;
+        }
+
+        for (size_t idx = 0; idx < relNameByNodeId.size(); ++idx) {
+            res.append(Sprintf("%ld: %s\n", idx, relNameByNodeId[idx].c_str()));
         }
 
         res.append("Edges: ").append("\n");
@@ -199,6 +208,16 @@ public:
         return simpleEdges;
     }
 
+    bool HasLabels(const TVector<TString>& labels) const  {
+        for (const auto& label: labels) {
+            if (!NodeIdByRelationName_.contains(label)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
     inline const TVector<TNode>& GetNodes() const {
         return Nodes_;
     }
@@ -271,45 +290,47 @@ public:
         : Graph_(graph)
     {}
 
-    void Apply(const TJoinOrderHints& hints) {
-        auto labels = ApplyHintsToSubgraph(hints.HintsTree);
-        auto nodes = Graph_.GetNodesByRelNames(labels);
-        
-        for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
-            TNodeSet newLeft = Graph_.GetEdge(i).Left;
-            if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
-                newLeft |= nodes;
+    void Apply(TJoinOrderHints& hints) {
+        for (auto& hint: hints.Hints) {
+            if (!Graph_.HasLabels(hint.Tree->Labels())) {
+                continue;
+            }
+            
+            auto labels = ApplyHintsToSubgraph(hint.Tree);
+            auto nodes = Graph_.GetNodesByRelNames(labels);
+            
+            for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+                TNodeSet newLeft = Graph_.GetEdge(i).Left;
+                if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
+                    newLeft |= nodes;
+                }
+
+                TNodeSet newRight = Graph_.GetEdge(i).Right;
+                if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
+                    newRight |= nodes;
+                }
+
+                Graph_.UpdateEdgeSides(i, newLeft, newRight);
             }
 
-            TNodeSet newRight = Graph_.GetEdge(i).Right;
-            if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
-                newRight |= nodes;
-            }
-
-            Graph_.UpdateEdgeSides(i, newLeft, newRight);
+            hint.Applied = true;
         }
     }
 
 private:
-    TVector<TString> ApplyHintsToSubgraph(const std::shared_ptr<IBaseOptimizerNode>& node) {
-        if (node->Kind == EOptimizerNodeKind::JoinNodeType) {
-            auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
-            TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->LeftArg);
-            TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->RightArg);
+    TVector<TString> ApplyHintsToSubgraph(const std::shared_ptr<TJoinOrderHints::ITreeNode>& node) {
+        if (node->IsJoin()) {
+            auto join = std::static_pointer_cast<TJoinOrderHints::TJoinNode>(node);
+            TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->Lhs);
+            TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->Rhs);
 
             auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
             auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
             
             auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
             if (maybeEdge == nullptr) {
-                auto str = [](const TVector<TString>& v) -> TString {
-                    TString s;
-                    for (auto& el : v) { s += (el + ", "); }
-                    return s.empty()? s: s.substr(0, s.length() - 2);
-                };
-
                 const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
-                Y_ENSURE(false, Sprintf(errStr, str(lhsLabels).c_str(), str(rhsLabels).c_str(), Graph_.String().c_str()));            
+                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));            
             }
 
             size_t revEdgeIdx = maybeEdge->ReversedEdgeId;
@@ -335,7 +356,8 @@ private:
             return joinLabels;
         }
 
-        return node->Labels();
+        auto relation = std::static_pointer_cast<TJoinOrderHints::TRelationNode>(node);
+        return {relation->Label};
     }
 
 private:
@@ -373,7 +395,8 @@ public:
             [this](const THyperedge& edge) {
                 return 
                     edge.IsReversed || 
-                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual());
+                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual()) ||
+                    edge.LeftAny || edge.RightAny;
             }
         );
         
@@ -449,7 +472,7 @@ private:
                         });
                     }
 
-                    auto e = THyperedge(lhs, rhs, groupJoinKind, isJoinCommutative, joinConditions);
+                    auto e = THyperedge(lhs, rhs, groupJoinKind, false, false, isJoinCommutative, joinConditions);
                     Graph_.AddEdge(std::move(e));
                 }
             }

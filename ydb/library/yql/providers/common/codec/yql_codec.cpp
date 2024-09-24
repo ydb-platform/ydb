@@ -1,15 +1,14 @@
 #include "yql_codec.h"
-#include "yql_restricted_yson.h"
 #include "yql_codec_type_flags.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
-
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <ydb/library/yql/public/result_format/yql_restricted_yson.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/swap_bytes.h>
@@ -33,7 +32,7 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NYson::NDetail;
 
-void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, TType* type,
+void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, TType* type,
     const TVector<ui32>* structPositions) {
     // Result format
     switch (type->GetKind()) {
@@ -107,7 +106,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 return;
             }
             case NUdf::EDataSlot::Yson:
-                EncodeRestrictedYson(writer, value.AsStringRef());
+                NResult::EncodeRestrictedYson(writer, value.AsStringRef());
                 return;
             case NUdf::EDataSlot::Date:
                 writer.OnUint64Scalar(value.Get<ui16>());
@@ -263,7 +262,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
 void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValuePod& value, TType* type,
     const TVector<ui32>* structPositions)
 {
-    TYsonResultWriter resultWriter(writer);
+    NResult::TYsonResultWriter resultWriter(writer);
     WriteYsonValueImpl(resultWriter, value, type, structPositions);
 }
 
@@ -1030,7 +1029,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                 return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(yson)));
             }
 
-            TString decodedYson = DecodeRestrictedYson(TStringBuf(yson.data(), yson.size()), NYson::EYsonFormat::Text);
+            TString decodedYson = NResult::DecodeRestrictedYson(TStringBuf(yson.data(), yson.size()), NYson::EYsonFormat::Text);
             return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(decodedYson)));
         }
 
@@ -1436,7 +1435,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
         }
 
         auto nextString = ReadNextString(cmd, buf);
-        YQL_ENSURE(nextString == TYsonResultWriter::VoidString, "Expected Void");
+        YQL_ENSURE(nextString == NResult::TYsonResultWriter::VoidString, "Expected Void");
         return NUdf::TUnboxedValuePod::Void();
     }
 

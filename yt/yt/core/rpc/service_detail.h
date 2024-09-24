@@ -508,6 +508,14 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TServiceOptions
+{
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
+    TRealmId RealmId;
+    IAuthenticatorPtr Authenticator;
+    bool UseHotProfiler = true;
+};
+
 //! Provides a base for implementing IService.
 class TServiceBase
     : public virtual IService
@@ -822,17 +830,8 @@ protected:
     TServiceBase(
         IInvokerPtr defaultInvoker,
         const TServiceDescriptor& descriptor,
-        const NLogging::TLogger& logger,
-        TRealmId realmId = NullRealmId,
-        IAuthenticatorPtr authenticator = nullptr);
-
-    TServiceBase(
-        IInvokerPtr defaultInvoker,
-        const TServiceDescriptor& descriptor,
-        IMemoryUsageTrackerPtr memoryUsageTracker,
-        const NLogging::TLogger& logger,
-        TRealmId realmId = NullRealmId,
-        IAuthenticatorPtr authenticator = nullptr);
+        NLogging::TLogger logger,
+        TServiceOptions options = {});
 
     //! Registers a method handler.
     //! This call is must be performed prior to service registration.

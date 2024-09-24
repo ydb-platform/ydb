@@ -322,6 +322,114 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::UserAttrsEqual({{"user__attr_1", "value"}})});
     }
 
+    Y_UNIT_TEST_FLAG(AlterWithPlainAlterSubdomain, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        // Create extsubdomain
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        // Altering extsubdomain but with plain altersubdomain should succeed
+        // (post tenant migration compatibility)
+
+        //NOTE: SubDomain and not ExtSubdomain
+        TestAlterSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST_FLAG(AlterTwiceAndWithPlainAlterSubdomain, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        AsyncAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        // TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        const auto firstAlterTxId = txId;
+
+        //NOTE: SubDomain vs ExtSubDomain
+        TestAlterSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )",
+            {{NKikimrScheme::StatusMultipleModifications}}
+        );
+
+        env.TestWaitNotification(runtime, firstAlterTxId);
+    }
+
     Y_UNIT_TEST(CreateWithOnlyDotsNotAllowed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

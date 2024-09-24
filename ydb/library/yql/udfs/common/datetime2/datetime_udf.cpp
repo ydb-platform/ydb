@@ -2,6 +2,7 @@
 #include <ydb/library/yql/public/udf/tz/udf_tz.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/minikql/datetime/datetime.h>
+#include <ydb/library/yql/minikql/datetime/datetime64.h>
 
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
 
@@ -22,6 +23,7 @@ extern const char GetMillisecondOfSecondName[] = "GetMillisecondOfSecond";
 extern const char GetMicrosecondOfSecondName[] = "GetMicrosecondOfSecond";
 
 extern const char TMResourceName[] = "DateTime2.TM";
+extern const char TM64ResourceName[] = "DateTime2.TM64";
 
 const auto UsecondsInDay = 86400000000ll;
 const auto UsecondsInHour = 3600000000ll;
@@ -397,6 +399,14 @@ Y_DECLARE_UNUSED TTMStorage& Reference(TBlockItem& value) {
     return *reinterpret_cast<TTMStorage*>(value.GetRawPtr());
 }
 
+const TTM64Storage& Reference64(const NUdf::TUnboxedValuePod& value) {
+    return *reinterpret_cast<const TTM64Storage*>(value.GetRawPtr());
+}
+
+TTM64Storage& Reference64(NUdf::TUnboxedValuePod& value) {
+    return *reinterpret_cast<TTM64Storage*>(value.GetRawPtr());
+}
+
 template<typename TValue>
 TValue DoAddMonths(const TValue& date, i64 months, const NUdf::IDateBuilder& builder) {
     auto result = date;
@@ -624,7 +634,11 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 }
             } else {
                 builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap);
-                builder.Returns(builder.Resource(TMResourceName));
+                if constexpr (NUdf::TDataType<TUserDataType>::Features & NYql::NUdf::BigDateType) {
+                    builder.Returns(builder.Resource(TM64ResourceName));
+                } else {
+                    builder.Returns(builder.Resource(TMResourceName));
+                }
                 
                 if (!typesOnly) {
                     builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition()));
@@ -666,6 +680,21 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     template <>
+    void TSplitKernelExec<TDate32>::Split(TBlockItem, TTMStorage&, const IValueBuilder&) {
+        ythrow yexception() << "Not implemented";
+    }
+
+    template <>
+    void TSplitKernelExec<TDatetime64>::Split(TBlockItem, TTMStorage&, const IValueBuilder&) {
+        ythrow yexception() << "Not implemented";
+    }
+
+    template <>
+    void TSplitKernelExec<TTimestamp64>::Split(TBlockItem, TTMStorage&, const IValueBuilder&) {
+        ythrow yexception() << "Not implemented";
+    }
+
+    template <>
     TUnboxedValue TSplit<TDate>::Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
@@ -677,6 +706,23 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TUnboxedValuePod result(0);
             auto& storage = Reference(result);
             storage.FromDate(builder, args[0].Get<ui16>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
+    }
+
+    template <>
+    TUnboxedValue TSplit<TDate32>::Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const
+    {
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+            TUnboxedValuePod result(0);
+            auto& storage = Reference64(result);
+            storage.FromDate32(valueBuilder->GetDateBuilder(), args[0].Get<i32>());
             return result;
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -702,6 +748,23 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     template <>
+    TUnboxedValue TSplit<TDatetime64>::Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const
+    {
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+            TUnboxedValuePod result(0);
+            auto& storage = Reference64(result);
+            storage.FromDatetime64(valueBuilder->GetDateBuilder(), args[0].Get<i64>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
+    }
+
+    template <>
     TUnboxedValue TSplit<TTimestamp>::Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
@@ -713,6 +776,23 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TUnboxedValuePod result(0);
             auto& storage = Reference(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
+    }
+
+    template <>
+    TUnboxedValue TSplit<TTimestamp64>::Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const
+    {
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+            TUnboxedValuePod result(0);
+            auto& storage = Reference64(result);
+            storage.FromTimestamp64(valueBuilder->GetDateBuilder(), args[0].Get<i64>());
             return result;
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -848,9 +928,16 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
-        TUnboxedValuePod result(storage.ToDate(builder, true));
-        result.SetTimezoneId(storage.TimezoneId);
-        return result;
+        try {
+            TUnboxedValuePod result(storage.ToDate(builder, true));
+            result.SetTimezoneId(storage.TimezoneId);
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
+                                           << storage.ToString()
+                                           << " cannot be casted to TzDate"
+            ).data());
+        }
     }
     END_SIMPLE_ARROW_UDF(TMakeTzDate, TMakeDateKernelExec<TTzDate>::Do);
 
@@ -871,6 +958,31 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return result;
     }
     END_SIMPLE_ARROW_UDF(TMakeTzTimestamp, TMakeDateKernelExec<TTzTimestamp>::Do);
+
+
+    SIMPLE_STRICT_UDF(TConvert, TResource<TM64ResourceName>(TAutoMap<TResource<TMResourceName>>)) {
+        Y_UNUSED(valueBuilder);
+        TUnboxedValuePod result(0);
+        auto& arg = Reference(args[0]);
+        auto& storage = Reference64(result);
+        storage.From(arg);
+        return result;
+    }
+
+    SIMPLE_STRICT_UDF(TMakeDate32, TDate32(TAutoMap<TResource<TM64ResourceName>>)) {
+        auto& storage = Reference64(args[0]);
+        return TUnboxedValuePod(storage.ToDate32(valueBuilder->GetDateBuilder()));
+    }
+
+    SIMPLE_STRICT_UDF(TMakeDatetime64, TDatetime64(TAutoMap<TResource<TM64ResourceName>>)) {
+        auto& storage = Reference64(args[0]);
+        return TUnboxedValuePod(storage.ToDatetime64(valueBuilder->GetDateBuilder()));
+    }
+
+    SIMPLE_STRICT_UDF(TMakeTimestamp64, TTimestamp64(TAutoMap<TResource<TM64ResourceName>>)) {
+        auto& storage = Reference64(args[0]);
+        return TUnboxedValuePod(storage.ToTimestamp64(valueBuilder->GetDateBuilder()));
+    }
 
     // Get*
 
@@ -2175,7 +2287,10 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TTimestamp,
             TTzDate,
             TTzDatetime,
-            TTzTimestamp>,
+            TTzTimestamp,
+            TDate32,
+            TDatetime64,
+            TTimestamp64>,
 
         TMakeDate,
         TMakeDatetime,
@@ -2183,6 +2298,12 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TMakeTzDate,
         TMakeTzDatetime,
         TMakeTzTimestamp,
+
+        TConvert,
+
+        TMakeDate32,
+        TMakeDatetime64,
+        TMakeTimestamp64,
 
         TGetYear,
         TGetDayOfYear,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/intrusive_heap.h>
 
@@ -74,5 +75,11 @@ TTags BuildTags(const TUserTable& tableInfo, Args&&... columns) {
 
     return tags;
 }
+
+using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
+
+TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
+
+void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo);
 
 }

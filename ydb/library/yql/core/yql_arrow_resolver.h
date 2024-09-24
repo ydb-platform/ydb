@@ -25,7 +25,7 @@ public:
 
     virtual EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const = 0;
 
-    virtual EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
+    virtual EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx, bool extraTypes = false,
         const TUnsupportedTypeCallback& onUnsupported = {}) const = 0;
 };
 

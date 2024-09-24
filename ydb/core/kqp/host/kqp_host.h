@@ -89,7 +89,7 @@ public:
     virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
     /* Federated queries */
-    virtual IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    virtual IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
     /* Scripting */
     virtual IAsyncQueryResultPtr ValidateYqlScript(const TKqpQueryRef& script) = 0;

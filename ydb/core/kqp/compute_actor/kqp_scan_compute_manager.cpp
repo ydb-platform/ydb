@@ -20,14 +20,13 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
     } else {
         Finished = true;
     }
-    if (data.IsEmpty()) {
-        AFL_ENSURE(data.Finished);
-        return {};
-    }
     AFL_ENSURE(ActorId);
     AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flightCount", DataChunksInFlightCount);
     std::vector<std::unique_ptr<TComputeTaskData>> result;
-    if (data.SplittedBatches.size() > 1) {
+    if (data.IsEmpty()) {
+        AFL_ENSURE(data.Finished);
+        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data.LocksInfo)));
+    } else if (data.SplittedBatches.size() > 1) {
         ui32 idx = 0;
         AFL_ENSURE(data.ArrowBatch);
         for (auto&& i : data.SplittedBatches) {

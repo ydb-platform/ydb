@@ -40,7 +40,6 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
 
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

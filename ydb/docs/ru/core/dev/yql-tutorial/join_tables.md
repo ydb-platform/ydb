@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     sa.title AS season_title,    -- sa и sr — это «связующие названия»,
     sr.title AS series_title,    -- алиасы таблиц, объявленные ниже с помощью AS.

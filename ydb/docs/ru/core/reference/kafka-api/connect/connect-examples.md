@@ -1,8 +1,11 @@
 # Примеры настройки коннекторов
+
 В разделе приведены примеры файлов настройки коннекторов Kafka Connect для работы с {{ ydb-short-name }} по протоколу Kafka.
 
 ## Из файла в {{ ydb-short-name }}
+
 Пример файла настроек FileSource коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
+
 ```ini
 name=local-file-source
 connector.class=FileStreamSource
@@ -13,6 +16,7 @@ topic=<topic-name>
 
 ## Из {{ ydb-short-name }} в PostgreSQL
 Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу PostgreSQL. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
+
 ```ini
 name=postgresql-sink
 connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
@@ -37,6 +41,7 @@ auto.evolve=true
 
 ## Из PostgreSQL в {{ ydb-short-name }}
 Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в топик. Используется коннектор [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc).
+
 ```ini
 name=postgresql-source
 connector.class=io.confluent.connect.jdbc.JdbcSourceConnector
@@ -54,6 +59,7 @@ validate.non.null=false
 
 ## Из {{ ydb-short-name }} в S3
 Пример файла настроек S3Sink коннектора `/etc/kafka-connect-worker/s3-sink.properties` для переноса данных из топика в S3. Используется коннектор [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka).
+
 ```ini
 name=s3-sink
 connector.class=io.aiven.kafka.connect.s3.AivenKafkaConnectS3SinkConnector

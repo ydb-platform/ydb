@@ -91,8 +91,8 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
         // Find the n'th slowest disk
         TDiskDelayPredictions worstDisks;
         state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass),
-                &worstDisks, AccelerationParams.PredictedDelayMultiplier);
-        nthWorstPredictedNsVec[idx++] = worstDisks[2].PredictedNs;
+                &worstDisks, AccelerationParams);
+        nthWorstPredictedNsVec[idx++] = worstDisks[AccelerationParams.MaxNumOfSlowDisks].PredictedNs;
     }
     return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }

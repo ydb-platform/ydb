@@ -510,7 +510,7 @@ public:
         const TGetJobSpecOptions& options),
         (jobId, options))
 
-    DELEGATE_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    DELEGATE_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),
@@ -855,6 +855,30 @@ public:
         const TDistributedWriteCookiePtr& cookie,
         const TParticipantTableWriterOptions& options),
         (cookie, options))
+
+    // Shuffle Service
+    DELEGATE_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
+        const TString& account,
+        int partitionCount,
+        const TStartShuffleOptions& options),
+        (account, partitionCount, options))
+
+    DELEGATE_METHOD(TFuture<void>, FinishShuffle, (
+        const TShuffleHandlePtr& shuffleHandle,
+        const TFinishShuffleOptions& options),
+        (shuffleHandle, options))
+
+    DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
+        const TShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        const NTableClient::TTableReaderConfigPtr& config),
+        (shuffleHandle, partitionIndex, config))
+
+    DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
+        const TShuffleHandlePtr& shuffleHandle,
+        const TString& partitionColumn,
+        const NTableClient::TTableWriterConfigPtr& config),
+        (shuffleHandle, partitionColumn, config))
 
     #undef DELEGATE_METHOD
 

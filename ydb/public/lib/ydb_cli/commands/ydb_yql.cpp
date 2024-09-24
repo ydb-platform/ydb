@@ -32,33 +32,33 @@ void TCommandYql::Config(TConfig& config) {
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
 
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Csv,
+        EDataFormat::Tsv,
+        EDataFormat::Parquet,
     });
 
     AddParametersOption(config);
 
     AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonBase64
     });
 
     AddStdinFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::Raw,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonBase64,
+        EDataFormat::Raw,
+        EDataFormat::Csv,
+        EDataFormat::Tsv
     }, {
-        EOutputFormat::NoFraming,
-        EOutputFormat::NewlineDelimited
+        EDataFormat::NoFraming,
+        EDataFormat::NewlineDelimited
     });
 
     AddParametersStdinOption(config, "script");

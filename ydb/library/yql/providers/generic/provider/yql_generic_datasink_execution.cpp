@@ -112,7 +112,7 @@ namespace NYql {
             const TGenericState::TPtr State_;
         };
 
-    }
+    } // namespace
 
     THolder<TExecTransformerBase> CreateGenericDataSinkExecTransformer(TGenericState::TPtr state) {
         return THolder(new TGenericDataSinkExecTransformer(state));

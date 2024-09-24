@@ -3,6 +3,7 @@
 {% include [../_includes/alert_preview.md)](../_includes/alert_preview.md) %}
 
 Синтаксис инструкции `DELETE FROM`:
+
  ```sql
  DELETE FROM <table name>
  WHERE <column name><condition><value/range>;

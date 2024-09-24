@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event_local.h"
+#include "event_simple_non_local.h"
 #include "event_pb.h"
 
 #include <util/system/unaligned_mem.h>
@@ -48,12 +49,10 @@ namespace NActors {
             static_assert(End < EventSpaceEnd(ES_HELLOWORLD), "expect End < EventSpaceEnd(ES_HELLOWORLD)");
         };
 
-        struct TEvPing: public TEventBase<TEvPing, THelloWorld::Ping> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPing, "HelloWorld: Ping");
+        struct TEvPing: public TEventSimpleNonLocal<TEvPing, THelloWorld::Ping> {
         };
 
-        struct TEvPong: public TEventBase<TEvPong, THelloWorld::Pong> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPong, "HelloWorld: Pong");
+        struct TEvPong: public TEventSimpleNonLocal<TEvPong, THelloWorld::Pong> {
         };
 
         struct TEvBlob: public TEventBase<TEvBlob, THelloWorld::Blob> {
@@ -116,8 +115,7 @@ namespace NActors {
         struct TEvBootstrap: public TEventLocal<TEvBootstrap, TSystem::Bootstrap> {
         };
 
-        struct TEvPoison : public TEventBase<TEvPoison, TSystem::Poison> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPoison, "System: TEvPoison")
+        struct TEvPoison : public TEventSimpleNonLocal<TEvPoison, TSystem::Poison> {
         };
 
         struct TEvWakeup: public TEventLocal<TEvWakeup, TSystem::Wakeup> {

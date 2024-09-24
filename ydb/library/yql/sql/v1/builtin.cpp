@@ -145,7 +145,7 @@ public:
     }
 
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
-        if (Args.empty() || Aggr->GetAggregationMode() != EAggregateMode::Distinct) {
+        if (Args.empty() || (Aggr->GetAggregationMode() != EAggregateMode::Distinct && Aggr->GetAggregationMode() != EAggregateMode::OverWindowDistinct)) {
             return;
         }
 
@@ -3579,7 +3579,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return new TInvalidBuiltin(pos, "MULTI_AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY");
             }
 
-            if (aggMode == EAggregateMode::Distinct) {
+            if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
                 return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
             }
 
@@ -3620,7 +3620,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         if (aggrCallback != aggrFuncs.end()) {
             return (*aggrCallback).second(pos, args, aggMode, false).Release();
         }
-        if (aggMode == EAggregateMode::Distinct) {
+        if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
             return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
         }
 

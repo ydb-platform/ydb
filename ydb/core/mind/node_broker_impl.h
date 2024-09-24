@@ -341,6 +341,10 @@ private:
     TSchedulerCookieHolder EpochTimerCookieHolder;
     TString EpochCache;
 
+    TString EpochDeltasCache;
+    TVector<ui64> EpochDeltasVersions;
+    TVector<ui64> EpochDeltasEndOffsets;
+
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 

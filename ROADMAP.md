@@ -1,4 +1,6 @@
 # YDB Roadmap
+## Intro
+The document contains high-level roadmap for YDB. Take a look at [👑 Epics Project](https://github.com/orgs/ydb-platform/projects/46/) also.
 ## Legend
 We use the following symbols as abbreviations:
 
@@ -48,9 +50,11 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ **DDL for column-oriented tables**
 
 ## Database Core (Tablets, etc)
+1. ✅ ㉔ **Exact Nearest Neighbor Vector Search**
+1. ㉔ **Approximate Nearest Neighbor Vector Search**. [Global vector index](https://github.com/ydb-platform/ydb/issues/8967)
 1. ㉔ **Volatile transactions**. YDB Distributed transactions 2.0, minimize network round trips in happy path
 1. ㉔ **Table statistics** for cost-based optimizer
-1. ㉔ **Memory optimization for row tables** (avoid full SST index loading, dynamic cache adjusting)
+1. ㉔ **Memory optimization for row tables** (avoid full [SST index loading](https://github.com/ydb-platform/ydb/issues/1483), dynamic cache adjusting)
 1. ㉔ Reduce minimum requirements for **the number of cores to 2** for YDB node
 1. ㉔ **Incremental backup** and **Point-in-time recovery**
 1. ㉔ **``ALTER CHANGEFEED``**
@@ -129,7 +133,7 @@ Detailed roadmap could be found at [YDB Embedded UI repo](https://github.com/ydb
 ## Tests and Benchmarks
 1. ㉓ **Built-in load test for DataShards** in YCSB manner
 1. ✅ ㉓ **`ydb workload` for topics**
-1. **Jepsen tests support**
+1. ✅ ㉔ **Jepsen tests support** [Blog post](https://blog.ydb.tech/hardening-ydb-with-jepsen-lessons-learned-e3238a7ef4f2)
 
 ## Experiments
 1. ❌ *(refused)* Try **RTMR-tablet** for key-value workload

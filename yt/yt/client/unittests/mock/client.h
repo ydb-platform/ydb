@@ -620,7 +620,7 @@ public:
         const TGetJobSpecOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    MOCK_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),
@@ -839,6 +839,29 @@ public:
     MOCK_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
         const TDistributedWriteCookiePtr& cookie,
         const TParticipantTableWriterOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
+        const TString& account,
+        int partitionCount,
+        const TStartShuffleOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishShuffle, (
+        const TShuffleHandlePtr& shuffleHandle,
+        const TFinishShuffleOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
+        const TShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        const NTableClient::TTableReaderConfigPtr& config),
+        (override));
+
+    MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
+        const TShuffleHandlePtr& shuffleHandle,
+        const TString& partitionColumn,
+        const NTableClient::TTableWriterConfigPtr& config),
         (override));
 
 private:

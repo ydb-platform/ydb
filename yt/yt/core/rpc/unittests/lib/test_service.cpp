@@ -33,8 +33,10 @@ public:
         : TServiceBase(
             invoker,
             TTestProxy::GetDescriptor(),
-            std::move(memoryUsageTracker),
-            NLogging::TLogger("Main"))
+            NLogging::TLogger("Main"),
+            TServiceOptions{
+                .MemoryUsageTracker = std::move(memoryUsageTracker),
+            })
         , Secure_(secure)
         , CreateChannel_(createChannel)
     {

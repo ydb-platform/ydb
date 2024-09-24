@@ -1,4 +1,5 @@
 #include "tpcds.h"
+#include "data_generator.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -146,9 +147,9 @@ THolder<IWorkloadQueryGenerator> TTpcdsWorkloadParams::CreateGenerator() const {
 TString TTpcdsWorkloadParams::GetWorkloadName() const {
     return "TPC-DS";
 }
-/*
+
 TWorkloadDataInitializer::TList TTpcdsWorkloadParams::CreateDataInitializers() const {
     return {std::make_shared<TTpcdsWorkloadDataInitializerGenerator>(*this)};
 }
-*/
+
 }

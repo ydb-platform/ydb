@@ -48,6 +48,8 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
+
+    library/cpp/json/yson
 )
 
 REQUIREMENTS(

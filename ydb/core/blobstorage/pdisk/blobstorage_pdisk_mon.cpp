@@ -120,6 +120,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
 
+    UpdateDurationTracker.SetPDiskId(PDiskId);
     UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
 
     // queue subgroup

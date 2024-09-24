@@ -206,7 +206,7 @@ public:
 
     virtual NThreading::TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query,
         TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings) = 0;
+        const Ydb::Table::TransactionSettings& txSettings, const TMaybe<TString>& traceId) = 0;
 
     virtual NThreading::TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) = 0;
 
@@ -215,7 +215,7 @@ public:
 
     virtual NThreading::TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query,
          TQueryData::TPtr, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target, const TMaybe<TString>& traceId) = 0;
 
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
          TQueryData::TPtr, const TAstQuerySettings& settings, const NActors::TActorId& target,
@@ -223,13 +223,13 @@ public:
 
     virtual NThreading::TFuture<TQueryResult> ExecGenericQuery(const TString& cluster, const TString& query,
         TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings) = 0;
+        const Ydb::Table::TransactionSettings& txSettings, const TMaybe<TString>& traceId) = 0;
 
     virtual NThreading::TFuture<TQueryResult> ExplainGenericQuery(const TString& cluster, const TString& query) = 0;
 
     virtual NThreading::TFuture<TQueryResult> StreamExecGenericQuery(const TString& cluster, const TString& query,
          TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target, const TMaybe<TString>& traceId) = 0;
 };
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,

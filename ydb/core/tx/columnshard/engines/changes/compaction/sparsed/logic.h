@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 
@@ -58,11 +58,15 @@ private:
 
         void InitArrays(const ui32 position) {
             AFL_VERIFY(!ChunkAddress || ChunkFinishPosition <= position);
-            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position);
+            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position)("pos", position)(
+                "global", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position - CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
             AFL_VERIFY(ChunkAddress);
             ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalStartPosition();
             ChunkFinishPosition =
                 CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalFinishPosition();
+            AFL_VERIFY(position < ChunkFinishPosition)("finish", ChunkFinishPosition)("pos", position);
+            AFL_VERIFY(ChunkStartPosition <= position)("start", ChunkStartPosition)("pos", position);
         }
 
     public:
@@ -76,14 +80,15 @@ private:
         }
         bool AddIndexTo(const ui32 index, TWriter& writer);
         std::optional<ui32> MoveToSignificant(const ui32 currentGlobalPosition, const TColumnMergeContext& context) {
-            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition);
+            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition)("start", ChunkStartPosition)("pos", currentGlobalPosition)(
+                "global_start", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
             ui32 currentIndex = currentGlobalPosition;
             while (true) {
                 if (CurrentOwnedArray->GetAddress().GetGlobalFinishPosition() <= currentIndex) {
                     return {};
                 }
                 if (ChunkFinishPosition <= currentIndex) {
-                    InitArrays(currentGlobalPosition);
+                    InitArrays(currentIndex);
                     continue;
                 }
                 for (; currentIndex < ChunkFinishPosition; ++currentIndex) {
@@ -190,6 +195,7 @@ private:
                 if (FinishGlobalPosition == Array->GetRecordsCount()) {
                     return FinishGlobalPosition;
                 } else {
+                    currentPosition = FinishGlobalPosition;
                     InitArrays(FinishGlobalPosition);
                 }
             }

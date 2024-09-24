@@ -19,11 +19,19 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         AnalyzeTable(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
     }
-    
+
     Y_UNIT_TEST(Analyze) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+    }
+
+    Y_UNIT_TEST(AnalyzeServerless) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateServerlessDatabaseColumnTables(env, 1, 1)[0];
 
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }

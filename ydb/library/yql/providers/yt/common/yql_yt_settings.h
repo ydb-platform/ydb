@@ -280,6 +280,7 @@ struct TYtSettings {
     NCommon::TConfSetting<EColumnGroupMode, false> ColumnGroupMode;
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
+    NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

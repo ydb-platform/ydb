@@ -42,47 +42,49 @@ constexpr bool CHierarchy =
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <CYsonStructDerived TBase>
-using TInstanceFactoryLeaf =
-    TIntrusivePtr<TBase>(*)();
+template <auto Value>
+struct TFactoryTag
+{ };
 
-template <class TEnum, CYsonStructDerived TBase>
-using TInstanceFactory = TEnumIndexedArray<TEnum, TInstanceFactoryLeaf<TBase>>;
+template <auto Value, class TDerived>
+struct TLeafTag
+{ };
 
-template <class TEnum>
-    requires TEnumTraits<TEnum>::IsEnum
-struct TEnumTraitsExt
+template <class TEnum, TEnum Value, class TBase, class TDerived>
+struct TMappingLeaf
 {
-    using TTraits = TEnumTraits<TEnum>;
+    static TIntrusivePtr<TBase> CreateInstance();
 
-    template <class TBase, class... TDerived>
-    static constexpr bool CompatibleHierarchy =
-        CHierarchy<TBase, TDerived...> &&
-        (TTraits::GetDomainSize() == sizeof...(TDerived) + 1);
+    // This is intentionally undefined to be used in invoke_result.
+    friend TDerived EnumToDerivedMethod(TFactoryTag<Value>, TMappingLeaf*);
+};
 
-    template <class TBase, class TDerived>
-    static TIntrusivePtr<TBase> ConcreteFactory();
+template <class TEnum, class... TLeafTags>
+struct TPolymorphicMapping;
 
-    template <class TBase, class... TDerived>
-    static TInstanceFactory<TEnum, TBase> MakeFactory();
+template <class TEnum, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+    requires (CHierarchy<TBase, TDerived...>)
+struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>
+    : public TMappingLeaf<TEnum, BaseValue, TBase, TBase>
+    , public TMappingLeaf<TEnum, Values, TBase, TDerived>...
+{
+    template <TEnum Value, class TConcrete>
+    using TLeaf = TMappingLeaf<TEnum, Value, TBase, TConcrete>;
+
+    template <TEnum Value>
+    using TDerivedToEnum = decltype(EnumToDerivedMethod(TFactoryTag<Value>{}, std::declval<TPolymorphicMapping*>()));
+
+    using TKey = TEnum;
+    using TBaseClass = TBase;
+
+    static TIntrusivePtr<TBase> CreateInstance(TEnum value);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TEnum, class TB, class... TD>
-struct TPolymorphicEnumMapping
-{
-    using TKey = TEnum;
-    using TBase = TB;
-    using TDerived = std::tuple<TD...>;
-    using THierarchy = std::tuple<TB, TD...>;
-
-    static TIntrusivePtr<TB> MakeInstance(TEnum e);
-};
-
 template <class T>
 constexpr bool IsMapping = requires (T t) {
-    [] <class E, class B, class... D> (TPolymorphicEnumMapping<E, B, D...>) {
+    [] <class TEnum, class... TLeafTags> (TPolymorphicMapping<TEnum, TLeafTags...>) {
     } (t);
 };
 
@@ -95,9 +97,8 @@ constexpr bool IsMapping = requires (T t) {
 template <class TBase, class... TDerived>
 concept CHierarchy = NDetail::CHierarchy<TBase, TDerived...>;
 
-template <class TEnum, CYsonStructDerived TBase, class... TDerived>
-    requires CHierarchy<TBase, TDerived...>
-using TPolymorphicEnumMapping = NDetail::TPolymorphicEnumMapping<TEnum, TBase, TDerived...>;
+template <class TEnum, class... TLeafTags>
+using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TLeafTags...>;
 
 template <class T>
 concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
@@ -137,13 +138,14 @@ class TPolymorphicYsonStruct
     // TODO(arkady-e1ppa): Support ctor from anyone from the
     // hierarchy.
     using TKey = typename TMapping::TKey;
-    using TBase = typename TMapping::TBase;
+    using TBase = typename TMapping::TBaseClass;
 
 public:
     using TImplementsYsonStructField = void;
 
     TPolymorphicYsonStruct() = default;
 
+    explicit TPolymorphicYsonStruct(TKey key);
     TPolymorphicYsonStruct(TKey key, TIntrusivePtr<TBase> ptr) noexcept;
 
     template <CYsonStructSource TSource>
@@ -160,7 +162,13 @@ public:
     template <std::derived_from<TBase> TConcrete>
     TIntrusivePtr<TConcrete> TryGetConcrete() const;
 
+    template <TKey Value>
+    TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TryGetConcrete() const;
+
     TKey GetCurrentType() const;
+
+    TBase* operator->();
+    const TBase* operator->() const;
 
 private:
     TIntrusivePtr<TBase> Storage_;
@@ -195,6 +203,29 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
     hierarchy members. They are keys in serialization.
 */
 #define DEFINE_POLYMORPHIC_YSON_STRUCT(name, seq)
+
+//! Usage:
+/*
+    DEFINE_ENUM(EMyEnum
+        (Pear)
+        (Apple)
+    );
+
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+        ((Pear)  (TPearClass))
+        ((Apple) (TAppleClass))
+    )
+
+    // NB(arkady-e1ppa): enum names in the list must be unqualified! E.g.
+
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+        ((EMyEnum::Pear)  (TPearClass))
+        ((EMyEnum::Apple) (TAppleClass))
+    )
+
+    Will not compile
+*/
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, seq)
 
 ////////////////////////////////////////////////////////////////////////////////
 

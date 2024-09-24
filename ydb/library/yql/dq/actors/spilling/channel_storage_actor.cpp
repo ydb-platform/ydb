@@ -82,7 +82,7 @@ protected:
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
         LOG_E("Error: " << error);
-        ErrorCallback_(error);
+        ErrorCallback_(TStringBuilder() << "[Channel spilling]" << error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }

@@ -52,7 +52,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(request));
+    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(request));
 }
 
 inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type, const std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse>& response, const TActorContext& ctx) {
@@ -75,7 +75,7 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
 }
 
 // DataExecuter
@@ -95,7 +95,7 @@ inline void LogIntegrityTrails(const TString& txType, const TString& traceId, ui
         return ss.Str();
     };
 
-    LOG_NOTICE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, traceId, txId, shardId));
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, traceId, txId, shardId));
 }
 
 }

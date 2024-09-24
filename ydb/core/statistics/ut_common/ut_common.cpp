@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <ydb/core/testlib/actors/wait_events.h>
+
 // TODO remove SDK
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -153,14 +155,36 @@ TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* 
         *domainKey = resultEntry.DomainInfo->DomainKey;
     }
 
-    if (saTabletId && resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
-        *saTabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
+    if (saTabletId) {
+        if (resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
+            *saTabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
+        } else {
+            auto resourcesDomainKey = resultEntry.DomainInfo->ResourcesDomainKey;
+            auto request = std::make_unique<TNavigate>();
+            auto& entry = request->ResultSet.emplace_back();
+            entry.TableId = TTableId(resourcesDomainKey.OwnerId, resourcesDomainKey.LocalPathId);
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            entry.Operation = TNavigate::EOp::OpPath;
+            entry.RedirectRequired = false;
+            runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.release()));
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get());
+            std::unique_ptr<TNavigate> response(ev->Get()->Request.Release());
+            UNIT_ASSERT(response->ResultSet.size() == 1);
+            auto& secondResultEntry = response->ResultSet[0];
+
+            if (secondResultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
+                *saTabletId = secondResultEntry.DomainInfo->Params.GetStatisticsAggregator();
+            }
+        }
     }
 
     return resultEntry.TableId.PathId;
 }
 
-NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime, TActorId sender, const TString &path)
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime, TActorId sender, const TString& path)
 {
     TAutoPtr<IEventHandle> handle;
 
@@ -173,7 +197,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime,
     return *reply->MutableRecord();
 }
 
-TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path)
+TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString& path)
 {
     TVector<ui64> shards;
     auto lsResult = DescribeTable(runtime, sender, path);
@@ -183,7 +207,7 @@ TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const 
     return shards;
 }
 
-TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path)
+TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender, const TString& path)
 {
     TVector<ui64> shards;
     auto lsResult = DescribeTable(runtime, sender, path);
@@ -273,20 +297,9 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
 
-std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    auto init = [&] () {
-        CreateDatabase(env, "Database");
-        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-            CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
-        }
-    };
-    std::thread initThread(init);
-
+std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, ui8 tableCount) {
     auto& runtime = *env.GetServer().GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SimulateSleep(TDuration::Seconds(10));
-    initThread.join();
 
     std::vector<TTableInfo> ret;
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
@@ -297,6 +310,50 @@ std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount
         ret.emplace_back(tableInfo);
     }
     return ret;
+}
+
+std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto init = [&] () {
+        CreateDatabase(env, "Database");
+        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+            CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        }
+    };
+    std::thread initThread(init);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+
+    runtime.SimulateSleep(TDuration::Seconds(10));
+    initThread.join();
+
+    return GatherColumnTablesInfo(env, tableCount);
+}
+
+std::vector<TTableInfo> CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto init = [&] () {
+        CreateDatabase(env, "Shared");
+    };
+    std::thread initThread(init);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+    runtime.SimulateSleep(TDuration::Seconds(5));
+    initThread.join();
+
+    TPathId domainKey;
+    ResolvePathId(runtime, "/Root/Shared", &domainKey);
+
+    auto init2 = [&] () {
+        CreateServerlessDatabase(env, "Database", domainKey);
+        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+            CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        }
+    };
+    std::thread init2Thread(init2);
+
+    runtime.SimulateSleep(TDuration::Seconds(5));
+    init2Thread.join();
+
+    return GatherColumnTablesInfo(env, tableCount);
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
@@ -436,13 +493,11 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
 }
 
 void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
-    bool eventSeen = false;
-    auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](auto& ev){
-        if (ev->Get()->PathId == pathId)
-            eventSeen = true;
+    TWaitForFirstEvent<TEvStatistics::TEvSaveStatisticsQueryResponse> waiter(runtime, [pathId](const auto& ev){
+        return ev->Get()->PathId == pathId;
     });
 
-    runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return eventSeen; });
+    waiter.Wait();
 }
 
 

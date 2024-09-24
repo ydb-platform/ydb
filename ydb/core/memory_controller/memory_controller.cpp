@@ -16,6 +16,9 @@
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 
 namespace NKikimr::NMemory {
 
@@ -98,7 +101,7 @@ public:
             const TResourceBrokerConfig& resourceBrokerConfig,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : Interval(interval)
-        , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters, 
+        , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters,
             Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable, TActorId{})).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
@@ -109,7 +112,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
 
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), 
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
                     NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
 
@@ -146,7 +149,7 @@ private:
         ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
         ui64 softLimitBytes = GetSoftLimitBytes(Config, hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(Config, hardLimitBytes);
-        ui64 activitiesLimitBytes = ResourceBrokerSelfConfig.LimitBytes 
+        ui64 activitiesLimitBytes = ResourceBrokerSelfConfig.LimitBytes
             ? ResourceBrokerSelfConfig.LimitBytes // for backward compatibility
             : GetActivitiesLimitBytes(Config, hardLimitBytes);
 
@@ -161,7 +164,7 @@ private:
         ui64 otherConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
 
         ui64 externalConsumption = 0;
-        if (hasMemTotalHardLimit && processMemoryInfo.AnonRss.has_value() 
+        if (hasMemTotalHardLimit && processMemoryInfo.AnonRss.has_value()
                 && processMemoryInfo.MemTotal.has_value() && processMemoryInfo.MemAvailable.has_value()) {
             // externalConsumption + AnonRss + MemAvailable = MemTotal
             externalConsumption = SafeDiff(processMemoryInfo.MemTotal.value(),
@@ -174,7 +177,7 @@ private:
         // want to find maximum possible coefficient in range [0..1] so that
         // Sum(
         //     Max(
-        //         consumers[i].Consumption, 
+        //         consumers[i].Consumption,
         //         consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes
         //        )
         //    ) <= targetConsumersConsumption
@@ -182,12 +185,12 @@ private:
 
         ui64 resultingConsumersConsumption = 0;
         for (const auto& consumer : consumers) {
-            // Note: take Max with current consumer consumption because memory free may happen with a delay, or don't happen at all 
+            // Note: take Max with current consumer consumption because memory free may happen with a delay, or don't happen at all
             resultingConsumersConsumption += Max(consumer.Consumption, consumer.GetLimit(coefficient));
         }
 
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
-            << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit 
+            << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit
             << " MemTotal: " << processMemoryInfo.MemTotal << " MemAvailable: " << processMemoryInfo.MemAvailable
             << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory << " AllocatorCachesMemory: " << processMemoryInfo.AllocatorCachesMemory
             << " HardLimit: " << hardLimitBytes << " SoftLimit: " << softLimitBytes << " TargetUtilization: " << targetUtilizationBytes
@@ -212,6 +215,8 @@ private:
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
+        Counters->GetCounter("Stats/ArrowAllocatedMemory")->Set(arrow::default_memory_pool()->bytes_allocated());
+        Counters->GetCounter("Stats/ArrowYqlAllocatedMemory")->Set(NYql::NUdf::GetYqlMemoryPool()->bytes_allocated());
 
         auto *memoryStatsUpdate = new NNodeWhiteboard::TEvWhiteboard::TEvMemoryStatsUpdate();
         auto& memoryStats = memoryStatsUpdate->Record;
@@ -251,7 +256,7 @@ private:
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
 
         ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        ui64 queryExecutionLimitBytes = ResourceBrokerSelfConfig.QueryExecutionLimitBytes 
+        ui64 queryExecutionLimitBytes = ResourceBrokerSelfConfig.QueryExecutionLimitBytes
             ? ResourceBrokerSelfConfig.QueryExecutionLimitBytes // for backward compatibility
             : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
@@ -303,9 +308,9 @@ private:
 
     void Handle(TEvResourceBroker::TEvConfigureResult::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        LOG_LOG_S(ctx, 
-            msg->Record.GetSuccess() ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, 
-            NKikimrServices::MEMORY_CONTROLLER, 
+        LOG_LOG_S(ctx,
+            msg->Record.GetSuccess() ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR,
+            NKikimrServices::MEMORY_CONTROLLER,
             "ResourceBroker configure result " << msg->Record.ShortDebugString());
     }
 
@@ -404,7 +409,7 @@ private:
 
     TConsumerState BuildConsumerState(const TMemoryConsumer& consumer, ui64 hardLimitBytes) const {
         TConsumerState result(consumer);
-        
+
         switch (consumer.Kind) {
             case EMemoryConsumerKind::MemTable: {
                 result.MinBytes = GetMemTableMinBytes(Config, hardLimitBytes);
@@ -445,7 +450,7 @@ private:
 IActor* CreateMemoryController(
         TDuration interval,
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
-        const NKikimrConfig::TMemoryControllerConfig& config, 
+        const NKikimrConfig::TMemoryControllerConfig& config,
         const TResourceBrokerConfig& resourceBrokerSelfConfig,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new TMemoryController(

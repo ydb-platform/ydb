@@ -190,6 +190,8 @@ DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
 DECLARE_REFCOUNTED_CLASS(TDistributedWriteSession)
 DECLARE_REFCOUNTED_CLASS(TDistributedWriteCookie)
 
+DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline const TString ClusterNamePath("//sys/@cluster_name");

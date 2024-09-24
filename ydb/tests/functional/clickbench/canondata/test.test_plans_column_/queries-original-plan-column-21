@@ -59,8 +59,17 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TableFullScan",
+                                                                "Node Type": "Filter-TableFullScan",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Filter",
+                                                                        "Predicate": "string_contains"
+                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",

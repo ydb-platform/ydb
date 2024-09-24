@@ -269,7 +269,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     keyColumnTypes.reserve(params.GetKeyColumnTypes().size());
     for (auto i = 0; i < params.GetKeyColumnTypes().size(); ++i)
         // TODO support pg types
-        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i), nullptr));
+        keyColumnTypes.emplace_back(NKikimr::NScheme::TTypeInfo(params.GetKeyColumnTypes().Get(i)));
 
     ui64 maxRowsInRequest = 0ULL;
     ui64 maxBytesInRequest = 0ULL;

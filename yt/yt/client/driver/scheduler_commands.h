@@ -132,6 +132,7 @@ private:
     NJobTrackerClient::TJobId JobId;
 
     void DoExecute(ICommandContextPtr context) override;
+    bool HasResponseParameters() const override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

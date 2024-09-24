@@ -354,7 +354,8 @@ protected:
 
         auto usePhases = State_->Configuration->UseAggPhases.Get().GetOrElse(false);
         auto usePartitionsByKeys = State_->Configuration->UsePartitionsByKeysForFinalAgg.Get().GetOrElse(true);
-        TAggregateExpander aggExpander(usePartitionsByKeys, false, node.Ptr(), ctx, *State_->Types, false, false, usePhases);
+        TAggregateExpander aggExpander(usePartitionsByKeys, false, node.Ptr(), ctx, *State_->Types, false, false,
+            usePhases, State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
         return aggExpander.ExpandAggregate();
     }
 
@@ -2518,7 +2519,8 @@ protected:
             return node;
         }
 
-        return TAggregateExpander::CountAggregateRewrite(aggregate, ctx, State_->Types->IsBlockEngineEnabled());
+        return TAggregateExpander::CountAggregateRewrite(aggregate, ctx,
+            State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

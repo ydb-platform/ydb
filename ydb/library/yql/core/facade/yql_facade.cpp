@@ -808,6 +808,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddTypeAnnotation()
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+        .AddCheckExecution(false)
         .AddLineageOptimization(LineageStr_)
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
         .Build();
@@ -1073,6 +1074,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
+    pipeline.AddCheckExecution(false);
     pipeline.AddLineageOptimization(LineageStr_);
 
     Transformer_ = pipeline.Build();

@@ -225,7 +225,6 @@ SRCS(
     threading/spin_wait_slow_path_logger.cpp
     threading/thread.cpp
 
-    GLOBAL tracing/allocation_hooks.cpp
     tracing/allocation_tags.cpp
     tracing/config.cpp
     tracing/public.cpp
@@ -307,6 +306,12 @@ SRCS(
     ytalloc/config.cpp
     ytalloc/statistics_producer.cpp
 )
+
+IF (OS_LINUX)
+    SRCS(
+        GLOBAL tracing/allocation_tags_hooks.cpp
+    )
+ENDIF()
 
 IF (OS_LINUX OR OS_FREEBSD)
     EXTRALIBS(-lutil)

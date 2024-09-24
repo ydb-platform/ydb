@@ -43,7 +43,7 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
-        const ui64 LockTxId;
+        const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
         const TActorId& Executer;
         const IKqpGateway::TKqpSnapshot& Snapshot;
@@ -103,7 +103,7 @@ private:
 
 private:
     const ui64 TxId;
-    const ui64 LockTxId;
+    const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;

@@ -656,7 +656,7 @@ private:
     };
 
 public:
-    template<typename TEvent>
+    template <typename TEvent>
     bool SetDatabaseIdOrDeffer(TEvent& event, std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> errorHandler, TActorContext actorContext) {
         const auto& database = CanonizePath(event->Get()->GetDatabase());
         if (!event->Get()->GetDatabaseId().empty() || database.empty()) {

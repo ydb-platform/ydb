@@ -90,7 +90,7 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        auto success = Cache.SetDatabaseIdOrDeffer(ev, [this](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
+        auto success = Cache.SetDatabaseIdOrDeffer(ev, [this](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
             UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, " << GetErrorString() << ", status: " << status << ", reason: " << issues.ToOneLineString());
         }, ActorContext());
 

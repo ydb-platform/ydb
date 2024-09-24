@@ -127,7 +127,7 @@ private:
         if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::UNSUPPORTED) {
             Send(subscriber, new TEvKqp::TEvUpdateDatabaseInfo(database, databaseState.DatabaseId, databaseState.Serverless));
         } else {
-            NYql::TIssue rootIssue(TStringBuilder() << "Failed to describe database" << database);
+            NYql::TIssue rootIssue(TStringBuilder() << "Failed to describe database " << database);
             for (const auto& issue : issues) {
                 rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
             }

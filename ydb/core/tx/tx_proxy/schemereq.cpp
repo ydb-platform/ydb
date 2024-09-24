@@ -360,6 +360,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
         }
     }
@@ -621,6 +622,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));

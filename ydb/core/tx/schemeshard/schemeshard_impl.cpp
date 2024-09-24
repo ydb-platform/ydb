@@ -1554,6 +1554,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterView:
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
+    case TTxState::TxRestoreIncrementalBackupAtTable:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:

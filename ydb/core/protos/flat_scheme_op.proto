@@ -1664,6 +1664,7 @@ enum EOperationType {
     ESchemeOpAlterResourcePool = 102;
 
     ESchemeOpRestoreIncrementalBackup = 103;
+    ESchemeOpRestoreIncrementalBackupAtTable = 104;
 }
 
 message TApplyIf {

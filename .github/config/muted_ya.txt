@@ -212,3 +212,5 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablet
 ydb/tests/functional/serializable *
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
+ydb/core/kqp/ut/olap *
+ydb/core/blobstorage/ut_vdisk *

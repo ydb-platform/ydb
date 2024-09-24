@@ -8,7 +8,7 @@ import re
 import requests
 import sys
 import ydb
-from get_file_diff import extract_diff_lines
+from get_file_diff import get_diff_lines_of_file
 from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
 
@@ -214,11 +214,10 @@ def mute_applier(args):
         removed_mute_lines_file = os.path.join(output_path, '3_removed_mute_lines.txt')
         unmuted_tests_file = os.path.join(output_path, '3_unmuted_tests.txt')
 
-        added_texts, removed_texts = extract_diff_lines(args.base_sha, args.head_sha, muted_ya_path)
-        write_to_file('\n'.join(added_texts), added_mute_lines_file)
-        write_to_file('\n'.join(removed_texts), removed_mute_lines_file)
+        added_lines, removed_lines = get_diff_lines_of_file(args.base_sha, args.head_sha, muted_ya_path)
 
         # checking added lines
+        write_to_file('\n'.join(added_lines), added_mute_lines_file)
         mute_check.load(added_mute_lines_file)
         added_muted_tests = []
         print("New muted tests captured")
@@ -229,8 +228,8 @@ def mute_applier(args):
                 added_muted_tests.append(testsuite + ' ' + testcase + '\n')
 
         # checking removed lines
+        write_to_file('\n'.join(removed_lines), removed_mute_lines_file)
         mute_check.load(removed_mute_lines_file)
-
         removed_muted_tests = []
         print("Unmuted tests captured")
         for test in all_tests:

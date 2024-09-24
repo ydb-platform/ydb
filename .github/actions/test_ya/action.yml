@@ -549,7 +549,7 @@ runs:
         else
             echo file ${file_to_check} changed
             .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${GITHUB_REF_NAME}"
-            FILE_PATH=$PUBLIC_DIR/mute_info/1_new_muted_tests.txt
+            FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
             SEPARATOR=""
             if [ -f "$FILE_PATH" ]; then
               LINE_COUNT=$(wc -l < "$FILE_PATH")
@@ -558,7 +558,7 @@ runs:
                 MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_new_muted_tests.txt)"
               fi
             fi
-            FILE_PATH=$PUBLIC_DIR/mute_info/2_unmuted_tests.txt
+            FILE_PATH=$PUBLIC_DIR/mute_info/3_unmuted_tests.txt
             if [ -f "$FILE_PATH" ]; then
               LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
               if [ "$LINE_COUNT_unmute" -gt 0 ]; then

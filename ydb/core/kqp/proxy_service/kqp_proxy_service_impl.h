@@ -656,6 +656,8 @@ private:
     };
 
 public:
+    TDatabasesCache(TDuration idleTimeout = TDuration::Seconds(60));
+
     template <typename TEvent>
     bool SetDatabaseIdOrDeffer(TEvent& event, std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> errorHandler, TActorContext actorContext) {
         if (!event->Get()->GetDatabaseId().empty()) {
@@ -693,6 +695,7 @@ private:
     void PingDatabaseSubscription(const TString& database, TActorContext actorContext) const;
 
 private:
+    const TDuration IdleTimeout;
     std::unordered_map<TString, TDatabaseInfo> DatabasesCache;
     TActorId SubscriberActor;
     TString TenantName;

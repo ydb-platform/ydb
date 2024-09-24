@@ -91,16 +91,6 @@ struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TKqpWo
     const std::optional<NACLib::TSecurityObject> SecurityObject;
 };
 
-struct TEvUpdateDatabaseInfo : public NActors::TEventLocal<TEvUpdateDatabaseInfo, TKqpWorkloadServiceEvents::EvUpdateDatabaseInfo> {
-    TEvUpdateDatabaseInfo(const TString& database, bool serverless)
-        : Database(database)
-        , Serverless(serverless)
-    {}
-
-    const TString Database;
-    const bool Serverless;
-};
-
 struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, TKqpWorkloadServiceEvents::EvFetchDatabaseResponse> {
     TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, TPathId pathId, NYql::TIssues issues)
         : Status(status)

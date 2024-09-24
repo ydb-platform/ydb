@@ -69,12 +69,12 @@ TString CreateSession(TTestActorRuntime* runtime, const TActorId& kqpProxy, cons
 
 class TDatabaseCacheTestActor : public TActorBootstrapped<TDatabaseCacheTestActor> {
 public:
-    TDatabaseCacheTestActor(const TString& database, const TString& expectedDatabaseId, bool fromCache, TDatabasesCache& cache, NThreading::TPromise<void> promise)
-        : Database(database)
+    TDatabaseCacheTestActor(const TString& database, const TString& expectedDatabaseId, TDuration idleTimeout, NThreading::TPromise<void> promise)
+        : IdleTimeout(idleTimeout)
+        , Database(database)
         , ExpectedDatabaseId(expectedDatabaseId)
-        , Cache(cache)
+        , Cache(idleTimeout)
         , Promise(promise)
-        , FromCache(fromCache)
     {}
 
     void Bootstrap() {
@@ -83,45 +83,68 @@ public:
         auto event = MakeHolder<TEvKqp::TEvQueryRequest>();
         event->Record.MutableRequest()->SetDatabase(Database);
         Send(SelfId(), event.Release());
+
+        Schedule(3 * IdleTimeout, new TEvents::TEvWakeup());
     }
 
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
-        Cache.UpdateDatabaseInfo(ev, ActorContext());
+        if (!CacheUpdated) {
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, TStringBuilder() << GetErrorString() << ev->Get()->Issues.ToString());
+            Cache.UpdateDatabaseInfo(ev, ActorContext());
+            CacheUpdated = true;
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::ABORTED, TStringBuilder() << GetErrorString() << ev->Get()->Issues.ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(ev->Get()->Issues.ToString(), "Database subscription was dropped by idle timeout", GetErrorString());
+            Finish();
+        }
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
         auto success = Cache.SetDatabaseIdOrDeffer(ev, [this](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-            UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, " << GetErrorString() << ", status: " << status << ", reason: " << issues.ToOneLineString());
+            UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, status: " << status << ", " << GetErrorString() << issues.ToString());
         }, ActorContext());
 
-        if (FromCache) {
+        bool dedicated = Database == ExpectedDatabaseId;
+        if (CacheUpdated || dedicated) {
             UNIT_ASSERT_C(success, TStringBuilder() << "Expected database id from cache, " << GetErrorString());
             UNIT_ASSERT_STRING_CONTAINS_C(ev->Get()->GetDatabaseId(), ExpectedDatabaseId, GetErrorString());
-            Promise.SetValue();
-            PassAway();
+            if (dedicated) {
+                Finish();
+            }
         } else {
             UNIT_ASSERT_C(!success, TStringBuilder() << "Unexpected database id from cache, " << GetErrorString());
-            FromCache = true;
         }
+    }
+
+    void HandleWakeup() {
+        UNIT_ASSERT_C(false, TStringBuilder() << "Test cache timeout, " << GetErrorString());
+        Finish();
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
         hFunc(TEvKqp::TEvQueryRequest, Handle);
+        sFunc(TEvents::TEvWakeup, HandleWakeup);
     )
 
 private:
     TString GetErrorString() const {
-        return TStringBuilder() << "database: " << Database << ", from cache: " << FromCache << "\n";
+        return TStringBuilder() << "cache updated: " << CacheUpdated << ", database: " << Database << "\n";
+    }
+
+    void Finish() {
+        Promise.SetValue();
+        PassAway();
     }
 
 private:
+    const TDuration IdleTimeout;
     const TString Database;
     const TString ExpectedDatabaseId;
-    TDatabasesCache& Cache;
+    TDatabasesCache Cache;
     NThreading::TPromise<void> Promise;
 
-    bool FromCache = false;
+    bool CacheUpdated = false;
 };
 
 }
@@ -606,27 +629,25 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         auto ydb = NWorkload::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .Create();
-        
-        auto& runtime = *ydb->GetRuntime();
-        TDatabasesCache cache;
 
-        auto checkCache = [&](const TString& database, const TString& expectedDatabaseId, bool fromCache) {
+        auto& runtime = *ydb->GetRuntime();
+        TDuration idleTimeout = TDuration::Seconds(5);
+
+        auto checkCache = [&](const TString& database, const TString& expectedDatabaseId, ui32 nodeIndex) {
             auto promise = NThreading::NewPromise();
-            runtime.Register(new TDatabaseCacheTestActor(database, expectedDatabaseId, fromCache, cache, promise));
+            runtime.Register(new TDatabaseCacheTestActor(database, expectedDatabaseId, idleTimeout, promise), nodeIndex);
             promise.GetFuture().GetValueSync();
         };
 
         const auto& dedicatedTennant = ydb->GetSettings().GetDedicatedTenantName();
-        checkCache(dedicatedTennant, dedicatedTennant, false);
-        checkCache(dedicatedTennant, dedicatedTennant, true);
+        checkCache(dedicatedTennant, dedicatedTennant, 2);
 
         const auto& sharedTennant = ydb->GetSettings().GetSharedTenantName();
-        checkCache(sharedTennant, sharedTennant, false);
-        checkCache(sharedTennant, sharedTennant, true);
+        checkCache(sharedTennant, sharedTennant, 1);
 
         const auto& serverlessTennant = ydb->GetSettings().GetServerlessTenantName();
-        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, false);
-        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, true);
+        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, 1);
     }
+
 } // namspace NKqp
 } // namespace NKikimr

@@ -1370,7 +1370,7 @@ public:
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
-            hFunc(NWorkload::TEvUpdateDatabaseInfo, Handle);
+            hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
@@ -1822,8 +1822,11 @@ private:
         ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
     }
 
-    void Handle(NWorkload::TEvUpdateDatabaseInfo::TPtr& ev) {
-        ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
+    void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
+        }
+        DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

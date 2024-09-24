@@ -14,163 +14,200 @@ namespace {
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
-        EvSubscribeOnDatabase = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvSubscribeOnDatabase = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvPingDatabaseSubscription,
 
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     struct TEvSubscribeOnDatabase : public TEventLocal<TEvSubscribeOnDatabase, EvSubscribeOnDatabase> {
         explicit TEvSubscribeOnDatabase(const TString& database)
             : Database(database)
         {}
 
-        TString Database;
+        const TString Database;
     };
 
-    struct TEvPingDatabaseSubscription : public TEventLocal<TEvSubscribeOnDatabase, EvPingDatabaseSubscription> {
+    struct TEvPingDatabaseSubscription : public TEventLocal<TEvPingDatabaseSubscription, EvPingDatabaseSubscription> {
         explicit TEvPingDatabaseSubscription(const TString& database)
             : Database(database)
         {}
 
-        TString Database;
+        const TString Database;
     };
 };
 
 class TDatabaseSubscriberActor : public TActor<TDatabaseSubscriberActor> {
-    using TBase = TActor<TDatabaseSubscriberActor>;
-
     struct TDatabaseState {
-        bool FetchRequestIsRunning = false;
-        TPathId WatchPathId;
-
-        TString DatabaseId;
+        TString Database;
+        TString DatabaseId = "";
         bool Serverless = false;
-        std::unordered_set<TActorId> Subscribers;
+
+        bool FetchRequestIsRunning = true;
+        TInstant LastUpdateTime = TInstant::Now();
+        ui32 WatchKey = 0;
     };
 
+    using TBase = TActor<TDatabaseSubscriberActor>;
+    using TDatabaseStatePtr = typename std::list<TDatabaseState>::iterator;
+
 public:
-    TDatabaseSubscriberActor()
+    TDatabaseSubscriberActor(TDuration idleTimeout)
         : TBase(&TDatabaseSubscriberActor::StateFunc)
+        , IdleTimeout(idleTimeout)
     {}
 
-    void Handle(TEvPrivate::TEvSubscribeOnDatabase::TPtr& ev) {
-        const TString& database = CanonizePath(ev->Get()->Database);
-        auto& databaseState = Subscriptions[database];
+    void Registered(TActorSystem* sys, const TActorId& owner) {
+        TBase::Registered(sys, owner);
+        Owner = owner;
+    }
 
-        if (databaseState.DatabaseId) {
-            SendSubscriberInfo(database, ev->Sender, databaseState, Ydb::StatusIds::SUCCESS);
-        } else if (!databaseState.FetchRequestIsRunning) {
+    void Handle(TEvPrivate::TEvSubscribeOnDatabase::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const auto it = DatabasePathToState.find(database);
+
+        if (it == DatabasePathToState.end()) {
+            DatabaseStates.emplace_front(TDatabaseState{.Database = database});
+            DatabasePathToState.insert({database, DatabaseStates.begin()});
             Register(NWorkload::CreateDatabaseFetcherActor(SelfId(), database));
-            databaseState.FetchRequestIsRunning = true;
+            StartIdleCheck();
+            return;
         }
 
-        databaseState.Subscribers.insert(ev->Sender);
+        const auto databaseState = it->second;
+        if (databaseState->DatabaseId) {
+            SendSubscriberInfo(*databaseState, Ydb::StatusIds::SUCCESS);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvPingDatabaseSubscription::TPtr& ev) {
+        const auto it = DatabasePathToState.find(ev->Get()->Database);
+        if (it == DatabasePathToState.end()) {
+            return;
+        }
+
+        TDatabaseState databaseState = *it->second;
+        databaseState.LastUpdateTime = TInstant::Now();
+
+        DatabaseStates.erase(it->second);
+        DatabaseStates.emplace_front(databaseState);
+        it->second = DatabaseStates.begin();
     }
 
     void Handle(NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
-        const TString& database = CanonizePath(ev->Get()->Database);
-        auto& databaseState = Subscriptions[database];
+        const auto it = DatabasePathToState.find(ev->Get()->Database);
+        if (it == DatabasePathToState.end()) {
+            return;
+        }
 
-        UpdateDatabaseState(databaseState, database, ev->Get()->PathId, ev->Get()->Serverless);
-        UpdateSubscribersInfo(database, databaseState, ev->Get()->Status, ev->Get()->Issues);
-
-        databaseState.FetchRequestIsRunning = false;
-        databaseState.WatchPathId = ev->Get()->PathId;
+        const auto databaseState = it->second;
+        databaseState->FetchRequestIsRunning = false;
+        UpdateDatabaseState(*databaseState, ev->Get()->PathId, ev->Get()->Serverless);
+        SendSubscriberInfo(*databaseState, ev->Get()->Status, ev->Get()->Issues);
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            WatchKey++;
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(databaseState.WatchPathId, WatchKey));
-            WatchDatabases.insert({WatchKey, database});
-        }
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
-        auto it = WatchDatabases.find(ev->Get()->Key);
-        if (it == WatchDatabases.end()) {
-            return;
-        }
-
-        const auto& result = ev->Get()->Result;
-        if (!result || result->GetStatus() != NKikimrScheme::StatusSuccess) {
-            return;
-        }
-
-        if (result->GetPathDescription().HasDomainDescription()) {
-            NSchemeCache::TDomainInfo description(result->GetPathDescription().GetDomainDescription());
-
-            auto& databaseState = Subscriptions[it->second];
-            UpdateDatabaseState(databaseState, it->second, description.DomainKey, description.IsServerless());
-            UpdateSubscribersInfo(it->second, databaseState, Ydb::StatusIds::SUCCESS);
+            FreeWatchKey++;
+            databaseState->WatchKey = FreeWatchKey;
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(ev->Get()->PathId, FreeWatchKey));
         }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
-        auto it = WatchDatabases.find(ev->Get()->Key);
-        if (it == WatchDatabases.end()) {
+        const auto it = DatabasePathToState.find(ev->Get()->Path);
+        if (it == DatabasePathToState.end()) {
             return;
         }
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(ev->Get()->Key));
-
-        auto databaseStateIt = Subscriptions.find(it->second);
-        if (databaseStateIt != Subscriptions.end()) {    
-            UpdateSubscribersInfo(it->second, databaseStateIt->second, Ydb::StatusIds::NOT_FOUND, {NYql::TIssue{"Database was dropped"}});
-            Subscriptions.erase(databaseStateIt);
-        }
-
-        WatchDatabases.erase(it);
+        const auto databaseState = it->second;
+        UnsubscribeFromSchemeCache(*databaseState);
+        SendSubscriberInfo(*databaseState, Ydb::StatusIds::NOT_FOUND, {NYql::TIssue{"Database was dropped"}});
+        DatabasePathToState.erase(it);
+        DatabaseStates.erase(databaseState);
     }
 
     void HandlePoison() {
-        if (!WatchDatabases.empty()) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(0));
+        for (auto& databaseState : DatabaseStates) {
+            UnsubscribeFromSchemeCache(databaseState);
         }
 
         TBase::PassAway();
     }
 
+    void HandleWakeup() {
+        IdleCheckStarted = false;
+        const auto minimalTime = TInstant::Now() - IdleTimeout;
+        while (!DatabaseStates.empty() && DatabaseStates.back().LastUpdateTime <= minimalTime) {
+            UnsubscribeFromSchemeCache(DatabaseStates.back());
+            SendSubscriberInfo(DatabaseStates.back(), Ydb::StatusIds::ABORTED, {NYql::TIssue{"Database subscription was dropped by idle timeout"}});
+            DatabasePathToState.erase(DatabaseStates.back().Database);
+            DatabaseStates.pop_back();
+        }
+
+        if (!DatabaseStates.empty()) {
+            StartIdleCheck();
+        }
+    }
+
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSubscribeOnDatabase, Handle);
+        hFunc(TEvPrivate::TEvPingDatabaseSubscription, Handle);
         hFunc(NWorkload::TEvFetchDatabaseResponse, Handle);
-        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
         sFunc(TEvents::TEvPoison, HandlePoison);
+        sFunc(TEvents::TEvWakeup, HandleWakeup);
+
+        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
+        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated);
     )
 
 private:
-    void UpdateDatabaseState(TDatabaseState& databaseState, const TString& database, TPathId pathId, bool serverless) {
-        databaseState.DatabaseId = (serverless ? TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" : TStringBuilder()) << database;
+    static void UpdateDatabaseState(TDatabaseState& databaseState, TPathId pathId, bool serverless) {
+        databaseState.DatabaseId = (serverless ? TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" : TStringBuilder()) << databaseState.Database;
         databaseState.Serverless = serverless;
     }
 
-    void UpdateSubscribersInfo(const TString& database, const TDatabaseState& databaseState, Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
-        for (const auto& subscriber : databaseState.Subscribers) {
-            SendSubscriberInfo(database, subscriber, databaseState, status, issues);
+    void UnsubscribeFromSchemeCache(TDatabaseState& databaseState) const {
+        if (databaseState.WatchKey) {
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(databaseState.WatchKey));
+            databaseState.WatchKey = 0;
         }
     }
 
-    void SendSubscriberInfo(const TString& database, TActorId subscriber, const TDatabaseState& databaseState, Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
+    void SendSubscriberInfo(TDatabaseState& databaseState, Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::UNSUPPORTED) {
-            Send(subscriber, new TEvKqp::TEvUpdateDatabaseInfo(database, databaseState.DatabaseId, databaseState.Serverless));
+            Send(Owner, new TEvKqp::TEvUpdateDatabaseInfo(databaseState.Database, databaseState.DatabaseId, databaseState.Serverless));
         } else {
-            NYql::TIssue rootIssue(TStringBuilder() << "Failed to describe database " << database);
+            NYql::TIssue rootIssue(TStringBuilder() << "Failed to describe database " << databaseState.Database);
             for (const auto& issue : issues) {
                 rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
             }
-            Send(subscriber, new TEvKqp::TEvUpdateDatabaseInfo(database, status, {rootIssue}));
+            Send(Owner, new TEvKqp::TEvUpdateDatabaseInfo(databaseState.Database, status, {rootIssue}));
+        }
+    }
+
+    void StartIdleCheck() {
+        if (!IdleCheckStarted) {
+            IdleCheckStarted = true;
+            Schedule(IdleTimeout, new TEvents::TEvWakeup());
         }
     }
 
 private:
-    std::unordered_map<TString, TDatabaseState> Subscriptions;
-    std::unordered_map<ui32, TString> WatchDatabases;
-    ui32 WatchKey = 0;
+    const TDuration IdleTimeout;
+    TActorId Owner;
+    bool IdleCheckStarted = false;
+
+    std::unordered_map<TString, TDatabaseStatePtr> DatabasePathToState;
+    std::list<TDatabaseState> DatabaseStates;
+    ui32 FreeWatchKey = 0;
 };
 
 }  // anonymous namespace
+
+TDatabasesCache::TDatabasesCache(TDuration idleTimeout)
+    : IdleTimeout(idleTimeout)
+{}
 
 const TString& TDatabasesCache::GetTenantName() {
     if (!TenantName) {
@@ -182,12 +219,10 @@ const TString& TDatabasesCache::GetTenantName() {
 void TDatabasesCache::UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext) {
     const auto& database = event->Get()->Database;
     auto it = DatabasesCache.find(database);
-    if (it == DatabasesCache.end()) {
-        it = DatabasesCache.insert({database, TDatabaseInfo{}}).first;
-    }
+    Y_ABORT_UNLESS(it != DatabasesCache.end());
     it->second.DatabaseId = event->Get()->DatabaseId;
 
-    bool success = event->Get()->Status == Ydb::StatusIds::SUCCESS;
+    const bool success = event->Get()->Status == Ydb::StatusIds::SUCCESS;
     for (auto& delayedEvent : it->second.DelayedEvents) {
         if (success) {
             actorContext.Send(std::move(delayedEvent.Event));
@@ -202,14 +237,23 @@ void TDatabasesCache::UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev
     }
 }
 
+void TDatabasesCache::SubscribeOnDatabase(const TString& database, TActorContext actorContext) {
+    if (!SubscriberActor) {
+        SubscriberActor = actorContext.Register(new TDatabaseSubscriberActor(IdleTimeout));
+    }
+    actorContext.Send(SubscriberActor, new TEvPrivate::TEvSubscribeOnDatabase(database));
+}
+
+void TDatabasesCache::PingDatabaseSubscription(const TString& database, TActorContext actorContext) const {
+    if (SubscriberActor) {
+        actorContext.Send(SubscriberActor, new TEvPrivate::TEvPingDatabaseSubscription(database));
+    }
+}
+
 void TDatabasesCache::StopSubscriberActor(TActorContext actorContext) const {
     if (SubscriberActor) {
         actorContext.Send(SubscriberActor, new TEvents::TEvPoison());
     }
-}
-
-void TDatabasesCache::CreateDatabaseSubscriberActor(TActorContext actorContext) {
-    SubscriberActor = actorContext.Register(new TDatabaseSubscriberActor());
 }
 
 }  // namespace NKikimr::NKqp

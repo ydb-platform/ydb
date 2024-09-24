@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/split.h>
 #include <util/system/compiler.h>
+#include <util/charset/wide.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -40,10 +41,11 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
-                                       const TStringBuf& query) {
-        TVector<YQLHighlight::Color> colors(query.Size(),
+                                       const TStringBuf& queryUtf8) {
+        const auto queryUtf32 = UTF8ToUTF32</* robust = */false>(queryUtf8);
+        TVector<YQLHighlight::Color> colors(queryUtf32.Size(),
                                             YQLHighlight::Color::DEFAULT);
-        highlight.Apply(query, colors);
+        highlight.Apply(queryUtf8, colors);
         return colors;
     }
 
@@ -67,6 +69,14 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "", "");
         Check(highlight, " ", " ");
         Check(highlight, "   ", "   ");
+    }
+
+    Y_UNIT_TEST(Invalid) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "!", "u");
+        Check(highlight, "й", "u");
+        Check(highlight, "编", "u");
+        Check(highlight, "🥲", "u");
     }
 
     Y_UNIT_TEST(Keyword) {
@@ -151,9 +161,12 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     Y_UNIT_TEST(Emoji) {
         YQLHighlight highlight(Coloring);
-        Check(highlight, "☺", "uuu");
-        Check(highlight, "\"☺\"", "sssuu");
-        Check(highlight, "`☺`", "qqquu");
+        Check(highlight, "☺", "u");
+        Check(highlight, "\"☺\"", "sss");
+        Check(highlight, "`☺`", "qqq");
+        Check(highlight, "SELECT \"😁\" FROM test", "kkkkkk sss kkkk vvvv");
+        Check(highlight, "SELECT \"编码\" FROM test", "kkkkkk ssss kkkk vvvv");
+        Check(highlight, "SELECT \"ай\" FROM test", "kkkkkk ssss kkkk vvvv");
     }
 
     Y_UNIT_TEST(Typing) {

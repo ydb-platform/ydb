@@ -39,7 +39,11 @@ using TParsedTokenList = TVector<TParsedToken>;
 IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator begin, TParsedTokenList::const_iterator end);
 bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors);
 
-bool IsKeyword(const TParsedToken& token);
+// "Probably" because YQL keyword can be an identifier
+// depending on a query context. For example
+// in SELECT * FROM group - group is an identifier, but
+// in SELECT * FROM ... GROUP BY ... - group is a keyword.
+bool IsProbablyKeyword(const TParsedToken& token);
 
 }
 

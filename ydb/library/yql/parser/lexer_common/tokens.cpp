@@ -19,7 +19,7 @@ bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TPa
     return lexer.Tokenize(query, queryName, onNextToken, issues, maxErrors);
 }
 
-bool IsKeyword(const TParsedToken& token) {
+bool IsProbablyKeyword(const TParsedToken& token) {
     return AsciiEqualsIgnoreCase(token.Name, token.Content);
 }
 

@@ -26,7 +26,7 @@ using namespace NSQLv1Generated;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
-using NSQLTranslation::IsKeyword;
+using NSQLTranslation::IsProbablyKeyword;
 using TTokenIterator = TParsedTokenList::const_iterator;
 
 TTokenIterator SkipWS(TTokenIterator curr, TTokenIterator end) {
@@ -56,7 +56,7 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             if (in->Name != out->Name) {
                 return false;
             }
-            if (IsKeyword(*in)) {
+            if (IsProbablyKeyword(*in)) {
                 if (!AsciiEqualsIgnoreCase(in->Content, out->Content)) {
                     return false;
                 }

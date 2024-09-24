@@ -12,6 +12,7 @@
 namespace NYdb {
     namespace NConsoleClient {
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
+        using NSQLTranslation::IsProbablyKeyword;
         using NSQLTranslationV1::MakeLexer;
         using NYql::TIssues;
 
@@ -174,7 +175,7 @@ namespace NYdb {
         }
 
         bool YQLHighlight::IsKeyword(const TParsedToken& token) const {
-            return NSQLTranslation::IsKeyword(token);
+            return IsProbablyKeyword(token);
         }
 
         bool YQLHighlight::IsOperation(const TParsedToken& token) const {

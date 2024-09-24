@@ -202,7 +202,7 @@ def mute_applier(args):
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
-            all_tests_names_and_suite.append(testsuite + ' ' + testcase + '\n')
+            all_tests_names_and_suites.append(testsuite + ' ' + testcase + '\n')
             if mute_check(testsuite, testcase):
                 muted_tests.append(testsuite + ' ' + testcase + '\n')
 

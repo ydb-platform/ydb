@@ -187,6 +187,7 @@ runs:
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
+        IS_TEST_RESULT_IGNORED=0
         
         case "$BUILD_PRESET" in
           debug)
@@ -212,6 +213,7 @@ runs:
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
@@ -221,6 +223,7 @@ runs:
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-msan)
             params+=(
@@ -230,6 +233,7 @@ runs:
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           *)
             echo "Invalid preset: $BUILD_PRESET"
@@ -434,6 +438,7 @@ runs:
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
+              --is_test_result_ignored $IS_TEST_RESULT_IGNORED
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"

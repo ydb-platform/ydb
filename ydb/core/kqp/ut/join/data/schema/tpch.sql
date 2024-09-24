@@ -32,7 +32,7 @@ CREATE TABLE `/Root/lineitem` (
 
 CREATE TABLE `/Root/nation` (
     n_comment String ,
-    n_name String ,
+    n_name String NOT NULL,
     n_nationkey Int32   NOT NULL, -- Identifier
     n_regionkey Int32 , -- FK to R_REGIONKEY
     PRIMARY KEY(n_nationkey)

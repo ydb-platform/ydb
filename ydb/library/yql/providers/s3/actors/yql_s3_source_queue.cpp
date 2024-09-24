@@ -182,6 +182,7 @@ public:
         , FileSizeLimit(fileSizeLimit)
         , ReadLimit(readLimit)
         , MaybeIssues(Nothing())
+        , FatalCode(NYql::NDqProto::StatusIds::EXTERNAL_ERROR)
         , UseRuntimeListing(useRuntimeListing)
         , ConsumersCount(consumersCount)
         , BatchSizeLimit(batchSizeLimit)
@@ -300,6 +301,7 @@ public:
                                     << " and exceeds limit = " << FileSizeLimit;
                 LOG_E("TS3FileQueueActor", errorMessage);
                 MaybeIssues = TIssues{TIssue{errorMessage}};
+                FatalCode = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
                 return false;
             }
             LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
@@ -375,7 +377,7 @@ public:
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
-        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
+        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
 
@@ -556,7 +558,7 @@ private:
                     if (!MaybeIssues.Defined()) {
                         SendObjects(consumer, requests.front());
                     } else {
-                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, requests.front()));
+                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, requests.front()));
                         TryFinish(consumer, requests.front().GetSeqNo());
                     }
                     requests.pop_front();
@@ -601,6 +603,7 @@ private:
     size_t CurrentDirectoryPathIndex = 0;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     TMaybe<TIssues> MaybeIssues;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode;
     bool UseRuntimeListing;
     ui64 ConsumersCount;
     ui64 BatchSizeLimit;

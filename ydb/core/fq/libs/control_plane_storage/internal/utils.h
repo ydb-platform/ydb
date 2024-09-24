@@ -8,7 +8,7 @@
 
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
-#include <ydb/core/fq/libs/exceptions/exceptions.h>
+#include <ydb/library/yql/utils/exceptions.h>
 
 namespace NFq {
 

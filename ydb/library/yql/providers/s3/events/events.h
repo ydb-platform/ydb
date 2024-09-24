@@ -100,9 +100,10 @@ struct TEvS3Provider {
 
         TEvObjectPathReadError() = default;
 
-        TEvObjectPathReadError(TIssues issues, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvObjectPathReadError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode code, const NDqProto::TMessageTransportMeta& transportMeta) {
             NYql::IssuesToMessage(issues, Record.MutableIssues());
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
+            Record.SetFatalCode(code);
         }
     };
 

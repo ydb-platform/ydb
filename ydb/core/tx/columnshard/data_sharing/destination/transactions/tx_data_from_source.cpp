@@ -1,11 +1,12 @@
 #include "tx_data_from_source.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/log.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    LOG_S_CRIT("SaveToDatabase from TTxDataFromSource");
+    TEMPLOG("SaveToDatabase from TTxDataFromSource");
     using namespace NKikimr::NColumnShard;
     TDbWrapper dbWrapper(txc.DB, nullptr);
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();

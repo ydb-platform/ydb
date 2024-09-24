@@ -1,0 +1,46 @@
+name: Build-YDB-CLI
+run-name: Build YDB CLI ${{ inputs.version }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        default: ""
+        description: "YDB CLI version (optional)"
+      runner_label:
+        type: string
+        default: "auto-provisioned"
+        description: "runner label"
+      commit_sha:
+        type: string
+        default: ""
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-platform-specific-binary:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-13, macos-latest, windows-latest]
+    name: Build YDB CLI for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+    
+    - name: Print uname
+      run: uname -a
+    
+    - name: Print YDB CLI version
+      run: cat ydb/apps/ydb/version.txt
+
+  gather-and-push-to-s3:
+    name: Gather built binaries and push to s3
+    needs: build-platform-specific-binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print result
+        run: echo "all done"

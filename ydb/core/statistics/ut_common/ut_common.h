@@ -16,15 +16,9 @@ namespace NStat {
 
 static constexpr ui32 ColumnTableRowsNumber = 1000;
 
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
-    const TString &name, const TStoragePools &pools = {});
-
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
-    const TString &name, const TStoragePools &pools = {});
-
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1, bool useRealThreads = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, bool useRealThreads = false);
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {
@@ -51,8 +45,6 @@ public:
         return Settings;
     }
 
-    TStoragePools GetPools() const;
-
     auto& GetController() {
         return CSController;
     }
@@ -71,9 +63,12 @@ private:
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> CSController;
 };
 
-void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount = 1);
+Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed = true);
 
-void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey);
+void CreateDatabase(TTestEnv& env, const TString& databaseName,
+    size_t nodeCount = 1, bool isShared = false, const TString& poolName = "hdd1");
+
+void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName);
 
 struct TTableInfo {
     std::vector<ui64> ShardIds;

@@ -1,6 +1,7 @@
 #include "kqp_stream_lookup_worker.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -58,16 +59,7 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
 NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
     YQL_ENSURE(type);
-
-    if (type->GetKind() == NMiniKQL::TType::EKind::Pg) {
-        auto pgType = static_cast<NMiniKQL::TPgType*>(type);
-        auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(pgTypeId));
-    } else {
-        bool isOptional = false;
-        auto dataType = NMiniKQL::UnpackOptionalData(type, isOptional);
-        return NScheme::TTypeInfo(dataType->GetSchemeType());
-    }
+    return NScheme::TypeInfoFromMiniKQLType(type);
 }
 
 struct THashableKey {

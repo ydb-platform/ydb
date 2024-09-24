@@ -48,17 +48,24 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
 }
 
 TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
-    switch (type->GetKind()) {
-    case NMiniKQL::TType::EKind::Data: {
-        NScheme::TTypeId typeId = AS_TYPE(NMiniKQL::TDataType, type)->GetSchemeType();
-        Y_ENSURE(typeId != NScheme::NTypeIds::Decimal, "Decimal is no supported");
-        return TTypeInfo(typeId);
-    }
-    case NMiniKQL::TType::EKind::Pg:
+    if (type->GetKind() == NMiniKQL::TType::EKind::Pg)
         return TTypeInfo(NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
-    default:
-        Y_ENSURE(false, "not a data or pg type");
+
+    const NMiniKQL::TDataType* dataType = type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional ?
+        AS_TYPE(NMiniKQL::TDataType, static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType()) :
+        AS_TYPE(NMiniKQL::TDataType, type);
+    Y_ENSURE(dataType->GetKind() == NMiniKQL::TType::EKind::Data, "data type is expected");
+    
+    NScheme::TTypeId typeId = dataType->GetSchemeType();
+    const NUdf::EDataSlot dataSlot = *dataType->GetDataSlot();
+    if (dataSlot == NUdf::EDataSlot::Decimal) {
+        Y_ENSURE(typeId == NScheme::NTypeIds::Decimal, "decimal typeid is expected");
+        const auto memberDataDecimalType = static_cast<const NKikimr::NMiniKQL::TDataDecimalType*>(dataType);
+        auto [precision, scale] = memberDataDecimalType->GetParams();
+        return NScheme::TDecimalType(precision, scale);
     }
+
+    return TTypeInfo(typeId);
 }
 
 } // namespace NKikimr::NScheme

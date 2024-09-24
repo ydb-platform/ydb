@@ -1,5 +1,6 @@
 #include "datashard_kqp_compute.h"
 
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_runtime_impl.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -72,17 +73,7 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     result.KeyTypes.resize(keyTypes->GetMembersCount());
     for (ui32 i = 0; i < result.KeyTypes.size(); ++i) {
         NKikimr::NMiniKQL::TType* type = keyTypes->GetMemberType(i);
-        if (type->GetKind() == TType::EKind::Pg) {
-            auto itemType = AS_TYPE(TPgType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
-        } else {
-            if (type->IsOptional()) {
-                type = AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType();
-            }
-            Y_ENSURE(type->GetKind() == TType::EKind::Data);
-            auto itemType = AS_TYPE(TDataType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(itemType->GetSchemeType());
-        }
+        result.KeyTypes[i] = NScheme::TypeInfoFromMiniKQLType(type);
     }
 
     ParseReadColumns(callable.GetType()->GetReturnType(), tagsNode, result.Columns, result.SystemColumns);

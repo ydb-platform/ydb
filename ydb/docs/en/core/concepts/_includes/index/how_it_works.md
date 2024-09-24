@@ -27,13 +27,16 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 * [Row-oriented tables](../../datamodel/table.md#row-tables) are designed for OLTP workloads.
 * [Column-oriented tables](../../datamodel/table.md#column-tables) are designed for OLAP workloads.
 
-Logically, from the user's point of view, both types of tables look the same. The main difference between row tables and column tables lies in the way data is stored. In row tables, the values of all columns in each row are stored together, while in column tables — on the contrary, each column is stored separately, so cells related to different rows are stored next to each other.
+Logically, from the user's perspective, both types of tables look the same. The main difference between row-oriented tables and column-oriented tables is in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning cells related to different rows are stored next to each other.
 
-Regardless of its type, each table must contain a primary key. Column tables can use only  `NOT NULL` columns as primary keys. Data in tables is physically sorted by the primary key. Partitioning works differently in row and column tables:
-* Row tables are automatically partitioned by the ranges of primary keys depending on the volume of data.
-* Column tables are partitioned by the hash of the partitioning columns.
+Regardless of type, each table must have a primary key. Column tables can only use `NOT NULL` columns as primary keys. Table data is physically sorted by the primary key. 
 
-Each range of primary keys in a table is processed by a specific [tablet](../../cluster/common_scheme_ydb.md#tablets), called a data shard for row tables and a column shard for column tables.
+Partitioning works differently in row and column tables:
+
+* Row-oriented tables are automatically partitioned by primary key ranges, depending on the data volume.
+* Column-oriented tables are partitioned by the hash of the partitioning columns.
+
+Each partition of a table is processed by a specific [tablet](../../glossary.md#tablets), called a [data shard(../../glossary.md#datashard) for row-oriented tables and a [column shard](../../glossary.md#columnshard) for column-oriented tables.
 
 #### Split by load {#split-by-load}
 

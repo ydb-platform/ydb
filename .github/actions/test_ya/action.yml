@@ -101,7 +101,9 @@ runs:
       shell: bash
       run: |
         set -x
-
+        
+        echo "$(pwd)/ydb/ci/scripts" >> $GITHUB_PATH
+        
         export TMP_DIR=$(pwd)/tmp
         rm -rf $TMP_DIR
         mkdir -p $TMP_DIR
@@ -345,7 +347,7 @@ runs:
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_RUN_ID=$(
-              TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
+              TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
                 --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources $CURRENT_PUBLIC_DIR/testmo.json \
                 --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
             )
@@ -459,11 +461,11 @@ runs:
             # archive unitest reports (transformed)
             tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
             
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:submit-thread \
+            TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:submit-thread \
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
 
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
+            TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
@@ -500,7 +502,7 @@ runs:
       shell: bash
       run: |
         if [ ${{ steps.build.outputs.runid }} ]; then
-          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
+          TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
         fi
         if [ ${{ inputs.testman_token }} ]; then
           kill $TESTMO_PROXY_PID

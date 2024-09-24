@@ -7,7 +7,7 @@ The current version of {{ ydb-short-name }} implements _synchronous_ and _asynch
 * For synchronous indexes: Transactionally when the main table changes.
 * For asynchronous indexes: In the background while getting the necessary changes from the main table.
 
-When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns, to enable nvaigation from an index record to the table row.
+When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns to enable navigation from an index record to the table row.
 
 ## Synchronous secondary index {#sync}
 
@@ -23,7 +23,7 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 ## Unique secondary index {#unique}
 
-This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be canceled with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
+This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
 
 A unique secondary index is a synchronous index, so the update process is the same as in the [Synchronous secondary index](#sync) section described above from a transaction perspective.
 

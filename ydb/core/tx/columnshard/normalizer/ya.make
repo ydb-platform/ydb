@@ -7,9 +7,7 @@ PEERDIR(
     ydb/core/tx/columnshard/normalizer/tables
     ydb/core/tx/columnshard/normalizer/portion
     ydb/core/tx/columnshard/normalizer/insert_table
-    ydb/core/tx/columnshard/normalizer/version
-    ydb/core/tx/columnshard/normalizer/insert_table
->>>>>>> Fixed wrong syntax after conflict resolution
+    ydb/core/tx/columnshard/normalizer/schema_version
 )
 
 END()

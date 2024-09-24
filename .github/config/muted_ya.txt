@@ -12,6 +12,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -24,13 +25,6 @@ ydb/core/kqp/ut/service [*/*]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
-ydb/core/kqp/ut/service KqpQueryService.TableSink_OlapRWQueries
-ydb/core/kqp/ut/service KqpQueryService.TableSink_Htap
-ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
-ydb/core/kqp/ut/tx KqpSinkMvcc.OltpNamedStatement
-ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
-ydb/core/kqp/ut/tx KqpSinkMvcc.OltpMultiSinks
-ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/persqueue/ut [*/*]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/persqueue/ut/ut_with_sdk [*/*]*
@@ -215,6 +209,6 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTr
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets-PQConfigTransactionsAtSchemeShard-true
-ydb/tests/functional/serializable *
+ydb/tests/functional/serializable test.py.test_local
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly

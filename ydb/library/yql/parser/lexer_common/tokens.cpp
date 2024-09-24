@@ -1,5 +1,6 @@
 #include "lexer.h"
 
+#include <util/string/ascii.h>
 
 namespace NSQLTranslation {
 
@@ -18,5 +19,8 @@ bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TPa
     return lexer.Tokenize(query, queryName, onNextToken, issues, maxErrors);
 }
 
+bool IsKeyword(const TParsedToken& token) {
+    return AsciiEqualsIgnoreCase(token.Name, token.Content);
+}
 
 }

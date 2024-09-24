@@ -43,7 +43,7 @@ public:
         , KeyColumns(std::move(keyColumns))
         , LogService(logService)
         , TtlSettings(std::move(ttlSettings))
-        , Database(database ? database : AppData()->TenantName)
+        , Database(database)
         , IsSystemUser(isSystemUser)
         , PartitioningPolicy(std::move(partitioningPolicy))
         , LogPrefix("Table " + TableName() + " updater. ")
@@ -75,6 +75,9 @@ public:
 
     void Bootstrap() {
         Become(&TTableCreator::StateFuncCheck);
+        if (!Database) {
+            Database = AppData()->TenantName;
+        }
         CheckTableExistence();
     }
 
@@ -390,7 +393,7 @@ private:
     const TVector<TString> KeyColumns;
     NKikimrServices::EServiceKikimr LogService;
     const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
-    const TString Database;
+    TString Database;
     bool IsSystemUser = false;
     const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;

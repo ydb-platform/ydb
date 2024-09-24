@@ -1918,7 +1918,7 @@ private:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
             Send(BufferActorId, event.release());
-            Become(&TKqpDataExecuter::FinalizeState);
+            MakeResponseAndPassAway();
             return;
         }
 
@@ -2074,7 +2074,9 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
-        BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
+        if (UseEvWriteForOltp) {
+            BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
+        }
 
         // Single-shard datashard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
@@ -2281,7 +2283,6 @@ private:
             TDatashardTxs& datashardTxs,
             TEvWriteTxs& evWriteTxs,
             TTopicTabletTxs& topicTxs) {
-        YQL_ENSURE(UseEvWriteForOltp);
         for (auto& [shardId, tasks]: datashardTasks) {
             auto [it, success] = datashardTxs.emplace(
                 shardId,

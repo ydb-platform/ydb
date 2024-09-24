@@ -3852,14 +3852,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
@@ -3868,7 +3868,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 'null');
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_C(!it.IsSuccess(), it.GetIssues().ToString());
                 UNIT_ASSERT_C(
                     it.GetIssues().ToString().Contains("Operation is aborting because an duplicate key")
@@ -3879,7 +3879,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");

@@ -1160,6 +1160,7 @@ public:
         PREPARING, // Do preparation for commit. All writers are closed. New writes wouldn't be accepted.
         COMMITTING, // Do immediate commit (single shard). All writers are closed. New writes wouldn't be accepted.
         ROLLINGBACK, // Do rollback. New writes wouldn't be accepted.
+        FINISHED,
     };
 
 public:
@@ -1371,7 +1372,7 @@ public:
     }
 
     void Rollback() {
-        YQL_ENSURE(State == EState::ROLLINGBACK);
+        State = EState::ROLLINGBACK;
         SendToExternalShards();
     }
 
@@ -1487,6 +1488,9 @@ public:
     }
 
     void PassAway() override {
+        if (State != EState::FINISHED) {
+            Rollback();
+        }
         for (auto& [_, queue] : DataQueues) {
             while (!queue.empty()) {
                 auto& message = queue.front();
@@ -1554,8 +1558,11 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        YQL_ENSURE(!TxManager->IsReadOnly());
-        if (TxManager->IsSingleShard() && !WriteInfos.empty()) {
+        if (TxManager->IsReadOnly()) {
+            Rollback();
+            State = EState::FINISHED;
+            Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        } else if (TxManager->IsSingleShard() && !WriteInfos.empty()) {
             TxManager->StartExecute();
             ImmediateCommit();
         } else {
@@ -1567,6 +1574,7 @@ public:
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         Rollback();
+        State = EState::FINISHED;
         Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
     }
 
@@ -1767,6 +1775,7 @@ public:
         AFL_ENSURE(State == EState::COMMITTING);
         Y_UNUSED(shardId, dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
+            State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
             ExecuterActorId = {};
         }

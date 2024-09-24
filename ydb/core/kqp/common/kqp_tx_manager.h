@@ -11,21 +11,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TKqpLock {
-    using TKey = std::tuple<ui64, ui64, ui64, ui64>;
-    TKey GetKey() const { return std::make_tuple(Proto.GetLockId(), Proto.GetDataShard(), Proto.GetSchemeShard(), Proto.GetPathId()); }
-
-    bool Invalidated(const TKqpLock& newLock) const {
-        YQL_ENSURE(GetKey() == newLock.GetKey());
-        return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
-    }
-
-    TKqpLock(const NKikimrDataEvents::TLock& proto)
-        : Proto(proto) {}
-
-    NKikimrDataEvents::TLock Proto;
-};
-
 struct TTableInfo {
     bool IsOlap = false;
     THashSet<TStringBuf> Pathes;
@@ -50,14 +35,14 @@ public:
 
     using TActionFlags = ui8;
 
-    // TODO: ???
-    // virutal std::optional<ui64> GetLockTxId() const = 0;
-
     virtual void AddShard(ui64 shardId, bool isOlap, const TString& path) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
-    virtual bool AddLock(ui64 shardId, TKqpLock lock) = 0;
+    virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) = 0;
 
     virtual TTableInfo GetShardTableInfo(ui64 shardId) const = 0;
+
+    virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;
+    virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;
 
     virtual EShardState GetState(ui64 shardId) const = 0;
     virtual void SetState(ui64 shardId, EShardState state) = 0;
@@ -91,10 +76,9 @@ public:
         const THashSet<ui64>& ReceivingShards;
         std::optional<ui64> Arbiter; // TODO: support volatile
         std::optional<ui64> ArbiterColumnShard; // TODO: support columnshard&topic
-        TVector<TKqpLock> Locks;
     };
 
-    virtual TPrepareInfo GetPrepareTransactionInfo(ui64 shardId) = 0;
+    virtual TPrepareInfo GetPrepareTransactionInfo() = 0;
 
     struct TPrepareResult {
         ui64 ShardId;
@@ -127,7 +111,7 @@ public:
 
 using IKqpTransactionManagerPtr = std::shared_ptr<IKqpTransactionManager>;
 
-IKqpTransactionManagerPtr CreateKqpTransactionManager();
+IKqpTransactionManagerPtr CreateKqpTransactionManager(bool collectOnly = false);
 
 }
 }

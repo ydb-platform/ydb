@@ -19,7 +19,6 @@ namespace {
 
 constexpr ui64 DataShardMaxOperationBytes = 8_MB;
 constexpr ui64 ColumnShardMaxOperationBytes = 64_MB;
-constexpr ui64 MaxUnshardedBatchBytes = 0_MB;
 
 class IPayloadSerializer : public TThrRefBase {
 public:
@@ -421,7 +420,7 @@ public:
     }
 
     void FlushUnsharded(bool force) {
-        if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() > MaxUnshardedBatchBytes) {
+        if (BatchBuilder.Bytes() > 0 && force) {
             const auto unshardedBatch = BatchBuilder.FlushBatch(true);
             YQL_ENSURE(unshardedBatch);
             ShardAndFlushBatch(unshardedBatch, force);
@@ -924,14 +923,12 @@ public:
 
         struct TBatchInfo {
             ui64 DataSize = 0;
-            bool HasRead = false;
         };
         std::optional<TBatchInfo> PopBatches(const ui64 cookie) {
             if (BatchesInFlight != 0 && Cookie == cookie) {
                 TBatchInfo result;
                 for (size_t index = 0; index < BatchesInFlight; ++index) {
                     result.DataSize += Batches.front().GetMemory();
-                    result.HasRead = Batches.front().HasRead;
                     Batches.pop_front();
                 }
 
@@ -949,6 +946,7 @@ public:
             YQL_ENSURE(!IsClosed());
             Batches.emplace_back(std::move(batch));
             Memory += Batches.back().GetMemory();
+            HasReadInBatch |= Batches.back().HasRead;
         }
 
         ui64 GetCookie() const {
@@ -971,9 +969,14 @@ public:
             SendAttempts = 0;
         }
 
+        bool HasRead() const {
+            return HasReadInBatch;
+        }
+
     private:
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
+        bool HasReadInBatch = false;
 
         ui64& NextCookie;
         ui64 Cookie;
@@ -994,11 +997,14 @@ public:
         return insertIt->second;
     }
 
-    TVector<ui64> GetPendingShards() const {
-        TVector<ui64> result;
+    TVector<IShardedWriteController::TPendingShardInfo> GetPendingShards() const {
+        TVector<IShardedWriteController::TPendingShardInfo> result;
         for (const auto& [id, shard] : ShardsInfo) {
             if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
-                result.push_back(id);
+                result.push_back(IShardedWriteController::TPendingShardInfo{
+                    .ShardId = id,
+                    .HasRead = shard.HasRead(),
+                });
             }
         }
         return result;
@@ -1175,7 +1181,7 @@ public:
         }
     }
 
-    TVector<ui64> GetPendingShards() const override {
+    TVector<TPendingShardInfo> GetPendingShards() const override {
         return ShardsInfo.GetPendingShards();
     }
 
@@ -1241,7 +1247,6 @@ public:
             return TMessageAcknowledgedResult {
                 .DataSize = result->DataSize,
                 .IsShardEmpty = shardInfo.IsEmpty(),
-                .HasRead = result->HasRead,
             };
         }
         return std::nullopt;

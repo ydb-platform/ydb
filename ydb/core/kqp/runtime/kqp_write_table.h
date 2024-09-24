@@ -35,7 +35,11 @@ public:
 
     virtual void AddCoveringMessages() = 0;
 
-    virtual TVector<ui64> GetPendingShards() const = 0;
+    struct TPendingShardInfo {
+        ui64 ShardId;
+        bool HasRead;
+    };
+    virtual TVector<TPendingShardInfo> GetPendingShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 
@@ -57,7 +61,6 @@ public:
     struct TMessageAcknowledgedResult {
         ui64 DataSize = 0;
         bool IsShardEmpty = 0;
-        bool HasRead = false;
     };
 
     virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;

@@ -38,47 +38,6 @@ namespace {
         return delay;
     }
 
-    struct TLockInfo {
-        bool AddAndCheckLock(const NKikimrDataEvents::TLock& lock) {
-            if (!Lock) {
-                Lock = lock;
-                return true;
-            } else {
-                return lock.GetLockId() == Lock->GetLockId()
-                    && lock.GetDataShard() == Lock->GetDataShard()
-                    && lock.GetSchemeShard() == Lock->GetSchemeShard()
-                    && lock.GetPathId() == Lock->GetPathId()
-                    && lock.GetGeneration() == Lock->GetGeneration()
-                    && lock.GetCounter() == Lock->GetCounter();
-            }
-        }
-
-        const std::optional<NKikimrDataEvents::TLock>& GetLock() const {
-            return Lock;
-        }
-
-    private:
-        std::optional<NKikimrDataEvents::TLock> Lock;
-    };
-
-    class TLocksManager {
-    public:
-        bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) {
-            return Locks[shardId].AddAndCheckLock(lock);
-        }
-
-        const std::optional<NKikimrDataEvents::TLock>& GetLock(ui64 shardId) {
-            return Locks[shardId].GetLock();
-        }
-
-        const THashMap<ui64, TLockInfo>& GetLocks() const {
-            return Locks;
-        }
-
-    private:
-        THashMap<ui64, TLockInfo> Locks;
-    };
-
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType GetOperation(NKikimrKqp::TKqpTableSinkSettings::EType type) {
         switch (type) {
         case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
@@ -115,8 +74,8 @@ struct IKqpTableWriterCallbacks {
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
 
-/*class TKqpReadOnlyCommitActor : public TActorBootstrapped<TKqpReadOnlyCommitActor> {
-    using TBase = TActorBootstrapped<TKqpReadOnlyCommitActor>;
+/*class TKqpShardsCommitActor : public TActorBootstrapped<TKqpShardsCommitActor> {
+    using TBase = TActorBootstrapped<TKqpShardsCommitActor>;
 
     struct TEvPrivate {
         enum EEv {
@@ -128,14 +87,14 @@ struct IKqpTableWriterCallbacks {
     };
 
 public:
-    TKqpReadOnlyCommitActor(
+    TKqpShardsCommitActor(
         IKqpTableWriterCallbacks* callbacks,
         IKqpTransactionManagerPtr txManager) {
     }
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TKqpReadOnlyCommitActor::StatePreparing);
+        Become(&TKqpShardsCommitActor::StatePreparing);
     }
 
     static constexpr char ActorName[] = "KQP_TABLE_WRITE_ACTOR";
@@ -155,7 +114,7 @@ public:
 
     void PassAway() override {;
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
-        TActorBootstrapped<TKqpReadOnlyCommitActor>::PassAway();
+        TActorBootstrapped<TKqpReadShardsCommitActor>::PassAway();
     }
 
     void Terminate() {
@@ -217,9 +176,8 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , Callbacks(callbacks)
- //       , TxManager(txManager)
+        , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
     {
-        Y_UNUSED(txManager);
         try {
             ShardedWriteController = CreateShardedWriteController(
                 TShardedWriteControllerSettings {
@@ -265,12 +223,8 @@ public:
         return SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable;
     }
 
-    const TString& GetTablePath() const {
-        return TablePath;
-    }
-
-    const THashMap<ui64, TLockInfo>& GetLocks() const {
-        return LocksManager.GetLocks();
+    TVector<NKikimrDataEvents::TLock> GetLocks() const {
+        return TxManager->GetLocks();
     }
 
     TVector<ui64> GetShardsIds() const {
@@ -302,6 +256,7 @@ public:
         YQL_ENSURE(ShardedWriteController);
         try {
             ShardedWriteController->Write(token, data);
+            UpdateShards();
         } catch (...) {
             RuntimeError(
                 CurrentExceptionMessage(),
@@ -314,6 +269,7 @@ public:
         YQL_ENSURE(ShardedWriteController);
         try {
             ShardedWriteController->Close(token);
+            UpdateShards();
         } catch (...) {
             RuntimeError(
                 CurrentExceptionMessage(),
@@ -327,6 +283,17 @@ public:
         YQL_ENSURE(ShardedWriteController->IsAllWritesClosed());
         Closed = true;
         ShardedWriteController->Close();
+    }
+
+    void UpdateShards() {
+        // Maybe there are better ways to initialize shards...
+        for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
+            TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
+            TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::WRITE);
+            if (shardInfo.HasRead) {
+                TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::READ);
+            }
+        }
     }
 
     bool IsClosed() const {
@@ -671,6 +638,7 @@ public:
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
+            YQL_ENSURE(result->IsShardEmpty);
             Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
         }
     }
@@ -689,12 +657,15 @@ public:
             }());
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            if (!LocksManager.AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+            if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                YQL_ENSURE(TxManager->BrokenLocks());
+                NYql::TIssues issues;
+                issues.AddIssue(*TxManager->GetLockIssue());
                 RuntimeError(
-                    TStringBuilder() << "Transaction locks invalidated. Table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    TStringBuilder() << "Transaction locks invalidated.",
                     NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssues{});
+                    issues);
+                return;
             }
         }
 
@@ -703,7 +674,7 @@ public:
         if (result && result->IsShardEmpty && (Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT)) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
-            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), SchemeEntry->TableId, result->DataSize, result->HasRead);
+            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), SchemeEntry->TableId, result->DataSize, false);
         }
     }
 
@@ -729,8 +700,8 @@ public:
     }
 
     void Flush() {
-        for (const size_t shardId : ShardedWriteController->GetPendingShards()) {
-            SendDataToShard(shardId);
+        for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
+            SendDataToShard(shardInfo.ShardId);
         }
     }
 
@@ -763,14 +734,14 @@ public:
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
         if (isImmediateCommit) {
-            const auto lock = LocksManager.GetLock(shardId);
-            if (lock) {
-                auto* locks = evWrite->Record.MutableLocks();
-                locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                locks->AddSendingShards(shardId);
-                locks->AddReceivingShards(shardId);
-                if (lock) {
-                    *locks->AddLocks() = *lock;
+            const auto locks = TxManager->GetLocks(shardId);
+            if (!locks.empty()) {
+                auto* protoLocks = evWrite->Record.MutableLocks();
+                protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                protoLocks->AddSendingShards(shardId);
+                protoLocks->AddReceivingShards(shardId);
+                for (const auto& lock : locks) {
+                    *protoLocks->AddLocks() = lock;
                 }
             }
         } else if (isPrepare) {
@@ -809,10 +780,10 @@ public:
             }*/
 
             // TODO: multi locks (for tablestore support)
-            const auto lock = LocksManager.GetLock(shardId);
-            if (lock) {
+            //const auto lock = LocksManager.GetLock(shardId);
+            //if (lock) {
                 //*locks->AddLocks() = *lock;
-            }
+            //}
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
         }
@@ -874,7 +845,6 @@ public:
     }
 
     void Handle(TEvPrivate::TEvTerminate::TPtr&) {
-        Become(&TKqpTableWriteActor::StateTerminating);
         PassAway();
     }
 
@@ -921,6 +891,7 @@ public:
     }
 
     void Terminate() {
+        Become(&TKqpTableWriteActor::StateTerminating);
         Send(this->SelfId(), new TEvPrivate::TEvTerminate{});
     }
 
@@ -944,8 +915,7 @@ public:
     std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> SchemeRequest;
     ui64 ResolveAttempts = 0;
 
-    TLocksManager LocksManager;
-    //IKqpTransactionManagerPtr TxManager;
+    IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
     EMode Mode = EMode::WRITE;
     
@@ -1035,10 +1005,8 @@ private:
 
     TMaybe<google::protobuf::Any> ExtraData() override {
         NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
-        for (const auto& [_, lockInfo] : WriteTableActor->GetLocks()) {
-            if (const auto lock = lockInfo.GetLock(); lock) {
-                resultInfo.AddLocks()->CopyFrom(*lock);
-            }
+        for (const auto& lock : WriteTableActor->GetLocks()) {
+            resultInfo.AddLocks()->CopyFrom(lock);
         }
         google::protobuf::Any result;
         result.PackFrom(resultInfo);
@@ -1540,20 +1508,7 @@ public:
     }
 
     void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
-        Y_UNUSED(dataSize);
-        auto& info = WriteInfos.at(tableId);
-        const auto& lockInfo = info.WriteTableActor->GetLocks().at(shardId);
-
-        const auto lock = lockInfo.GetLock();
-        YQL_ENSURE(lock);
-        YQL_ENSURE(shardId == lock->GetDataShard());
-        TxManager->AddShard(shardId, info.WriteTableActor->IsOlap(), info.WriteTableActor->GetTablePath());
-        TxManager->AddAction(shardId, IKqpTransactionManager::EAction::WRITE);
-        if (hasRead) {
-            TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
-        }
-        TxManager->AddLock(lock->GetDataShard(), *lock);
-
+        Y_UNUSED(dataSize, shardId, tableId, hasRead); // TODO: delete unused
         Process();
     }
 

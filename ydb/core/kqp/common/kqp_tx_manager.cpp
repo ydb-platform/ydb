@@ -7,6 +7,21 @@ namespace NKqp {
 
 namespace {
 
+struct TKqpLock {
+    using TKey = std::tuple<ui64, ui64, ui64, ui64>;
+    TKey GetKey() const { return std::make_tuple(Proto.GetLockId(), Proto.GetDataShard(), Proto.GetSchemeShard(), Proto.GetPathId()); }
+
+    bool Invalidated(const TKqpLock& newLock) const {
+        YQL_ENSURE(GetKey() == newLock.GetKey());
+        return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
+    }
+
+    TKqpLock(const NKikimrDataEvents::TLock& proto)
+        : Proto(proto) {}
+
+    NKikimrDataEvents::TLock Proto;
+};
+
 class TKqpTransactionManager : public IKqpTransactionManager {
     enum ETransactionState {
         COLLECTING,
@@ -14,6 +29,9 @@ class TKqpTransactionManager : public IKqpTransactionManager {
         EXECUTING,   
     };
 public:
+    TKqpTransactionManager(bool collectOnly)
+        : CollectOnly(collectOnly) {}
+
     void AddShard(ui64 shardId, bool isOlap, const TString& path) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         ShardsIds.insert(shardId);
@@ -33,7 +51,8 @@ public:
         }
     }
 
-    bool AddLock(ui64 shardId, TKqpLock lock) override {
+    bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
+        TKqpLock lock(lockProto);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
         bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
@@ -104,6 +123,25 @@ public:
 
     void SetState(ui64 shardId, EShardState state) override {
         ShardsInfo.at(shardId).State = state;
+    }
+
+    TVector<NKikimrDataEvents::TLock> GetLocks() const override {
+        TVector<NKikimrDataEvents::TLock> locks;
+        for (const auto& [_, shardInfo] : ShardsInfo) {
+            for (const auto& [_, lockInfo] : shardInfo.Locks) {
+                locks.push_back(lockInfo.Lock.Proto);
+            }
+        }
+        return locks;
+    }
+
+    TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const override {
+        TVector<NKikimrDataEvents::TLock> locks;
+        const auto& shardInfo = ShardsInfo.at(shardId);
+        for (const auto& [_, lockInfo] : shardInfo.Locks) {
+            locks.push_back(lockInfo.Lock.Proto);
+        }
+        return locks;
     }
 
     bool IsTxPrepared() const override {
@@ -184,6 +222,7 @@ public:
     }
 
     void StartPrepare() override {
+        YQL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(!IsReadOnly());
 
@@ -205,22 +244,14 @@ public:
         State = ETransactionState::PREPARING;
     }
 
-    TPrepareInfo GetPrepareTransactionInfo(ui64 shardId) override {
+    TPrepareInfo GetPrepareTransactionInfo() override {
         AFL_ENSURE(State == ETransactionState::PREPARING);
-        auto& shardInfo = ShardsInfo.at(shardId);
-        AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
-        shardInfo.State = EShardState::PREPARING;
 
         TPrepareInfo result {
             .SendingShards = SendingShards,
             .ReceivingShards = ReceivingShards,
             .Arbiter = std::nullopt,
-            .Locks = {},
         };
-
-        for (const auto& [_, lockInfo] : shardInfo.Locks) {
-            result.Locks.push_back(lockInfo.Lock);   
-        }
 
         return result;
     }
@@ -246,6 +277,7 @@ public:
     }
 
     void StartExecute() override {
+        YQL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::PREPARING
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
@@ -293,6 +325,7 @@ public:
     }
 
 private:
+    bool CollectOnly = false;
     ETransactionState State = ETransactionState::COLLECTING;
 
     struct TShardInfo {
@@ -331,8 +364,8 @@ private:
 
 }
 
-IKqpTransactionManagerPtr CreateKqpTransactionManager() {
-    return std::make_shared<TKqpTransactionManager>();
+IKqpTransactionManagerPtr CreateKqpTransactionManager(bool collectOnly) {
+    return std::make_shared<TKqpTransactionManager>(collectOnly);
 }
 
 }

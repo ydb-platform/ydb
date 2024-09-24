@@ -24,12 +24,10 @@ private:
     };
 
     std::vector<TKey> VersionsToRemove;
-    std::optional<ui64> LastVersion;
 
 public:
-    TNormalizerResult(std::vector<TKey>&& versions, std::optional<ui64>& lastVersion)
+    TNormalizerResult(std::vector<TKey>&& versions)
         : VersionsToRemove(versions)
-        , LastVersion(lastVersion)
     {
     }
 
@@ -37,9 +35,7 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key: VersionsToRemove) {
-            if ((!LastVersion.has_value()) || (key.Version != *LastVersion)) {
-                db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
-            }
+            db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
         }
         return true;
     }
@@ -111,11 +107,18 @@ public:
             }
         }
 
-        for (size_t start = 0; start < unusedSchemaIds.size(); start += 10000) {
-            std::vector<TKey> portion;
-            size_t end = std::min(unusedSchemaIds.size(), start + 10000);
-            portion.insert(portion.begin(), &unusedSchemaIds[start], &unusedSchemaIds[end]);
-            changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), maxVersion));
+        std::vector<TKey> portion;
+        portion.reserve(10000);
+        for (auto iter = unusedSchemaIds.begin(); iter != unusedSchemaIds.end(); iter++) {
+            if (!maxVersion.has_value() || (iter->Version != *maxVersion)) {
+                portion.push_back(*iter);
+                if (portion.size() >= 10000) {
+                    changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion)));
+                }
+            }
+        }
+        if (portion.size() > 0) {
+            changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion)));
         }
         return changes;
     }

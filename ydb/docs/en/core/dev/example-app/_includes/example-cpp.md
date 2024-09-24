@@ -75,7 +75,7 @@ void SelectSimple(TQueryClient client) {
     TMaybe<TResultSet> resultSet;
     ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
         auto query = Sprintf(R"(
-            SELECT series_id, title, CAST(CAST(release_date AS Date) AS String) AS release_date
+            SELECT series_id, title, CAST(release_date AS Date) AS release_date
             FROM series
             WHERE series_id = 1;
         )");
@@ -107,7 +107,7 @@ The code snippet below shows how to process query results using the `parser` obj
         Cout << "> SelectSimple:" << Endl << "Series"
             << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
             << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-            << ", Release date: " << parser.ColumnParser("release_date").GetOptionalString()
+            << ", Release date: " << parser.ColumnParser("release_date").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
             << Endl;
     }
 }
@@ -197,7 +197,7 @@ void StreamQuerySelect(TQueryClient client) {
         auto query = Sprintf(R"(
             DECLARE $series AS List<UInt64>;
 
-            SELECT series_id, season_id, title, CAST(CAST(first_aired AS Date) AS String) AS first_aired
+            SELECT series_id, season_id, title, CAST(first_aired AS Date) AS first_aired
             FROM seasons
             WHERE series_id IN $series
             ORDER BY season_id;
@@ -247,7 +247,7 @@ void StreamQuerySelect(TQueryClient client) {
                             << ", SeriesId: " << parser.ColumnParser("series_id").GetOptionalUint64()
                             << ", SeasonId: " << parser.ColumnParser("season_id").GetOptionalUint64()
                             << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
-                            << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalString()
+                            << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
                             << Endl;
                 }
             }

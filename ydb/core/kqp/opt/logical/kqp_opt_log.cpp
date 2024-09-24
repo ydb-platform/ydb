@@ -93,9 +93,9 @@ public:
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
-
-        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedHintStrings()) {
-            YQL_CLOG(WARN, ProviderYdb) << "Unapplied hint: " + hint;
+        
+        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
+            ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
         }
 
         return status;

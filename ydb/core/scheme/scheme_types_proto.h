@@ -4,7 +4,10 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme_types/scheme_decimal_type.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+
+namespace NKikimr::NPg {
+    struct ITypeDesc;
+}
 
 namespace NKikimr::NScheme {
 
@@ -28,6 +31,8 @@ void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringTyp
 
 NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrProto::TTypeInfo& typeInfoProto);
 
+void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, ::Ydb::Type& typeProto, bool notNull = true);
+void ProtoFromPgType(const NKikimr::NPg::ITypeDesc* pgDesc, ::Ydb::PgType& pgProto);
 void ProtoFromDecimalType(const NScheme::TDecimalType& decimal, ::Ydb::DecimalType& decimalProto);
 
 } // namespace NKikimr::NScheme

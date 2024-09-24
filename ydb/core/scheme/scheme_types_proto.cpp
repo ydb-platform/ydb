@@ -1,5 +1,8 @@
 #include "scheme_types_proto.h"
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+
+
 namespace NKikimr::NScheme {
 
 TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const ::TString& typeMod) {
@@ -96,6 +99,30 @@ NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrPro
     default:
         return NScheme::TTypeInfo(typeId);
     }
+}
+
+void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, ::Ydb::Type& typeProto, bool notNull) {
+    switch (typeInfo.GetTypeId()) {
+    case NScheme::NTypeIds::Pg: {
+        ProtoFromPgType(typeInfo.GetPgTypeDesc(), *typeProto.mutable_pg_type());
+        break;
+    }
+    case NScheme::NTypeIds::Decimal: {
+        Ydb::Type& item = notNull ? typeProto : *typeProto.mutable_optional_type()->mutable_item();
+        ProtoFromDecimalType(typeInfo.GetDecimalType(), *item.mutable_decimal_type());
+        break;
+    }
+    default: {
+        Ydb::Type& item = notNull ? typeProto : *typeProto.mutable_optional_type()->mutable_item();
+        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        break;
+    }
+    }    
+}
+
+void ProtoFromPgType(const NKikimr::NPg::ITypeDesc* pgDesc, ::Ydb::PgType& pgProto) {
+    pgProto.set_type_name(NPg::PgTypeNameFromTypeDesc(pgDesc));
+    pgProto.set_oid(NPg::PgTypeIdFromTypeDesc(pgDesc));                    
 }
 
 void ProtoFromDecimalType(const NScheme::TDecimalType& decimal, ::Ydb::DecimalType& decimalProto) {

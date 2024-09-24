@@ -12,6 +12,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -471,14 +472,7 @@ private:
         } else if (reqColumns.empty()) {
             for (auto& [name, typeInfo] : SrcColumns) {
                 Ydb::Type ydbType;
-                if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
-                    ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-                } else {
-                    auto typeDesc = typeInfo.GetPgTypeDesc();
-                    auto* pg = ydbType.mutable_pg_type();
-                    pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                    pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-                }
+                ProtoFromTypeInfo(typeInfo, ydbType);
                 reqColumns.emplace_back(name, std::move(ydbType));
             }
         }
@@ -494,7 +488,7 @@ private:
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
-            const auto& typeInProto = reqColumns[pos].second;
+            const Ydb::Type& typeInProto = reqColumns[pos].second;
 
             if (typeInProto.type_id()) {
                 auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());

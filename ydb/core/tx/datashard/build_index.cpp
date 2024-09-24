@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 
@@ -38,7 +39,7 @@ static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tabl
     for (const auto& keyColId : tableInfo.KeyColumnIds) {
         auto it = tableInfo.Columns.at(keyColId);
         Ydb::Type type;
-        ProtoYdbTypeFromTypeInfo(&type, it.Type);
+        NScheme::ProtoFromTypeInfo(it.Type, type);
         result->emplace_back(it.Name, type);
     }
     for (size_t i = 0; i < buildSettings.columnSize(); i++) {
@@ -56,12 +57,12 @@ static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tabl
 
     for (const auto& colName : indexColumns) {
         Ydb::Type type;
-        ProtoYdbTypeFromTypeInfo(&type, types.at(colName));
+        NScheme::ProtoFromTypeInfo(types.at(colName), type);
         result->emplace_back(colName, type);
     }
     for (const auto& colName : dataColumns) {
         Ydb::Type type;
-        ProtoYdbTypeFromTypeInfo(&type, types.at(colName));
+        NScheme::ProtoFromTypeInfo(types.at(colName), type);
         result->emplace_back(colName, type);
     }
     return result;

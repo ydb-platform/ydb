@@ -941,29 +941,22 @@ int RunMain(int argc, const char* argv[])
 
     TVector<TActorSystemManager::TSetupModifier> setupModifiers;
 
-    NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
-        fqConfig,
-        NKikimr::CreateYdbCredentialsProviderFactory,
-        MakeIntrusive<NMonitoring::TDynamicCounters>());
-    NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
+    // if (fqConfig.GetRowDispatcher().GetEnabled()) {
+    //     setupModifiers.push_back([&](TActorSystemSetup& setup) {
+    //         auto rowDispatcher = NFq::NewRowDispatcherService(
+    //             fqConfig.GetRowDispatcher(),
+    //             NKikimr::CreateYdbCredentialsProviderFactory,
+    //             yqSharedResources,
+    //             credentialsFactory,
+    //             "/tenant",
+    //             MakeIntrusive<NMonitoring::TDynamicCounters>());
 
-    if (fqConfig.GetRowDispatcher().GetEnabled()) {
-        setupModifiers.push_back([&](TActorSystemSetup& setup) {
-            auto rowDispatcher = NFq::NewRowDispatcherService(
-                fqConfig.GetRowDispatcher(),
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                yqSharedResources,
-                credentialsFactory,
-                "/tenant",
-                MakeIntrusive<NMonitoring::TDynamicCounters>());
-
-            setup.LocalServices.push_back(
-            std::pair<TActorId, TActorSetupCmd>(
-                NFq::RowDispatcherServiceActorId(),
-                TActorSetupCmd(rowDispatcher.release(), TMailboxType::HTSwap, 0)));
-        });
-    }
-
+    //         setup.LocalServices.push_back(
+    //             std::pair<TActorId, TActorSetupCmd>(
+    //                 NFq::RowDispatcherServiceActorId(),
+    //                 TActorSetupCmd(rowDispatcher.release(), TMailboxType::Simple, 0)));
+    //     });
+    // }
 
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
@@ -1089,7 +1082,7 @@ int RunMain(int argc, const char* argv[])
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
-                metricsRegistry, metricsPusherFactory);
+                metricsRegistry, metricsPusherFactory, fqConfig);
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

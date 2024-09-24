@@ -19,6 +19,9 @@
 #include <util/generic/size_literals.h>
 #include <util/folder/dirut.h>
 
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
+
 namespace NYql {
 
 using namespace NActors;
@@ -31,7 +34,8 @@ public:
         NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
         IMetricsRegistryPtr metricsRegistry,
         const std::function<IActor*(void)>& metricsPusherFactory,
-        bool withSpilling)
+        bool withSpilling,
+        NFq::NConfig::TConfig fqConfig)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
             : CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq))
@@ -88,6 +92,27 @@ public:
             ServiceNode->AddLocalService(
                 NDq::MakeDqLocalFileSpillingServiceID(nodeId),
                 TActorSetupCmd(spillingActor, TMailboxType::Simple, 0));
+        }
+
+        if (fqConfig.GetRowDispatcher().GetEnabled()) {
+            NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
+                fqConfig,
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                MakeIntrusive<NMonitoring::TDynamicCounters>());
+            NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
+            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+            auto rowDispatcher = NFq::NewRowDispatcherService(
+                fqConfig.GetRowDispatcher(),
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                yqSharedResources,
+                credentialsFactory,
+                "/tenant",
+                MakeIntrusive<NMonitoring::TDynamicCounters>());
+
+            ServiceNode->AddLocalService(
+                NFq::RowDispatcherServiceActorId(),
+                TActorSetupCmd(rowDispatcher.release(), TMailboxType::Simple, 0));
         }
 
         auto statsCollector = CreateStatsCollector(1, *ServiceNode->GetSetup(), MetricsRegistry->GetSensors());
@@ -248,7 +273,8 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling)
+    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling,
+    NFq::NConfig::TConfig fqConfig)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
         compFactory,
@@ -260,7 +286,8 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
         threads,
         metricsRegistry,
         metricsPusherFactory,
-        withSpilling);
+        withSpilling,
+        fqConfig);
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -268,7 +295,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
     bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory)
+    const std::function<IActor*(void)>& metricsPusherFactory,
+    NFq::NConfig::TConfig fqConfig)
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
@@ -287,7 +315,8 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             threads,
             metricsRegistry,
             metricsPusherFactory,
-            withSpilling),
+            withSpilling,
+            fqConfig),
         CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 

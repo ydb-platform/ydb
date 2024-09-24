@@ -16,6 +16,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/worker_manager
     ydb/library/yql/providers/dq/service
     ydb/library/yql/providers/dq/stats_collector
+    ydb/core/fq/libs/config/protos
+    ydb/core/fq/libs/init
 )
 
 END()

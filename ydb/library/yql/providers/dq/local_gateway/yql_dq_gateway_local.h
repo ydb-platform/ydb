@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 
 namespace NActors {
 class IActor;
@@ -17,6 +18,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     bool withSpilling,
     NDq::IDqAsyncIoFactory::TPtr = nullptr, int threads = 16,
     IMetricsRegistryPtr metricsRegistry = {},
-    const std::function<NActors::IActor*(void)>& metricsPusherFactory = {});
+    const std::function<NActors::IActor*(void)>& metricsPusherFactory = {},
+    NFq::NConfig::TConfig fqConfig = NFq::NConfig::TConfig{});
 
 } // namespace NYql

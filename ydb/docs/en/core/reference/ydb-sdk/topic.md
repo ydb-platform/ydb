@@ -1683,7 +1683,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   ```go
   for {
     err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
-      batch, err := reader.PopMessagesBatchTx(ctx, tx) // батч закоммитится при общем коммите транзакции
+      batch, err := reader.PopMessagesBatchTx(ctx, tx) // the batch will be committed along with the transaction
       if err != nil {
         return err
       }

@@ -438,7 +438,7 @@ runs:
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
-              --is_test_result_ignored $IS_TEST_RESULT_IGNORED
+              --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"

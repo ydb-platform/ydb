@@ -23,17 +23,15 @@ CREATE RESOURCE POOL olap WITH (
 
 Рассмотрим на примере выше, что на самом деле означают эти параметры и как они будут влиять на распределение ресурсов. Допустим, в базе данных {{ ydb-short-name }} выделено $10$ узлов по $10 vCPU$. В сумме в такой базе данных $100 vCPU$. Тогда на каждом узле для пула ресурсов с именем `olap` будет выделено:
 
-$$
-\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 = 7 vCPU
-$$
+$\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 = 7 vCPU$
 
 В сумме, при равномерном распределении ресурсов на всю базу данных, пулу ресурсов будет выделено:
 
-$$
-7 vCPU \cdot 10 \text{ (nodes)} = 70 vCPU.
-$$
+$7 vCPU \cdot 10 \text{ (nodes)} = 70 vCPU$
 
-На один запрос в этом пуле ресурсов будет выделено: $\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} \cdot \frac{QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 \cdot 0.5 = 3.5 vCPU$
+На один запрос в этом пуле ресурсов будет выделено:
+
+$\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} \cdot \frac{QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 \cdot 0.5 = 3.5 vCPU$
 
 ### Как работает CONCURRENT_QUERY_LIMIT и QUEUE_SIZE {#concurrent_query_limit}
 

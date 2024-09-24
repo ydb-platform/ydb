@@ -23,11 +23,13 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 ## Unique secondary index {#unique}
 
-This type of index allows to get unique constraint behaviour. The query processor uses it to perform additional checks to guarantee indexed set of columns present just once in the table. If SQL modification of table brokes the constraint the coresponding query will be canceled with PRECONDITION_FAILED status. So user code must be ready to handle this status. Unique secondaty indes is a synchronous index so update process is same as in the [Synchronous secondary](#sync) described above from transaction perspective.
+This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be canceled with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
 
-As other this index allows to perform efficient point lookup query.
+A unique secondary index is a synchronous index, so the update process is the same as in the [{#T}](#sync) section described above from a transaction perspective.
 
-Currently unique index can't be added in to existed table.
+### Limitations
+
+Currently, a unique index cannot be added to an existing table.
 
 ## Creating a secondary index online {#index-add}
 

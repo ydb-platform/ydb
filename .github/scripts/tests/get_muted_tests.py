@@ -8,7 +8,7 @@ import re
 import requests
 import sys
 import ydb
-from get_file_diff import get_diff_lines_of_file
+from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
 

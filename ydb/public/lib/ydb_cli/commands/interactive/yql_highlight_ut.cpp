@@ -69,6 +69,14 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "   ", "   ");
     }
 
+    Y_UNIT_TEST(Invalid) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "!", "u");
+        Check(highlight, "й", "uu");
+        Check(highlight, "编", "uuu");
+        Check(highlight, "🥲", "uuuu");
+    }
+
     Y_UNIT_TEST(Keyword) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "SELECT", "kkkkkk");
@@ -152,8 +160,11 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(Emoji) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "☺", "uuu");
-        Check(highlight, "\"☺\"", "sssuu");
-        Check(highlight, "`☺`", "qqquu");
+        Check(highlight, "\"☺\"", "sssss");
+        Check(highlight, "`☺`", "qqqqq");
+        Check(highlight, "SELECT \"😁\" FROM test", "kkkkkk ssssss kkkk vvvv");
+        Check(highlight, "SELECT \"编码\" FROM test", "kkkkkk ssssssss kkkk vvvv");
+        Check(highlight, "SELECT \"ай\" FROM test", "kkkkkk ssssss kkkk vvvv");
     }
 
     Y_UNIT_TEST(Typing) {

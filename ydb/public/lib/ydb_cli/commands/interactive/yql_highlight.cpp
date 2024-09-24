@@ -121,15 +121,18 @@ namespace NYdb {
         void YQLHighlight::Apply(std::string_view query, Colors& colors) {
             Reset(query);
 
-            for (std::size_t i = 0; i < Tokens.size(); ++i) {
+            std::ptrdiff_t start = 0;
+            for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
                 const auto* token = Tokens.get(i);
                 const auto color = ColorOf(token);
 
-                const std::ptrdiff_t start = token->getStartIndex();
-                const std::ptrdiff_t stop = token->getStopIndex() + 1;
+                const std::ptrdiff_t length = token->getText().length();
+                const std::ptrdiff_t stop = start + length;
 
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);
+
+                start += length;
             }
         }
 

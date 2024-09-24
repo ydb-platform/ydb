@@ -141,7 +141,7 @@ Record with virtual timestamps:
 
 * The same record may not contain the `update` and `erase` fields simultaneously, since these fields are operation flags (you can't update and erase a table row at the same time). However, each record contains one of these fields (any operation is either an update or an erase).
 * In `UPDATES` mode, the `update` field for update operations is an operation flag (update) and contains the names and values of updated columns.
-* JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` in `UPDATES` mode), *do not include* the columns that are primary key components.
+* JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` in `UPDATES` mode), _do not include_ the columns that are primary key components.
 * If a record contains the `erase` field (indicating that the record matches the erase operation), this is always an empty JSON object (`{}`).
 
 {% endnote %}

@@ -29,7 +29,7 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 
 Logically, from the user's perspective, both types of tables look the same. The main difference between row-oriented tables and column-oriented tables is in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning cells related to different rows are stored next to each other.
 
-Regardless of type, each table must have a primary key. Column tables can only use `NOT NULL` columns as primary keys. Table data is physically sorted by the primary key. 
+Regardless of type, each table must have a primary key. Column tables can only use `NOT NULL` columns as primary keys. Table data is physically sorted by the primary key.
 
 Partitioning works differently in row and column tables:
 

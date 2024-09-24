@@ -336,13 +336,17 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         TString sessionId;
         TString txId;
-        KqpSimpleBegin(runtime, sessionId, txId, "SELECT * FROM `/Root/table-1`;");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, "SELECT key, value FROM `/Root/table-1`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
 
         ApplyChanges(server, shards.at(0), tableId, "my-source", {
             TChange{ .Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 21 },
         });
 
-        KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT key, value FROM `/Root/table-1`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
     }
 
 }

@@ -89,6 +89,7 @@ public:
         }
 
         if (MvccReadWriteVersion) {
+            Self->PromoteImmediatePostExecuteEdges(*MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
             Pipeline.AddCommittingOp(*MvccReadWriteVersion);
         }
 

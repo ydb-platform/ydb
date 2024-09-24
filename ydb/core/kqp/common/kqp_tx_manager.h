@@ -57,12 +57,6 @@ public:
     virtual bool HasSnapshot() const = 0;
     virtual void SetHasSnapshot(bool hasSnapshot) = 0;
 
-    /*struct TCheckLocksResult {
-        bool Ok = false;
-        std::vector<TKqpTxLock> BrokenLocks;
-        bool LocksAcquireFailure = false;
-    };
-    virtual TCheckLocksResult CheckLocks() const = 0;*/
     virtual bool BrokenLocks() const = 0;
     virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;
 

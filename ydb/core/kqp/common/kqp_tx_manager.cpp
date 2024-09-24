@@ -182,29 +182,6 @@ public:
         ValidSnapshot = hasSnapshot;
     }
 
-    /*TCheckLocksResult CheckLocks() const override {
-        TCheckLocksResult result;
-        result.Ok = true;
-        if (HasSnapshot() && IsReadOnly()) {
-            // Snapshot read doesn't care about locks.
-            return result;
-        }
-
-        for (const auto& [_, shardInfo] : ShardsInfo) {
-            for (const auto& [_, lockInfo] : shardInfo.Locks) {
-                if (lockInfo.LocksAcquireFailure) {
-                    result.Ok = false;
-                    result.LocksAcquireFailure = lockInfo.LocksAcquireFailure;
-                }
-                if (lockInfo.Invalidated) {
-                    result.Ok = false;
-                    result.BrokenLocks.push_back(lockInfo.Lock);
-                }
-            }
-        }
-        return result;
-    }*/
-
     bool BrokenLocks() const override {
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }

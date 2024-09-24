@@ -504,14 +504,16 @@ private:
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
             } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                int precision = typeInProto.decimal_type().precision();
-                int scale = typeInProto.decimal_type().scale();
-                if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
-                    errorMessage = Sprintf("Unsupported Decimal(%d,%d) for column %s: expected Decimal(%d,%d)",
-                                           precision, scale,
-                                           name.c_str(),
-                                           NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-
+                ui32 precision = typeInProto.decimal_type().precision();
+                ui32 scale = typeInProto.decimal_type().scale();
+                if (precision > NScheme::DECIMAL_MAX_PRECISION) {
+                    errorMessage = Sprintf("Decimal precision %u should be less or equal %u for column %s",
+                                    precision, NScheme::DECIMAL_MAX_PRECISION, name.c_str());
+                    return false;
+                }
+                if (scale > precision) {
+                    errorMessage = Sprintf("Decimal precision %u should be greater than scale %u for column %s",
+                                    precision, scale, name.c_str());
                     return false;
                 }
             } else if (typeInProto.has_pg_type()) {

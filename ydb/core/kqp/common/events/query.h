@@ -352,10 +352,7 @@ public:
     }
 
     const TString& GetDatabaseId() const {
-        if (DatabaseId) {
-            return DatabaseId;
-        }
-        return Record.GetRequest().GetDatabaseId();
+        return DatabaseId ? DatabaseId : Record.GetRequest().GetDatabaseId();
     }
 
     void SetDatabaseId(const TString& databaseId) {

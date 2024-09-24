@@ -1,4 +1,6 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
+#include "setup_sys_locks.h"
 
 #include <util/string/escape.h>
 
@@ -23,6 +25,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
+
+        TDataShardLocksDb locksDb(*Self, txc);
+        TSetupSysLocks guardLocks(*Self, &locksDb);
 
         if (Self->State != TShardState::Ready) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
@@ -92,6 +97,7 @@ public:
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
         }
 
+        Self->SysLocksTable().ApplyLocks();
         return true;
     }
 

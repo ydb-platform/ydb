@@ -422,7 +422,7 @@ def main():
     else:
         overall_status = "success"
 
-    color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry), is_test_result_ignored=(bool.is_test_result_ignored))
+    color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry), is_test_result_ignored=(args.is_test_result_ignored))
 
     with open(args.comment_color_file, "w") as f:
         f.write(color)

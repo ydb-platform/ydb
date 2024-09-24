@@ -444,7 +444,8 @@ When running the account creation and group assignment commands, the {{ ydb-shor
 
 {% list tabs %}
 
-- Creating a row oriented table
+- Creating a row-oriented table
+
    ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
       yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'

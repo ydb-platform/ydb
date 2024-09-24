@@ -23,11 +23,11 @@ private:
         }
     };
 
-    TVector<TKey> VersionsToRemove;
+    std::vector<TKey> VersionsToRemove;
     std::optional<ui64> LastVersion;
 
 public:
-    TNormalizerResult(TVector<TKey>&& versions, std::optional<ui64>& lastVersion)
+    TNormalizerResult(std::vector<TKey>&& versions, std::optional<ui64>& lastVersion)
         : VersionsToRemove(versions)
         , LastVersion(lastVersion)
     {
@@ -61,6 +61,8 @@ public:
                         return std::nullopt;
                     }
                 }
+            } else {
+                return std::nullopt;
             }
         }
         {
@@ -74,11 +76,14 @@ public:
                         }
                     }
                 }
+            } else {
+                return std::nullopt;
             }
         }
 
-        TVector<TKey> unusedSchemaIds;
-        std::optional<ui64> maxVersion = 0;
+        std::vector<TKey> unusedSchemaIds;
+        std::optional<ui64> maxVersion;
+        std::vector<INormalizerChanges::TPtr> changes;
 
         {
             bool emptyUsed = usedSchemaVersions.size() == 0;
@@ -102,11 +107,17 @@ public:
                         return std::nullopt;
                     }
                 }
+            } else {
+                return std::nullopt;
             }
         }
 
-        std::vector<INormalizerChanges::TPtr> changes;
-        changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(unusedSchemaIds), maxVersion));
+        for (size_t start = 0; start < unusedSchemaIds.size(); start += 10000) {
+            std::vector<TKey> portion;
+            size_t end = std::min(unusedSchemaIds.size(), start + 10000);
+            portion.insert(portion.begin(), &unusedSchemaIds[start], &unusedSchemaIds[end]);
+            changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), maxVersion));
+        }
         return changes;
     }
 };

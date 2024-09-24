@@ -417,7 +417,7 @@ def main():
     summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
     write_summary(summary)
 
-    if summary.is_failed and not bool.is_test_result_ignored:
+    if summary.is_failed and not args.is_test_result_ignored:
         overall_status = "failure"
     else:
         overall_status = "success"

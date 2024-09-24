@@ -38,10 +38,25 @@
 | ReadCentric           | Bool      |          | Наличие метки "ReadCentric", устанавливаемой вручную при создании PDisk. Может использоваться для фильтрации дисков при создании новых групп.                    |
 | AvailableSize         | Uint64    |          | Число доступных для выделения байт на PDisk                                                                                                                      |
 | TotalSize             | Uint64    |          | Общее число байт на PDisk                                                                                                                                        |
-| Status                | String    |          | Режим работы PDisk, который влияет на его участие в выделении групп (ACTIVE, INACTIVE, BROKEN, FAULTY, TO_BE_REMOVED)                                            |
+| Status                | String    |          | Статус PDisk, выставляемый внешними по отношению к DS компонентами. На это состояние смотрит [SelfHeal](../../maintenance/manual/selfheal.md) при развозе VDisk-ов с недоступных PDisk-ов ([см. ниже](#status))                                                                                                                                                                                                        |
+| DecommitStatus        | String    |          | Состояние декомиссии PDisk ([cм. ниже](#decommitstatus)), выставляется вручную с помощью специальной команды [DSTool](../../reference/ydb-dstool/index.md): </br> `dstool pdisk set --decommit-status <статус> --pdisks-ids "[NodeId:PDiskId]"`.                                            |
 | StatusChangeTimestamp | Timestamp |          | Время, когда последний раз поменялся Status; если NULL, то Status не менялся с момента создания PDisk                                                            |
-| ExpectedSlotCount     | Uint32    |          | Максимальное число слотов (VSlot), которое может быть создано на этом PDisk                                                                                      |
+| ExpectedSlotCount     | Uint32    |          | Максимальное число слотов (VSlot), которое может быть создано на этом PDisk      вв                                                                                |
 | NumActiveSlots        | Uint32    |          | Количество работающих слотов в настоящий момент                                                                                                                  |
+
+#### Status
+
+* **ACTIVE** - PDisk работает штатно. Статус выставляется механизмом CMS - Sentinel.
+* **INACTIVE** - Sentinel выставляет такой статус, если в окне [заданного](../../maintenance/manual/selfheal.md) размера (по умолчанию, 1 час) были периоды недоступности PDisk-а для Sentinel. При принятии решений о SelfHeal и создании групп, такие PDisk-и рассматриваются как диски пониженной надежности, с высокой вероятностью недоступности в ближайшее время. На таком PDisk-е нельзя создавать новые VDisk-и.
+* **FAULTY** - этот статус выставляется Sentinel, если PDisk был недоступен для Sentinel дольше [заданного](../../maintenance/manual/selfheal.md) промежутка времени (по умолчанию, 1 час). Новые VDisk-и не создаются на этом PDisk-е, старые VDisk-и постепенно перемещаются с него.
+* **BROKEN** - диск утерян необратимо, VDisk-и автоматически перемещаются с PDisk-а при получении этого статуса.
+
+#### DecommitStatus
+
+* **DECOMMIT_NONE** - декомиссия не требуется.
+* **DECOMMIT_PENDING** - диск планируется к декомиссии, существующие VDisk-и не мигрируют с PDisk-а, но и не создаются новые.
+* **DECOMMIT_IMMINENT** - декомиссия стартовала, существующие VDisk-и мигрируют с диска.
+* **DECOMMIT_REJECTED** - диск работает как обычно, но в процессе декомиссии на него не перемещаются новые VDisk-и.
 
 ### ds_vslots
 
@@ -57,10 +72,17 @@
 | VDisk           | Uint32  |          | Относительный номер VSlot внутри домена отказа (fail domain)                            |
 | AllocatedSize   | Uint64  |          | Число байт, которые VSlot занимает на PDisk                                             |
 | AvailableSize   | Uint64  |          | Число байт, доступных для выделения данному VSlot                                       |
-| Status          | String  |          | Состояние запущенного VDisk в данном VSlot (INIT_PENDING, REPLICATING, READY, ERROR)    |
+| Status          | String  |          | Состояние запущенного VDisk в данном VSlot, обновляется примерно раз в 15 секунд ([см. ниже](#status-1))                                                                                                                     |
 | Kind            | String  |          | Предустановленная настройка режима работы VDisk (Default, Log, ...)                     |
 
 Стоит заметить, что кортеж (NodeId, PDiskId) формируют внешний ключ к таблице `ds_pdisks`, а (GroupId) -- к таблице `ds_groups`.
+
+#### Status
+
+* **INIT_PENDING** - VDisk находится в процессе инициализации и не обслуживает запросы от DS proxy.
+* **REPLICATING** - VDisk принимает запросы, но не все данные отреплицированы (возможно все, но есть [фантомы](../../concepts/glossary.md#фантомный-блоб)).
+* **READY** - VDisk полностью функционирует.
+* **ERROR** - VDisk не работает.
 
 ### ds_groups
 

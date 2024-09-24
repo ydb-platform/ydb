@@ -197,6 +197,7 @@ SRCS(
     remove_lock_change_records.cpp
     remove_locks.cpp
     remove_schema_snapshots.cpp
+    reshuffle_kmeans.cpp
     restore_unit.cpp
     sample_k.cpp
     scan_common.cpp

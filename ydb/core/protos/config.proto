@@ -669,7 +669,7 @@ message TGRpcConfig {
     repeated string ServicesEnabled = 22;
     repeated string ServicesDisabled = 23;
 
-    optional bool SkipSchemeCheck = 24 [default = false];
+    optional bool SkipSchemeCheck = 24 [default = false, deprecated = true];
 
     repeated string RatelimiterServicesEnabled = 25;
     repeated string RatelimiterServicesDisabled = 26;

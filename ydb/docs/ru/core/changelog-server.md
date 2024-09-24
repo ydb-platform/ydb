@@ -7,7 +7,7 @@
 **Функциональность:**
 
 * [Реализована](https://github.com/ydb-platform/ydb/pull/5418) [асинхронная репликация(./concepts/async-replication.md) между базами данных {{ ydb-short-name }}. 
-* [Реализована](https://ydb.tech/docs/ru/yql/reference/udf/list/knn) UDF функция для точного векторного поиска k-NN.
+* Реализована [Knn UDF]](https://ydb.tech/docs/ru/yql/reference/udf/list/knn) для точного поиска ближайших векторов.
 
 **Встроенный UI:**
 

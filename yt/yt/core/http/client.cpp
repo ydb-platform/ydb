@@ -300,6 +300,12 @@ private:
                 .ThrowOnError();
         }
 
+        if (Config_->IgnoreContinueResponses) {
+            while (response->GetStatusCode() == EStatusCode::Continue) {
+                response->Reset();
+            }
+        }
+
         // Waits for response headers internally.
         auto redirectUrl = response->TryGetRedirectUrl();
         if (redirectUrl && redirectCount < Config_->MaxRedirectCount) {

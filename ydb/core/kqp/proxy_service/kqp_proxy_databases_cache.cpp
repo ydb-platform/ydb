@@ -1,7 +1,6 @@
 #include "kqp_proxy_service_impl.h"
 
 #include <ydb/core/kqp/workload_service/actors/actors.h>
-#include <ydb/core/kqp/workload_service/common/events.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 

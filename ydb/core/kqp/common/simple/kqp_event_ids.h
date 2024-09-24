@@ -175,7 +175,6 @@ struct TKqpWorkloadServiceEvents {
         EvCleanupRequest,
         EvCleanupResponse,
         EvUpdatePoolInfo,
-        EvUpdateDatabaseInfo,
         EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
     };

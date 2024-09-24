@@ -22,12 +22,12 @@ using namespace NWorkload;
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
-        EvRanksCheckerResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvRanksCheckerResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
 
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
         TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)

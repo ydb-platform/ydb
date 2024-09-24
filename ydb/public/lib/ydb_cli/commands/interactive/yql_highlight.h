@@ -16,6 +16,8 @@ namespace NYdb {
         class YQLHighlight final {
         public:
             using Color = replxx::Replxx::Color;
+
+            // Colors are provided as for a UTF32 string
             using Colors = replxx::Replxx::colors_t;
 
             struct ColorSchema {

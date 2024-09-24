@@ -425,7 +425,7 @@ class TResourcePoolsCache {
         const i64 Rank;
 
         TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
-            : Membername(classifierSettings.Membername)
+            : Membername(classifierSettings.MemberName)
             , PoolId(classifierSettings.ResourcePool)
             , Rank(classifierSettings.Rank)
         {}

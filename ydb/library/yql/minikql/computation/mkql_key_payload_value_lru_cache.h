@@ -19,7 +19,7 @@ namespace NKikimr::NMiniKQL {
 //  Never requests system time, expects monotonically increased time points in methods argument
 class TUnboxedKeyValueLruCacheWithTtl {
     struct TEntry {
-	TEntry(NUdf::TUnboxedValue key, NUdf::TUnboxedValue value, std::chrono::time_point<std::chrono::steady_clock> expiration)
+        TEntry(NUdf::TUnboxedValue key, NUdf::TUnboxedValue value, std::chrono::time_point<std::chrono::steady_clock> expiration)
             : Key(std::move(key))
             , Value(std::move(value))
             , Expiration(std::move(expiration))
@@ -73,16 +73,23 @@ public:
         return std::nullopt;
     }
 
-    // Perform garbage collection.
+    // Perform garbage collection, single step, O(1) time.
     // Must be called periodically
-    void Tick(const std::chrono::time_point<std::chrono::steady_clock>& now) {
+    bool Tick(const std::chrono::time_point<std::chrono::steady_clock>& now) {
         if (UsageList.empty()) {
-            return;
+            return false;
         }
         if (now < UsageList.front().Expiration) {
-            return;
+            return false;
         }
         RemoveLeastRecentlyUsedEntry();
+        return true;
+    }
+
+    // Perform garbage collection, O(1) amortized, but O(n) one-time
+    void Prune(const std::chrono::time_point<std::chrono::steady_clock>& now) {
+        while (Tick(now)) {
+        }
     }
 
     size_t Size() const {

@@ -3316,6 +3316,7 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
     const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
     NHopping::TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
 
+    // TODO(YQ-3699): uncomment
     // if (keysDescription.NeedPickle()) {
     //     return Build<TCoMap>(ctx, pos)
     //         .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
@@ -5186,7 +5187,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return clean;
         }
 
-        if (auto hopping = RewriteAsHoppingWindow(node, ctx); hopping) {
+        if (auto hopping = RewriteAsHoppingWindow(node, ctx)) {
             YQL_CLOG(DEBUG, Core) << "RewriteAggregate";
             return hopping;
         }

@@ -504,6 +504,9 @@ static TString ReadFile(const TString& fileName) {
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
     Y_UNUSED(runConfig);
     GracefulShutdownSupported = true;
+    if (runConfig.AppConfig.HasDelayBeforeShutdownSeconds()) {
+        DelayBeforeShutdown = TDuration::Seconds(runConfig.AppConfig.GetDelayBeforeShutdownSeconds());
+    }
 }
 
 void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
@@ -1732,6 +1735,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
+        Sleep(DelayBeforeShutdown);
     }
 
     TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());

@@ -28,12 +28,16 @@ public:
             const TNodeSet& left,
             const TNodeSet& right,
             EJoinKind joinKind,
+            bool leftAny,
+            bool rightAny,
             bool isCommutative,
             const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions
         )
             : Left(left)
             , Right(right)
             , JoinKind(joinKind)
+            , LeftAny(leftAny)
+            , RightAny(rightAny)
             , IsCommutative(isCommutative)
             , JoinConditions(joinConditions)
             , IsReversed(false)
@@ -52,6 +56,7 @@ public:
         TNodeSet Left;
         TNodeSet Right;
         EJoinKind JoinKind;
+        bool LeftAny, RightAny;
         bool IsCommutative;
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
@@ -97,8 +102,11 @@ public:
         TVector<TString> relNameByNodeId(Nodes_.size());
         res.append("Nodes: ").append("\n");
         for (const auto& [name, idx]: NodeIdByRelationName_) {
-            res.append(Sprintf("%ld: %s\n", idx, name.c_str()));
             relNameByNodeId[idx] = name;
+        }
+
+        for (size_t idx = 0; idx < relNameByNodeId.size(); ++idx) {
+            res.append(Sprintf("%ld: %s\n", idx, relNameByNodeId[idx].c_str()));
         }
 
         res.append("Edges: ").append("\n");
@@ -387,7 +395,8 @@ public:
             [this](const THyperedge& edge) {
                 return 
                     edge.IsReversed || 
-                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual());
+                    !(IsJoinTransitiveClosureSupported(edge.JoinKind) && edge.AreCondVectorEqual()) ||
+                    edge.LeftAny || edge.RightAny;
             }
         );
         
@@ -463,7 +472,7 @@ private:
                         });
                     }
 
-                    auto e = THyperedge(lhs, rhs, groupJoinKind, isJoinCommutative, joinConditions);
+                    auto e = THyperedge(lhs, rhs, groupJoinKind, false, false, isJoinCommutative, joinConditions);
                     Graph_.AddEdge(std::move(e));
                 }
             }

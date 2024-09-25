@@ -10,8 +10,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, bool /*allowIndexImplLock*/,
-    TVector<ISubOperation::TPtr>& result)
+void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
 {
     auto outTx = TransactionTemplate(workingDirPath.PathString(),
         NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
@@ -21,6 +20,19 @@ void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TP
     cfg->SetName(tablePath.LeafName());
 
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
+}
+
+void DoDropLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
+{
+    auto outTx = TransactionTemplate(workingDirPath.PathString(),
+        NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
+    outTx.SetFailOnExist(true);
+    outTx.SetInternal(true);
+    auto cfg = outTx.MutableLockConfig();
+    cfg->SetName(tablePath.LeafName());
+    outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
+
+    result.push_back(DropLock(NextPartId(opId, result), outTx));
 }
 
 namespace NIncrRestore {
@@ -458,8 +470,8 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
 
     TVector<ISubOperation::TPtr> result;
 
-    DoCreateLock(opId, workingDirPath, srcTablePath, false, result);
-    DoCreateLock(opId, workingDirPath, dstTablePath, false, result);
+    DoCreateLock(opId, workingDirPath, srcTablePath, result);
+    DoCreateLock(opId, workingDirPath, dstTablePath, result);
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
@@ -469,6 +481,9 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
         PathIdFromPathId(dstTablePath.Base()->PathId, restoreOp.MutableDstPathId());
         result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));
     }
+
+    DoDropLock(opId, workingDirPath, dstTablePath, result);
+    DoDropLock(opId, workingDirPath, srcTablePath, result);
 
     return result;
 }

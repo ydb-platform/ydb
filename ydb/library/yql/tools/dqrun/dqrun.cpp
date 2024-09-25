@@ -500,7 +500,7 @@ int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
     TString fqCfgFile;
-    TString progFile;
+    TVector<TString> progFiles;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
     TString user = GetUsername();
@@ -567,8 +567,7 @@ int RunMain(int argc, const char* argv[])
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
         .Optional()
-        .RequiredArgument("FILE")
-        .StoreResult(&progFile);
+        .AppendTo(&progFiles);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
         .NoArgument()
@@ -863,7 +862,7 @@ int RunMain(int argc, const char* argv[])
 
     TGatewaysConfig gatewaysConfig;
     ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
-    PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
+    // PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
@@ -1136,6 +1135,8 @@ int RunMain(int argc, const char* argv[])
         )
     );
 
+    int result = 0;
+    for (const auto& progFile : progFiles) {
     TProgramPtr program;
     if (res.Has("replay") && res.Has("capture")) {
         YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
@@ -1186,13 +1187,14 @@ int RunMain(int argc, const char* argv[])
         runOptions.ValidateResultFormat = true;
     }
 
-    int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);
+    result &= RunProgram(std::move(program), runOptions, clusters, sqlFlags);
     if (res.Has("metrics")) {
         NProto::TMetricsRegistrySnapshot snapshot;
         snapshot.SetDontIncrement(true);
         metricsRegistry->TakeSnapshot(&snapshot);
         auto output = MakeHolder<TFileOutput>(metricsFile);
         SerializeToTextFormat(snapshot, *output.Get());
+    }
     }
 
     if (result == 0 && res.Has("capture")) {

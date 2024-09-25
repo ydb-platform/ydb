@@ -51,6 +51,9 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
         auto next = curr->Right;
         auto size = ((TMkqlArrowHeader*)curr)->Size;
         auto fullSize = size + sizeof(TMkqlArrowHeader);
+        if (((TMkqlArrowHeader*)curr)->Freed) {
+            OffloadFree(fullSize);
+        }
         ReleaseAlignedPage(curr, fullSize);
         curr = next;
     }
@@ -262,6 +265,7 @@ void* MKQLArrowAllocate(ui64 size) {
     }
 
     header->Size = size;
+    header->Freed = false;
     return header + 1;
 }
 
@@ -269,6 +273,7 @@ void* MKQLArrowAllocateUntracked(ui64 size) {
     auto header = (TMkqlArrowHeader*)GetAlignedPage(size + sizeof(TMkqlArrowHeader));
     header->Entry.Clear();
     header->Size = size;
+    header->Freed = false;
     return header + 1;
 }
 
@@ -287,6 +292,7 @@ bool MKQLArrowFree(const void* mem, ui64 size, bool forceUntrack) {
         if (forceUntrack) {
             Y_ENSURE(state);
         } else if (!state) {
+            header->Freed = true;
             return false;
         }
         state->OffloadFree(fullSize);

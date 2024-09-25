@@ -123,9 +123,9 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 CostLimitNs;
 
     // AsyncBlockDevice settings
-    ui32 BufferPoolBufferSizeBytes = 256 << 10;
-    ui32 BufferPoolBufferCount = 2048;
-    ui32 MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+    ui32 BufferPoolBufferSizeBytes;
+    ui32 BufferPoolBufferCount;
+    ui32 MaxQueuedCompletionActions;
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;

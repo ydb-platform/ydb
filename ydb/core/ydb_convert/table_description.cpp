@@ -1433,6 +1433,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
 template <typename TYdbProto>
 bool FillSequenceDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    Y_UNUSED(status);
+    Y_UNUSED(error);
     THashMap<TString, NKikimrSchemeOp::TSequenceDescription> sequences;
 
     for (const auto& sequenceDescription : in.GetSequences()) {
@@ -1487,6 +1489,36 @@ bool FillSequenceDescription(Ydb::Table::DescribeTableResult& out, const NKikimr
 
 bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     return FillSequenceDescriptionImpl(out, in, status, error);
+}
+
+bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    Y_UNUSED(status);
+    Y_UNUSED(error);
+    out.SetName(in.name());
+    if (in.has_min_value()) {
+        out.SetMinValue(in.min_value());
+    }
+    if (in.has_max_value()) {
+        out.SetMaxValue(in.max_value());
+    }
+    if (in.has_start_value()) {
+        out.SetStartValue(in.start_value());
+    }
+    if (in.has_cache()) {
+        out.SetCache(in.cache());
+    }
+    if (in.has_increment()) {
+        out.SetIncrement(in.increment());
+    }
+    if (in.has_cycle()) {
+        out.SetCycle(in.cycle());
+    }
+    if (in.has_set_val()) {
+        auto* setVal = out.MutableSetVal();
+        setVal->SetNextUsed(in.set_val().next_used());
+        setVal->SetNextValue(in.set_val().next_value());
+    }
+    return true;
 }
 
 } // namespace NKikimr

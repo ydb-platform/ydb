@@ -137,4 +137,9 @@ bool FillSequenceDescription(Ydb::Table::DescribeTableResult& out, const NKikimr
 
 bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TTableDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
+// in
+bool FillSequenceDescription(
+    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, 
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
 } // namespace NKikimr

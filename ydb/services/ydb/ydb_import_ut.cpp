@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void CheckTableDescription(TSession& session, const TString& path, auto&& checker) {
-        auto describeResult = session.DescribeTable(path).ExtractValueSync();
+        auto describeResult = session.DescribeTable(path, TDescribeTableSettings().WithSetVal(true)).ExtractValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         auto tableDescription = describeResult.GetTableDescription();
         Ydb::Table::CreateTableRequest descriptionProto;
@@ -186,6 +186,21 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             checker(tableDescription),
             descriptionProto.DebugString()
         );
+    }
+
+    auto CreateHasSerialChecker(i64 nextValue, bool nextUsed) {
+        return [=](const TTableDescription& tableDescription) {
+            for (const auto& column : tableDescription.GetTableColumns()) {
+                if (column.Name == "Key") {
+                    UNIT_ASSERT(column.SequenceDescription.has_value());
+                    UNIT_ASSERT(column.SequenceDescription->SetVal.has_value());
+                    UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextValue, nextValue);
+                    UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextUsed, nextUsed);
+                    return true;
+                }
+            }
+            return false;
+        };
     }
 
     Y_UNIT_TEST(Basic) {
@@ -339,6 +354,50 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         ));
         Restore(backupClient, pathToBackup, "/Root");
         CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minPartitions));
+    }
+
+    Y_UNIT_TEST(BasicRestoreTableWithSerial) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Serial,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            table
+        ));
+        ExecuteDataModificationQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (
+                    Value
+                )
+                VALUES (1), (2), (3), (4), (5), (6), (7);
+            )",
+            table
+        ));
+                
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
+        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
+
+        CheckTableDescription(session, table, CreateHasSerialChecker(8, false));
+        
+        NDump::TClient backupClient(driver);
+
+        // restore deleted table
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        Restore(backupClient, pathToBackup, "/Root");
+        CheckTableDescription(session, table, CreateHasSerialChecker(8, false));
     }
 
 }

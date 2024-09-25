@@ -459,6 +459,7 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     TVector<ISubOperation::TPtr> result;
 
     DoCreateLock(opId, workingDirPath, srcTablePath, false, result);
+    DoCreateLock(opId, workingDirPath, dstTablePath, false, result);
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);

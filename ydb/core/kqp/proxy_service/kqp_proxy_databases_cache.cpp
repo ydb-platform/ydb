@@ -217,7 +217,7 @@ void TDatabasesCache::UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev
         if (success) {
             actorContext.Send(std::move(delayedEvent.Event));
         } else {
-            delayedEvent.ErrorHandler(event->Get()->Status, event->Get()->Issues);
+            actorContext.Send(actorContext.SelfID, new TEvKqp::TEvDelayedRequestError(std::move(delayedEvent.Event), event->Get()->Status, event->Get()->Issues), 0, delayedEvent.RequestType);
         }
     }
     it->second.DelayedEvents.clear();

@@ -646,7 +646,7 @@ class TDatabasesCache {
 public:
     struct TDelayedEvent {
         THolder<IEventHandle> Event;
-        std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> ErrorHandler;
+        i32 RequestType;
     };
 
 private:
@@ -659,7 +659,7 @@ public:
     TDatabasesCache(TDuration idleTimeout = TDuration::Seconds(60));
 
     template <typename TEvent>
-    bool SetDatabaseIdOrDefer(TEvent& event, std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> errorHandler, TActorContext actorContext) {
+    bool SetDatabaseIdOrDefer(TEvent& event, i32 requestType, TActorContext actorContext) {
         if (!event->Get()->GetDatabaseId().empty()) {
             return true;
         }
@@ -678,9 +678,9 @@ public:
         }
 
         SubscribeOnDatabase(database, actorContext);
-        databaseInfo.DelayedEvents.push_back({
+        databaseInfo.DelayedEvents.push_back(TDelayedEvent{
             .Event = std::move(event),
-            .ErrorHandler = errorHandler
+            .RequestType = requestType
         });
 
         return false;

@@ -99,10 +99,12 @@ public:
         }
     }
 
+    void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
+        UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, status: " << ev->Get()->Status << ", " << GetErrorString() << ev->Get()->Issues.ToString());
+    }
+
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        auto success = Cache.SetDatabaseIdOrDefer(ev, [this](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-            UNIT_ASSERT_C(false, TStringBuilder() << "Unexpected fail, status: " << status << ", " << GetErrorString() << issues.ToString());
-        }, ActorContext());
+        auto success = Cache.SetDatabaseIdOrDefer(ev, 0, ActorContext());
 
         bool dedicated = Database == ExpectedDatabaseId;
         if (CacheUpdated || dedicated) {
@@ -123,6 +125,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
+        hFunc(TEvKqp::TEvDelayedRequestError, Handle);
         hFunc(TEvKqp::TEvQueryRequest, Handle);
         sFunc(TEvents::TEvWakeup, HandleWakeup);
     )

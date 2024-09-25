@@ -195,6 +195,18 @@ struct TEvKqp {
         bool Serverless = false;
         NYql::TIssues Issues;
     };
+
+    struct TEvDelayedRequestError : public TEventLocal<TEvDelayedRequestError, TKqpEvents::EvDelayedRequestError> {
+        TEvDelayedRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : RequestEvent(std::move(requestEvent))
+            , Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        THolder<IEventHandle> RequestEvent;
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+    };
 };
 
 } // namespace NKikimr::NKqp

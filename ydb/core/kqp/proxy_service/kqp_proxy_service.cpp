@@ -176,6 +176,15 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         };
     };
 
+    enum class EDelayedRequestType {
+        QueryRequest,
+        ScriptRequest,
+        ForgetScriptExecutionOperation,
+        GetScriptExecutionOperation,
+        ListScriptExecutionOperations,
+        CancelScriptExecutionOperation,
+    };
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_PROXY_ACTOR;
@@ -636,13 +645,7 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        const auto errorHandler = [this, sender = ev->Sender](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
-            auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
-            response->Record.GetRef().SetYdbStatus(status);
-            NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
-            Send(sender, std::move(response));
-        };
-        if (!DatabasesCache.SetDatabaseIdOrDefer(ev, errorHandler, ActorContext())) {
+        if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
         }
 
@@ -746,7 +749,7 @@ public:
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
-        if (CheckScriptExecutionsTablesReady<TEvKqp::TEvScriptResponse>(ev)) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ScriptRequest)) {
             auto req = ev->Get()->Record.MutableRequest();
             auto maxRunTime = GetQueryTimeout(req->GetType(), req->GetTimeoutMs(), TableServiceConfig, QueryServiceConfig);
             req->SetTimeoutMs(maxRunTime.MilliSeconds());
@@ -1371,6 +1374,7 @@ public:
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
+            hFunc(TEvKqp::TEvDelayedRequestError, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
@@ -1638,19 +1642,53 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    template<typename TResponse, typename TEvent>
-    bool CheckScriptExecutionsTablesReady(TEvent& ev) {
+    void HanleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+        switch (requestType) {
+            case EDelayedRequestType::QueryRequest: {
+                auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
+                response->Record.GetRef().SetYdbStatus(status);
+                NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+                Send(requestEvent->Sender, std::move(response), 0, requestEvent->Cookie);
+                break;
+            }
+
+            case EDelayedRequestType::ScriptRequest:
+                HanleDelayedScriptRequestError<TEvKqp::TEvScriptResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+
+            case EDelayedRequestType::ForgetScriptExecutionOperation:
+                HanleDelayedScriptRequestError<TEvForgetScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+
+            case EDelayedRequestType::GetScriptExecutionOperation:
+                HanleDelayedScriptRequestError<TEvGetScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+
+            case EDelayedRequestType::ListScriptExecutionOperations:
+                HanleDelayedScriptRequestError<TEvListScriptExecutionOperationsResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+
+            case EDelayedRequestType::CancelScriptExecutionOperation:
+                HanleDelayedScriptRequestError<TEvCancelScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+        }
+    }
+
+    template<typename TResponse>
+    void HanleDelayedScriptRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
+        Send(requestEvent->Sender, new TResponse(status, std::move(issues)), 0, requestEvent->Cookie);
+    }
+
+    template<typename TEvent>
+    bool CheckScriptExecutionsTablesReady(TEvent& ev, EDelayedRequestType requestType) {
         if (!AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
             NYql::TIssues issues;
             issues.AddIssue("ExecuteScript feature is not enabled");
-            Send(ev->Sender, new TResponse(Ydb::StatusIds::UNSUPPORTED, std::move(issues)));
+            HanleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::UNSUPPORTED, std::move(issues));
             return false;
         }
 
-        const auto errorHandler = [this, sender = ev->Sender](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
-            Send(sender, new TResponse(status, std::move(issues)));
-        };
-        if (!DatabasesCache.SetDatabaseIdOrDefer(ev, errorHandler, ActorContext())) {
+        if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(requestType), ActorContext())) {
             return false;
         }
 
@@ -1663,12 +1701,12 @@ private:
                 if (DelayedEventsQueue.size() < 10000) {
                     DelayedEventsQueue.push_back({
                         .Event = std::move(ev),
-                        .ErrorHandler = errorHandler
+                        .RequestType = static_cast<i32>(requestType)
                     });
                 } else {
                     NYql::TIssues issues;
                     issues.AddIssue("Too many queued requests");
-                    Send(ev->Sender, new TResponse(Ydb::StatusIds::OVERLOADED, std::move(issues)));
+                    HanleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::OVERLOADED, std::move(issues));
                 }
                 return false;
             case EScriptExecutionsCreationStatus::Finished:
@@ -1693,32 +1731,32 @@ private:
             if (ev->Get()->Success) {
                 Send(std::move(delayedEvent.Event));
             } else {
-                delayedEvent.ErrorHandler(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue});
+                HanleDelayedRequestError(static_cast<EDelayedRequestType>(delayedEvent.RequestType), std::move(delayedEvent.Event), Ydb::StatusIds::INTERNAL_ERROR, {rootIssue});
             }
             DelayedEventsQueue.pop_front();
         }
     }
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
-        if (CheckScriptExecutionsTablesReady<TEvForgetScriptExecutionOperationResponse>(ev)) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ForgetScriptExecutionOperation)) {
             Register(CreateForgetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
-        if (CheckScriptExecutionsTablesReady<TEvGetScriptExecutionOperationResponse>(ev)) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionOperation)) {
             Register(CreateGetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
-        if (CheckScriptExecutionsTablesReady<TEvListScriptExecutionOperationsResponse>(ev)) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ListScriptExecutionOperations)) {
             Register(CreateListScriptExecutionOperationsActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
-        if (CheckScriptExecutionsTablesReady<TEvCancelScriptExecutionOperationResponse>(ev)) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::CancelScriptExecutionOperation)) {
             Register(CreateCancelScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
@@ -1827,6 +1865,10 @@ private:
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
+    }
+
+    void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
+        HanleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {

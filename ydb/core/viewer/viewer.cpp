@@ -598,7 +598,7 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
                << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
                << "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
                << "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
-               << "Allow: OPTIONS, GET, POST, DELETE\r\n";
+               << "Allow: OPTIONS,GET,POST,DELETE\r\n";
     }
 }
 

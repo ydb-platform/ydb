@@ -238,7 +238,7 @@ void StreamQuerySelect(TQueryClient client) {
                 continue;
             }
 
-            // It is possible to duplicate lines in the output stream due to an external retryer.
+            // It is possible for lines to be duplicated in the output stream due to an external retrier
             if (streamPart.HasResultSet()) {
                 auto rs = streamPart.ExtractResultSet();
                 TResultSetParser parser(rs);
@@ -258,7 +258,7 @@ void StreamQuerySelect(TQueryClient client) {
 }
 ```
 
-The given code snippet prints the following text to the console at startup (there may be duplicate lines in the output stream due to an external RetryQuerySync):
+The given code snippet prints the following text to the console at startup (there may be duplicate lines in the output stream due to an external `RetryQuerySync`):
 
 ```text
 > StreamQuery:

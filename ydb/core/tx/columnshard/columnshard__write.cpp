@@ -557,8 +557,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     ui64 lockId = 0;
     if (behaviour == EOperationBehaviour::NoTxWrite) {
         lockId = BuildEphemeralTxId();
-    } else if (behaviour == EOperationBehaviour::InTxWrite) {
-        lockId = record.GetTxId();
     } else {
         lockId = record.GetLockTxId();
     }

@@ -471,14 +471,7 @@ namespace NKikimr::NDataStreams::V1 {
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!GetProtoRequest()->has_partitioning_settings()) {
-            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
-            {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error);
-            }
 
-            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
-        }
         switch (GetProtoRequest()->retention_case()) {
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionPeriodHours:
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(
@@ -520,7 +513,19 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        if (GetProtoRequest()->has_partitioning_settings()) {
+        if (!GetProtoRequest()->has_partitioning_settings() ||
+            (GetProtoRequest()->partitioning_settings().has_auto_partitioning_settings() &&
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) ||
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED))) {
+
+            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
+            {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error);
+            }
+
+            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+
+        } else {
             auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
             if (!r.empty()) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), r);

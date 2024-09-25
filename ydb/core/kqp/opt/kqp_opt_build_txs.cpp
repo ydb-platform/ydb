@@ -586,6 +586,8 @@ public:
 
 private:
     TVector<TExprList> CollectEffects(const TExprList& list, TExprContext& ctx) {
+        return {list};
+
         struct TEffectsInfo {
             enum class EType {
                 KQP_EFFECT,

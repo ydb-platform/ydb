@@ -37,7 +37,6 @@ enum class EOperationStatus : ui32 {
 
 enum class EOperationBehaviour : ui32 {
     Undefined = 1,
-    InTxWrite = 2,
     WriteWithLock = 3,
     CommitWriteLock = 4,
     AbortWriteLock = 5,

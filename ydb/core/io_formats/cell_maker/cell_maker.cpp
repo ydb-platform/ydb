@@ -106,7 +106,7 @@ namespace {
         Y_ABORT("TryParse with typeInfo is unimplemented");
     }
 
-    template <typename T>
+    template <>
     bool TryParse(TStringBuf value, NYql::NDecimal::TInt128& result, TString& err, const NScheme::TTypeInfo& typeInfo) {
         Y_UNUSED(err);
         

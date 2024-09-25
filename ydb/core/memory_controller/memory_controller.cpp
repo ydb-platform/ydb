@@ -217,6 +217,7 @@ private:
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
         Counters->GetCounter("Stats/ArrowAllocatedMemory")->Set(arrow::default_memory_pool()->bytes_allocated());
         Counters->GetCounter("Stats/ArrowYqlAllocatedMemory")->Set(NYql::NUdf::GetYqlMemoryPool()->bytes_allocated());
+        // TODO: Counters->GetCounter("Stats/ArrowUntrackFailedMemory")->Set(NArrow::GetMemoryPool()->untrack_failed_bytes());
 
         auto *memoryStatsUpdate = new NNodeWhiteboard::TEvWhiteboard::TEvMemoryStatsUpdate();
         auto& memoryStats = memoryStatsUpdate->Record;

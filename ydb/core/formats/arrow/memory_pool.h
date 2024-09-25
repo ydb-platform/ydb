@@ -44,16 +44,12 @@ class TMemoryPool : public arrow::MemoryPool {
     }
 
 public:
-    // Do auto-untrack within `Free()` - as the best efford in hope on proper TLSAllocState,
+    // Do auto-untrack within `Free()` - as the best effort in hope on proper TLSAllocState,
     // otherwise we'll have unused extra-tracked memory until AllocState destruction.
     // Manual untrack is complicated because one table may share buffers with other tables.
     void Track(const std::shared_ptr<arrow::Table>& table);
 
 private:
-    // HACK: remember which buffers are ours - to track only them.
-    TMutex Mutex_;
-    std::unordered_set<const void*> Buffers_;
-
     std::atomic<int64_t> BytesAllocated_{0};
     std::atomic<int64_t> MaxMemory_{0};
 };

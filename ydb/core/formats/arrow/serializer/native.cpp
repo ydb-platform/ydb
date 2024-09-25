@@ -20,8 +20,10 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
-    arrow::io::BufferReader readerStream(buffer);
+    ARROW_ASSIGN_OR_RAISE(auto buffer, arrow::AllocateBuffer(data.size(), arrow::default_memory_pool()));
+    memcpy(buffer->mutable_data(), data.data(), data.size());
+
+    arrow::io::BufferReader readerStream(std::move(buffer));
     auto reader = TStatusValidator::GetValid(arrow::ipc::RecordBatchStreamReader::Open(&readerStream, options));
 
     std::shared_ptr<arrow::RecordBatch> batch;
@@ -62,8 +64,10 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
-    arrow::io::BufferReader reader(buffer);
+    ARROW_ASSIGN_OR_RAISE(auto buffer, arrow::AllocateBuffer(data.size(), arrow::default_memory_pool()));
+    memcpy(buffer->mutable_data(), data.data(), data.size());
+
+    arrow::io::BufferReader reader(std::move(buffer));
     AFL_TRACE(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", schema->num_fields());
     auto batchResult = arrow::ipc::ReadRecordBatch(schema, &dictMemo, options, &reader);
     if (!batchResult.ok()) {

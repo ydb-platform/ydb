@@ -12,7 +12,7 @@ namespace NKikimr::NArrow::NSerialization {
 // Arrow internally keeps references to Buffer objects with the data
 // This helper class implements arrow::Buffer over TString that owns
 // the actual memory
-// Its use for no-compression mode, where RecordBatch dont own memory
+// Its use for no-compression mode, where RecordBatch don't own memory
 class TBufferOverString: public arrow::Buffer {
     TString Str;
 public:

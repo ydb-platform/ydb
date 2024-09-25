@@ -167,6 +167,7 @@ SRCS(
     key_conflicts.cpp
     key_conflicts.h
     key_validator.cpp
+    kmeans_helper.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp

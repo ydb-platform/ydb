@@ -154,12 +154,9 @@ public:
             } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 int precision = typeInProto.decimal_type().precision();
                 int scale = typeInProto.decimal_type().scale();
+                if (!NScheme::TDecimalType::Validate(precision, scale, errorMessage))
                 if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
-                    errorMessage = Sprintf("Unsupported Decimal(%d,%d) for column %s: expected Decimal(%d,%d)",
-                                           precision, scale,
-                                           name.c_str(),
-                                           NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-
+                    errorMessage = Sprintf("%s for column %s", errorMessage.c_str(), name.c_str());
                     return false;
                 }
             } else if (typeInProto.has_pg_type()) {

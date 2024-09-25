@@ -206,7 +206,9 @@ public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
     //! no Ack is provided.
-    virtual bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) = 0;
+    virtual bool Write(TWriteMessage&& message,
+                       NTable::TTransaction* tx = nullptr,
+                       const TDuration& blockTimeout = TDuration::Max()) = 0;
 
 
     //! Write single message. Deprecated method with only basic message options.
@@ -251,7 +253,8 @@ public:
 
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) = 0;
+    virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
+                       NTable::TTransaction* tx = nullptr) = 0;
 
     //! Write single message. Old method with only basic message options.
     virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(),
@@ -259,7 +262,8 @@ public:
 
     //! Write single message that is already coded by codec.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& params) = 0;
+    virtual void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& params,
+                              NTable::TTransaction* tx = nullptr) = 0;
 
     //! Write single message that is already compressed by codec. Old method with only basic message options.
     virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,

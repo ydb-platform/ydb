@@ -11,24 +11,25 @@
 #include "blobs_action/tier/storage.h"
 #endif
 
-#include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
+#include "blobs_action/transaction/tx_gc_insert_table.h"
+#include "blobs_reader/actor.h"
 #include "hooks/abstract/abstract.h"
+#include "resource_subscriber/counters.h"
+
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tx/tiering/external_data.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/services/metadata/service.h>
-#include <ydb/core/tx/tiering/manager.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
-#include "resource_subscriber/counters.h"
-#include "blobs_reader/actor.h"
-
-
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/min_max.h>
 #include <ydb/core/tx/columnshard/normalizer/portion/chunks.h>
+#include <ydb/core/tx/columnshard/normalizer/portion/min_max.h>
+#include <ydb/core/tx/columnshard/normalizer/tables/normalizer.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/tiering/external_data.h>
+#include <ydb/core/tx/tiering/manager.h>
+
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -186,6 +187,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TGranulesNormalizer>());
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TChunksNormalizer>(Info()));
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
+    // NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TRemovedTablesNormalizer>());
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

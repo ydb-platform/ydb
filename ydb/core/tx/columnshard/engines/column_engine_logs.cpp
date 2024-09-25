@@ -170,10 +170,14 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TSnapshot lastSnapshot(0, 0);
     const TIndexInfo* currentIndexInfo = nullptr;
+    std::set<ui64> brokenPortions;
+
     auto result = ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
         auto granule = GetGranuleOptional(portion.GetPathId());
 
+
         if (!granule) {
+            brokenPortions.insert(portion.GetPortionId());
             return;
         }
 
@@ -186,6 +190,17 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         TColumnRecord rec(loadContext, *currentIndexInfo);
         granule->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
     });
+
+    if (!brokenPortions.empty()) {
+        TStringBuilder portionsString;
+
+        for (ui64 id : brokenPortions) {
+            portionsString << id << ", ";
+        }
+
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("broken portions", portionsString);
+    }
+
     for (auto&& i : Tables) {
         i.second->OnAfterPortionsLoad();
     }

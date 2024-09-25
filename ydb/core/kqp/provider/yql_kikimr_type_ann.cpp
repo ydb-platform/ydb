@@ -263,14 +263,20 @@ namespace {
         return columnTypeError;
     }
 
-    TString GetColumnTypeName(const TTypeAnnotationNode* type) {
-        if (type->GetKind() == ETypeAnnotationKind::Data) {
-            return ToString(type->Cast<TDataExprType>()->GetName());
-        } else {
+    NKikimr::NScheme::TTypeInfo GetColumnTypeInfo(const TTypeAnnotationNode* type) {
+        if (type->GetKind() == ETypeAnnotationKind::Pg) {
             auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
-            return NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc);
+            return NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
+        } else if (type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
+            if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
+                ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                return NKikimr::NScheme::TDecimalType(precision, scale);
+            }
         }
+
+        auto typeId = NKikimr::NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).TypeId;
+        return NKikimr::NScheme::TTypeInfo(typeId);
     }
 
     bool ValidateColumnDataType(const TDataExprType* type, const TExprBase& typeNode, const TString& columnName,
@@ -902,18 +908,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = GetColumnTypeName(actualType);
 
-            if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
-                auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
-                columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
-            } else if (actualType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
-                if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(actualType)) {
-                    ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
-                    ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
-                    columnMeta.TypeInfo = NKikimr::NScheme::TDecimalType(precision, scale);
-                }
-            }
+            columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
+            columnMeta.Type = NKikimr::NScheme::TypeName(columnMeta.TypeInfo);
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
@@ -1345,7 +1342,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                     TKikimrColumnMetadata columnMeta;
                     // columnMeta.Name = columnName;
-                    columnMeta.Type = GetColumnTypeName(actualType);
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
@@ -1361,16 +1357,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         }
                     }
 
-                    if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
-                        auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
-                        columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
-                    } else if (actualType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
-                        if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(actualType)) {
-                            ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
-                            ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
-                            columnMeta.TypeInfo = NKikimr::NScheme::TDecimalType(precision, scale);
-                        }
-                    }
+                    columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
+                    columnMeta.Type = NKikimr::NScheme::TypeName(columnMeta.TypeInfo);
+
 
                     if (columnTuple.Size() > 3) {
                         auto families = columnTuple.Item(3);

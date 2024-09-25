@@ -193,7 +193,6 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             break;
         }
         case Ydb::Type::kDecimalType: {
-            // TODO: Decimal parameters
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             auto data = output.MutableData();
             data->SetScheme(NYql::NProto::TypeIds::Decimal);

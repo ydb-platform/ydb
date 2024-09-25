@@ -143,11 +143,18 @@ runs:
           echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
         fi
 
+    - name: Setup cache
+      shell: bash
+      run: |
+        export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        echo "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
+        echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
+
     - name: ya build and test
       id: build
       shell: bash
       run: |
-        set -x
+        set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
@@ -259,7 +266,7 @@ runs:
 
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
         fi
 
@@ -377,12 +384,12 @@ runs:
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
-          set +ex
+          set +e
           (./ya make $YA_MAKE_TARGET "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
-          set -ex
+          set -e
           RC=`cat exit_code`
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true

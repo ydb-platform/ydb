@@ -309,9 +309,10 @@ bool TReadSession::Close(TDuration timeout) {
         issues.AddIssue(TStringBuilder() << "Session was closed after waiting " << timeout);
         EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred);
     }
-
-    std::lock_guard guard(Lock);
-    Aborting = true; // Set abort flag for doing nothing on destructor.
+    {
+        std::lock_guard guard(Lock);
+        Aborting = true; // Set abort flag for doing nothing on destructor.
+    }
     return result;
 }
 

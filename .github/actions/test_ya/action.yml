@@ -144,7 +144,6 @@ runs:
         fi
 
     - name: Setup cache
-      id: init
       shell: bash
       run: |
         export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)

@@ -181,8 +181,9 @@ public:
         return true;
     }
 
-    void WaitAsyncQueries() const {
+    void FinalizeRunner() const {
         YdbSetup_.WaitAsyncQueries();
+        YdbSetup_.CloseSessions();
     }
 
     bool FetchScriptResults() {
@@ -460,8 +461,8 @@ void TKqpRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
     Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery);
 }
 
-void TKqpRunner::WaitAsyncQueries() const {
-    Impl_->WaitAsyncQueries();
+void TKqpRunner::FinalizeRunner() const {
+    Impl_->FinalizeRunner();
 }
 
 bool TKqpRunner::FetchScriptResults() {

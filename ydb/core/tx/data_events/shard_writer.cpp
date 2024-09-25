@@ -1,4 +1,5 @@
 #include "shard_writer.h"
+#include "common/error_codes.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -86,8 +87,9 @@ namespace NKikimr::NEvWrite {
 
         auto gPassAway = PassAwayGuard();
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            ExternalController->OnFail(Ydb::StatusIds::GENERIC_ERROR,
-                TStringBuilder() << "Cannot write data into shard " << ShardId << " in longTx " <<
+            auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(ydbStatus).DetachResult();
+            ExternalController->OnFail(statusInfo.GetYdbStatusCode(),
+                TStringBuilder() << "Cannot write data into shard(" << statusInfo.GetIssueGeneralText() << ") " << ShardId << " in longTx " <<
                 ExternalController->GetLongTxId().ToString());
             return;
         }

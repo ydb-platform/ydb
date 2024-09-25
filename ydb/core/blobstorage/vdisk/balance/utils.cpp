@@ -76,8 +76,8 @@ namespace NBalancing {
     }
 
     void TPartsCollectorMerger::Clear() {
+        Ingress = TIngress();
         Parts.clear();
-        Parts.resize(GType.TotalPartCount());
     }
 
 } // NBalancing

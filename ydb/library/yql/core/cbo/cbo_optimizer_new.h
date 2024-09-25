@@ -177,7 +177,7 @@ struct TOptimizerHints {
     std::shared_ptr<TJoinAlgoHints> JoinAlgoHints = std::make_shared<TJoinAlgoHints>();
     std::shared_ptr<TJoinOrderHints> JoinOrderHints = std::make_shared<TJoinOrderHints>();
 
-    TVector<TString> GetUnappliedHintStrings();
+    TVector<TString> GetUnappliedString();
 
     /* 
      *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):

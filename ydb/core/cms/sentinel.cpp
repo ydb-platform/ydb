@@ -895,8 +895,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
-            if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
-                info.SetForcedStatus(*Config.EvictVDisksStatus);
+            if (it->second.HasFaultyMarker()) {
+                info.SetForcedStatus(EPDiskStatus::FAULTY);
             } else {
                 info.ResetForcedStatus();
             }

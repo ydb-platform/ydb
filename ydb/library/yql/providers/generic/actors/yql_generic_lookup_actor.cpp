@@ -84,19 +84,20 @@ namespace NYql::NDq {
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(maxKeysInRequest)
-            , Request(
-                  0,
-                  KeyTypeHelper->GetValueHash(),
-                  KeyTypeHelper->GetValueEqual())
         {
         }
 
         ~TGenericLookupActor() {
-            auto guard = Guard(*Alloc);
-            KeyTypeHelper.reset();
-            TKeyTypeHelper empty;
-            Request = IDqAsyncLookupSource::TUnboxedValueMap(0, empty.GetValueHash(), empty.GetValueEqual());
+            Free();
         }
+
+    private:
+        void Free() {
+            auto guard = Guard(*Alloc);
+            Request.reset();
+            KeyTypeHelper.reset();
+        }
+    public:
 
         void Bootstrap() {
             auto dsi = LookupSource.data_source_instance();
@@ -116,9 +117,13 @@ namespace NYql::NDq {
         size_t GetMaxSupportedKeysInRequest() const override {
             return MaxKeysInRequest;
         }
-        void AsyncLookup(IDqAsyncLookupSource::TUnboxedValueMap&& request) override {
+        void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) override {
             auto guard = Guard(*Alloc);
-            CreateRequest(std::move(request));
+            CreateRequest(request.lock());
+        }
+        void PassAway() override {
+            Free();
+            TBase::PassAway();
         }
 
     private: // events
@@ -197,10 +202,12 @@ namespace NYql::NDq {
         }
 
     private:
-        void CreateRequest(IDqAsyncLookupSource::TUnboxedValueMap&& request) {
-            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
-            Y_ABORT_IF(InProgress);
-            Y_ABORT_IF(request.size() == 0 || request.size() > MaxKeysInRequest);
+        void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) {
+            if (!request) {
+                return;
+            }
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
+            Y_ABORT_IF(request->size() == 0 || request->size() > MaxKeysInRequest);
 
             Request = std::move(request);
             NConnector::NApi::TListSplitsRequest splitRequest;
@@ -272,20 +279,20 @@ namespace NYql::NDq {
                 for (size_t j = 0; j != columns.size(); ++j) {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
-                if (auto* v = Request.FindPtr(key)) {
+                if (auto* v = Request->FindPtr(key)) {
                     *v = std::move(output); // duplicates will be overwritten
                 }
             }
         }
 
         void FinalizeRequest() {
-            YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results for " << Request.size() << " keys";
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results for " << Request->size() << " keys";
             auto guard = Guard(*Alloc);
-            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(Request));
+            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Request);
+            Request.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
             ReadSplitsIterator = {};
-            InProgress = false;
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
@@ -351,7 +358,7 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
-            for (const auto& [k, _] : Request) {
+            for (const auto& [k, _] : *Request) {
                 NConnector::NApi::TPredicate_TConjunction conjunction;
                 for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
                     NConnector::NApi::TPredicate_TComparison eq;
@@ -381,8 +388,7 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
-        std::atomic_bool InProgress;
-        IDqAsyncLookupSource::TUnboxedValueMap Request;
+        std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };

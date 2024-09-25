@@ -65,7 +65,6 @@ public:
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
         , CacheTtl(cacheTtl)
         , ReadyQueue(OutputRowType)
-        , WaitingForLookupResults(false)
     {
         Y_ABORT_UNLESS(Alloc);
         for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
@@ -134,19 +133,20 @@ private: //events
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
-        auto lookupResult = std::move(ev->Get()->Result);
+        auto lookupResult = ev->Get()->Result.lock();
+        Y_ABORT_UNLESS(lookupResult == KeysForLookup);
         for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
             auto& [lookupKey, inputOther] = AwaitingQueue.front();
-            auto lookupPayload = lookupResult.FindPtr(lookupKey);
+            auto lookupPayload = lookupResult->FindPtr(lookupKey);
             if (lookupPayload == nullptr) {
                 continue;
             }
             AddReadyQueue(lookupKey, inputOther, lookupPayload);
         }
-        for (auto&& [k, v]: lookupResult) {
+        for (auto&& [k, v]: *lookupResult) {
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
-        WaitingForLookupResults = false;
+        KeysForLookup.reset();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -168,6 +168,7 @@ private: //IDqComputeActorAsyncInput
         Send(LookupSource.second->SelfId(), new NActors::TEvents::TEvPoison{});
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
+        KeysForLookup.reset();
         InputFlow.Clear();
         KeyTypeHelper.reset();
         decltype(AwaitingQueue){}.swap(AwaitingQueue);
@@ -188,15 +189,15 @@ private: //IDqComputeActorAsyncInput
 
         DrainReadyQueue(batch);
 
-        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && !WaitingForLookupResults) {
+        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && !KeysForLookup) {
              NUdf::TUnboxedValue* inputRowItems;
              NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
             const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
-            IDqAsyncLookupSource::TUnboxedValueMap keysForLookup{maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual()};
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
             LruCache->Prune(now);
             while (
-                (keysForLookup.size() < maxKeysInRequest) &&
+                (KeysForLookup->size() < maxKeysInRequest) &&
                 ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), keyItems);
@@ -212,12 +213,13 @@ private: //IDqComputeActorAsyncInput
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
                     AwaitingQueue.emplace_back(key, std::move(other));
-                    keysForLookup.emplace(std::move(key), NUdf::TUnboxedValue{});
+                    KeysForLookup->emplace(std::move(key), NUdf::TUnboxedValue{});
                 }
             }
-            if (!keysForLookup.empty()) {
-                LookupSource.first->AsyncLookup(std::move(keysForLookup));
-                WaitingForLookupResults = true;
+            if (!KeysForLookup->empty()) {
+                LookupSource.first->AsyncLookup(KeysForLookup);
+            } else {
+                KeysForLookup.reset();
             }
             DrainReadyQueue(batch);
         }
@@ -276,8 +278,8 @@ protected:
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
     TAwaitingQueue AwaitingQueue;
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
-    std::atomic<bool> WaitingForLookupResults;
     NYql::NDq::TDqAsyncStats IngressStats;
+    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
 };
 
 class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {

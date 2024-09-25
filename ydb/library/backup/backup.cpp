@@ -372,7 +372,7 @@ NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTable
     NTable::TTableClient client(driver);
 
     TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
-        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true);
+        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true).WithSetVal(true);
         auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);
@@ -489,6 +489,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
         << " backupPrefix: " << backupPrefix << " path: " << path);
 
     auto desc = DescribeTable(driver, JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path));
+
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
 
     TString schemaStr;
@@ -718,19 +719,26 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
 //                               Restore
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTableBuilder *builder) {
+TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTableBuilder *builder, std::optional<NTable::TSequenceDescription> sequenceDescription) {
     TStringStream ss;
     ss << "name: " << name << "; ";
     if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
         ss << " optional; ";
         parser.OpenOptional();
     }
+    if (sequenceDescription.has_value()) {
+        ss << "serial; ";
+    }
     ss << "kind: " << parser.GetKind() << "; ";
     switch (parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
             ss << " type_id: " << parser.GetPrimitive() << "; ";
             if (builder) {
-                builder->AddNullableColumn(name, parser.GetPrimitive());
+                if (sequenceDescription.has_value()) {
+                    builder->AddSerialColumn(name, parser.GetPrimitive(), std::move(*sequenceDescription));
+                } else {
+                    builder->AddNullableColumn(name, parser.GetPrimitive());
+                }
             }
             break;
         case TTypeParser::ETypeKind::Decimal:
@@ -751,8 +759,19 @@ TString ProcessColumnType(const TString& name, TTypeParser parser, NTable::TTabl
 NTable::TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
     NTable::TTableBuilder builder;
 
+    std::optional<NTable::TSequenceDescription> sequenceDescription;
     for (const auto &col : proto.Getcolumns()) {
-        LOG_DEBUG("AddNullableColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder));
+        if (col.from_sequence().name() == "_serial_column_" + col.name()) {
+            NTable::TSequenceDescription currentSequenceDescription;
+            if (col.from_sequence().has_set_val()) {
+                NTable::TSequenceDescription::TSetVal setVal;
+                setVal.NextUsed = col.from_sequence().set_val().next_used();
+                setVal.NextValue = col.from_sequence().set_val().next_value();
+                currentSequenceDescription.SetVal = std::move(setVal);
+            }
+            sequenceDescription = std::move(currentSequenceDescription);
+        }
+        LOG_DEBUG("AddColumn: " << ProcessColumnType(col.Getname(), TType(col.Gettype()), &builder, std::move(sequenceDescription)));
     }
 
     for (const auto &primary : proto.Getprimary_key()) {
@@ -781,7 +800,7 @@ TString SerializeColumnsToString(const TVector<TColumn>& columns, TVector<TStrin
         if (BinarySearch(primary.cbegin(), primary.cend(), col.Name)) {
             ss << "primary; ";
         }
-        ss << ProcessColumnType(col.Name, col.Type, nullptr) << Endl;
+        ss << ProcessColumnType(col.Name, col.Type, nullptr, std::nullopt) << Endl;
     }
     // Cerr << "Parse column to : " << ss.Str() << Endl;
     return ss.Str();

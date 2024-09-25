@@ -292,6 +292,18 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: KIKIMR_DISK_SPACE_EXHAUSTED
+  severity: S_ERROR
+}
+ids {
+  code: KIKIMR_SCHEMA_CHANGED
+  severity: S_ERROR
+}
+ids {
+  code: KIKIMR_INTERNAL_ERROR
+  severity: S_ERROR
+}
+ids {
   code: YQL_PRAGMA_WARNING_MSG
   severity: S_WARNING
 }

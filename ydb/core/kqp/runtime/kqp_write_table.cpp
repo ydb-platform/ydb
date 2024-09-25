@@ -914,7 +914,8 @@ public:
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
-            YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).GetMemory() <= maxDataSize); 
+            YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).GetMemory() <= maxDataSize);
+            Y_ABORT_UNLESS(BatchesInFlight == Batches.size());
         }
 
         const TBatchWithMetadata& GetBatch(size_t index) const {

@@ -510,6 +510,12 @@ protected:
             }
         }
 
+        if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
+            //YQL_ENSURE(Request.Transactions.empty());
+            static_cast<TDerived*>(this)->Finalize();
+            return;
+        }
+
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, Request.Transactions,

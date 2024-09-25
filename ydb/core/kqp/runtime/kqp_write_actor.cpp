@@ -250,6 +250,7 @@ public:
             TableId,
             operationType,
             std::move(columnsMetadata));
+        CA_LOG_D("Open write to " << TableId << " token=" << token);
         return token;
     }
 
@@ -257,6 +258,7 @@ public:
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
+        CA_LOG_D("Write to " << TableId << " token=" << token);
         try {
             ShardedWriteController->Write(token, data);
             UpdateShards();
@@ -270,6 +272,7 @@ public:
     void Close(TWriteToken token) {
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
+        CA_LOG_D("Close write to " << TableId << " token=" << token);
         try {
             ShardedWriteController->Close(token);
             UpdateShards();
@@ -662,6 +665,7 @@ public:
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
+            << " MODETEST= " << static_cast<int>(Mode)
             << ", Locks=" << [&]() {
                 TStringBuilder builder;
                 for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
@@ -671,6 +675,20 @@ public:
             }());
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            if (Mode != EMode::WRITE) {
+                CA_LOG_D("ERROR HERE TEST MODE" << static_cast<int>(Mode) << " Got completed result TxId=" << ev->Get()->Record.GetTxId()
+                    << ", TabletId=" << ev->Get()->Record.GetOrigin()
+                    << ", Cookie=" << ev->Cookie
+                    << ", Locks=" << [&]() {
+                        TStringBuilder builder;
+                        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                            builder << lock.ShortDebugString();
+                        }
+                        return builder;
+                    }());
+                Y_ABORT_UNLESS(false);
+            }
+            Y_ABORT_UNLESS(Mode == EMode::WRITE);
             if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                 YQL_ENSURE(TxManager->BrokenLocks());
                 NYql::TIssues issues;
@@ -698,6 +716,7 @@ public:
     }
 
     void SetPrepare(ui64 txId) {
+        CA_LOG_D("SetPrepare; txId=" << txId);
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::PREPARE;
         TxId = txId;
@@ -705,11 +724,13 @@ public:
     }
 
     void SetDistributedCommit() {
+        CA_LOG_D("SetDistributedCommit; txId=" << *TxId);
         YQL_ENSURE(Mode == EMode::PREPARE);
         Mode = EMode::COMMIT;
     }
 
     void SetImmediateCommit() {
+        CA_LOG_D("SetImmediateCommit");
         YQL_ENSURE(Mode == EMode::WRITE);
         Mode = EMode::IMMEDIATE_COMMIT;
 
@@ -747,6 +768,8 @@ public:
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
+
+        Y_ABORT_UNLESS(!metadata->IsFinal || isPrepare || isImmediateCommit);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
@@ -786,7 +809,7 @@ public:
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << metadata->OperationsCount << ", IsFinal=" << metadata->IsFinal
-            << ", Attempts=" << metadata->SendAttempts);
+            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
@@ -813,6 +836,7 @@ public:
             CA_LOG_D("Retry failed: not found ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
             return;
         }
+        Y_ABORT_UNLESS(false);
 
         CA_LOG_D("Retry ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
         SendDataToShard(shardId);
@@ -933,6 +957,7 @@ public:
     }
 
     void Bootstrap() {
+        Y_ABORT_UNLESS(false);
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
 
         WriteTableActor = new TKqpTableWriteActor(
@@ -1261,6 +1286,18 @@ public:
         ProcessRequestQueue();
         ProcessWrite();
         ProcessAckQueue();
+
+        if (State == EState::FLUSHING) {
+            //Y_ABORT_UNLESS(DataQueues.empty());
+            //Y_ABORT_UNLESS(AckQueue.empty());
+            bool isEmpty = true;
+            for (auto& [_, info] : WriteInfos) {
+                isEmpty = isEmpty && info.WriteTableActor->IsReady() && info.WriteTableActor->IsEmpty();
+            }
+            if (isEmpty) {
+                OnFlushed();
+            }
+        }
     }
 
     void ProcessRequestQueue() {
@@ -1300,20 +1337,21 @@ public:
 
     void ProcessAckQueue() {
         while (!AckQueue.empty()) {
-            const auto& item = AckQueue.front();
-            if (GetTotalFreeSpace() >= item.DataSize) {
+            //const auto& item = AckQueue.front();
+            //if (GetTotalFreeSpace() >= item.DataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
-            } else {
-                return;
-            }
+            //} else {
+            //    return;
+            //}
         }
     }
 
     void ProcessWrite() {
-        const bool needToFlush = GetTotalFreeSpace() <= 0
+        //Y_ABORT_UNLESS(GetTotalFreeSpace() <= 0);
+        const bool needToFlush = /*GetTotalFreeSpace() <= 0*/ false
             || State == EState::FLUSHING
             || State == EState::PREPARING
             || State == EState::COMMITTING
@@ -1326,39 +1364,38 @@ public:
                 }
             }
         }
-
-        if (State == EState::FLUSHING) {
-            bool isEmpty = true;
-            for (auto& [_, info] : WriteInfos) {
-                isEmpty &= info.WriteTableActor->IsEmpty();
-            }
-            if (isEmpty) {
-                OnFlushed();
-            }
-        }
     }
 
     void Flush() {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::FLUSHING;
+        for (auto& [_, queue] : DataQueues) {
+            Y_ABORT_UNLESS(queue.empty());
+        }
         Process();
     }
 
     void Prepare(const ui64 txId) {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
+        for (auto& [_, queue] : DataQueues) {
+            Y_ABORT_UNLESS(queue.empty());
+        }
         TxId = txId;
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetPrepare(txId);
         }
         Close();
         Process();
-        SendToExternalShards();
+        SendToExternalShards(false);
     }
 
     void ImmediateCommit() {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
+        for (auto& [_, queue] : DataQueues) {
+            Y_ABORT_UNLESS(queue.empty());
+        }
         CA_LOG_D("Start immediate commit");
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetImmediateCommit();
@@ -1370,6 +1407,9 @@ public:
     void DistributedCommit() {
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
+        for (auto& [_, queue] : DataQueues) {
+            Y_ABORT_UNLESS(queue.empty());
+        }
         CA_LOG_D("Start distributed commit TxId" << *TxId);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetDistributedCommit();
@@ -1379,21 +1419,23 @@ public:
 
     void Rollback() {
         State = EState::ROLLINGBACK;
-        SendToExternalShards();
+        SendToExternalShards(true);
     }
 
-    void SendToExternalShards() {
-        const bool isRollback = (State == EState::ROLLINGBACK);
-    
-        THashSet<ui64> ExternalShards = TxManager->GetShards();
-        for (auto& [_, info] : WriteInfos) {
-            for (const auto& shardId : info.WriteTableActor->GetShardsIds()) {
-                ExternalShards.erase(shardId);
+    void SendToExternalShards(bool isRollback) {
+        THashSet<ui64> shards = TxManager->GetShards();
+        if (!isRollback) {
+            for (auto& [_, info] : WriteInfos) {
+                for (const auto& shardId : info.WriteTableActor->GetShardsIds()) {
+                    shards.erase(shardId);
+                }
             }
         }
 
-        for (const ui64 shardId : ExternalShards) {
-            
+        for (const ui64 shardId : shards) {
+            if (TxManager->GetLocks(shardId).empty()) {
+                continue;
+            }
             auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isRollback
                 ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
@@ -1777,6 +1819,7 @@ public:
         Y_UNUSED(preparedInfo, dataSize);
         if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
             TxManager->StartExecute();
+            Y_ABORT_UNLESS(GetTotalMemory() == 0);
             DistributedCommit();
             return;
         }
@@ -1792,7 +1835,10 @@ public:
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
             ExecuterActorId = {};
+            Y_ABORT_UNLESS(GetTotalMemory() == 0);
+            return;
         }
+        //Process();
     }
 
     void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
@@ -1804,6 +1850,7 @@ public:
         State = EState::WRITING;
         Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         ExecuterActorId = {};
+        Y_ABORT_UNLESS(GetTotalMemory() == 0);
     }
 
     void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) override {

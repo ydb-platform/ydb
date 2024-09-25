@@ -83,5 +83,4 @@ jobs:
 #          name: windows-latest-binary
 #          path: binaries/windows/amd64/
       - name: Print result
-        run: echo "all done"
-             ls -R binaries
+        run: ls -R binaries

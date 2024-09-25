@@ -132,7 +132,7 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , IsTheLastPart(isTheLastPart)
     , Span(std::move(span))
 {
-    TCompletionAction::CanBeExecutedInCompletionThread2 = true;
+    TCompletionAction::CanBeExecutedInAdditionalCompletionThread = true;
     if (!IsTheLastPart) {
         CumulativeCompletion->AddPart();
     }

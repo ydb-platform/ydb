@@ -248,7 +248,6 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
     COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
     COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
-    COUNTER_INIT(PDiskGroup, Completion2ThreadCPU, true);
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {

@@ -31,7 +31,7 @@ struct TClassifierSettings : public TSettingsBase {
 
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
     TString ResourcePool = DEFAULT_POOL_ID;
-    TString Membername = "";
+    TString MemberName = "";
 };
 
 }  // namespace NKikimr::NResourcePool

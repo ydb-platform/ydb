@@ -514,14 +514,9 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (!GetProtoRequest()->has_partitioning_settings() ||
-
             (GetProtoRequest()->partitioning_settings().has_auto_partitioning_settings() &&
-
-            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() ==
-            Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) ||
-
-            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() ==
-            Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED))) {
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) ||
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() == Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED))) {
 
             if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
             {

@@ -473,9 +473,14 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (!GetProtoRequest()->has_partitioning_settings() ||
+
             (GetProtoRequest()->partitioning_settings().has_auto_partitioning_settings() &&
-            GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() ==
-            Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED)) {
+
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() ==
+            Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) ||
+
+            (GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() ==
+            Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED))) {
 
             if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
             {
@@ -496,7 +501,6 @@ namespace NKikimr::NDataStreams::V1 {
             auto& as = s.auto_partitioning_settings();
             switch(as.strategy()) {
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
-                    break;
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED:
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MAX_SENTINEL_DO_NOT_USE_:
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MIN_SENTINEL_DO_NOT_USE_:

@@ -1717,6 +1717,14 @@ public:
         return TtlReadAheadHi;
     }
 
+    ui64 GetIncrementalRestoreReadAheadLoOverride() const {
+        return IncrementalRestoreReadAheadLo;
+    }
+
+    ui64 GetIncrementalRestoreReadAheadHiOverride() const {
+        return IncrementalRestoreReadAheadHi;
+    }
+
     bool GetEnableLockedWrites() const {
         ui64 value = EnableLockedWrites;
         return value != 0;
@@ -2745,6 +2753,9 @@ private:
 
     TControlWrapper TtlReadAheadLo;
     TControlWrapper TtlReadAheadHi;
+
+    TControlWrapper IncrementalRestoreReadAheadLo;
+    TControlWrapper IncrementalRestoreReadAheadHi;
 
     TControlWrapper EnableLockedWrites;
     TControlWrapper MaxLockedWritesPerKey;

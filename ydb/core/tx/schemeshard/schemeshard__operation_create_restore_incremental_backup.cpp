@@ -4,12 +4,6 @@
 
 #include "schemeshard__operation_create_cdc_stream.h"
 
-namespace {
-
-const char* IB_RESTORE_CDC_STREAM_NAME = "__ib_restore_stream";
-
-}
-
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -27,89 +21,6 @@ void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TP
     cfg->SetName(tablePath.LeafName());
 
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
-}
-
-void DoCreatePqPart(
-    const TOperationId& opId,
-    const TPath& streamPath,
-    const TString& streamName,
-    const TIntrusivePtr<TTableInfo> table,
-    const TPathId dstPathId,
-    const NKikimrSchemeOp::TCreateCdcStream& op,
-    const TVector<TString>& boundaries,
-    const bool acceptExisted,
-    TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
-    outTx.SetFailOnExist(!acceptExisted);
-
-    auto& desc = *outTx.MutableCreatePersQueueGroup();
-    desc.SetName("streamImpl");
-    desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
-    desc.SetPartitionPerTablet(2);
-
-    auto& pqConfig = *desc.MutablePQTabletConfig();
-    pqConfig.SetTopicName(streamName);
-    pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
-    pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-
-    auto& partitionConfig = *pqConfig.MutablePartitionConfig();
-    partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
-    partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
-    partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
-    partitionConfig.SetMaxCountInPartition(Max<i32>());
-
-    for (const auto& tag : table->KeyColumnIds) {
-        Y_ABORT_UNLESS(table->Columns.contains(tag));
-        const auto& column = table->Columns.at(tag);
-
-        auto& keyComponent = *pqConfig.AddPartitionKeySchema();
-        keyComponent.SetName(column.Name);
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
-        keyComponent.SetTypeId(columnType.TypeId);
-        if (columnType.TypeInfo) {
-            *keyComponent.MutableTypeInfo() = *columnType.TypeInfo;
-        }
-    }
-
-    for (const auto& serialized : boundaries) {
-        TSerializedCellVec endKey(serialized);
-        Y_ABORT_UNLESS(endKey.GetCells().size() <= table->KeyColumnIds.size());
-
-        TString errStr;
-        auto& boundary = *desc.AddPartitionBoundaries();
-        for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
-            const auto& cell = endKey.GetCells()[ki];
-            const auto tag = table->KeyColumnIds.at(ki);
-            Y_ABORT_UNLESS(table->Columns.contains(tag));
-            const auto typeId = table->Columns.at(tag).PType;
-            const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
-            Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
-        }
-    }
-
-    auto& ir = *pqConfig.MutableOffloadConfig()->MutableIncrementalRestore();
-    auto* pathId = ir.MutableDstPathId();
-    PathIdFromPathId(dstPathId, pathId);
-
-    result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
-}
-
-void DoCreateAlterTable(
-    const TOperationId& opId,
-    const TPath& dstTablePath,
-    TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(dstTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
-    auto& desc = *outTx.MutableAlterTable();
-
-    PathIdFromPathId(dstTablePath.Base()->PathId, desc.MutablePathId());
-
-    auto& restoreConfig = *desc.MutableIncrementalBackupConfig();
-    restoreConfig.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
-    restoreConfig.SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK);
-
-    result.push_back(CreateAlterTable(NextPartId(opId, result), outTx));
 }
 
 namespace NIncrRestore {
@@ -439,7 +350,7 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
+        tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
         for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
@@ -475,19 +386,49 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
         << ": opId# " << opId
         << ", tx# " << tx.ShortDebugString());
 
-    const auto acceptExisted = !tx.GetFailOnExist();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     const auto& restoreOp = tx.GetRestoreIncrementalBackup();
     const auto& srcTableName = restoreOp.GetSrcTableName();
     const auto& dstTableName = restoreOp.GetDstTableName();
-    const auto dstTablePath = workingDirPath.Child(dstTableName);
 
-    const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, srcTableName, IB_RESTORE_CDC_STREAM_NAME, acceptExisted, true);
-    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
-        return {std::get<ISubOperation::TPtr>(checksResult)};
+    const auto srcTablePath = workingDirPath.Child(srcTableName);
+    {
+        const auto checks = srcTablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsCommonSensePath();
+
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
     }
 
-    const auto [srcTablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+    const auto dstTablePath = workingDirPath.Child(dstTableName);
+    {
+        const auto checks = srcTablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsCommonSensePath();
+
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(srcTablePath.Base()->PathId));
     auto srcTable = context.SS->Tables.at(srcTablePath.Base()->PathId);
@@ -525,7 +466,7 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
         auto& restoreOp = *outTx.MutableRestoreIncrementalBackup();
         PathIdFromPathId(srcTablePath.Base()->PathId, restoreOp.MutableSrcPathId());
         PathIdFromPathId(dstTablePath.Base()->PathId, restoreOp.MutableDstPathId());
-        result.push_back(MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(NextPartId(opId, result), outTx));
+        result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));
     }
 
     return result;

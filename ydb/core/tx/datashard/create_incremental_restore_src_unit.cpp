@@ -26,41 +26,7 @@ namespace NDataShard {
 using namespace NKikimrTxDataShard;
 using namespace NExportScan;
 
-///
-
-THolder<NTable::IScan> CreateDirectReplicationScan(
-    TDataShard& self,
-    const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
-    ui64 txId)
-{
-    TPathId tablePathId = PathIdFromPathId(incrBackup.GetSrcPathId());
-    TPathId dstTablePathId = PathIdFromPathId(incrBackup.GetDstPathId());
-    const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
-
-    return CreateIncrementalRestoreScan(
-            self.SelfId(),
-            [=, tabletID = self.TabletID(), generation = self.Generation(), tabletActor = self.SelfId()](const TActorContext& ctx, TActorId parent) {
-                return ctx.Register(CreateIncrRestoreChangeSender(
-                                        parent,
-                                        NDataShard::TDataShardId{
-                                            .TabletId = tabletID,
-                                            .Generation = generation,
-                                            .ActorId = tabletActor,
-                                        },
-                                        tablePathId,
-                                        dstTablePathId));
-            },
-            tablePathId,
-            self.GetUserTables().at(tableId),
-            dstTablePathId,
-            txId,
-            {});
-}
-
-///
-
 class TCreateIncrementalRestoreSrcUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvAddSender> AddSender;
 protected:
     bool IsRelevant(TActiveTransaction* tx) const {
         return tx->GetSchemeTx().HasCreateIncrementalRestoreSrc();
@@ -91,6 +57,35 @@ protected:
         Cancel(tx, ctx);
     }
 
+    THolder<NTable::IScan> CreateScan(
+        const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
+        ui64 txId)
+    {
+        TPathId tablePathId = PathIdFromPathId(incrBackup.GetSrcPathId());
+        TPathId dstTablePathId = PathIdFromPathId(incrBackup.GetDstPathId());
+        const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
+
+        return CreateIncrementalRestoreScan(
+                DataShard.SelfId(),
+                [=, tabletID = DataShard.TabletID(), generation = DataShard.Generation(), tabletActor = DataShard.SelfId()](const TActorContext& ctx, TActorId parent) {
+                    return ctx.Register(
+                        CreateIncrRestoreChangeSender(
+                            parent,
+                            NDataShard::TDataShardId{
+                                .TabletId = tabletID,
+                                .Generation = generation,
+                                .ActorId = tabletActor,
+                            },
+                            tablePathId,
+                            dstTablePathId));
+                },
+                tablePathId,
+                DataShard.GetUserTables().at(tableId),
+                dstTablePathId,
+                txId,
+                {});
+    }
+
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -106,22 +101,19 @@ protected:
 
         Y_ABORT_UNLESS(restoreSrc.HasDstPathId());
 
+        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId())};
+
         auto* appData = AppData(ctx);
+        const auto& taskName = appData->DataShardConfig.GetRestoreTaskName();
+        const auto taskPrio = appData->DataShardConfig.GetRestoreTaskPriority();
 
-        THolder<NTable::IScan> scan{CreateDirectReplicationScan(DataShard, restoreSrc, op->GetTxId())};
-
-        // FIXME:
-
-        const auto& taskName = appData->DataShardConfig.GetBackupTaskName();
-        const auto taskPrio = appData->DataShardConfig.GetBackupTaskPriority();
-
-        ui64 readAheadLo = appData->DataShardConfig.GetBackupReadAheadLo();
-        if (ui64 readAheadLoOverride = DataShard.GetBackupReadAheadLoOverride(); readAheadLoOverride > 0) {
+        ui64 readAheadLo = appData->DataShardConfig.GetIncrementalRestoreReadAheadLo();
+        if (ui64 readAheadLoOverride = DataShard.GetIncrementalRestoreReadAheadLoOverride(); readAheadLoOverride > 0) {
             readAheadLo = readAheadLoOverride;
         }
 
-        ui64 readAheadHi = appData->DataShardConfig.GetBackupReadAheadHi();
-        if (ui64 readAheadHiOverride = DataShard.GetBackupReadAheadHiOverride(); readAheadHiOverride > 0) {
+        ui64 readAheadHi = appData->DataShardConfig.GetIncrementalRestoreReadAheadHi();
+        if (ui64 readAheadHiOverride = DataShard.GetIncrementalRestoreReadAheadHiOverride(); readAheadHiOverride > 0) {
             readAheadHi = readAheadHiOverride;
         }
 

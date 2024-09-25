@@ -622,7 +622,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
-        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -810,6 +809,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return false;
         }
         return true;

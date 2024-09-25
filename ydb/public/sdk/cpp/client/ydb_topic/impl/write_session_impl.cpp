@@ -562,8 +562,12 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 
 void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
 {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefix() << "OnAck: seqno=" << seqNo << ", txId=?");
         return;
     }
 
@@ -572,8 +576,13 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
 
     ++txInfo->AckCount;
 
+    LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+             LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << txId.second<< ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+
     if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
         txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+
+        Txs.erase(txId);
     }
 }
 
@@ -604,6 +613,9 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
             TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
             ++txInfo->WriteCount;
             WrittenInTx[seqNo] = txId;
+
+            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                     LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId.second << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
         }
 
         CurrentBatch.Add(
@@ -1073,11 +1085,11 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
 
             for (const auto& ack : batchWriteResponse.acks()) {
                 // TODO: Fill writer statistics
-                ui64 sequenceNumber = ack.seq_no();
+                ui64 msgId = GetIdImpl(ack.seq_no());
 
                 Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
 
-                TrySignalAllAcksReceived(sequenceNumber);
+                TrySignalAllAcksReceived(msgId);
 
                 TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
                 if (ack.has_written_in_tx()) {
@@ -1094,7 +1106,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 
                 acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
-                    GetIdImpl(sequenceNumber),
+                    msgId,
                     msgWriteStatus,
                     TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
                         offset,
@@ -1103,7 +1115,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                     writeStat,
                 });
 
-                if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
+                if (CleanupOnAcknowledged(msgId)) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }

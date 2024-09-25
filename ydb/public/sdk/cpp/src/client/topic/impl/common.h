@@ -383,6 +383,7 @@ protected:
         while (!HasEventsImpl()) {
             std::unique_lock<std::mutex> lk(Mutex, std::adopt_lock);
             CondVar.wait(lk);
+            lk.release();
         }
     }
 

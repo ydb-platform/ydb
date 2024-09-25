@@ -163,9 +163,6 @@ SELECT "Hello, world!"u;
 
 Основная цель существования систем управления базами данных - сохранение данных для последующего извлечения. Как система, базирующаяся на SQL, основной абстракцией {{ ydb-short-name }} для хранения данных является таблица. {{ ydb-short-name }} поддерживает два типа таблиц: [строковые](./concepts/datamodel/table.md#row-oriented-tables) и [колоночные](./concepts/datamodel/table.md#column-oriented-tables), далее в данной статье будет использоваться строковая таблица.
 
-* [Строковые таблицы](./concepts/datamodel/table.md#row-oriented-tables) предназначенные для OLTP-нагрузок;
-* [Колоночные таблицы](./concepts/datamodel/table.md#column-oriented-tables) созданные для OLAP-нагрузок.
-
 Чтобы создать первую таблицу, выполните следующий запрос:
 
 ```yql

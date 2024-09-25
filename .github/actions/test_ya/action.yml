@@ -191,7 +191,7 @@ runs:
           -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
-          --test-threads "40" --link-threads "${{ inputs.link_threads }}"
+          --test-threads "28" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
         )
 

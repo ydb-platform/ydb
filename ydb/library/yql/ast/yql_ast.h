@@ -190,7 +190,7 @@ struct TAstNode {
     inline ~TAstNode() {}
 
     void Destroy() {
-        Position.File.clear();
+        std::string{}.swap(Position.File);
     }
 
 private:

@@ -187,7 +187,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TGranulesNormalizer>());
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TChunksNormalizer>(Info()));
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
-    // NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TRemovedTablesNormalizer>());
+    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TRemovedTablesNormalizer>());
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

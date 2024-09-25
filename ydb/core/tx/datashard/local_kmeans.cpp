@@ -61,8 +61,8 @@ protected:
     TLead Lead;
 
     // Sample
-    ui64 ReadRows = 0;
-    ui64 ReadBytes = 0;
+    TStats ReadStats;
+    // TODO(mbkkt) Sent or Upload stats?
 
     ui64 MaxProbability = std::numeric_limits<ui64>::max();
     TReallyFastRng32 Rng;
@@ -127,23 +127,9 @@ public:
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
-        {
-            auto tags = GetAllTags(table);
-            KMeansScan = tags.at(embedding);
-            UploadScan.reserve(1 + data.size());
-            if (auto it = std::find(data.begin(), data.end(), embedding); it != data.end()) {
-                EmbeddingPos = it - data.begin();
-                DataPos = 0;
-            } else {
-                UploadScan.push_back(KMeansScan);
-            }
-            for (const auto& column : data) {
-                UploadScan.push_back(tags.at(column));
-            }
-        }
+        UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, KMeansScan);
         // upload types
-        Ydb::Type type;
-        if (State <= EState::KMEANS) {
+        if (Ydb::Type type; State <= EState::KMEANS) {
             TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
             type.set_type_id(Ydb::Type::UINT32);
             (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn, type};
@@ -151,40 +137,7 @@ public:
             type.set_type_id(Ydb::Type::STRING);
             (*TargetTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn, type};
         }
-        {
-            auto types = GetAllTypes(table);
-
-            NextTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            NextTypes->reserve(1 + 1 + std::min(table.KeyColumnTypes.size() + data.size(), types.size()));
-
-            type.set_type_id(Ydb::Type::UINT32);
-            NextTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, type);
-
-            auto addType = [&](const auto& column) {
-                auto it = types.find(column);
-                Y_ABORT_UNLESS(it != types.end());
-                ProtoYdbTypeFromTypeInfo(&type, it->second);
-                NextTypes->emplace_back(it->first, type);
-                types.erase(it);
-            };
-            for (const auto& column : table.KeyColumnIds) {
-                addType(table.Columns.at(column).Name);
-            }
-            switch (UploadState) {
-                case EState::UPLOAD_MAIN_TO_TMP:
-                case EState::UPLOAD_TMP_TO_TMP:
-                    addType(embedding);
-                    [[fallthrough]];
-                case EState::UPLOAD_MAIN_TO_POSTING:
-                case EState::UPLOAD_TMP_TO_POSTING: {
-                    for (const auto& column : data) {
-                        addType(column);
-                    }
-                } break;
-                default:
-                    Y_UNREACHABLE();
-            }
-        }
+        NextTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
@@ -494,22 +447,11 @@ private:
         Clusters.erase(w, Clusters.end());
     }
 
-    ui32 FeedEmbedding(const TRow& row, NTable::TPos embeddingPos) {
-        Y_ASSERT(embeddingPos < row.Size());
-        const auto embedding = row.Get(embeddingPos).AsRef();
-        ++ReadRows;
-        ReadBytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
-        if (!this->IsExpectedSize(embedding)) {
-            return std::numeric_limits<ui32>::max();
-        }
-        return this->FindClosest(Clusters, embedding.data());
-    }
-
     EScan FeedSample(const TRow& row) noexcept {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
-        ++ReadRows;
-        ReadBytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
+        ReadStats.Rows += 1;
+        ReadStats.Bytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
         if (!this->IsExpectedSize(embedding)) {
             return EScan::Feed;
         }
@@ -535,60 +477,44 @@ private:
 
     EScan FeedKMeans(const TRow& row) noexcept {
         Y_ASSERT(row.Size() == 1);
-        const ui32 pos = FeedEmbedding(row, 0);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, 0, ReadStats);
         AggregateToCluster(pos, row.Get(0).Data());
         return EScan::Feed;
     }
 
     EScan FeedUploadMain2Tmp(TArrayRef<const TCell> key, const TRow& row) noexcept {
-        const ui32 pos = FeedEmbedding(row, EmbeddingPos);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        std::array<TCell, 1> cells;
-        cells[0] = TCell::Make(Child + pos);
-        auto pk = TSerializedCellVec::Serialize(cells);
-        TSerializedCellVec::UnsafeAppendCells(key, pk);
-        ReadBuf.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+        AddRowMain2Tmp(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
     EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept {
-        const ui32 pos = FeedEmbedding(row, EmbeddingPos);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        std::array<TCell, 1> cells;
-        cells[0] = TCell::Make(Child + pos);
-        auto pk = TSerializedCellVec::Serialize(cells);
-        TSerializedCellVec::UnsafeAppendCells(key, pk);
-        ReadBuf.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(DataPos)));
+        AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 
     EScan FeedUploadTmp2Tmp(TArrayRef<const TCell> key, const TRow& row) noexcept {
-        const ui32 pos = FeedEmbedding(row, EmbeddingPos);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        std::array<TCell, 1> cells;
-        cells[0] = TCell::Make(Child + pos);
-        auto pk = TSerializedCellVec::Serialize(cells);
-        TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-        ReadBuf.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+        AddRowTmp2Tmp(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
     EScan FeedUploadTmp2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept {
-        const ui32 pos = FeedEmbedding(row, EmbeddingPos);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        std::array<TCell, 1> cells;
-        cells[0] = TCell::Make(Child + pos);
-        auto pk = TSerializedCellVec::Serialize(cells);
-        TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-        ReadBuf.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(DataPos)));
+        AddRowTmp2Posting(ReadBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 };
@@ -701,18 +627,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         return;
     }
 
-    if (!record.HasEmbeddingColumn()) {
-        badRequest(TStringBuilder() << "Should be specified embedding column");
-        return;
-    }
-
-    const auto& settings = record.GetSettings();
-    if (settings.vector_dimension() < 1) {
-        badRequest(TStringBuilder() << "Dimension of vector should be at least one");
-        return;
-    }
     TAutoPtr<NTable::IScan> scan;
-
     auto createScan = [&]<typename T> {
         scan = new TLocalKMeansScan<T>{
             userTable,
@@ -722,56 +637,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             std::move(response),
         };
     };
-
-    auto handleType = [&]<template <typename...> typename T>() {
-        switch (settings.vector_type()) {
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
-                return createScan.operator()<T<float>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
-                return createScan.operator()<T<ui8>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
-                return createScan.operator()<T<i8>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-                return badRequest("TODO(mbkkt) bit vector type is not supported");
-            default:
-                return badRequest("Wrong vector type");
-        }
-    };
-
-    // TODO(mbkkt) unify distance and similarity to single field in proto
-    if (settings.has_similarity() && settings.has_distance()) {
-        badRequest("Shouldn't be specified similarity and distance at the same time");
-    } else if (settings.has_similarity()) {
-        switch (settings.similarity()) {
-            case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
-                handleType.template operator()<TCosineSimilarity>();
-                break;
-            case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                handleType.template operator()<TMaxInnerProductSimilarity>();
-                break;
-            default:
-                badRequest("Wrong similarity");
-                break;
-        }
-    } else if (settings.has_distance()) {
-        switch (settings.distance()) {
-            case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-                // We don't need to have separate implementation for distance, because clusters will be same as for similarity
-                handleType.template operator()<TCosineSimilarity>();
-                break;
-            case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                handleType.template operator()<TL1Distance>();
-                break;
-            case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                handleType.template operator()<TL2Distance>();
-                break;
-            default:
-                badRequest("Wrong distance");
-                break;
-        }
-    } else {
-        badRequest("Should be specified similarity or distance");
-    }
+    MakeScan(record, createScan, badRequest);
     if (!scan) {
         return;
     }

@@ -1,7 +1,12 @@
-#include "range_ops.h"
+#pragma once
 
+#include <ydb/core/tx/datashard/buffer_data.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
+#include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tablet_flat/flat_scan_lead.h>
+
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
@@ -164,7 +169,7 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
 
 template <typename TMetric>
 struct TCalculation: TMetric {
-    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) {
+    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) const {
         auto min = this->Init();
         ui32 closest = std::numeric_limits<ui32>::max();
         for (size_t i = 0; const auto& cluster : clusters) {
@@ -178,5 +183,179 @@ struct TCalculation: TMetric {
         return closest;
     }
 };
+
+struct TStats {
+    ui64 Rows = 0;
+    ui64 Bytes = 0;
+};
+
+template <typename TMetric>
+ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters, const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats) {
+    Y_ASSERT(embeddingPos < row.Size());
+    const auto embedding = row.Get(embeddingPos).AsRef();
+    stats.Rows += 1;
+    stats.Bytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
+    if (!calculation.IsExpectedSize(embedding)) {
+        return std::numeric_limits<ui32>::max();
+    }
+    return calculation.FindClosest(clusters, embedding.data());
+}
+
+inline void AddRowMain2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key, pk);
+    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+}
+
+inline void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row, ui32 dataPos) {
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key, pk);
+    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+}
+
+inline void AddRowTmp2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
+    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+}
+
+inline void AddRowTmp2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row, ui32 dataPos) {
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
+    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+}
+
+inline TTags MakeUploadTags(const TUserTable& table,
+                            const TProtoStringType& embedding,
+                            const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+                            ui32& embeddingPos,
+                            ui32& dataPos,
+                            NTable::TTag& embeddingTag) {
+    auto tags = GetAllTags(table);
+    TTags uploadTags;
+    uploadTags.reserve(1 + data.size());
+    embeddingTag = tags.at(embedding);
+    if (auto it = std::find(data.begin(), data.end(), embedding); it != data.end()) {
+        embeddingPos = it - data.begin();
+        dataPos = 0;
+    } else {
+        uploadTags.push_back(embeddingTag);
+    }
+    for (const auto& column : data) {
+        uploadTags.push_back(tags.at(column));
+    }
+    return uploadTags;
+}
+
+inline std::shared_ptr<NTxProxy::TUploadTypes> MakeUploadTypes(const TUserTable& table,
+                                                               NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
+                                                               const TProtoStringType& embedding,
+                                                               const google::protobuf::RepeatedPtrField<TProtoStringType>& data) {
+    auto types = GetAllTypes(table);
+
+    auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+    uploadTypes->reserve(1 + 1 + std::min(table.KeyColumnTypes.size() + data.size(), types.size()));
+
+    Ydb::Type type;
+    type.set_type_id(Ydb::Type::UINT32);
+    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, type);
+
+    auto addType = [&](const auto& column) {
+        auto it = types.find(column);
+        Y_ABORT_UNLESS(it != types.end());
+        ProtoYdbTypeFromTypeInfo(&type, it->second);
+        uploadTypes->emplace_back(it->first, type);
+        types.erase(it);
+    };
+    for (const auto& column : table.KeyColumnIds) {
+        addType(table.Columns.at(column).Name);
+    }
+    switch (uploadState) {
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_TMP:
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_TMP_TO_TMP:
+            addType(embedding);
+            [[fallthrough]];
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING:
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_TMP_TO_POSTING: {
+            for (const auto& column : data) {
+                addType(column);
+            }
+        } break;
+        default:
+            Y_UNREACHABLE();
+    }
+    return uploadTypes;
+}
+
+inline void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
+    if (!record.HasEmbeddingColumn()) {
+        badRequest(TStringBuilder() << "Should be specified embedding column");
+        return;
+    }
+
+    const auto& settings = record.GetSettings();
+    if (settings.vector_dimension() < 1) {
+        badRequest(TStringBuilder() << "Dimension of vector should be at least one");
+        return;
+    }
+
+    auto handleType = [&]<template <typename...> typename T>() {
+        switch (settings.vector_type()) {
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+                return createScan.template operator()<T<float>>();
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+                return createScan.template operator()<T<ui8>>();
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+                return createScan.template operator()<T<i8>>();
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+                return badRequest("TODO(mbkkt) bit vector type is not supported");
+            default:
+                return badRequest("Wrong vector type");
+        }
+    };
+
+    // TODO(mbkkt) unify distance and similarity to single field in proto
+    if (settings.has_similarity() && settings.has_distance()) {
+        badRequest("Shouldn't be specified similarity and distance at the same time");
+    } else if (settings.has_similarity()) {
+        switch (settings.similarity()) {
+            case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+                handleType.template operator()<TCosineSimilarity>();
+                break;
+            case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+                handleType.template operator()<TMaxInnerProductSimilarity>();
+                break;
+            default:
+                badRequest("Wrong similarity");
+                break;
+        }
+    } else if (settings.has_distance()) {
+        switch (settings.distance()) {
+            case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+                // We don't need to have separate implementation for distance, because clusters will be same as for similarity
+                handleType.template operator()<TCosineSimilarity>();
+                break;
+            case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+                handleType.template operator()<TL1Distance>();
+                break;
+            case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+                handleType.template operator()<TL2Distance>();
+                break;
+            default:
+                badRequest("Wrong distance");
+                break;
+        }
+    } else {
+        badRequest("Should be specified similarity or distance");
+    }
+}
 
 }

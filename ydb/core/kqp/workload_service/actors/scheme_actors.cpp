@@ -489,6 +489,7 @@ public:
                 }
                 if (result.DomainInfo) {
                     Serverless = result.DomainInfo->IsServerless();
+                    PathId = result.DomainInfo->DomainKey;
                 }
                 Reply(Ydb::StatusIds::SUCCESS);
                 return;
@@ -537,7 +538,7 @@ private:
         }
 
         Issues.AddIssues(std::move(issues));
-        Send(ReplyActorId, new TEvPrivate::TEvFetchDatabaseResponse(status, Database, Serverless, std::move(Issues)));
+        Send(ReplyActorId, new TEvFetchDatabaseResponse(status, Database, Serverless, PathId, std::move(Issues)));
         PassAway();
     }
 
@@ -560,6 +561,7 @@ private:
     const NACLib::EAccessRights CheckAccess;
 
     bool Serverless = false;
+    TPathId PathId;
 };
 
 }  // anonymous namespace

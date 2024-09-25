@@ -4,7 +4,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
-#include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 
@@ -19,6 +18,31 @@ using namespace NActors;
 using namespace NResourcePool;
 using namespace NWorkload;
 
+
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvRanksCheckerResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
+        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
+            : Status(status)
+            , MaxRank(maxRank)
+            , NumberClassifiers(numberClassifiers)
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status;
+        const i64 MaxRank;
+        const ui64 NumberClassifiers;
+        const NYql::TIssues Issues;
+    };
+};
 
 class TRanksCheckerActor : public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
@@ -177,7 +201,7 @@ public:
         TryFinish();
     }
 
-    void Handle(TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             FailAndPassAway("Database check failed", ev->Get()->Status, ev->Get()->Issues);
             return;
@@ -223,7 +247,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
-        hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)

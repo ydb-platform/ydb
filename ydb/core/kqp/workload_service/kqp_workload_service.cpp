@@ -207,7 +207,7 @@ public:
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
 
-        hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
@@ -223,7 +223,7 @@ public:
     )
 
 private:
-    void Handle(TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
         GetOrCreateDatabaseState(ev->Get()->Database)->UpdateDatabaseInfo(ev);
     }
 

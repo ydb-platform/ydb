@@ -538,10 +538,11 @@ public:
     using TResult = IKqpGateway::TGenericResult;
 
     TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TMaybe<TString>& requestType, const TString& database,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
+        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
         : PhyTx(std::move(phyTx))
         , QueryType(queryType)
         , Database(database)
+        , DatabaseId(databaseId)
         , UserToken(std::move(userToken))
         , Promise(promise)
         , RequestType(requestType)
@@ -549,6 +550,7 @@ public:
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
+        ctx->DatabaseId = DatabaseId;
         IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
@@ -580,6 +582,7 @@ private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
     const NKikimrKqp::EQueryType QueryType;
     const TString Database;
+    const TString DatabaseId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPromise<TResult> Promise;
     const TMaybe<TString> RequestType;
@@ -702,11 +705,12 @@ private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
-    TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
+    TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
         : Cluster(cluster)
         , QueryType(queryType)
         , Database(database)
+        , DatabaseId(databaseId)
         , ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
@@ -727,6 +731,10 @@ public:
 
     TString GetDatabase() override {
         return Database;
+    }
+
+    TString GetDatabaseId() override {
+        return DatabaseId;
     }
 
     TMaybe<TString> GetSetting(const TString& cluster, const TString& name) override {
@@ -1473,6 +1481,7 @@ public:
                     context.SetUserToken(*GetUserToken());
                 }
                 context.SetDatabase(Owner.Database);
+                context.SetDatabaseId(Owner.DatabaseId);
                 context.SetActorSystem(Owner.ActorSystem);
                 return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TYqlConclusionStatus>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
@@ -2244,7 +2253,7 @@ private:
 
     TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, UserToken, promise);
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, promise);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
@@ -2324,6 +2333,7 @@ private:
     TString Cluster;
     const NKikimrKqp::EQueryType QueryType;
     TString Database;
+    TString DatabaseId;
     TActorSystem* ActorSystem;
     ui32 NodeId;
     TKqpRequestCounters::TPtr Counters;
@@ -2335,11 +2345,11 @@ private:
 
 } // namespace
 
-TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
+TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId,
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
 {
-    return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, std::move(metadataLoader), actorSystem, nodeId,
+    return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, databaseId, std::move(metadataLoader), actorSystem, nodeId,
         counters, queryServiceConfig);
 }
 

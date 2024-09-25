@@ -1063,6 +1063,7 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
+        SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
         if (tempTablesState) {
             SessionCtx->SetSessionId(tempTablesState->SessionId);

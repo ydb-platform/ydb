@@ -1255,6 +1255,7 @@ public:
 
             NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
             context.SetDatabase(SessionCtx->GetDatabase());
+            context.SetDatabaseId(SessionCtx->GetDatabaseId());
             context.SetActorSystem(ActorSystem);
             if (SessionCtx->GetUserToken()) {
                 context.SetUserToken(*SessionCtx->GetUserToken());

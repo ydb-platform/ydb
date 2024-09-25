@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -7125,14 +7126,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807");
     }
 
-    TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        const TActorId edgeActor = runtime.AllocateEdgeActor();
-        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId()), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+    TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
+        const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIndex)), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()), nodeIndex);
 
         const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor);
         UNIT_ASSERT(response);
         return response->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>()->SerializeToString();
+    }
+
+    TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
+        return FetchResourcePoolClassifiers(*kikimr.GetTestServer().GetRuntime(), 0);
     }
 
     Y_UNIT_TEST(CreateResourcePoolClassifier) {
@@ -7166,6 +7170,37 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"member_name\":\"another@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolClassifierOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20,
+                RESOURCE_POOL="test_pool"
+            );)",
+            NWorkload::TQueryRunnerSettings()
+                .PoolId("")
+                .Database(serverlessTenant)
+                .NodeIndex(1)
+        ));
+
+        const TActorId edgeActor = ydb->GetRuntime()->AllocateEdgeActor();
+        ydb->GetRuntime()->Register(NWorkload::CreateDatabaseFetcherActor(edgeActor, serverlessTenant));
+        const auto response = ydb->GetRuntime()->GrabEdgeEvent<NWorkload::TEvFetchDatabaseResponse>(edgeActor);
+        UNIT_ASSERT_C(response, "Got empty response from DatabaseFetcherActor");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+
+        const auto pathId = response->Get()->PathId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FetchResourcePoolClassifiers(*ydb->GetRuntime(), 1),
+            TStringBuilder() << "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"" << pathId.OwnerId << ":" << pathId.LocalPathId << ":\\/Root\\/test-serverless\"}]}"
+        );
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {

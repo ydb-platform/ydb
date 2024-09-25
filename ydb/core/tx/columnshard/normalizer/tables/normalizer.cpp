@@ -121,6 +121,10 @@ public:
                     return std::nullopt;
                 }
             }
+
+            if (!toRemove.empty()) {
+                changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(toRemove)));
+            }
         }
 
         return changes;

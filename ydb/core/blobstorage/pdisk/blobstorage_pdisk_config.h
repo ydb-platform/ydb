@@ -123,9 +123,9 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 CostLimitNs;
 
     // AsyncBlockDevice settings
-    ui32 BufferPoolBufferSizeBytes = 512 << 10;
-    ui32 BufferPoolBufferCount = 256;
-    ui32 MaxQueuedCompletionActions = 128; // BufferPoolBufferCount / 2;
+    ui32 BufferPoolBufferSizeBytes = 256 << 10;
+    ui32 BufferPoolBufferCount = 2048;
+    ui32 MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
@@ -210,6 +210,10 @@ struct TPDiskConfig : public TThrRefBase {
         const ui64 hddInFlight = FeatureFlags.GetEnablePDiskHighHDDInFlight() ? 32 : 4;
         DeviceInFlight = choose(128, 4, hddInFlight);
         CostLimitNs = choose(500'000ull, 20'000'000ull, 50'000'000ull);
+
+        BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
+        BufferPoolBufferCount = choose(1024, 512, 256);
+        MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,

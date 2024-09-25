@@ -158,7 +158,7 @@ private:
                 TEvKqpExecuter::TEvStreamData, TEvKqpExecuter::TEvStreamProfile>(handle);
 
             if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
-                auto& response = ev->Record.GetRef();
+                auto& response = ev->Record;
 
                 if (!error) {
                     UNIT_ASSERT_EQUAL_C(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS, response.Utf8DebugString());
@@ -450,7 +450,7 @@ void KqpStabilityTests::AbortOnDisconnect() {
             TEvKqpExecuter::TEvStreamData, TEvKqpExecuter::TEvStreamProfile>(handle);
 
         if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
-            auto& response = ev->Record.GetRef();
+            auto& response = ev->Record;
 
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
             UNIT_ASSERT_STRINGS_EQUAL(response.GetResponse().GetQueryIssues()[0].issues()[0].message(), "Table /Root/table-1 scan failed, reason: 2");

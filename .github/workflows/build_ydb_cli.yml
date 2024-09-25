@@ -41,7 +41,7 @@ jobs:
     - name: Print YDB CLI version
       run: cat ydb/apps/ydb/version.txt
     
-    - name: Print YDB CLI version
+    - name: Build binary with ya make
       run: ./ya make ydb/apps/ydb
 
     - name: Upload binary to artifact

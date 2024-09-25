@@ -125,7 +125,8 @@ public:
         , TargetTable{request.GetLevelName()}
         , NextTable{request.GetPostingName()}
         , ResponseActorId{responseActorId}
-        , Response{std::move(response)} {
+        , Response{std::move(response)}
+    {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
@@ -319,7 +320,8 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
 public:
     TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                      const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
-        : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} {
+        : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} 
+    {
         this->Dimensions = request.GetSettings().vector_dimension();
     }
 
@@ -519,7 +521,8 @@ class TDataShard::TTxHandleSafeLocalKMeansScan final: public NTabletFlatExecutor
 public:
     TTxHandleSafeLocalKMeansScan(TDataShard* self, TEvDataShard::TEvLocalKMeansRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev)) {
+        , Ev(std::move(ev)) 
+    {
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) final {

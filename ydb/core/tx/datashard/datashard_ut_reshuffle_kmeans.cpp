@@ -22,7 +22,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
                              std::unique_ptr<TEvDataShard::TEvReshuffleKMeansRequest> & ev, size_t dims = 2,
                              VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                             VectorIndexSettings::Distance metric = VectorIndexSettings::DISTANCE_COSINE) {
+                             VectorIndexSettings::Distance metric = VectorIndexSettings::DISTANCE_COSINE)
+    {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
@@ -85,7 +86,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
     static TString DoReshuffleKMeans(
         Tests::TServer::TPtr server, TActorId sender, ui32 parent, const std::vector<TString>& level,
-        NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload, VectorIndexSettings::VectorType type, auto metric) {
+        NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload, VectorIndexSettings::VectorType type, auto metric)
+    {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
@@ -177,7 +179,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     }
 
     static void CreateTmpTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                               const char* name) {
+                               const char* name)
+    {
         options.AllowSystemColumnNames(true);
         options.Columns({
             {PostingTable_ParentIdColumn, "Uint32", true, true},

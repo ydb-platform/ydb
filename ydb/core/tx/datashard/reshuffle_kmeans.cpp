@@ -85,7 +85,8 @@ public:
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , TargetTable{request.GetPostingName()}
         , ResponseActorId{responseActorId}
-        , Response{std::move(response)} {
+        , Response{std::move(response)} 
+    {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
@@ -261,7 +262,8 @@ class TReshuffleKMeansScan final: public TReshuffleKMeansScanBase, private TCalc
 public:
     TReshuffleKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
                          const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
-        : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} {
+        : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} 
+    {
         this->Dimensions = request.GetSettings().vector_dimension();
     }
 

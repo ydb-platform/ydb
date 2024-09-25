@@ -175,7 +175,8 @@ struct TStats {
 
 template <typename TMetric>
 ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters,
-                   const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats) {
+                   const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats)
+{
     Y_ASSERT(embeddingPos < row.Size());
     const auto embedding = row.Get(embeddingPos).AsRef();
     stats.Rows += 1;

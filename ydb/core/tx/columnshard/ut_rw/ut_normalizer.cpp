@@ -292,7 +292,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         repair->SetClassName("SchemaVersionCleaner");
         repair->SetDescription("Removing unused schema versions");
 
-        const ui64 ownerId = 0;
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };

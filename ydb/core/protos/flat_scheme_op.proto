@@ -405,12 +405,16 @@ message TCompressionOptions {
     optional int32 Level = 3; // Use default compression level if not set (0 != not set)
 }
 
+message TCompressionOptionsGorilla {
+}
+
 message TOlapColumn {
 
     message TSerializer {
         optional string ClassName = 1;
         oneof Implementation {
             TCompressionOptions ArrowCompression = 40;
+            TCompressionOptionsGorilla ArrowCompressionGorilla = 41;
         }
     }
 }

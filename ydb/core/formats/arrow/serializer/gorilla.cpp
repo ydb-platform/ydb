@@ -233,11 +233,13 @@ namespace NKikimr::NArrow::NSerialization {
     }
 
     NKikimr::TConclusionStatus TGorillaSerializer::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) {
-        Y_UNUSED(proto);
+        if (!proto.HasArrowCompressionGorilla()) {
+            return TConclusionStatus::Fail("no arrow gorilla serializer data in proto");
+        }
         return TConclusionStatus::Success();
     }
 
     void TGorillaSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
-        Y_UNUSED(proto);
+        proto.MutableArrowCompressionGorilla();
     }
 }

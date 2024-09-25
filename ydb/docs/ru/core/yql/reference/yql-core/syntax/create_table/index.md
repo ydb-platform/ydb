@@ -238,7 +238,7 @@ CREATE TABLE <table_name> (
 
 {% endif %}
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 При создании строковых таблиц возможно задать:
 

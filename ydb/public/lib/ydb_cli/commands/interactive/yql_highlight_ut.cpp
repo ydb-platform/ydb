@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
                                        const TStringBuf& queryUtf8) {
-        const auto queryUtf32 = UTF8ToUTF32</* robust = */false>(queryUtf8);
+        const auto queryUtf32 = UTF8ToUTF32</* robust = */ false>(queryUtf8);
         TVector<YQLHighlight::Color> colors(queryUtf32.Size(),
                                             YQLHighlight::Color::DEFAULT);
         highlight.Apply(queryUtf8, colors);
@@ -131,9 +131,9 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "\"\"", "ss");
         Check(highlight, "\"test\"", "ssssss");
-        Check(highlight, "\"", "o");
-        Check(highlight, "\"\"\"", "sso");
-        Check(highlight, "\"\\\"", "ooo");
+        Check(highlight, "\"", "u");
+        Check(highlight, "\"\"\"", "ssu");
+        Check(highlight, "\"\\\"", "uuu");
         Check(highlight, "\"\\\"\"", "ssss");
     }
 

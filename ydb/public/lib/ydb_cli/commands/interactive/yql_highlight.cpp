@@ -5,14 +5,16 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 
+#include <util/charset/utf8.h>
+
 #include <regex>
 
 #define TOKEN(NAME) SQLv1Antlr4Lexer::TOKEN_##NAME
 
 namespace NYdb {
     namespace NConsoleClient {
-        using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
         using NSQLTranslation::IsProbablyKeyword;
+        using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
         using NSQLTranslationV1::MakeLexer;
         using NYql::TIssues;
 
@@ -124,12 +126,16 @@ namespace NYdb {
 
         void YQLHighlight::Apply(TStringBuf queryUtf8, Colors& colors) {
             Tokens = Tokenize(TString(queryUtf8));
+            Position = 0;
+
             for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
                 const auto& token = Tokens.at(i);
                 const auto color = ColorOf(token, i);
 
-                const std::ptrdiff_t start = token.StartPos;
-                const std::ptrdiff_t stop = token.StopPos + 1;
+                const std::ptrdiff_t start = Position;
+
+                Position += GetNumberOfUTF8Chars(token.Content);
+                const std::ptrdiff_t stop = Position;
 
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);

@@ -64,6 +64,7 @@ namespace NYdb {
 
             ILexer::TPtr Lexer;
             TParsedTokenList Tokens;
+            ui32 Position;
         };
 
     }

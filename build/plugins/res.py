@@ -106,8 +106,15 @@ def on_ya_conf_json(unit, conf_file):
     with open(conf_abs_path) as f:
         conf = json.load(f)
     formulas = set()
-    for bottle_name, bottle in conf['bottles'].items():
-        formula = bottle['formula']
+
+    def _iter_bottles(config):
+        if "simple_tools" in config:
+            for name, info in config["simple_tools"].items():
+                yield name, f"build/external_resources/{info.get('resource', name)}/resources.json"
+        for name, bottle in config["bottles"].items():
+            yield name, bottle["formula"]
+
+    for bottle_name, formula in _iter_bottles(conf):
         if isinstance(formula, six.string_types):
             if formula.startswith(valid_dirs):
                 abs_path = unit.resolve('$S/' + formula)

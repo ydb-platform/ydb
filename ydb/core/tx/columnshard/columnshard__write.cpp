@@ -459,12 +459,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         if (conclusionParse.IsFail()) {
             sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         } else {
-            if (commitOperation->NeedSyncLocks()) {
-                auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
-                if (!lockInfo) {
-                    sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
-                        NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
-                } else {
+            auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
+            if (!lockInfo) {
+                sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            } else {
+                if (commitOperation->NeedSyncLocks()) {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
@@ -477,9 +477,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     } else {
                         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                     }
+                } else {
+                    Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                 }
-            } else {
-                Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
             }
         }
         return;

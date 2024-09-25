@@ -154,7 +154,6 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
 | `none` | There is no redundancy. Applies for testing. |
 | `block-4-2` | Redundancy factor of 1.5, applies to single data center clusters. |
 | `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters. |
-| `mirror-3dc-3-nodes` | Redundancy factor of 3. Applies for testing. |
 
 ### Syntax
 

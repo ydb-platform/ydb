@@ -859,6 +859,23 @@
     transaction.Commit().GetValueSync();
   ```
 
+- Go
+
+  Для записи в топик в транзакции необходимо создать транзакционного писателя через вызов [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter). После этого можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
+
+  ```go
+  err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+    writer, err := db.Topic().StartTransactionalWriter(tx, topicName)
+    if err != nil {
+      return err
+    }
+
+    return writer.Write(ctx, topicwriter.Message{Data: strings.NewReader("asd")})
+  })
+  ```
+
 - Java (sync)
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
@@ -1668,6 +1685,28 @@
       if (stopPartitionSessionEvent) {
           stopPartitionSessionEvent->Commit();
       }
+  ```
+
+- Go
+
+  Для чтения сообщений в рамках транзакции следует использовать метод [`Reader.PopMessagesBatchTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx). Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку. Проще всего это сделать если использовать читателя в цикле.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
+
+  ```go
+  for {
+    err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+      batch, err := reader.PopMessagesBatchTx(ctx, tx) // батч закоммитится при общем коммите транзакции
+      if err != nil {
+        return err
+      }
+
+      return processBatch(ctx, batch)
+    })
+    if err != nil {
+      handleError(err)
+    }
+  }
   ```
 
 - Java (sync)

@@ -110,7 +110,9 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(const TUserTable& table, TLead&& lead, const NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
+    TLocalKMeansScanBase(const TUserTable& table, TLead&& lead,
+                         const NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId,
+                         TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
@@ -182,12 +184,8 @@ public:
             auto& r = Response->Record;
             builder << " Id: " << r.GetId();
         }
-        return builder << " State: " << State
-                       << " Round: " << Round
-                       << " MaxRounds: " << MaxRounds
-                       << " ReadBuf size: " << ReadBuf.Size()
-                       << " WriteBuf size: " << WriteBuf.Size()
-                       << " ";
+        return builder << " State: " << State << " Round: " << Round << " MaxRounds: " << MaxRounds
+                       << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
     EScan PageFault() noexcept final {
@@ -207,7 +205,8 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TLocalKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
+                LOG_E("TLocalKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
+                                                                            << ev->ToString() << " " << Debug());
         }
     }
 
@@ -220,13 +219,12 @@ protected:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_T("Handle TEvUploadRowsResponse "
-              << Debug()
-              << " Uploader: " << Uploader.ToString()
-              << " ev->Sender: " << ev->Sender.ToString());
+        LOG_T("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
+                                              << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString() << Debug());
+            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
+                                                                     << ev->Sender.ToString() << Debug());
         } else {
             Y_ABORT_UNLESS(Driver == nullptr);
             return;
@@ -285,11 +283,8 @@ protected:
         }
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable,
-            TargetTypes,
-            WriteBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow,
-            true /*writeToPrivateTable*/);
+            this->SelfId(), TargetTable, TargetTypes, WriteBuf.GetRowsData(),
+            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
 
         Uploader = this->Register(actor);
     }
@@ -322,7 +317,8 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     std::vector<TAggregatedCluster> AggregatedClusters;
 
 public:
-    TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
+    TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
+                     const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
         : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} {
         this->Dimensions = request.GetSettings().vector_dimension();
     }
@@ -548,8 +544,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion,
-                                                     std::unique_ptr<IEventHandle>(ev.Release()));
+        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
     const ui64 id = record.GetId();
@@ -609,11 +604,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
     const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
     if (!snapshot) {
-        badRequest(TStringBuilder()
-                   << "no snapshot has been found"
-                   << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
-                   << " , snapshot step is " << snapshotKey.Step
-                   << " , snapshot tx is " << snapshotKey.TxId);
+        badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
+                                    << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
+                                    << " , snapshot tx is " << snapshotKey.TxId);
         return;
     }
 
@@ -630,11 +623,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TLocalKMeansScan<T>{
-            userTable,
-            CreateLeadFrom(range),
-            record,
-            ev->Sender,
-            std::move(response),
+            userTable, CreateLeadFrom(range), record, ev->Sender, std::move(response),
         };
     };
     MakeScan(record, createScan, badRequest);

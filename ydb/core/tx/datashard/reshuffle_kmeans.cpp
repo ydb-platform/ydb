@@ -72,7 +72,10 @@ public:
         return NKikimrServices::TActivity::RESHUFFLE_KMEANS_SCAN_ACTOR;
     }
 
-    TReshuffleKMeansScanBase(const TUserTable& table, TLead&& lead, const NKikimrTxDataShard::TEvReshuffleKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
+    TReshuffleKMeansScanBase(const TUserTable& table, TLead&& lead,
+                             const NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
+                             const TActorId& responseActorId,
+                             TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
@@ -155,10 +158,8 @@ public:
             auto& r = Response->Record;
             builder << " Id: " << r.GetId();
         }
-        return builder << " Upload: " << UploadState
-                       << " ReadBuf size: " << ReadBuf.Size()
-                       << " WriteBuf size: " << WriteBuf.Size()
-                       << " ";
+        return builder << " Upload: " << UploadState << " ReadBuf size: " << ReadBuf.Size()
+                       << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
     EScan PageFault() noexcept final {
@@ -178,7 +179,8 @@ protected:
             hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TReshuffleKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
+                LOG_E("TReshuffleKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
+                                                                                << ev->ToString() << " " << Debug());
         }
     }
 
@@ -191,13 +193,12 @@ protected:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_T("Handle TEvUploadRowsResponse "
-              << Debug()
-              << " Uploader: " << Uploader.ToString()
-              << " ev->Sender: " << ev->Sender.ToString());
+        LOG_T("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
+                                              << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString() << Debug());
+            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
+                                                                     << ev->Sender.ToString() << Debug());
         } else {
             Y_ABORT_UNLESS(Driver == nullptr);
             return;
@@ -248,11 +249,8 @@ protected:
         }
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable,
-            TargetTypes,
-            WriteBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow,
-            true /*writeToPrivateTable*/);
+            this->SelfId(), TargetTable, TargetTypes, WriteBuf.GetRowsData(),
+            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
 
         Uploader = this->Register(actor);
     }
@@ -261,7 +259,8 @@ protected:
 template <typename TMetric>
 class TReshuffleKMeansScan final: public TReshuffleKMeansScanBase, private TCalculation<TMetric> {
 public:
-    TReshuffleKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request, const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
+    TReshuffleKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
+                         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} {
         this->Dimensions = request.GetSettings().vector_dimension();
     }
@@ -349,8 +348,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion,
-                                                     std::unique_ptr<IEventHandle>(ev.Release()));
+        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
     const ui64 id = record.GetId();
@@ -410,11 +408,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
     const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
     if (!snapshot) {
-        badRequest(TStringBuilder()
-                   << "no snapshot has been found"
-                   << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
-                   << " , snapshot step is " << snapshotKey.Step
-                   << " , snapshot tx is " << snapshotKey.TxId);
+        badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
+                                    << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
+                                    << " , snapshot tx is " << snapshotKey.TxId);
         return;
     }
 
@@ -431,11 +427,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TReshuffleKMeansScan<T>{
-            userTable,
-            CreateLeadFrom(range),
-            record,
-            ev->Sender,
-            std::move(response),
+            userTable, CreateLeadFrom(range), record, ev->Sender, std::move(response),
         };
     };
     MakeScan(record, createScan, badRequest);

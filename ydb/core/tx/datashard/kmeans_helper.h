@@ -91,7 +91,8 @@ struct TCosineSimilarity: TMetric<T> {
     }
 
     auto Distance(const char* cluster, const char* embedding) const noexcept {
-        const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster), reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
+        const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster),
+                                        reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         // sqrt(ll) * sqrt(rr) computed instead of sqrt(ll * rr) to avoid precision issues
         const auto norm = std::sqrt(r.LL) * std::sqrt(r.RR);
         const TRes similarity = norm != 0 ? static_cast<TRes>(r.LR) / static_cast<TRes>(norm) : 0;
@@ -110,7 +111,8 @@ struct TL1Distance: TMetric<T> {
     }
 
     auto Distance(const char* cluster, const char* embedding) const noexcept {
-        const auto distance = L1Distance(reinterpret_cast<const TCoord*>(cluster), reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
+        const auto distance = L1Distance(reinterpret_cast<const TCoord*>(cluster),
+                                         reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         return distance;
     }
 };
@@ -126,7 +128,8 @@ struct TL2Distance: TMetric<T> {
     }
 
     auto Distance(const char* cluster, const char* embedding) const noexcept {
-        const auto distance = L2SqrDistance(reinterpret_cast<const TCoord*>(cluster), reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
+        const auto distance = L2SqrDistance(reinterpret_cast<const TCoord*>(cluster),
+                                            reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         return distance;
     }
 };
@@ -142,7 +145,8 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
     }
 
     auto Distance(const char* cluster, const char* embedding) const noexcept {
-        const TRes similarity = DotProduct(reinterpret_cast<const TCoord*>(cluster), reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
+        const TRes similarity = DotProduct(reinterpret_cast<const TCoord*>(cluster),
+                                           reinterpret_cast<const TCoord*>(embedding), this->Dimensions);
         return -similarity;
     }
 };
@@ -170,7 +174,8 @@ struct TStats {
 };
 
 template <typename TMetric>
-ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters, const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats) {
+ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters,
+                   const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats) {
     Y_ASSERT(embeddingPos < row.Size());
     const auto embedding = row.Get(embeddingPos).AsRef();
     stats.Rows += 1;
@@ -183,23 +188,21 @@ ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TSt
 
 void AddRowMain2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row, ui32 dataPos);
+void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                        ui32 dataPos);
 
 void AddRowTmp2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-void AddRowTmp2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row, ui32 dataPos);
+void AddRowTmp2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                       ui32 dataPos);
 
-TTags MakeUploadTags(const TUserTable& table,
-                     const TProtoStringType& embedding,
-                     const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-                     ui32& embeddingPos,
-                     ui32& dataPos,
-                     NTable::TTag& embeddingTag);
+TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
+                     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
+                     ui32& dataPos, NTable::TTag& embeddingTag);
 
-std::shared_ptr<NTxProxy::TUploadTypes> MakeUploadTypes(const TUserTable& table,
-                                                        NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
-                                                        const TProtoStringType& embedding,
-                                                        const google::protobuf::RepeatedPtrField<TProtoStringType>& data);
+std::shared_ptr<NTxProxy::TUploadTypes>
+MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
+                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data);
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
     if (!record.HasEmbeddingColumn()) {
@@ -246,7 +249,8 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
     } else if (settings.has_distance()) {
         switch (settings.distance()) {
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-                // We don't need to have separate implementation for distance, because clusters will be same as for similarity
+                // We don't need to have separate implementation for distance, because clusters will be same as for
+                // similarity
                 handleType.template operator()<TCosineSimilarity>();
                 break;
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:

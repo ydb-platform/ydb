@@ -74,9 +74,6 @@ namespace NProtoAST {
                     last.Name = isEOF ? "EOF" : TokenNames[type];
                     last.Content = token->getText();
                     last.Line = token->get_line();
-
-                    // FIXME (vityaman): this position is incorrect, it references
-                    // byte array, not symbol array
                     last.LinePos = token->get_charPositionInLine();
 
                     const char* start = reinterpret_cast<const char*>(token->get_startIndex());

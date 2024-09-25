@@ -306,7 +306,7 @@ private:
     struct TTransactionInfo {
         bool IsActive = false;
         bool Subscribed = false;
-        NThreading::TPromise<NTable::TCommitTransactionResult> AllAcksReceived;
+        NThreading::TPromise<TStatus> AllAcksReceived;
         bool CommitCalled = false;
         ui64 WriteCount = 0;
         ui64 AckCount = 0;

@@ -1692,7 +1692,7 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
-using TPrecommitTransactionCallback = std::function<TAsyncCommitTransactionResult ()>;
+using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
 
 //! Represents all session operations
 //! Session is transparent logic representation of connection

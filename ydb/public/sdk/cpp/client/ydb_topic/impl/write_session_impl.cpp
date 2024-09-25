@@ -511,14 +511,19 @@ void TWriteSessionImpl::OnTransactionCommit()
 {
 }
 
-NTable::TCommitTransactionResult MakeCommitTransactionError(EStatus code, NYql::TIssues&& issues)
+TStatus MakeStatus(EStatus code, NYql::TIssues&& issues)
 {
-    return {TStatus{code, std::move(issues)}, Nothing()};
+    return {code, std::move(issues)};
 }
 
-NTable::TCommitTransactionResult MakeCommitTransactionSuccess()
+TStatus MakeSessionExpiredError()
 {
-    return MakeCommitTransactionError(EStatus::SUCCESS, {});
+    return MakeStatus(EStatus::SESSION_EXPIRED, {});
+}
+
+TStatus MakeCommitTransactionSuccess()
+{
+    return MakeStatus(EStatus::SUCCESS, {});
 }
 
 std::pair<TString, TString> MakeTransactionId(const TTransaction& tx)
@@ -540,7 +545,7 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 
     txInfo->IsActive = true;
     txInfo->Subscribed = true;
-    txInfo->AllAcksReceived = NThreading::NewPromise<NTable::TCommitTransactionResult>();
+    txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
 
     auto callback = [txInfo]() {
         txInfo->CommitCalled = true;
@@ -554,7 +559,7 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
             return txInfo->AllAcksReceived.GetFuture();
         }
 
-        return NThreading::MakeFuture(MakeCommitTransactionError(EStatus::SESSION_EXPIRED, {}));
+        return NThreading::MakeFuture(MakeSessionExpiredError());
     };
 
     tx->AddPrecommitCallback(std::move(callback));
@@ -1669,7 +1674,7 @@ void TWriteSessionImpl::CancelTransactions()
     for (auto& [_, txInfo] : Txs) {
         txInfo->IsActive = false;
         if (txInfo->WriteCount != txInfo->AckCount) {
-            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionError(EStatus::SESSION_EXPIRED, {}));
+            txInfo->AllAcksReceived.SetValue(MakeSessionExpiredError());
         }
     }
 

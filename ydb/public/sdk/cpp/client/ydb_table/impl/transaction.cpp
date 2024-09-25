@@ -13,10 +13,10 @@ TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSetting
 {
     ChangesAreAccepted = false;
 
-    auto result = NThreading::MakeFuture(TCommitTransactionResult(TStatus(EStatus::SUCCESS, {}), Nothing()));
+    auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
 
     for (auto& callback : PrecommitCallbacks) {
-        auto action = [curr = callback()](const TAsyncCommitTransactionResult& prev) {
+        auto action = [curr = callback()](const TAsyncStatus& prev) {
             if (const TStatus& status = prev.GetValue(); !status.IsSuccess()) {
                 return prev;
             }
@@ -27,9 +27,9 @@ TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSetting
         result = result.Apply(action);
     }
 
-    auto precommitsCompleted = [this, settings](const TAsyncCommitTransactionResult& result) mutable {
+    auto precommitsCompleted = [this, settings](const TAsyncStatus& result) mutable {
         if (const TStatus& status = result.GetValue(); !status.IsSuccess()) {
-            return result;
+            return NThreading::MakeFuture(TCommitTransactionResult(TStatus(status), Nothing()));
         }
 
         return Session_.Client_->CommitTransaction(Session_,

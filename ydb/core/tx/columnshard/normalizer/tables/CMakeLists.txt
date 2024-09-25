@@ -5,7 +5,13 @@
 # ya.make files by maintainers. Any complex modifications which can't be ported back to the
 # original buildsystem will not be accepted.
 
-add_subdirectory(abstract)
-add_subdirectory(granule)
-add_subdirectory(portion)
-add_subdirectory(tables)
+add_library(columnshard-normalizer-tables)
+target_link_libraries(columnshard-normalizer-tables PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-normalizer-abstract
+)
+target_sources(columnshard-normalizer-tables PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/tables/normalizer.cpp
+)

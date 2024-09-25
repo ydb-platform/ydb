@@ -580,7 +580,7 @@ public:
     }
 
     // Returns nullptr in case of no local event
-    google::protobuf::Arena* GetArena() {
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArena() {
         return RequestEv->GetArena();
     }
 

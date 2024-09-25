@@ -67,6 +67,10 @@ public:
         return nullptr;
     };
 
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() override {
+        return nullptr;
+    }
+
     bool HasClientCapability(const TString& capability) const override {
         Y_UNUSED(capability);
         return false;

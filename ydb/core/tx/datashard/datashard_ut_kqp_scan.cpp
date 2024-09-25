@@ -811,7 +811,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 }
                 case NKqp::TEvKqp::TEvQueryResponse::EventType: {
                     auto* msg = ev->Get<NKqp::TEvKqp::TEvQueryResponse>();
-                    auto& record = msg->Record.GetRef();
+                    auto& record = msg->Record;
                     status = record.GetYdbStatus();
                     break;
                 }

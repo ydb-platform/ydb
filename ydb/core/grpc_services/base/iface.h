@@ -61,6 +61,7 @@ public:
     virtual void SetFinishAction(std::function<void()>&& cb) = 0;
     // Allocation is thread safe. https://protobuf.dev/reference/cpp/arenas/#thread-safety
     virtual google::protobuf::Arena* GetArena() = 0;
+    virtual TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() = 0;
 };
 
 }

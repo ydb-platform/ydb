@@ -252,7 +252,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "stale response with generation " << ev->Cookie << ", actual is " << Generation->Val());
             return;
         }
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE,
@@ -273,7 +273,7 @@ private:
 
     void HandleCheckVersionResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
@@ -297,7 +297,7 @@ private:
     void HandleGetTopicsResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleGetTopicsResult");
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
         TString path, dc;

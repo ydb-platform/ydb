@@ -18,6 +18,8 @@
 
 #include <util/system/hp_timer.h>
 
+#include <ydb/library/actors/core/event_pb.h>
+
 #include <grpc++/server.h>
 #include <grpc++/server_context.h>
 #include <grpc++/support/async_stream.h>
@@ -73,8 +75,9 @@ public:
         , RequestLimiter_(std::move(limiter))
         , Writer_(new grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
-        , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(server->NeedAuth())
+        , Arena_(MakeIntrusive<NActors::TProtoArenaHolder>())
+        , Request_(Arena_->Allocate<TIn>())
+        , AuthState_(Server_->NeedAuth())
     {
         Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
@@ -100,8 +103,9 @@ public:
         , RequestLimiter_(std::move(limiter))
         , StreamWriter_(new grpc::ServerAsyncWriter<TUniversalResponse<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
-        , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(server->NeedAuth())
+        , Arena_(MakeIntrusive<NActors::TProtoArenaHolder>())
+        , Request_(Arena_->Allocate<TIn>())
+        , AuthState_(Server_->NeedAuth())
         , StreamAdaptor_(CreateStreamAdaptor())
     {
         Y_ABORT_UNLESS(Request_);
@@ -239,7 +243,11 @@ public:
     }
 
     google::protobuf::Arena* GetArena() override {
-        return &Arena_;
+        return Arena_->Get();
+    }
+
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() override {
+        return Arena_;
     }
 
     void UseDatabase(const TString& database) override {
@@ -556,7 +564,7 @@ private:
     THolder<grpc::ServerAsyncWriterInterface<TUniversalResponse<TOut>>> StreamWriter_;
     TStateFunc StateFunc_;
 
-    google::protobuf::Arena Arena_;
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena_;
     TIn* Request_ = nullptr;
     TOnNextReply NextReplyCb_;
     ui32 RequestSize = 0;

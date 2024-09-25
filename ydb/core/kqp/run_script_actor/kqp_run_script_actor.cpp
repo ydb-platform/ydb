@@ -426,7 +426,7 @@ private:
         if (RunState != ERunState::Running) {
             return;
         }
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, Issues);

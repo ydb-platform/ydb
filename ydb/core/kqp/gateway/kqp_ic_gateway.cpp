@@ -225,7 +225,7 @@ public:
     using TBase::HandleResponse;
 
     void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        auto& response = *ev->Get()->Record.GetRef().MutableResponse();
+        auto& response = *ev->Get()->Record.MutableResponse();
 
         response.AddYdbResults()->CopyFrom(ResultSet);
         for (auto& execStats : Executions) {
@@ -284,7 +284,7 @@ public:
     using TBase::Callback;
 
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             if (record.MutableResponse()->GetYdbResults().size()) {
                 // Send result sets to RPC actor TStreamExecuteYqlScriptRPC
@@ -400,7 +400,7 @@ public:
     using TBase::HandleResponse;
 
     void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        auto& response = *ev->Get()->Record.GetRef().MutableResponse();
+        auto& response = *ev->Get()->Record.MutableResponse();
 
         Ydb::ResultSet resultSet;
         response.AddYdbResults()->CopyFrom(resultSet);
@@ -506,7 +506,7 @@ public:
     using TBase::HandleResponse;
 
     void HandleResponse(TResponse::TPtr &ev, const TActorContext &ctx) {
-        auto& response = *ev->Get()->Record.GetRef().MutableResponse();
+        auto& response = *ev->Get()->Record.MutableResponse();
 
         for (auto& resultSet : ResultSets) {
             response.AddYdbResults()->Swap(&resultSet.ResultSet);
@@ -1897,7 +1897,7 @@ public:
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
                 TQueryResult queryResult;
                 queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+                KqpResponseToQueryResult(responseEv.Record, queryResult);
                 promise.SetValue(std::move(queryResult));
             });
     }
@@ -1938,7 +1938,7 @@ public:
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
             TQueryResult queryResult;
             queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-            KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+            KqpResponseToQueryResult(responseEv.Record, queryResult);
             promise.SetValue(std::move(queryResult));
         });
     }
@@ -1975,7 +1975,7 @@ public:
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
             TQueryResult queryResult;
             queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-            KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+            KqpResponseToQueryResult(responseEv.Record, queryResult);
             promise.SetValue(std::move(queryResult));
         });
     }
@@ -2002,7 +2002,7 @@ public:
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
                 TQueryResult queryResult;
                 queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+                KqpResponseToQueryResult(responseEv.Record, queryResult);
                 promise.SetValue(std::move(queryResult));
             });
     }
@@ -2042,7 +2042,7 @@ public:
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
                 TQueryResult queryResult;
                 queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+                KqpResponseToQueryResult(responseEv.Record, queryResult);
                 promise.SetValue(std::move(queryResult));
             });
     }
@@ -2066,7 +2066,7 @@ public:
 
         return SendKqpRequest<TRequest, TResponse, TQueryResult>(ev.Release(),
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
-                auto& response = responseEv.Record.GetRef();
+                auto& response = responseEv.Record;
                 auto& queryResponse = response.GetResponse();
 
                 TQueryResult queryResult;
@@ -2153,7 +2153,7 @@ public:
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
             TQueryResult queryResult;
             queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-            KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+            KqpResponseToQueryResult(responseEv.Record, queryResult);
             promise.SetValue(std::move(queryResult));
         });
     }
@@ -2286,7 +2286,7 @@ private:
             [] (TPromise<TQueryResult> promise, TEvKqp::TEvQueryResponse&& responseEv) {
                 TQueryResult queryResult;
                 queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+                KqpResponseToQueryResult(responseEv.Record, queryResult);
                 promise.SetValue(std::move(queryResult));
             });
     }

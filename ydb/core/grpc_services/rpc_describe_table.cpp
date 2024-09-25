@@ -142,6 +142,14 @@ private:
                     return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
                 }
 
+                StatusIds::StatusCode code = StatusIds::SUCCESS;
+                TString error;
+                if (!FillSequenceDescription(describeTableResult, tableDescription, code, error)) {
+                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Unable to fill sequence description: %s", error.c_str());
+                    Request_->RaiseIssue(NYql::TIssue(error));
+                    return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+                }
+
                 describeTableResult.mutable_primary_key()->CopyFrom(tableDescription.GetKeyColumnNames());
 
                 try {
@@ -210,6 +218,10 @@ private:
 
         if (req->include_partition_stats() && req->include_table_stats()) {
             record->MutableOptions()->SetReturnPartitionStats(true);
+        }
+
+        if (req->include_set_val()) {
+            record->MutableOptions()->SetReturnSetVal(true);
         }
 
         record->MutableOptions()->SetShowPrivateTable(ShowPrivatePath(path));

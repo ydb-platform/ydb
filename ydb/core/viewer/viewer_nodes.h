@@ -954,10 +954,10 @@ public:
                 InvalidateNodes();
             }
             if (UptimeSeconds > 0 && FieldsAvailable.test(+ENodeFields::SystemState)) {
-                ui64 limitSeconds = TInstant::Now().Seconds() - UptimeSeconds;
+                ui64 limitMilliSeconds = TInstant::Now().MilliSeconds() - UptimeSeconds * 1000;
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->SystemState.GetStartTime() >= limitSeconds) {
+                    if (node->SystemState.GetStartTime() >= limitMilliSeconds) {
                         nodeView.push_back(node);
                     }
                 }

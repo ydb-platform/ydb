@@ -516,13 +516,15 @@ namespace NKikimr::NDataStreams::V1 {
         if (!GetProtoRequest()->has_partitioning_settings() ||
             (GetProtoRequest()->partitioning_settings().has_auto_partitioning_settings() &&
             GetProtoRequest()->partitioning_settings().auto_partitioning_settings().strategy() ==
-                Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED)) {
+            Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED)) {
+
             if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
             {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error);
             }
 
             groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+
         } else {
             auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
             if (!r.empty()) {
@@ -535,6 +537,7 @@ namespace NKikimr::NDataStreams::V1 {
             auto& as = s.auto_partitioning_settings();
             switch(as.strategy()) {
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
+                    break;
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED:
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MAX_SENTINEL_DO_NOT_USE_:
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MIN_SENTINEL_DO_NOT_USE_:

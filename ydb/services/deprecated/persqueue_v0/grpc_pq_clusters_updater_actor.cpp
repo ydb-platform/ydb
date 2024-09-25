@@ -42,7 +42,7 @@ void TClustersUpdater::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpd
 
 
 void TClustersUpdater::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
-    auto& record = ev->Get()->Record.GetRef();
+    auto& record = ev->Get()->Record;
 
     if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
         auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);

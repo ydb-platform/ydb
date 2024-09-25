@@ -10,6 +10,7 @@ public:
     TContextBase(std::shared_ptr<IRequestCtx> baseRequest)
         : BaseRequest_{std::move(baseRequest)}
         , AuthState_{/*needAuth*/true}
+        , Arena_(MakeIntrusive<NActors::TProtoArenaHolder>())
     {}
 
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
@@ -55,7 +56,11 @@ public:
     }
 
     google::protobuf::Arena* GetArena() override {
-        return &Arena_;
+        return Arena_->Get();
+    }
+
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() override {
+        return Arena_;
     }
 
     void AddTrailingMetadata(const TString& key, const TString& value) override {
@@ -101,7 +106,7 @@ private:
     NYdbGrpc::TAuthState AuthState_;
 
     NYql::TIssueManager IssueManager_;
-    google::protobuf::Arena Arena_;
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena_;
 };
 
 template<typename TReq, typename TResp>

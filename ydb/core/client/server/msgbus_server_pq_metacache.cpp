@@ -251,7 +251,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "stale response with generation " << ev->Cookie << ", actual is " << Generation->Val());
             return;
         }
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE,
@@ -272,7 +272,7 @@ private:
 
     void HandleCheckVersionResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         Y_ABORT_UNLESS(record.GetResponse().GetResults().size() == 1);
         const auto& rr = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
@@ -291,7 +291,7 @@ private:
     void HandleGetTopicsResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleGetTopicsResult");
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         Y_ABORT_UNLESS(record.GetResponse().GetResults().size() == 1);
         TString path, dc;
@@ -710,7 +710,7 @@ private:
     void ProcessNodesInfoWaitersQueue(bool status, const TActorContext& ctx) {
         if (DynamicNodesMapping == nullptr) {
             Y_ABORT_UNLESS(!status);
-            DynamicNodesMapping.reset(new THashMap<ui32, ui32>); 
+            DynamicNodesMapping.reset(new THashMap<ui32, ui32>);
         }
         while(!NodesMappingWaiters.empty()) {
             ctx.Send(NodesMappingWaiters.front(),

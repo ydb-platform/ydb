@@ -217,7 +217,7 @@ private:
 
         --Inflight;
 
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
         if (response.GetYdbStatus() != Ydb::StatusIds_StatusCode_SUCCESS) {
             ++Errors;
         }

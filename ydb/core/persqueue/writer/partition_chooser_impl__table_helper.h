@@ -160,7 +160,7 @@ public:
     }
 
     bool HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
 
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             return false;
@@ -254,7 +254,7 @@ private:
     const TString TopicHashName;
 
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-   
+
     NPQ::ESourceIdTableGeneration TableGeneration;
     TString SelectQuery;
     TString UpdateQuery;

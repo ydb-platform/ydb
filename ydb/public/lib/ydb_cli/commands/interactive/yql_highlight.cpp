@@ -126,8 +126,8 @@ namespace NYdb {
 
         void YQLHighlight::Apply(TStringBuf queryUtf8, Colors& colors) {
             Tokens = Tokenize(TString(queryUtf8));
-            Position = 0;
 
+            ui32 Position = 0;
             for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
                 const auto& token = Tokens.at(i);
                 const auto color = ColorOf(token, i);

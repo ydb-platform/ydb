@@ -31,12 +31,12 @@ Logically, from the user’s perspective, both types of tables look the same. Th
 
 Regardless of the type, each table must have a primary key. Column-oriented tables can only have `NOT NULL` columns in primary keys. Table data is physically sorted by the primary key.
 
-Partitioning works differently in row and column tables:
+Partitioning works differently in row-oriented and column-oriented tables:
 
 * Row-oriented tables are automatically partitioned by primary key ranges, depending on the data volume.
 * Column-oriented tables are partitioned by the hash of the partitioning columns.
 
-Each partition of a table is processed by a specific [tablet](../../glossary.md#tablets), called a [data shard(../../glossary.md#datashard) for row-oriented tables and a [column shard](../../glossary.md#columnshard) for column-oriented tables.
+Each partition of a table is processed by a specific [tablet](../../glossary.md#tablets), called a [data shard](../../glossary.md#datashard) for row-oriented tables and a [column shard](../../glossary.md#columnshard) for column-oriented tables.
 
 #### Split by load {#split-by-load}
 

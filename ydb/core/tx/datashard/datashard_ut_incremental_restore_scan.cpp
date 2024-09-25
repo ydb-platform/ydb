@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TPathId targetPathId = dstTable.PathId;
         TPathId sourcePathId = srcTable.PathId;
 
-        TDataShardId sourceDatashard;
+        TDataShardId sourceDatashard{};
 
         {
             auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();

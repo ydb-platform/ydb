@@ -94,7 +94,9 @@ public:
         }
 
         databaseStateIt->FetchRequestIsRunning = false;
-        UpdateDatabaseState(*databaseStateIt, ev->Get()->PathId, ev->Get()->Serverless);
+        databaseStateIt->LastUpdateTime = TInstant::Now();
+        databaseStateIt->DatabaseId = ev->Get()->DatabaseId;
+        databaseStateIt->Serverless = ev->Get()->Serverless;
         SendSubscriberInfo(*databaseStateIt, ev->Get()->Status, ev->Get()->Issues);
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
@@ -151,12 +153,6 @@ public:
     )
 
 private:
-    static void UpdateDatabaseState(TDatabaseState& databaseState, TPathId pathId, bool serverless) {
-        databaseState.LastUpdateTime = TInstant::Now();
-        databaseState.DatabaseId = (serverless ? TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" : TStringBuilder()) << databaseState.Database;
-        databaseState.Serverless = serverless;
-    }
-
     void UnsubscribeFromSchemeCache(TDatabaseState& databaseState) const {
         if (databaseState.WatchKey) {
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(databaseState.WatchKey));

@@ -498,6 +498,15 @@ public:
         }
     }
 
+    TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const override {
+        const TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Register(CreateDatabaseFetcherActor(edgeActor, database));
+        const auto response = GetRuntime()->GrabEdgeEvent<TEvFetchDatabaseResponse>(edgeActor);
+        UNIT_ASSERT_C(response, "Got empty response from DatabaseFetcherActor");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+        return response;
+    }
+
     // Coomon helpers
     TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();

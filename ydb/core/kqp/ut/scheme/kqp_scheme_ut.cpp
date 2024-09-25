@@ -7190,13 +7190,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .NodeIndex(1)
         ));
 
-        const TActorId edgeActor = ydb->GetRuntime()->AllocateEdgeActor();
-        ydb->GetRuntime()->Register(NWorkload::CreateDatabaseFetcherActor(edgeActor, serverlessTenant));
-        const auto response = ydb->GetRuntime()->GrabEdgeEvent<NWorkload::TEvFetchDatabaseResponse>(edgeActor);
-        UNIT_ASSERT_C(response, "Got empty response from DatabaseFetcherActor");
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
-
-        const auto pathId = response->Get()->PathId;
+        const auto pathId = ydb->FetchDatabase(serverlessTenant)->Get()->PathId;
         UNIT_ASSERT_VALUES_EQUAL(
             FetchResourcePoolClassifiers(*ydb->GetRuntime(), 1),
             TStringBuilder() << "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"" << pathId.OwnerId << ":" << pathId.LocalPathId << ":\\/Root\\/test-serverless\"}]}"

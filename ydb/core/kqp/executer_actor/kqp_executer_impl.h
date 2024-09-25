@@ -81,6 +81,10 @@ struct TShardRangesWithShardId {
     const TShardKeyRanges* Ranges;
 };
 
+struct TStageScheduleInfo {
+    double StageCost = 0.0;
+    ui32 TaskCount = 0;
+};
 
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
     const NKikimrKqp::TRlPath& path);
@@ -817,6 +821,40 @@ protected:
             YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentification supported for compute tasks");
             secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
         }
+    }
+
+    std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+        std::map<ui32, TStageScheduleInfo> result;
+        if (!resourceSnapshot.empty()) // can't schedule w/o node count
+        {
+            // collect costs and schedule stages with external sources only 
+            double totalCost = 0.0;
+            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+                auto& stage = tx.Body->GetStages(stageIdx);
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                    if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
+                        totalCost += stage.GetStageCost();
+                        result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
+                    }
+                }
+            }
+            // assign task counts
+            if (!result.empty()) {
+                // allow use 2/3 of threads in single stage
+                ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
+                // total limit per mode is x2 
+                ui32 maxTotalTaskCount = maxStageTaskCount * 2;
+                for (auto& [_, stageInfo] : result) {
+                    // schedule tasks evenly between nodes
+                    stageInfo.TaskCount = 
+                        std::max<ui32>(
+                            std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
+                            , 1
+                        ) * resourceSnapshot.size();
+                }
+            }
+        }
+        return result;
     }
 
     void BuildSysViewScanTasks(TStageInfo& stageInfo) {

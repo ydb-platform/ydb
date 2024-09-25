@@ -86,7 +86,7 @@ runs:
           https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
           -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
 
-        if [[ "${{inputs.run_tests}}" == "true" ]];then
+        if [[ "${{inputs.run_tests}}" == "true" ]]; then
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
@@ -187,6 +187,7 @@ runs:
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
+        IS_TEST_RESULT_IGNORED=0
         
         case "$BUILD_PRESET" in
           debug)
@@ -212,6 +213,7 @@ runs:
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
@@ -221,6 +223,7 @@ runs:
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-msan)
             params+=(
@@ -230,12 +233,15 @@ runs:
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           *)
             echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
+        
+        echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ $TEST_RETRY_COUNT -z ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
@@ -434,6 +440,7 @@ runs:
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
+              --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
@@ -513,7 +520,7 @@ runs:
         set -x
         if [ true = ${{ inputs.run_tests }} ]; then
           teststatus=$(cat statusrep.txt)
-          if [[ $teststatus == "success" ]];then
+          if [[ $teststatus == "success" ]]; then
             testmessage="The check has been completed successfully"
           else
             testmessage="The check has been failed"
@@ -522,7 +529,7 @@ runs:
               https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
           
-          if [[ $teststatus != "success" ]];then
+          if [[ $teststatus != "success" ]]; then
             echo "status=failed" >> $GITHUB_OUTPUT
           fi
         fi
@@ -531,7 +538,9 @@ runs:
       if: inputs.run_tests
       shell: bash
       run: |
-        .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+        if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
+          .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+        fi
 
     - name: show diff mute_ya.txt
       if: inputs.build_preset == 'relwithdebinfo' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
@@ -623,7 +632,7 @@ runs:
         read -ra comment_arr <<< "$comment_raw"
 
         printf "$comment"
-        if [[ ${comment_raw} != "Error"* ]];then
+        if [[ ${comment_raw} != "Error"* ]]; then
           color=${comment_arr[0]}
           replace=$color";;;"
           comment=${comment_raw/$replace/""}

@@ -642,7 +642,7 @@ public:
             NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
             Send(sender, std::move(response));
         };
-        if (!DatabasesCache.SetDatabaseIdOrDeffer(ev, errorHandler, ActorContext())) {
+        if (!DatabasesCache.SetDatabaseIdOrDefer(ev, errorHandler, ActorContext())) {
             return;
         }
 
@@ -1650,7 +1650,7 @@ private:
         const auto errorHandler = [this, sender = ev->Sender](Ydb::StatusIds::StatusCode status, NYql::TIssues issues){
             Send(sender, new TResponse(status, std::move(issues)));
         };
-        if (!DatabasesCache.SetDatabaseIdOrDeffer(ev, errorHandler, ActorContext())) {
+        if (!DatabasesCache.SetDatabaseIdOrDefer(ev, errorHandler, ActorContext())) {
             return false;
         }
 

@@ -659,7 +659,7 @@ public:
     TDatabasesCache(TDuration idleTimeout = TDuration::Seconds(60));
 
     template <typename TEvent>
-    bool SetDatabaseIdOrDeffer(TEvent& event, std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> errorHandler, TActorContext actorContext) {
+    bool SetDatabaseIdOrDefer(TEvent& event, std::function<void(Ydb::StatusIds::StatusCode, NYql::TIssues)> errorHandler, TActorContext actorContext) {
         if (!event->Get()->GetDatabaseId().empty()) {
             return true;
         }

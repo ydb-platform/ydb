@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/data_events/common/error_codes.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
@@ -840,37 +841,12 @@ private:
     void ShardError(const NKikimrDataEvents::TEvWriteResult& result) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(result.GetIssues(), issues);
-
-        switch (result.GetStatus()) {
-            case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
-                YQL_ENSURE(false);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
-                return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
-                return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
-                issues.AddIssue(NYql::YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated."));
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
-            }
+        auto statusConclusion = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(result.GetStatus());
+        AFL_ENSURE(statusConclusion.IsSuccess())("error", statusConclusion.GetErrorMessage());
+        if (result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+            issues.AddIssue(NYql::YqlIssue({}, statusConclusion->GetIssueCode(), statusConclusion->GetIssueGeneralText()));
         }
+        return ReplyErrorAndDie(statusConclusion->GetYdbStatusCode(), issues);
     }
 
     void PQTabletError(const NKikimrPQ::TEvProposeTransactionResult& result) {

@@ -32,7 +32,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
         ActualSchema->PrepareForModification(batchConclusion.DetachResult(), WriteData.GetWriteMeta().GetModificationType());
     if (preparedConclusion.IsFail()) {
         ReplyError("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage(),
-            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
         return TConclusionStatus::Fail("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage());
     }
     auto batch = preparedConclusion.DetachResult();

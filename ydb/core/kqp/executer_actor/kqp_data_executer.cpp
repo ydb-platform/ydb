@@ -214,30 +214,6 @@ public:
     }
 
     void Finalize() {
-        if (!BufferActorId || ReadOnlyTx) {
-            MakeResponseAndPassAway();
-        } else {
-            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
-            event->ExecuterActorId = SelfId();
-            Send(BufferActorId, event.release());
-            Become(&TKqpDataExecuter::FinalizeState);
-        }
-    }
-
-    STATEFN(FinalizeState) {
-        switch(ev->GetTypeRewrite()) {
-            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-            hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
-            default:
-                LOG_W("Unexpected event: " << ev->GetTypeName() << ", at state: FinalizeState");
-        }
-    }
-
-    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr&) {
-        MakeResponseAndPassAway();
-    }
-
-    void MakeResponseAndPassAway() {
         YQL_ENSURE(!AlreadyReplied);
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
@@ -301,6 +277,9 @@ public:
         }
 
         ResponseEv->Snapshot = GetSnapshot();
+        if (TxManager) {
+            TxManager->SetHasSnapshot(GetSnapshot().IsValid());
+        }
 
         if (!Locks.empty() || (TxManager && !TxManager->IsEmpty())) {
             if (LockHandle) {
@@ -309,6 +288,44 @@ public:
             BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
+        if (!BufferActorId || ReadOnlyTx) {
+            MakeResponseAndPassAway();
+        }  else if (Request.LocksOp == ELocksOp::Commit ) {
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
+            event->ExecuterActorId = SelfId();
+            event->TxId = TxId;
+            Become(&TKqpDataExecuter::FinalizeState);
+            Send(BufferActorId, event.release());
+            return;
+        } else if (Request.LocksOp == ELocksOp::Rollback) {
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
+            event->ExecuterActorId = SelfId();
+            Send(BufferActorId, event.release());
+            MakeResponseAndPassAway();
+            return;
+        } else {
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
+            event->ExecuterActorId = SelfId();
+            Become(&TKqpDataExecuter::FinalizeState);
+            Send(BufferActorId, event.release());
+        }
+    }
+
+    STATEFN(FinalizeState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
+            hFunc(TEvents::TEvPoison, HandleShutdown);
+            default:
+                LOG_W("Unexpected event: " << ev->GetTypeName() << ", at state: FinalizeState");
+        }
+    }
+
+    void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr&) {
+        MakeResponseAndPassAway();
+    }
+
+    void MakeResponseAndPassAway() {
         auto resultSize = ResponseEv->GetByteSize();
         if (resultSize > (int)ReplySizeLimit) {
             TString message;
@@ -1904,7 +1921,7 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        if (BufferActorId && Request.LocksOp == ELocksOp::Commit) {
+        /*if (BufferActorId && Request.LocksOp == ELocksOp::Commit && Request.Transactions.empty()) {
             // TODO: skip resolving phase? Move it to session actor?
             YQL_ENSURE(Request.Transactions.empty());
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
@@ -1914,13 +1931,13 @@ private:
             Become(&TKqpDataExecuter::FinalizeState);
             return;
         } else if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
-            YQL_ENSURE(Request.Transactions.empty());
+            //YQL_ENSURE(Request.Transactions.empty());
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
             Send(BufferActorId, event.release());
             MakeResponseAndPassAway();
             return;
-        }
+        }*/
 
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -2074,7 +2091,7 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
-        if (UseEvWriteForOltp) {
+        if (!UseEvWriteForOltp) {
             BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         }
 

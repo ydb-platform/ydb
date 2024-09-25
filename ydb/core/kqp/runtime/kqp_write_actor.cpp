@@ -1359,6 +1359,7 @@ public:
     void ImmediateCommit() {
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
+        CA_LOG_D("Start immediate commit");
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetImmediateCommit();
         }
@@ -1369,6 +1370,7 @@ public:
     void DistributedCommit() {
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
+        CA_LOG_D("Start distributed commit TxId" << *TxId);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetDistributedCommit();
         }
@@ -1727,7 +1729,9 @@ public:
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        YQL_ENSURE(State == EState::COMMITTING);
+        if (State != EState::PREPARING) {
+            return;
+        }
         const auto& record = ev->Get()->Record;
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
@@ -1745,7 +1749,9 @@ public:
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        YQL_ENSURE(State == EState::COMMITTING);
+        if (State != EState::COMMITTING) {
+            return;
+        }
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
@@ -1765,7 +1771,9 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) override {
-        AFL_ENSURE(State == EState::PREPARING);
+        if (State != EState::PREPARING) {
+            return;
+        }
         Y_UNUSED(preparedInfo, dataSize);
         if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
             TxManager->StartExecute();
@@ -1776,7 +1784,9 @@ public:
     }
 
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
-        AFL_ENSURE(State == EState::COMMITTING);
+        if (State != EState::COMMITTING) {
+            return;
+        }
         Y_UNUSED(shardId, dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
             State = EState::FINISHED;

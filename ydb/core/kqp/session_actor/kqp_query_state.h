@@ -347,10 +347,10 @@ public:
             return true;
         }
 
-        if (HasTxSinkInTx(tx)) {
+        /*if (HasTxSinkInTx(tx)) {
             // Sink results can't be committed with changes
             return false;
-        }
+        }*/
 
         if (TxCtx->HasOlapTable) {
             // HTAP/OLAP transactions always use separate commit.

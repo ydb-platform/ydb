@@ -321,7 +321,7 @@ public:
         }
 
         // TODO: support buffer actor
-        bool replied = ExecutePhyTx(/*tx*/ nullptr, /*commit*/ true);
+        bool replied = ExecutePhyTx(/*tx*/ nullptr, /*commit*/ true, false);
         if (!replied) {
             Become(&TKqpSessionActor::ExecuteState);
         }
@@ -1093,14 +1093,15 @@ public:
         if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately();
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
-            ExecutePhyTx(tx, commit);
+            ExecutePhyTx(tx, commit, false);
         } else {
             ReplySuccess();
         }
+        //}
     }
 
     void ExecuteDeferredEffectsImmediately() {
-        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
+        //YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
 
         auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
@@ -1122,7 +1123,7 @@ public:
         SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
     }
 
-    bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
+    bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit, bool) {
         if (tx) {
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
@@ -1221,27 +1222,60 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            const bool hasLocks = txCtx.TxManager ? !txCtx.TxManager->IsEmpty() : txCtx.Locks.HasLocks();
-            if (hasLocks || txCtx.TopicOperations.HasOperations() || !!txCtx.BufferActorId) {
-                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
-                    LOG_D("TExecPhysicalRequest, tx has commit locks");
-                    request.LocksOp = ELocksOp::Commit;
-                } else {
-                    LOG_D("TExecPhysicalRequest, tx has rollback locks");
-                    request.LocksOp = ELocksOp::Rollback;
-                }
+            request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
-                if (!txCtx.TxManager) {
-                    for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
-                        auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
-                        request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+            if (Settings.TableService.GetEnableOltpSink()) {
+                const bool hasLocks = txCtx.TxManager ? !txCtx.TxManager->IsEmpty() : false;
+
+                if (hasLocks) {
+                    if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
+                        LOG_D("TExecPhysicalRequest, tx has commit locks");
+                        request.LocksOp = ELocksOp::Commit;
+                    } else {
+                        LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                        request.LocksOp = ELocksOp::Rollback;
                     }
-                } else {
-                    // TODO: support for non buffer actor writes
+                } else if (txCtx.TxHasEffects()) {
+                    LOG_D("TExecPhysicalRequest, need commit locks");
+                    request.LocksOp = ELocksOp::Commit;
+                }
+            } else {
+                const bool hasLocks = txCtx.TxManager ? !txCtx.TxManager->IsEmpty() : txCtx.Locks.HasLocks();
+                if (hasLocks || txCtx.TopicOperations.HasOperations() || Settings.TableService.GetEnableOltpSink()) {
+                    if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
+                        LOG_D("TExecPhysicalRequest, tx has commit locks");
+                        request.LocksOp = ELocksOp::Commit;
+                    } else {
+                        LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                        request.LocksOp = ELocksOp::Rollback;
+                    }
+
+                    if (!Settings.TableService.GetEnableOltpSink()) {
+                        for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
+                            auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
+                            request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+                        }
+                    } else {
+                        // TODO: support for non buffer actor writes
+                    }
                 }
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
+        /*} else if (executeDeferred && !txCtx.DeferredEffects.Empty()) {
+            for (const auto& effect : txCtx.DeferredEffects) {
+                request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+
+                LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
+                    << " current Transactions.size(): " << request.Transactions.size());
+            }
+
+            request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
+            request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+            request.UseImmediateEffects = true;
+
+            txCtx.HasImmediateEffects = true;
+            txCtx.ClearDeferredEffects();*/
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 

@@ -23,7 +23,7 @@ struct TParsedToken {
     ui32 LinePos = 0; // starts from 0
     // Position of first and last token symbol
     ui32 StartPos; // starts from 0
-    ui32 StopPos;   // starts from 0
+    ui32 StopPos;  // starts from 0
 };
 
 class ILexer {

@@ -8,11 +8,15 @@
 using namespace NSQLTranslation;
 using namespace NSQLTranslationV1;
 
-TParsedTokenList Tokenize(ILexer::TPtr& lexer, TString queryUtf8) {
+std::pair<TParsedTokenList, NYql::TIssues> Tokenize(ILexer::TPtr& lexer, TString queryUtf8) {
     TParsedTokenList tokens;
     NYql::TIssues issues;
     Tokenize(*lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
-    return tokens;
+    return {tokens, issues};
+}
+
+NYql::TIssues GetIssues(ILexer::TPtr& lexer, TString queryUtf8) {
+    return Tokenize(lexer, queryUtf8).second;
 }
 
 void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
@@ -56,9 +60,28 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
 
         for (const auto& query : queriesUtf8) {
-            auto tokens3 = Tokenize(lexer3, query);
-            auto tokens4 = Tokenize(lexer4, query);
+            auto [tokens3, issues3] = Tokenize(lexer3, query);
+            auto [tokens4, issues4] = Tokenize(lexer4, query);
             AssertEquivialent(tokens3, tokens4);
+            UNIT_ASSERT_EQUAL(issues3.Empty(), issues4.Empty());
+        }
+    }
+
+    Y_UNIT_TEST(IssuesCollected) {
+        const TVector<TString> queriesUtf8 = {
+            "😊",
+            "SEL",
+            "SELECT FROM test",
+        };
+
+        auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
+        auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
+
+        for (const auto& query : queriesUtf8) {
+            auto issues3 = GetIssues(lexer3, query);
+            auto issues4 = GetIssues(lexer4, query);
+
+            UNIT_ASSERT_EQUAL(issues3.Empty(), issues4.Empty());
         }
     }
 }

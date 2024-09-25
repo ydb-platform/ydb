@@ -31,6 +31,8 @@ int main(int argc, char** argv) {
         .StoreResult(&endpoint);
     opts.AddLongOption('d', "database", "YDB database name").Required().RequiredArgument("PATH")
         .StoreResult(&database);
+    opts.AddLongOption('p', "path", "Base path for tables").Optional().RequiredArgument("PATH")
+        .StoreResult(&path);
     opts.AddLongOption('c', "cert", "Certificate path to use secure connection").Optional().RequiredArgument("PATH")
         .StoreResult(&certPath);
 
@@ -51,7 +53,7 @@ int main(int argc, char** argv) {
 
     TDriver driver(driverConfig);
 
-    if (!Run(driver)) {
+    if (!Run(driver, path)) {
         driver.Stop(true);
         return 2;
     }

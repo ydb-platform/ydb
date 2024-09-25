@@ -507,12 +507,12 @@ bool Run(const TDriver& driver, const std::string& path) {
     TQueryClient client(driver);
 
     try {
-        CreateTables(client);
+        CreateTables(client, path);
 
         FillTableData(client, path);
 
-        SelectSimple(client);
-        UpsertSimple(client);
+        SelectSimple(client, path);
+        UpsertSimple(client, path);
 
         SelectWithParams(client, path);
 

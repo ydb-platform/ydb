@@ -42,6 +42,7 @@ private:
     TSet<TCommittedData> Committed;
     YDB_READONLY(i64, CommittedSize, 0);
     YDB_READONLY(i64, InsertedSize, 0);
+    YDB_ACCESSOR(TMonotonic, LastIndexation, TMonotonic::Now());
     bool CommittedOverload = false;
     bool InsertedOverload = false;
     TInsertionSummary* Summary = nullptr;

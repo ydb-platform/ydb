@@ -421,6 +421,7 @@ message TPQTabletConfig {
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
+    // The field is filled in only for the PQ tablet. Contains information about linked partitions for constructing a partial PartitionGraph.
     repeated TPartition AllPartitions = 36; // filled by schemeshard
 
     optional TOffloadConfig OffloadConfig = 38;

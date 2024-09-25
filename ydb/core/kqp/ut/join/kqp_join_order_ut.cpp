@@ -94,10 +94,14 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     return TKikimrRunner(serverSettings);
 }
 
+void PrintPlan(const TString& plan) {
+    Cout << plan << Endl;
+}
+
 class TChainTester {
 public:
     TChainTester(size_t chainSize)
-        : Kikimr(GetKikimrWithJoinSettings())
+        : Kikimr(GetKikimrWithJoinSettings(false, GetStats(chainSize)))
         , TableClient(Kikimr.GetTableClient())
         , Session(TableClient.CreateSession().GetValueSync().GetSession())
         , ChainSize(chainSize)
@@ -107,6 +111,21 @@ public:
     void Test() {
         CreateTables();
         JoinTables();
+    }
+
+    static TString GetStats(size_t chainSize) {
+        srand(228);
+        NJson::TJsonValue stats;
+        for (size_t i = 0; i < chainSize; ++i) {
+            ui64 nRows = rand();
+            NJson::TJsonValue tableStat;
+            tableStat["n_rows"] = nRows;
+            tableStat["byte_size"] = nRows * 10;
+
+            TString table = Sprintf("/Root/table_%ld", i);
+            stats[table] = std::move(tableStat);
+        }
+        return stats.GetStringRobust();
     }
 
 private:
@@ -143,9 +162,10 @@ private:
                 );
         }
 
-        auto result = Session.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = Session.ExplainDataQuery(joinRequest).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        PrintPlan(result.GetPlan());
     }
 
     TKikimrRunner Kikimr;
@@ -193,9 +213,9 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    //Y_UNIT_TEST(Chain65Nodes) {
-    //    TChainTester(65).Test();
-    //}
+    Y_UNIT_TEST(Chain65Nodes) {
+        TChainTester(65).Test();
+    }
 
     TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
@@ -212,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
             auto plan = CollectStreamResult(execRes).PlanJson;
-            Cerr << plan.GetRef();
+            PrintPlan(plan.GetRef());
             return plan.GetRef();
         }
     }

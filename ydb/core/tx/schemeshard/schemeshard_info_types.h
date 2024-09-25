@@ -940,6 +940,8 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         THashSet<ui32> ParentPartitionIds;
         THashSet<ui32> ChildPartitionIds;
 
+        TShardIdx ShardIdx;
+
         void SetStatus(const TActorContext& ctx, ui32 value) {
             if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
@@ -1133,6 +1135,8 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTopicStats Stats;
 
     void AddPartition(TShardIdx shardIdx, TTopicTabletInfo::TTopicPartitionInfo* partition) {
+        partition->ShardIdx = shardIdx;
+
         TTopicTabletInfo::TPtr& pqShard = Shards[shardIdx];
         if (!pqShard) {
             pqShard.Reset(new TTopicTabletInfo());
@@ -2435,6 +2439,20 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         }
 
         return result;
+    }
+
+    void FinishAlter() {
+        Y_ABORT_UNLESS(AlterData);
+
+        AlterVersion = AlterData->AlterVersion;
+        Mode = AlterData->Mode;
+        Format = AlterData->Format;
+        VirtualTimestamps = AlterData->VirtualTimestamps;
+        ResolvedTimestamps = AlterData->ResolvedTimestamps;
+        AwsRegion = AlterData->AwsRegion;
+        State = AlterData->State;
+
+        AlterData.Reset();
     }
 
     ui64 AlterVersion = 1;

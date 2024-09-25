@@ -470,20 +470,14 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
         // If supportive - update counters only prior to write, otherwise - only after writes;
         return;
     }
-    if (BytesWrittenGrpc)
-        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
-    if (BytesWrittenTotal)
-        BytesWrittenTotal.Inc(WriteNewSize);
-
-    if (BytesWrittenUncompressed)
-        BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
+    BytesWrittenGrpc.Inc(WriteNewSizeInternal);
+    BytesWrittenTotal.Inc(WriteNewSize);
+    BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
     if (BytesWrittenComp)
         BytesWrittenComp.Inc(WriteCycleSize);
-    if (MsgsWrittenGrpc)
-        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
-    if (MsgsWrittenTotal) {
-        MsgsWrittenTotal.Inc(WriteNewMessages);
-    }
+
+    MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
+    MsgsWrittenTotal.Inc(WriteNewMessages);
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {

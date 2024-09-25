@@ -899,7 +899,7 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
+    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
@@ -966,6 +966,21 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
 
 void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvTxCalcPredicate" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
+    if (PlanStep.Defined() && TxId.Defined()) {
+        if (GetStepAndTxId(*ev->Get()) < GetStepAndTxId(*PlanStep, *TxId)) {
+            Send(Tablet,
+                 MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(ev->Get()->Step,
+                                                             ev->Get()->TxId,
+                                                             Partition,
+                                                             Nothing()).Release());
+            return;
+        }
+    }
+
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -1975,7 +1990,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             return EProcessResult::Continue;
         }
         t->Predicate.ConstructInPlace(true);
-        return PreProcessImmediateTx(t->ProposeTransaction->Record);
+        return PreProcessImmediateTx(t->ProposeTransaction->GetRecord());
 
     } else if (t->Tx) { // Distributed TX
         if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
@@ -2552,7 +2567,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
 void TPartition::ExecImmediateTx(TTransaction& t)
 {
     --ImmediateTxCount;
-    auto& record = t.ProposeTransaction->Record;
+    const auto& record = t.ProposeTransaction->GetRecord();
     Y_ABORT_UNLESS(record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(record.HasData());
 
@@ -2565,7 +2580,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
                              t.Message);
         return;
     }
-    for (auto& operation : record.GetData().GetOperations()) {
+    for (const auto& operation : record.GetData().GetOperations()) {
         if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }

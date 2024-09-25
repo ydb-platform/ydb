@@ -552,6 +552,54 @@ public:
 
 namespace NPQState {
 
+class TBootstrapConfigWrapper: public NKikimrPQ::TBootstrapConfig {
+    struct TSerializedProposeTransaction {
+        TString Value;
+
+        static TSerializedProposeTransaction Serialize(const NKikimrPQ::TBootstrapConfig& value) {
+            NKikimrPQ::TEvProposeTransaction record;
+            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(value);
+            return {record.SerializeAsString()};
+        }
+    };
+
+    struct TSerializedUpdateConfig {
+        TString Value;
+
+        static TSerializedUpdateConfig Serialize(const NKikimrPQ::TBootstrapConfig& value) {
+            NKikimrPQ::TUpdateConfig record;
+            record.MutableBootstrapConfig()->CopyFrom(value);
+            return {record.SerializeAsString()};
+        }
+    };
+
+    mutable std::optional<std::variant<
+        TSerializedProposeTransaction,
+        TSerializedUpdateConfig
+    >> PreSerialized;
+
+    template <typename T>
+    const TString& Get() const {
+        if (!PreSerialized) {
+            PreSerialized.emplace(T::Serialize(*this));
+        }
+
+        const auto* value = std::get_if<T>(&PreSerialized.value());
+        Y_ABORT_UNLESS(value);
+
+        return value->Value;
+    }
+
+public:
+    const TString& GetPreSerializedProposeTransaction() const {
+        return Get<TSerializedProposeTransaction>();
+    }
+
+    const TString& GetPreSerializedUpdateConfig() const {
+        return Get<TSerializedUpdateConfig>();
+    }
+};
+
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -627,7 +675,6 @@ public:
         return false;
     }
 
-
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -669,7 +716,7 @@ public:
         TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
         auto topicPath = TPath::Init(txState->TargetPathId, context.SS);
 
-        std::optional<NKikimrPQ::TBootstrapConfig> bootstrapConfig;
+        std::optional<TBootstrapConfigWrapper> bootstrapConfig;
         if (txState->TxType == TTxState::TxCreatePQGroup && topicPath.Parent().IsCdcStream()) {
             bootstrapConfig.emplace();
 
@@ -881,20 +928,37 @@ private:
             config.SetVersion(pqGroup.AlterData->AlterVersion);
         }
 
+        THashSet<ui32> linkedPartitions;
+
         for(const auto& pq : pqShard.Partitions) {
             config.AddPartitionIds(pq->PqId);
 
             auto& partition = *config.AddPartitions();
             FillPartition(partition, pq.Get(), 0);
+
+            linkedPartitions.insert(pq->PqId);
+            linkedPartitions.insert(pq->ParentPartitionIds.begin(), pq->ParentPartitionIds.end());
+            linkedPartitions.insert(pq->ChildPartitionIds.begin(), pq->ChildPartitionIds.end());
+            for (auto c : pq->ChildPartitionIds) {
+                auto it = pqGroup.Partitions.find(c);
+                if (it == pqGroup.Partitions.end()) {
+                    continue;
+                }
+                linkedPartitions.insert(it->second->ParentPartitionIds.begin(), it->second->ParentPartitionIds.end());
+            }
         }
 
-        for(const auto& p : pqGroup.Shards) {
-            const auto& pqShard = p.second;
-            const auto& tabletId = context.SS->ShardInfos[p.first].TabletID;
-            for (const auto& pq : pqShard->Partitions) {
-                auto& partition = *config.AddAllPartitions();
-                FillPartition(partition, pq.Get(), ui64(tabletId));
+        for(auto lp : linkedPartitions) {
+            auto it = pqGroup.Partitions.find(lp);
+            if (it == pqGroup.Partitions.end()) {
+                continue;
             }
+
+            auto* partitionInfo = it->second;
+            const auto& tabletId = context.SS->ShardInfos[partitionInfo->ShardIdx].TabletID;
+
+            auto& partition = *config.AddAllPartitions();
+            FillPartition(partition, partitionInfo, ui64(tabletId));
         }
     }
 
@@ -918,7 +982,7 @@ private:
                                  const TTopicTabletInfo& pqShard,
                                  const TString& topicName,
                                  const TString& topicPath,
-                                 const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                                 const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                                  const TString& cloudId,
                                  const TString& folderId,
                                  const TString& databaseId,
@@ -931,7 +995,7 @@ private:
                            const TTopicTabletInfo& pqShard,
                            const TString& topicName,
                            const TString& topicPath,
-                           const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                           const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                            const TString& cloudId,
                            const TString& folderId,
                            const TString& databaseId,

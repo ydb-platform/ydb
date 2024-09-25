@@ -54,7 +54,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
     AFL_VERIFY(event);
 
-    AFL_VERIFY(event->Record.GetOrigin() == PathId);
+    AFL_VERIFY(event->Record.GetOrigin() == TabletId);
     AFL_VERIFY(event->Record.GetTxId() == LockId);
 
     return event->Record.GetStatus();

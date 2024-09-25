@@ -38,29 +38,6 @@ public:
     TSchemeDirectoryRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
-
-    void Bootstrap() override {
-        if (!TBase::PostToRequest()) {
-            return;
-        }
-
-        const auto& params(TBase::Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            TBase::Database = params.Get("database");
-        }
-        if (TBase::Database.empty()) {
-            return TBase::ReplyAndPassAway(TBase::Viewer->GetHTTPBADREQUEST(TBase::Event->Get(), "text/plain", "field 'database' is required"));
-        }
-
-        if (params.Has("path")) {
-            TBase::Request.set_path(params.Get("path"));
-        }
-        if (TBase::Request.path().empty()) {
-            return TBase::ReplyAndPassAway(TBase::Viewer->GetHTTPBADREQUEST(TBase::Event->Get(), "text/plain", "field 'path' is required"));
-        }
-
-        TBase::Bootstrap();
-    }
 };
 
 class TJsonSchemeDirectoryHandler : public TJsonHandler<TSchemeDirectory> {

@@ -14,7 +14,7 @@ namespace NKikimr::NOlap {
 class TSchemaVersionNormalizer : public TNormalizationController::INormalizerComponent {
 public:
     static TString GetClassNameStatic() {
-        return ::ToString(ENormalizerSequentialId::SchemaVersionCleaner);
+        return "SchemaVersionCleaner";
     }
 
 private:
@@ -26,7 +26,7 @@ public:
 
 public:
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::SchemaVersionCleaner;
+        return std::nullopt;
     }
 
     virtual TString GetClassName() const override {

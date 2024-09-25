@@ -29,7 +29,7 @@ public:
         }
     }
 
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block) {
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> Pop(bool block) {
         with_lock(Mutex_) {
             if (block) {
                 CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
@@ -97,29 +97,29 @@ public:
         }, Pool_);
     }
 
-    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
+    std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount, size_t maxByteSize) override {
         // TODO
         Y_UNUSED(maxByteSize);
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() &&  res.size() <= maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+        std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
+        for (auto event = EventsQ_.Pop(block); event.has_value() && res.size() <= maxEventsCount.value_or(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(*event);
         }
         return res;
     }
 
-    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
+    std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
         return GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
     }
 
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
         // TODO
         Y_UNUSED(maxByteSize);
 
         return EventsQ_.Pop(block);
     }
 
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
         return GetEvent(settings.Block_, settings.MaxByteSize_);
     }
 
@@ -139,7 +139,7 @@ public:
         return Counters_;
     }
 
-    TString GetSessionId() const override {
+    std::string GetSessionId() const override {
         return ToString(Session_->GetPartitionSessionId());
     }
 
@@ -226,7 +226,7 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
 
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
-    TString topicPath = settings.Topics_.front().Path_;
+    auto topicPath = settings.Topics_.front().Path_;
 
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
@@ -239,7 +239,7 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
 
     return std::make_shared<TFileTopicReadSession>(
         TFile(*filePath, EOpenMode::TEnum::RdOnly),
-        MakeIntrusive<TDummyPartitionSession>(sessionId, topicPath, partitionId)
+        MakeIntrusive<TDummyPartitionSession>(sessionId, TString{topicPath}, partitionId)
     );
 }
 

@@ -27,9 +27,9 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 * [Row-oriented tables](../../datamodel/table.md#row-tables) are designed for OLTP workloads.
 * [Column-oriented tables](../../datamodel/table.md#column-tables) are designed for OLAP workloads.
 
-Logically, from the user's perspective, both types of tables look the same. The main difference between row-oriented tables and column-oriented tables is in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning cells related to different rows are stored next to each other.
+Logically, from the user’s perspective, both types of tables look the same. The main difference between row-oriented and column-oriented tables lies in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning that cells from different rows are stored next to each other within the same column.
 
-Regardless of type, each table must have a primary key. Column tables can only use `NOT NULL` columns as primary keys. Table data is physically sorted by the primary key.
+Regardless of the type, each table must have a primary key. Column-oriented tables can only have `NOT NULL` columns in primary keys. Table data is physically sorted by the primary key.
 
 Partitioning works differently in row and column tables:
 

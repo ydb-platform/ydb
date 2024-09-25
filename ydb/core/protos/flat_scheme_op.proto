@@ -1015,7 +1015,10 @@ message TDropContinuousBackup {
 
 message TRestoreIncrementalBackup {
     optional string SrcTableName = 1;
+    optional NKikimrProto.TPathID SrcPathId = 3;
+
     optional string DstTableName = 2;
+    optional NKikimrProto.TPathID DstPathId = 4;
 }
 
 enum EIndexType {
@@ -1661,6 +1664,7 @@ enum EOperationType {
     ESchemeOpAlterResourcePool = 102;
 
     ESchemeOpRestoreIncrementalBackup = 103;
+    ESchemeOpRestoreIncrementalBackupAtTable = 104;
 }
 
 message TApplyIf {
@@ -1931,6 +1935,7 @@ enum EPathState {
     EPathStateMigrated = 9;
     EPathStateRestore = 10;
     EPathStateMoving = 11;
+    EPathStateOutgoingIncrementalRestore = 12;
 }
 
 message TPathVersion {

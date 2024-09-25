@@ -309,11 +309,17 @@ struct TSchemeChecksMixin
 
 };
 
+enum class ETableChangeSenderType {
+    AsyncIndex,
+    IncrementalRestore,
+};
+
 IActor* CreateTableChangeSenderShard(
     const TActorId& parent,
     const TDataShardId& dataShard,
     ui64 shardId,
-    const TPathId& indexTablePathId,
-    const TMap<TTag, TTag>& tagMap);
+    const TPathId& targetTablePathId,
+    const TMap<TTag, TTag>& tagMap,
+    ETableChangeSenderType type);
 
 } // namespace NKikimr::NDataShard

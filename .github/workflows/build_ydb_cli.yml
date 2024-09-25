@@ -24,7 +24,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-13
+          #- macos-13
           #- macos-latest
           #- windows-latest
     name: Build YDB CLI for ${{ matrix.os }}
@@ -58,15 +58,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: prepare directories
-        run: mkdir -p binaries/darwin/amd64
-             mkdir -p binaries/linux/amd64
+        run: mkdir -p binaries/linux/amd64
+             mkdir -p binaries/darwin/amd64
 #             mkdir -p binaries/windows/amd64
 #             mkdir -p binaries/darwin/arm64
-      - name: copy darwin amd64 binary
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-13-binary
-          path: binaries/darwin/amd64/
+#      - name: copy darwin amd64 binary
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: macos-13-binary
+#          path: binaries/darwin/amd64/
 #      - name: copy darwin arm64 binary
 #        uses: actions/download-artifact@v4
 #        with:

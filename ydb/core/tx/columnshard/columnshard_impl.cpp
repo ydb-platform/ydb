@@ -686,7 +686,7 @@ void TColumnShard::SetupIndexation() {
     const TMonotonic now = TMonotonic::Now();
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
-            if (pathInfo->GetLastIndexation() + durationLimit < now && pathInfo->GetCommittedSize() < (i64)bytesLimit) {
+            if (now < pathInfo->GetLastIndexation() + durationLimit && pathInfo->GetCommittedSize() < (i64)bytesLimit) {
                 continue;
             }
             pathInfo->SetLastIndexation(now);

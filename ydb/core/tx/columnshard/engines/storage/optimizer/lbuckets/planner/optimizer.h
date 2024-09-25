@@ -1093,7 +1093,7 @@ public:
         Y_UNUSED(LeftBucket->Actualize(currentInstant));
         AddBucketToRating(LeftBucket);
         for (auto&& i : Buckets) {
-            const i64 rating = i.second->GetWeight();
+            const i64 rating = i.second->GetLastWeight();
             if (i.second->Actualize(currentInstant)) {
                 RemoveBucketFromRating(i.second, rating);
                 AddBucketToRating(i.second);

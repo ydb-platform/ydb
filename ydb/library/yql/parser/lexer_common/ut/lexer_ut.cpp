@@ -1,7 +1,8 @@
-#include "lexer.h"
+#include <ydb/library/yql/parser/lexer_common/lexer.h>
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <ydb/library/yql/sql/v1/lexer/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -15,8 +16,12 @@ std::pair<TParsedTokenList, NYql::TIssues> Tokenize(ILexer::TPtr& lexer, TString
     return {tokens, issues};
 }
 
-NYql::TIssues GetIssues(ILexer::TPtr& lexer, TString queryUtf8) {
-    return Tokenize(lexer, queryUtf8).second;
+TVector<TString> GetIssueMessages(ILexer::TPtr& lexer, TString queryUtf8) {
+    TVector<TString> messages;
+    for (const auto& issue : Tokenize(lexer, queryUtf8).second) {
+        messages.emplace_back(issue.ToString(/* oneLine = */ true));
+    }
+    return messages;
 }
 
 void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
@@ -27,8 +32,6 @@ void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
     UNIT_ASSERT_EQUAL(lhs.Name, rhs.Name);
     UNIT_ASSERT_EQUAL(lhs.Content, rhs.Content);
     UNIT_ASSERT_EQUAL(lhs.Line, rhs.Line);
-    UNIT_ASSERT_EQUAL(lhs.StartPos, rhs.StartPos);
-    UNIT_ASSERT_EQUAL(lhs.StopPos, rhs.StopPos);
 }
 
 void AssertEquivialent(const TParsedTokenList& lhs, const TParsedTokenList& rhs) {
@@ -44,6 +47,8 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             "",
             "   ",
             "SELECT",
+            "SEL", // identifier
+            "SELECT FROM test",
             "SELECT * FROM",
             "   SELECT * FROM ",
             "SELECT \"😊\" FROM ydb",
@@ -63,25 +68,55 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             auto [tokens3, issues3] = Tokenize(lexer3, query);
             auto [tokens4, issues4] = Tokenize(lexer4, query);
             AssertEquivialent(tokens3, tokens4);
-            UNIT_ASSERT_EQUAL(issues3.Empty(), issues4.Empty());
+            UNIT_ASSERT(issues3.Empty());
+            UNIT_ASSERT(issues4.Empty());
         }
     }
 
     Y_UNIT_TEST(IssuesCollected) {
-        const TVector<TString> queriesUtf8 = {
-            "😊",
-            "SEL",
-            "SELECT FROM test",
-        };
-
         auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
         auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
 
-        for (const auto& query : queriesUtf8) {
-            auto issues3 = GetIssues(lexer3, query);
-            auto issues4 = GetIssues(lexer4, query);
+        const TVector<TString> queriesUtf8 = {
+            "😊",
+            "select \"aaaa",
+            "\"\\\"",
+            "😊 SELECT * FR",
+        };
 
-            UNIT_ASSERT_EQUAL(issues3.Empty(), issues4.Empty());
-        }
+        for (const auto& query : queriesUtf8) {
+            auto issues3 = GetIssueMessages(lexer3, query);
+            auto issues4 = GetIssueMessages(lexer4, query);
+
+            UNIT_ASSERT(!issues3.empty());
+            UNIT_ASSERT(!issues4.empty());
+        }        
+    }
+
+    Y_UNIT_TEST(IssueMessagesAntlr3) {
+        auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
+
+        auto actual = GetIssueMessages(lexer3, "😊 SELECT * FR");
+
+        TVector<TString> expected = {
+            "<main>:1:0: Error: Unexpected character '\xF0\x9F\x98\x8A' (Unicode character <128522>) : cannot match to any predicted input...",
+            "<main>:1:1: Error: Unexpected character : cannot match to any predicted input...",
+            "<main>:1:2: Error: Unexpected character : cannot match to any predicted input...", 
+            "<main>:1:3: Error: Unexpected character : cannot match to any predicted input...",
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
+    Y_UNIT_TEST(IssueMessagesAntlr4) {
+        auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
+
+        auto actual = GetIssueMessages(lexer4, "😊 SELECT * FR");
+
+        TVector<TString> expected = {
+            "<main>:1:0: Error: token recognition error at: '\xF0\x9F\x98\x8A'",
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 }

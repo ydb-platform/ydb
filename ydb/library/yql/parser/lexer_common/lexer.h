@@ -23,10 +23,6 @@ struct TParsedToken {
     // but when antlr4 lexer is used, LinePos is a position as in a symbol array,
     ui32 Line = 0;    // starts from 1
     ui32 LinePos = 0; // starts from 0
-    // Position of first and last token symbol
-    // These values are always as in a symbol array
-    ui32 StartPos; // starts from 0
-    ui32 StopPos;  // starts from 0
 };
 
 class ILexer {

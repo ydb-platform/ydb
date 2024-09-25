@@ -97,17 +97,6 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
                 Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
-            } else if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
-                NKikimrTxColumnShard::TCommitWriteTxBody proto;
-                proto.SetLockId(operation->GetLockId());
-                TString txBody;
-                Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
-                auto op = Self->GetProgressTxController().StartProposeOnExecute(
-                    TTxController::TTxInfo(
-                        NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId(), writeMeta.GetSource(), operation->GetCookie(), {}),
-                    txBody, txc);
-                AFL_VERIFY(!op->IsFail());
-                ResultOperators.emplace_back(op);
             } else {
                 auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
                 NKikimrDataEvents::TLock lock;

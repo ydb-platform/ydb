@@ -2184,22 +2184,23 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, std::option
     std::vector<TReadSessionEventInfo<UseMigrationProtocol>> eventInfos;
     const size_t maxCount = maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max();
     TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
-
-    std::lock_guard<std::mutex> guard(TParent::Mutex);
-    eventInfos.reserve(Min(TParent::Events.size() + TParent::CloseEvent.has_value(), maxCount));
-    do {
-        if (block) {
-            TParent::WaitEventsImpl();
-        }
-
-        while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-            TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(maxByteSize, accumulator);
-            eventInfos.emplace_back(std::move(event));
-            if (eventInfos.back().IsSessionClosedEvent()) {
-                break;
+    {
+        std::lock_guard<std::mutex> guard(TParent::Mutex);
+        eventInfos.reserve(Min(TParent::Events.size() + TParent::CloseEvent.has_value(), maxCount));
+        do {
+            if (block) {
+                TParent::WaitEventsImpl();
             }
-        }
-    } while (block && eventInfos.empty());
+
+            while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
+                TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(maxByteSize, accumulator);
+                eventInfos.emplace_back(std::move(event));
+                if (eventInfos.back().IsSessionClosedEvent()) {
+                    break;
+                }
+            }
+        } while (block && eventInfos.empty());
+    }
 
     accumulator.OnUserRetrievedEvent();
 
@@ -2222,18 +2223,19 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxBy
 
     std::optional<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
     TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
+    {
+        std::lock_guard<std::mutex> guard(TParent::Mutex);
+        do {
+            if (block) {
+                TParent::WaitEventsImpl();
+            }
 
-    std::lock_guard<std::mutex> guard(TParent::Mutex);
-    do {
-        if (block) {
-            TParent::WaitEventsImpl();
-        }
+            if (TParent::HasEventsImpl()) {
+                eventInfo = GetEventImpl(maxByteSize, accumulator);
+            }
 
-        if (TParent::HasEventsImpl()) {
-            eventInfo = GetEventImpl(maxByteSize, accumulator);
-        }
-
-    } while (block && !eventInfo);
+        } while (block && !eventInfo);
+    }
 
     accumulator.OnUserRetrievedEvent();
 

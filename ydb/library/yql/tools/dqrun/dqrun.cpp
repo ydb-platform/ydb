@@ -99,6 +99,7 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
+#include <util/folder/iterator.h>
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/generic/scope.h>
@@ -372,7 +373,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
 }
 
-int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
+int PrepareProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
     program->SetUseTableMetaFromGraph(options.UseMetaFromGraph);
     bool fail = true;
     if (options.Sql || options.Pg) {
@@ -415,24 +416,20 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     if (fail) {
         return 1;
     }
+    return 0;
+}
 
-    TProgram::TStatus status = TProgram::TStatus::Error;
-    if (options.ValidateOnly) {
-        Cout << "Validate program..." << Endl;
-        status = program->Validate(options.User);
-    } else if (options.LineageOnly) {
-        Cout << "Calculate lineage..." << Endl;
-        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
-        status = program->LineageWithConfig(options.User, config);
-    } else if (options.OptimizeOnly) {
-        Cout << "Optimize program..." << Endl;
-        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
-        status = program->OptimizeWithConfig(options.User, config);
-    } else {
-        Cout << "Run program..." << Endl;
-        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
-        status = program->RunWithConfig(options.User, config);
-    }
+TProgram::TFutureStatus RunProgram(TProgramPtr program, const TRunOptions& options) {
+    // TProgram::TStatus status = TProgram::TStatus::Error;
+    YQL_ENSURE(!options.ValidateOnly);
+    YQL_ENSURE(!options.LineageOnly);
+    YQL_ENSURE(!options.OptimizeOnly);
+    Cout << "Run program..." << Endl;
+    auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
+    return program->RunWithConfig(options.User, config);
+}
+
+int PrintResults(TProgramPtr program, const TRunOptions& options, TProgram::TStatus status) {
     if (options.WithFinalIssues) {
         program->FinalizeIssues();
     }
@@ -500,7 +497,7 @@ int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
     TString fqCfgFile;
-    TVector<TString> progFiles;
+    TString progFiles;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
     TString user = GetUsername();
@@ -567,7 +564,8 @@ int RunMain(int argc, const char* argv[])
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
         .Optional()
-        .AppendTo(&progFiles);
+        .RequiredArgument("FILE")
+        .StoreResult(&progFiles);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
         .NoArgument()
@@ -1135,8 +1133,13 @@ int RunMain(int argc, const char* argv[])
         )
     );
 
-    int result = 0;
-    for (const auto& progFile : progFiles) {
+    TVector<TProgramPtr> programs;
+    for (const auto& entry : TDirIterator(progFiles)) {
+        if (entry.fts_type != FTS_F) {
+            continue;
+        }
+        const auto& progFile = entry.fts_path;
+
     TProgramPtr program;
     if (res.Has("replay") && res.Has("capture")) {
         YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
@@ -1150,6 +1153,7 @@ int RunMain(int argc, const char* argv[])
     } else {
         program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
         program->SetQueryName(progFile);
+        opId.push_back('_');
     }
 
     if (paramsFile) {
@@ -1187,7 +1191,17 @@ int RunMain(int argc, const char* argv[])
         runOptions.ValidateResultFormat = true;
     }
 
-    result &= RunProgram(std::move(program), runOptions, clusters, sqlFlags);
+        int result = PrepareProgram(program, runOptions, clusters, sqlFlags);
+        if (result) {
+            return result;
+        }
+        programs.emplace_back(program);
+    }
+
+    TVector<TProgram::TFutureStatus> futures;
+    for (TProgramPtr program : programs) {
+        futures.emplace_back(RunProgram(program, runOptions));
+    }
     if (res.Has("metrics")) {
         NProto::TMetricsRegistrySnapshot snapshot;
         snapshot.SetDontIncrement(true);
@@ -1195,6 +1209,17 @@ int RunMain(int argc, const char* argv[])
         auto output = MakeHolder<TFileOutput>(metricsFile);
         SerializeToTextFormat(snapshot, *output.Get());
     }
+
+    int result = 0;
+    NThreading::WaitAll(futures).Wait();
+    for (size_t i = 0; i < futures.size(); ++i) {
+        try {
+            YQL_ENSURE(futures[i].IsReady());
+            PrintResults(programs[i], runOptions, futures[i].GetValueSync());
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << e.what() << '\n';
+            result = 1;
+        }
     }
 
     if (result == 0 && res.Has("capture")) {

@@ -417,14 +417,8 @@ public:
                 return EUpdateResult::ReadInput;
             }
             case EOperatingMode::SplittingState: {
-                UpdateSpillingBuckets();
-
-                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) {
-                    return EUpdateResult::Yield;
-                }
-                if (!IsInMemoryProcessingStateSplitted) {
-                    SplitStateIntoBuckets();
-                }
+                if (SplitStateIntoBucketsAndWait()) return EUpdateResult::Yield;
+                return Update();
             }
             case EOperatingMode::Spilling: {
                 UpdateSpillingBuckets();
@@ -534,13 +528,52 @@ private:
         return ProcessSpilledData();
     }
 
+    i64 SplitStateSpillingBucket = -1;
+
     bool SplitStateIntoBucketsAndWait() {
-       while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
+        if (SplitStateSpillingBucket != -1) {
+            auto& bucket = SpilledBuckets[SplitStateSpillingBucket];
+            MKQL_ENSURE(bucket.AsyncWriteOperation.has_value(), "MISHA ERROR");
+            if (!bucket.AsyncWriteOperation->HasValue()) return true;
+            bucket.SpilledState->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
+            bucket.AsyncWriteOperation = std::nullopt;
+
+            while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
+                bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
+                for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                    //releasing values stored in unsafe TUnboxedValue buffer
+                    keyAndState[i].UnRef();
+                }
+                if (bucket.AsyncWriteOperation) return true;
+
+                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                if (bucket.AsyncWriteOperation) return true;
+            }
+
+            SplitStateSpillingBucket = -1;
+            bucket.InMemoryProcessingState->ReadMore<false>();
+        }
+        while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
 
             bucket.LineCount++;
+
+            if (bucket.BucketState != TSpilledBucket::EBucketState::InMemory) {
+                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
+                for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                    //releasing values stored in unsafe TUnboxedValue buffer
+                    keyAndState[i].UnRef();
+                }
+                if (bucket.AsyncWriteOperation) {
+                    SplitStateSpillingBucket = bucketId;
+                    return true;
+                }
+                continue;
+            }
+
             auto& processingState = *bucket.InMemoryProcessingState;
 
             for (size_t i = 0; i < KeyWidth; ++i) {
@@ -553,14 +586,44 @@ private:
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
-            if (!HasMemoryForProcessing() && TryToReduceMemoryAndWait()) {
-                return true;
+            if (!HasMemoryForProcessing()) {
+
+                i64 bucketNumToSpill = -1;
+                ui64 sizeToSpill = 0;
+                for (ui64 i = 0; i < SpillingBucketsCount; ++i) {
+                    if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
+                        if (SpilledBuckets[i].LineCount >= sizeToSpill) {
+                            bucketNumToSpill = i;
+                            sizeToSpill = SpilledBuckets[i].LineCount;
+                        }
+                    }
+                }
+                if (bucketNumToSpill == -1) continue;
+
+                SplitStateSpillingBucket = bucketNumToSpill;
+
+                auto& bucket = SpilledBuckets[bucketNumToSpill];
+                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+
+                while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
+                    bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
+                    for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                        //releasing values stored in unsafe TUnboxedValue buffer
+                        keyAndState[i].UnRef();
+                    }
+                    if (bucket.AsyncWriteOperation) return true;
+
+                    bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                    if (bucket.AsyncWriteOperation) return true;
+                }
+
             }
         }
 
         InMemoryProcessingState.ReadMore<false>();
         IsInMemoryProcessingStateSplitted = true;
         SwitchMode(EOperatingMode::Spilling);
+        return false;
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
@@ -732,7 +795,7 @@ private:
             }
             case EOperatingMode::Spilling: {
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
-                MKQL_ENSURE(EOperatingMode::SplittingState == Mode, "Internal logic error");
+                // MKQL_ENSURE(EOperatingMode::SplittingState == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
                 break;
@@ -1634,6 +1697,8 @@ private:
             AllowSpilling,
             ctx
         );
+
+        std::cerr << "MISHA MADE STATE\n";
     }
 
     void RegisterDependencies() const final {

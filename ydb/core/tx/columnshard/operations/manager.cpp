@@ -255,9 +255,6 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
         return EOperationBehaviour::NoTxWrite;
     }
 
-    if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
-        return EOperationBehaviour::InTxWrite;
-    }
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
     return TConclusionStatus::Fail("undefined request for detect tx type");
 }

@@ -249,7 +249,7 @@ namespace {
                 return;
             }
 
-            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(READ_TIMEOUT_TAG)); // read timeout
+            Schedule(Ctx->Cfg.ReadBatchTimeout, new NActors::TEvents::TEvWakeup(READ_TIMEOUT_TAG)); // read timeout
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
@@ -293,7 +293,7 @@ namespace {
 
             Sender.SendPartsOnMain(SelfId(), Reader.GetResult());
 
-            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(SEND_TIMEOUT_TAG)); // send timeout
+            Schedule(Ctx->Cfg.SendBatchTimeout, new NActors::TEvents::TEvWakeup(SEND_TIMEOUT_TAG)); // send timeout
         }
 
         template<class TEvPutResult>
@@ -314,7 +314,7 @@ namespace {
         }
 
         void PassAway() override {
-            Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
+            Send(NotifyId, new NActors::TEvents::TEvCompleted());
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway"));
             TActorBootstrapped::PassAway();
         }

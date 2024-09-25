@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             );
             CREATE RESOURCE POOL CLASSIFIER MyPoolClassifier WITH (
                 RESOURCE_POOL="MyPool",
-                MEMBERNAME=")" << userSID << R"("
+                MEMBER_NAME=")" << userSID << R"("
             );
             GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
         )";

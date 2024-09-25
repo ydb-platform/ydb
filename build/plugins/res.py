@@ -13,7 +13,7 @@ def remove_prefix(text, prefix):
 
 def onresource_files(unit, *args):
     """
-    @usage: RESOURCE_FILES([PREFIX {prefix}] [STRIP prefix_to_strip] {path})
+    @usage: RESOURCE_FILES([DONT_COMPRESS] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})
 
     This macro expands into
     RESOURCE(DONT_PARSE {path} resfs/file/{prefix}{path}
@@ -26,8 +26,7 @@ def onresource_files(unit, *args):
     resfs/file/{key} stores any value whose source was a file on a filesystem.
     resfs/src/resfs/file/{key} must store its path.
 
-    DONT_PARSE disables parsing for source code files (determined by extension)
-               Please don't abuse: use separate DONT_PARSE macro call only for files subject to parsing
+    DONT_COMPRESS allows optionally disable resource compression on platforms where it is supported
 
     This form is for use from other plugins:
     RESOURCE_FILES([DEST {dest}] {path}) expands into RESOURCE({path} resfs/file/{dest})
@@ -43,9 +42,14 @@ def onresource_files(unit, *args):
         # GO_RESOURCE currently doesn't support DONT_PARSE
         res.append('DONT_PARSE')
 
+    if args and not unit.enabled('_GO_MODULE') and 'DONT_COMPRESS' in args:
+        res.append('DONT_COMPRESS')
+
     args = iter(args)
     for arg in args:
-        if arg == 'PREFIX':
+        if arg == 'DONT_COMPRESS':
+            pass
+        elif arg == 'PREFIX':
             prefix, dest = next(args), None
         elif arg == 'DEST':
             dest, prefix = next(args), None
@@ -58,7 +62,7 @@ def onresource_files(unit, *args):
             )
             if key in res:
                 unit.message(
-                    ['warn', "Dublicated resource file {} in RESOURCE_FILES() macro. Skipped it.".format(path)]
+                    ['warn', "Duplicated resource file {} in RESOURCE_FILES() macro. Skipped it.".format(path)]
                 )
                 continue
             src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))

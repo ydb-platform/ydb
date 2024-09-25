@@ -22,8 +22,6 @@
 
 namespace NKikimr::NDataShard::NKMeans {
 
-// TODO(mbkkt) We are know all tempalte parameters for these functions and classes so we can move them to cpp
-
 template <typename TRes>
 Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length) noexcept {
     auto r = TriWayDotProduct(lhs, rhs, length);

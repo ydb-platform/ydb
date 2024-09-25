@@ -4,7 +4,7 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-{{ ydb-short-name }} allows you to specify a TTL column in both [row-oriented](../datamodel/table.md#row-oriented-tables) and [column-oriented](../datamodel/table.md#column-oriented-tables) tables. Values in TTL columns determine the lifetime of table rows.
+{{ ydb-short-name }} allows you to specify a TTL column in both [row-oriented](../datamodel/table.md#row-oriented-tables) and [column-oriented](../datamodel/table.md#column-oriented-tables) tables. Values in TTL columns determine the table rows lifetime.
 
 {% note warning %}
 

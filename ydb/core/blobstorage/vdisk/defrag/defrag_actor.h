@@ -48,7 +48,8 @@ namespace NKikimr {
             const TOutOfSpaceState& oos,
             ui32 hugeCanBeFreedChunks,
             ui32 hugeTotalChunks,
-            double defaultPercent);
+            double defaultPercent,
+            double hugeDefragFreeSpaceShareThreshold);
 
     ////////////////////////////////////////////////////////////////////////////
     // VDISK DEFRAG ACTOR CREATOR

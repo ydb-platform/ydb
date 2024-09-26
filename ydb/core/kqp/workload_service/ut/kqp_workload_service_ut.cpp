@@ -457,13 +457,13 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         {  // Check tables
             auto result = ydb->ExecuteQuery(R"(
                 SELECT * FROM `.metadata/workload_manager/running_requests`
-            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID));
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(ydb->GetSettings().GetSharedTenantName()));
             TSampleQueries::CheckSuccess(result);
 
             NYdb::TResultSetParser resultSet(result.GetResultSet(0));
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
-            const auto& databaseId = resultSet.ColumnParser("database").GetOptionalString();
+            const auto& databaseId = resultSet.ColumnParser("database").GetOptionalUtf8();
             UNIT_ASSERT_C(databaseId, "Unexpected database response");
             UNIT_ASSERT_VALUES_EQUAL_C(*databaseId, ydb->FetchDatabase(serverlessTenant)->Get()->DatabaseId, "Unexpected database id");
         }
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
     void CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierId, const TQueryRunnerSettings& settings, const TString& poolId) {
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/Root` TO `)" << settings.UserSID_ << R"(`;
+            GRANT ALL ON `)" << CanonizePath(settings.Database_) << R"(` TO `)" << settings.UserSID_ << R"(`;
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=0
             );

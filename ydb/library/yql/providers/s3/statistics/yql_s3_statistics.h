@@ -1,6 +1,9 @@
 #pragma once
 
 #include <ydb/library/yql/core/yql_statistics.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <map>
 
 namespace NYql {
 
@@ -13,6 +16,9 @@ struct TS3ProviderStatistics : public IProviderStatistics {
     double PrunedDecodedRowAvgSize = 0.0;
     TString Format;
     TString Compression;
+    std::unordered_map<ui64, double> Costs;
 };
+
+double GetDqSourceWrapBaseCost(const NNodes::TDqSourceWrapBase& wrapBase, TTypeAnnotationContext& typeCtx);
 
 } // namespace NYql

@@ -1178,6 +1178,17 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+
+        optional uint64 IncrementalRestoreReadAheadLo = 17 [(ControlOptions) = {
+            Description: "Override for incremental restore readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 IncrementalRestoreReadAheadHi = 18 [(ControlOptions) = {
+            Description: "Override for incremental restore readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {

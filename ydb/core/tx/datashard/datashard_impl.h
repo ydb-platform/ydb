@@ -1,29 +1,30 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_trans_queue.h"
-#include "datashard_outreadset.h"
-#include "datashard_pipeline.h"
-#include "datashard_schema_snapshots.h"
-#include "datashard_snapshots.h"
-#include "datashard_s3_downloads.h"
-#include "datashard_s3_uploads.h"
-#include "datashard_user_table.h"
-#include "datashard_repl_offsets.h"
-#include "datashard_repl_offsets_client.h"
-#include "datashard_repl_offsets_server.h"
-#include "datashard_write.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
+#include "conflicts_cache.h"
+#include "datashard_outreadset.h"
+#include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
+#include "datashard_repl_offsets_client.h"
+#include "datashard_repl_offsets_server.h"
+#include "datashard_s3_downloads.h"
+#include "datashard_s3_uploads.h"
+#include "datashard_schema_snapshots.h"
+#include "datashard_snapshots.h"
+#include "datashard_trans_queue.h"
+#include "datashard_user_table.h"
+#include "datashard_write.h"
+#include "incr_restore_scan.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
-#include "volatile_tx.h"
-#include "conflicts_cache.h"
 #include "reject_reason.h"
 #include "scan_common.h"
+#include "volatile_tx.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -254,6 +255,7 @@ class TDataShard
     class TTxHandleSafeBuildIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
+    class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -316,6 +318,7 @@ class TDataShard
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
     template <typename T> friend class TBackupRestoreUnitBase;
+    friend class TCreateIncrementalRestoreSrcUnit;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
@@ -1325,6 +1328,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
@@ -1393,6 +1398,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1711,6 +1718,14 @@ public:
 
     ui64 GetTtlReadAheadHiOverride() const {
         return TtlReadAheadHi;
+    }
+
+    ui64 GetIncrementalRestoreReadAheadLoOverride() const {
+        return IncrementalRestoreReadAheadLo;
+    }
+
+    ui64 GetIncrementalRestoreReadAheadHiOverride() const {
+        return IncrementalRestoreReadAheadHi;
     }
 
     bool GetEnableLockedWrites() const {
@@ -2742,6 +2757,9 @@ private:
     TControlWrapper TtlReadAheadLo;
     TControlWrapper TtlReadAheadHi;
 
+    TControlWrapper IncrementalRestoreReadAheadLo;
+    TControlWrapper IncrementalRestoreReadAheadHi;
+
     TControlWrapper EnableLockedWrites;
     TControlWrapper MaxLockedWritesPerKey;
 
@@ -3117,6 +3135,7 @@ protected:
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
+            HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
@@ -3157,6 +3176,7 @@ protected:
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
+            HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

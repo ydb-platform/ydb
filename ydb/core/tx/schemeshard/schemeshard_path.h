@@ -155,6 +155,7 @@ public:
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
+    bool IsUnderOutgoingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;

@@ -211,7 +211,13 @@ class TAsyncIndexChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return CreateTableChangeSenderShard(SelfId(), DataShard, partitionId, TargetTablePathId, TagMap);
+        return CreateTableChangeSenderShard(
+            SelfId(),
+            DataShard,
+            partitionId,
+            TargetTablePathId,
+            TagMap,
+            ETableChangeSenderType::AsyncIndex);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {

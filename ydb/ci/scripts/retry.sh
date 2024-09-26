@@ -3,7 +3,6 @@
 usage() {
   echo "$0 -r [max_attempts] -t [timeout] -s [sleep] -- cmd"
 }
-
 if [ $# -lt 2 ]; then
   usage
   exit 1
@@ -24,7 +23,7 @@ while getopts 'r:t:s:' opt; do
     s)
       sleep_time=$OPTARG
       ;;
-    :)
+    *)
       usage
       exit 1
       ;;
@@ -41,13 +40,11 @@ else
   exit 1
 fi
 
-cmd=$@
-
 attempt_num=1
 start_time=$(date +%s)
 
 while true; do
-  elapsed=$(($(date +%s) - $start_time))
+  elapsed=$(($(date +%s) - start_time))
 
   if [ "$max_attempts" -ne 0 ] && [ "$attempt_num" -ge "$max_attempts" ]; then
     echo "maximum attempts reached, exit" >&2
@@ -59,14 +56,12 @@ while true; do
     exit 11
   fi
 
-  $cmd
-
-  if [ $? -eq 0 ]; then
+  if "$@"; then
     exit
   else
     attempt_num=$(( attempt_num + 1 ))
-    if [ $sleep_time != "0" ]; then
-      sleep $sleep_time
+    if [ "$sleep_time" != "0" ]; then
+      sleep "$sleep_time"
     fi
   fi
 done

@@ -7,11 +7,16 @@
 namespace NKikimr::NKqp::NWorkload {
 
 TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId) {
-    TString result = CanonizePath(database ? database : AppData()->TenantName);
-    if (serverless && result) {
-        result = TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" << result;
+    TString databasePath = CanonizePath(database);
+    TString tennantPath = CanonizePath(AppData()->TenantName);
+    if (databasePath.empty() || databasePath == tennantPath) {
+        return tennantPath;
     }
-    return result;
+
+    if (serverless) {
+        databasePath = TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" << databasePath;
+    }
+    return databasePath;
 }
 
 TString DatabaseIdToDatabase(TStringBuf databaseId) {

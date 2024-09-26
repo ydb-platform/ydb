@@ -532,7 +532,7 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Database info successfully fetched");
+            LOG_D("Database info successfully fetched, serverless: " << Serverless);
         } else {
             LOG_W("Failed to fetch database info, " << status << ", issues: " << issues.ToOneLineString());
         }

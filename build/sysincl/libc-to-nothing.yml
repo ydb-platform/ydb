@@ -10,7 +10,10 @@
   - arpa/telnet.h
   - arpa/tftp.h
   - assert.h
-  - bits/alltypes.h # not libc, but similar
+  - bits/endian.h
+  - bits/fenv.h
+  - bits/types.h
+  - bits/wordsize.h
   - byteswap.h
   - cpio.h
   - crypt.h
@@ -27,6 +30,8 @@
   - ftw.h
   - getopt.h
   - glob.h
+  - gnu-versions.h
+  - gnu/libc-version.h
   - grp.h
   - iconv.h
   - ifaddrs.h
@@ -59,6 +64,7 @@
   - netinet/udp.h
   - netpacket/packet.h
   - netrom/netrom.h
+  - netrose/rose.h
   - net/route.h
   - nl_types.h
   - paths.h
@@ -68,10 +74,13 @@
   - pwd.h
   - regex.h
   - resolv.h
+  - rpcsvc/yp_prot.h
+  - rpcsvc/ypclnt.h
   - sched.h
   - scsi/scsi.h
   - search.h
   - semaphore.h
+  - sgtty.h
   - shadow.h
   - signal.h
   - spawn.h
@@ -85,6 +94,7 @@
   - stropts.h
   - sys/acct.h
   - sys/auxv.h
+  - sys/bitypes.h
   - sys/cachectl.h
   - sys/cdefs.h
   - syscall.h
@@ -170,3 +180,8 @@
   - wait.h
   - wordexp.h
   - xlocale.h
+
+# These are musl-libc specific includes not present in glibc.
+# They are used by libcxxabi at the time, hence they should resolve to nothing in glibc-specific build
+- includes:
+  - bits/alltypes.h

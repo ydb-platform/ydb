@@ -7203,14 +7203,14 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
                 CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                     RANK=20,
                     RESOURCE_POOL='wgUserQueries',
-                    MEMBERNAME='yandex_query@abc'
+                    MEMBER_NAME='yandex_query@abc'
                 );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"membername" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"member_name" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
             }
         };
@@ -7240,7 +7240,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                    SET (RANK = 30, Weight = 5, MEMBERNAME = "test@user"),
+                    SET (RANK = 30, Weight = 5, MEMBER_NAME = "test@user"),
                     RESET (Resource_Pool);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -7248,7 +7248,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"membername" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"member_name" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
             }
         };

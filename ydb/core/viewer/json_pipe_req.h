@@ -45,6 +45,8 @@ protected:
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
+    TJsonSettings JsonSettings;
+    TDuration Timeout = TDuration::Seconds(10);
 
     struct TPipeInfo {
         TActorId PipeClient;
@@ -289,6 +291,7 @@ protected:
     TString GetHTTPOK(TString contentType = {}, TString response = {}, TInstant lastModified = {});
     TString GetHTTPOKJSON(TString response = {}, TInstant lastModified = {});
     TString GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified = {});
+    TString GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified = {});
     TString GetHTTPGATEWAYTIMEOUT(TString contentType = {}, TString response = {});
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});

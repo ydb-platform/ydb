@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/yql/minikql/computation/llvm14
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/ut_helpers
+    ydb/library/yql/providers/pq/gateway/native
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql
     ydb/public/sdk/cpp/client/ydb_datastreams

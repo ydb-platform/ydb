@@ -31,7 +31,7 @@ jobs:
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
-        build_target: "ydb/appd/ydbd"
+        build_target: "ydb/apps/ydbd"
         increment: false
         run_tests: false
         put_build_results_to_cache: false
@@ -39,3 +39,16 @@ jobs:
           secrets.TESTMO_TOKEN2, secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD ) }}
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","TESTMO_URL":"{3}","TESTMO_PROJECT_ID":"{4}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.TESTMO_URL, vars.TESTMO_PROJECT_ID ) }}
+    - name: Setup s3cmd
+      uses: ./.github/actions/s3cmd
+      with:
+        s3_bucket: "ydb-builds"
+        s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+        s3_key_id: ${{ secrets.AWS_KEY_ID }}
+        s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+    
+    - name: sync results to s3 and publish links
+      shell: bash
+      run: |
+        set -x
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ github.ref_name }}/${{ matrix.build_preset }}/ydbd" -d

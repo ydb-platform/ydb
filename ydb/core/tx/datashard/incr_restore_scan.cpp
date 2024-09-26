@@ -40,7 +40,7 @@ class TIncrementalRestoreScan
 public:
     explicit TIncrementalRestoreScan(
             TActorId parent,
-            std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
+            std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
             const TPathId& sourcePathId,
             TUserTable::TCPtr table,
             const TPathId& targetPathId,
@@ -83,7 +83,7 @@ public:
     }
 
     void Registered(TActorSystem*, const TActorId&) override {
-        ChangeSender = ChangeSenderFactory(TlsActivationContext->AsActorContext());
+        ChangeSender = ChangeSenderFactory(TlsActivationContext->AsActorContext(), SelfId());
     }
 
     void PassAway() override {
@@ -92,8 +92,8 @@ public:
         IActorCallback::PassAway();
     }
 
-    void Start(TEvents::TEvWakeup::TPtr& ev) {
-        LOG_D("Handle TEvents::TEvWakeup " << ev->Get()->ToString());
+    void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
+        LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
 
         Driver->Touch(EScan::Feed);
     }
@@ -118,6 +118,8 @@ public:
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);
         }
+
+        Driver->Touch(EScan::Feed);
     }
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
@@ -128,7 +130,7 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvWakeup, Start);
+            hFunc(TEvIncrementalRestoreScan::TEvServe, Start);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
@@ -188,10 +190,10 @@ public:
         LOG_D("Finish " << static_cast<ui64>(abort));
 
         if (abort != EAbort::None) {
-            Send(Parent, new TEvIncrementalRestoreScan::TEvFinished{});
-        } else {
-            Send(Parent, new TEvIncrementalRestoreScan::TEvFinished{});
+            // FIXME
         }
+
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
 
         PassAway();
         return nullptr;
@@ -247,7 +249,7 @@ public:
 
 private:
     const TActorId Parent;
-    const std::function<TActorId(const TActorContext& ctx)> ChangeSenderFactory;
+    const std::function<TActorId(const TActorContext& ctx, TActorId parent)> ChangeSenderFactory;
     const ui64 TxId;
     const TPathId SourcePathId;
     const TPathId TargetPathId;
@@ -269,7 +271,7 @@ private:
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
-        std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
+        std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
         const TPathId& sourcePathId,
         TUserTable::TCPtr table,
         const TPathId& targetPathId,

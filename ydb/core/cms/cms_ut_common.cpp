@@ -29,6 +29,17 @@ const bool ENABLE_DETAILED_CMS_LOG = true;
 const bool ENABLE_DETAILED_CMS_LOG = false;
 #endif
 
+#define COMMA ,
+Y_DECLARE_OUT_SPEC(, std::map<NKikimrBlobStorage::EDriveStatus COMMA std::set<ui32>>, o, value) {
+    std::vector<TString> pairs;
+    for (const auto& [status, nodes] : value) {
+        pairs.push_back(
+            TStringBuilder() << status  << "=" << '[' << JoinSeq(',', nodes) << ']'
+        );
+    }
+    o << '[' << JoinSeq(',', pairs) << ']';
+};
+
 namespace NKikimr {
 namespace NCmsTest {
 
@@ -391,7 +402,7 @@ static NKikimrConfig::TBootstrap GenerateBootstrapConfig(TTestActorRuntime &runt
     return res;
 }
 
-static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &options) {
+static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &options) {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
 
@@ -503,6 +514,7 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
             ),
         0);
 
+    runtime.LocationCallback = options.NodeLocationCallback;
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();
     dnsConfig->MaxStaticNodeId = 1000;
@@ -868,6 +880,39 @@ TCmsTestEnv::CheckRequest(const TString &user,
     return rec;
 }
 
+void TCmsTestEnv::CheckBSCUpdateRequests(std::set<ui32> expectedNodes,
+                                         NKikimrBlobStorage::EDriveStatus expectedStatus)
+{
+    using TBSCRequests = std::map<NKikimrBlobStorage::EDriveStatus, std::set<ui32>>;
+
+    TBSCRequests expectedRequests = { {expectedStatus, expectedNodes} };
+    TBSCRequests actualRequests;
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+        if (ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+            const auto& request = ev.Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
+            bool foundUpdateDriveCommand = false;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    foundUpdateDriveCommand = true;
+                    const auto& update = command.GetUpdateDriveStatus();
+                    actualRequests[update.GetStatus()].insert(update.GetHostKey().GetNodeId());
+                }
+            }
+            return foundUpdateDriveCommand;
+        }
+        return false;
+    });
+    DispatchEvents(options, TDuration::Minutes(1));
+
+    UNIT_ASSERT_C(
+        actualRequests == expectedRequests,
+        TStringBuilder() << "Sentinel sent wrong update requests to BSC: "
+                        << "expected# " << expectedRequests
+                        << ", actual# " << actualRequests
+    );
+}
 
 void TCmsTestEnv::CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req)
 {

@@ -954,10 +954,10 @@ public:
                 InvalidateNodes();
             }
             if (UptimeSeconds > 0 && FieldsAvailable.test(+ENodeFields::SystemState)) {
-                ui64 limitSeconds = TInstant::Now().Seconds() - UptimeSeconds;
+                ui64 limitMilliSeconds = TInstant::Now().MilliSeconds() - UptimeSeconds * 1000;
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->SystemState.GetStartTime() >= limitSeconds) {
+                    if (node->SystemState.GetStartTime() >= limitMilliSeconds) {
                         nodeView.push_back(node);
                     }
                 }
@@ -1567,10 +1567,13 @@ public:
         }
         if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
+                std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
                 std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
                 for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
                     if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
-                        FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                        if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
+                            FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                        }
                         TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
                         if (node) {
                             node->SysViewVDisks.emplace_back(slotEntry);

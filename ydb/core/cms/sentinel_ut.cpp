@@ -21,12 +21,10 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
     void AddState(TPDiskStatus& st, const EPDiskState state) {
         st.AddState(state, false);
-        Cerr << st.GetStatus() << " " << st.GetState() << " " << st.GetPrevState() << " " << st.GetStateCounter() << Endl;
     }
 
     void AddStateNodeLocked(TPDiskStatus& st, const EPDiskState state) {
         st.AddState(state, true);
-        Cerr << st.GetStatus() << " " << st.GetState() << " " << st.GetPrevState() << " " << st.GetStateCounter() << Endl;
     }
 
     Y_UNIT_TEST(PDiskInitialStatus) {
@@ -126,7 +124,8 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskStateChangeNormalFlow) {
         // If disk has only been in good state, then change to Normal state within GoodStateLimit
         const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-        TPDiskStatus st(initialStatus, 60, GoodStateLimit, DefaultStateLimits);
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
         AddState(st, NKikimrBlobStorage::TPDiskState::Initial);
         UNIT_ASSERT(!st.IsChanged());
@@ -143,7 +142,6 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         UNIT_ASSERT(!st.IsChanged());
 
         for (ui32 i = 0; i < GoodStateLimit - 1; ++i) {
-            Cerr << "i = " << i << Endl;
             AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
             UNIT_ASSERT(!st.IsChanged());
         }
@@ -158,7 +156,8 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskStateChangeNodePermanentlyBad) {
         // If node is restarting all the time, then disk should never become ACTIVE
         const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
-        TPDiskStatus st(initialStatus, 60, GoodStateLimit, DefaultStateLimits);
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
         AddState(st, NKikimrBlobStorage::TPDiskState::Unknown);
         UNIT_ASSERT(!st.IsChanged());
@@ -232,7 +231,8 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskStateChangeNodeExpectedRestart) {
         // Node restarts, but it is planned (node is locked by CMS), so disk should become ACTIVE after GoodStateLimit
         const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
-        TPDiskStatus st(initialStatus, 60, GoodStateLimit, DefaultStateLimits);
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
         auto nodeStartFn = [&st]() {
             AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::Unknown);

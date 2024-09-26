@@ -502,10 +502,10 @@ static TString ReadFile(const TString& fileName) {
 }
 
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
-    Y_UNUSED(runConfig);
     GracefulShutdownSupported = true;
-    if (runConfig.AppConfig.HasDelayBeforeShutdownSeconds()) {
-        DelayBeforeShutdown = TDuration::Seconds(runConfig.AppConfig.GetDelayBeforeShutdownSeconds());
+    const auto& config = runConfig.AppConfig.GetShutdownConfig();
+    if (config.HasMinDelayBeforeShutdownSeconds()) {
+        MinDelayBeforeShutdown = TDuration::Seconds(config.GetMinDelayBeforeShutdownSeconds());
     }
 }
 
@@ -1735,9 +1735,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
-        Sleep(DelayBeforeShutdown);
     }
 
+    THPTimer timer;
     TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());
     if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) {
         drainProgress->OnSend();
@@ -1770,6 +1770,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             Cerr << "Drain completed, but " << *stillOnline << " tablet(s) are online." << Endl;
         }
     }
+
+    // Wait for a minimum delay to make sure that clients forget about this node
+    auto timeLeftBeforeShutdown = MinDelayBeforeShutdown - TDuration::Seconds(timer.Passed());
+    Sleep(timeLeftBeforeShutdown);
 
     if (ActorSystem) {
         ActorSystem->BroadcastToProxies([](const TActorId& proxyId) {

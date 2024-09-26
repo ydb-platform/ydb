@@ -33,6 +33,13 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
     steps:
+    
+    - name: Program files content
+      run: Dir "C:\Program Files (x86)"
+    
+    - name: BuildTools content | Get-Childitem
+      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+    
     - name: Checkout
       uses: actions/checkout@v4
       with:
@@ -46,9 +53,6 @@ jobs:
 
     - name: Print env vars
       run: gci env:* | sort-object name
-
-    - name: BuildTools content
-      run: Dir "C:\"
 #    - name: Print uname
 #      run: uname -a
     

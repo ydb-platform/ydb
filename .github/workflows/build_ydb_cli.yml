@@ -48,7 +48,7 @@ jobs:
       run: gci env:* | sort-object name
 
     - name: BuildTools content
-      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" | Get-Childitem
+      run: Dir "C:\"
 #    - name: Print uname
 #      run: uname -a
     

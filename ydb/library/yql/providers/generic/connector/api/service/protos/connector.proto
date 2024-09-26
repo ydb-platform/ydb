@@ -235,6 +235,10 @@ message TReadSplitsRequest {
     // If empty, the connector will return the split data from the very beginning.
     TContinuation continuation = 6;
 
+    // This flag makes request fail with an error if Connector was not able 
+    // to push down the predicate to the data source completely.
+    bool fail_if_cannot_pushdown = 7;
+
     reserved 5;
 }
 

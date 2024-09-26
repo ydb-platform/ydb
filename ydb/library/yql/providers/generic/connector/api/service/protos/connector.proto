@@ -247,7 +247,7 @@ message TReadSplitsRequest {
     }
 
     // Determines various modes of server behavior in the context of predicate pushdown.
-    // If not specified, the default value is `FILTERING_OPTIONAL``. 
+    // If not specified, the default value is `FILTERING_OPTIONAL`. 
     EFiltering filtering = 7;
 
     reserved 5;

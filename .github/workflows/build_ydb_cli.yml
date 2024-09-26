@@ -38,14 +38,17 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
 
-    - name: Print env vars before installing Windows SDK
-      run: gci env:* | sort-object name
+#    - name: Print env vars before installing Windows SDK
+#      run: gci env:* | sort-object name
     
-    - name: Install windows10 SDK
-      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
+#    - name: Install windows10 SDK
+#      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
 
-    - name: Print env vars after installing Windows SDK
+    - name: Print env vars
       run: gci env:* | sort-object name
+
+    - name: BuildTools content
+      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" | Get-Childitem
 #    - name: Print uname
 #      run: uname -a
     

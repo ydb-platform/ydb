@@ -110,6 +110,7 @@ SRCS(
     schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
+    schemeshard__operation_create_backup_collection.cpp
     schemeshard__operation_create_bsv.cpp
     schemeshard__operation_create_external_data_source.cpp
     schemeshard__operation_create_external_table.cpp

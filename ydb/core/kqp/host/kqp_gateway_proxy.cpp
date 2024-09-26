@@ -2210,24 +2210,22 @@ public:
         CHECK_PREPARED_DDL(CreateBackupCollection);
 
         try {
-            Y_UNUSED(cluster, settings);
-            return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
-            // if (cluster != SessionCtx->GetCluster()) {
-            //     return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-            // }
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
 
-            // TString error;
-            // std::pair<TString, TString> pathPair;
-            // if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
-            //     return MakeFuture(ResultFromError<TGenericResult>(error));
-            // }
+            TString error;
+            std::pair<TString, TString> pathPair;
+            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                return MakeFuture(ResultFromError<TGenericResult>(error));
+            }
 
-            // NKikimrSchemeOp::TModifyScheme tx;
-            // tx.SetWorkingDir(pathPair.first);
-            // tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBackupCollection);
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(pathPair.first);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBackupCollection);
 
-            // auto& op = *tx.MutableBackupCollection();
-            // op.SetName(pathPair.second);
+            auto& op = *tx.MutableCreateBackupCollection();
+            op.SetName(pathPair.second);
 
             // auto& config = *op.MutableConfig();
             // auto& params = *config.MutableSrcConnectionParams();
@@ -2257,18 +2255,18 @@ public:
             //     target.SetDstPath(AdjustPath(dst, GetDatabase()));
             // }
 
-            // if (IsPrepare()) {
-            //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            //     auto& phyTx = *phyQuery.AddTransactions();
-            //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-            //     phyTx.MutableSchemeOperation()->MutableCreateBackupCollection()->Swap(&tx);
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableCreateBackupCollection()->Swap(&tx);
 
-            //     TGenericResult result;
-            //     result.SetSuccess();
-            //     return MakeFuture(result);
-            // } else {
-            //     return Gateway->ModifyScheme(std::move(tx));
-            // }
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

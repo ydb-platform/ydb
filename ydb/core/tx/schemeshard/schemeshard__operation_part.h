@@ -624,6 +624,17 @@ ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState s
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
 
+// Backup Collection
+// Create
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterBackupCollection(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 

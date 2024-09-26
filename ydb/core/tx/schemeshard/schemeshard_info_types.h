@@ -3417,6 +3417,13 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
     NKikimrSchemeOp::TResourcePoolProperties Properties;
 };
 
+struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
+    using TPtr = TIntrusivePtr<TBackupCollectionInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TBackupCollectionProperties Properties;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,

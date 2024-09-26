@@ -1446,6 +1446,16 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // BackupCollection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return {CreateNewBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        Y_ABORT("unimplemented");
+        // return {CreateAlterBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        Y_ABORT("unimplemented");
+        // return {CreateDropBackupCollection(NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

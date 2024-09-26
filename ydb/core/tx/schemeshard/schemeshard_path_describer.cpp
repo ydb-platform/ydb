@@ -1067,6 +1067,19 @@ void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pat
     entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);
 }
 
+void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->BackupCollections.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "BackupCollections is not found");
+    TBackupCollectionInfo::TPtr backupCollectionInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableBackupCollectionDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(backupCollectionInfo->AlterVersion);
+    entry->MutableProperties()->CopyFrom(backupCollectionInfo->Properties);
+}
+
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1220,6 +1233,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeResourcePool:
             DescribeResourcePool(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeBackupCollection:
+            DescribeBackupCollection(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

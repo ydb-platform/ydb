@@ -31,7 +31,12 @@ struct TTestEnv {
         .NodeCount = nodeCount,
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
-        .FeatureFlags = MakeFeatureFlags(),
+        .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
+            auto* balancingConf = conf.BlobStorageConfig.MutableVDiskBalancingConfig();
+            balancingConf->SetEnableSend(true);
+            balancingConf->SetEnableDelete(true);
+            balancingConf->SetBalanceOnlyHugeBlobs(false);
+        },
     })
     {
         Env.CreateBoxAndPool(1, 1);
@@ -44,12 +49,6 @@ struct TTestEnv {
         for (ui32 i = 0; i < Env.Settings.NodeCount; ++i) {
             RunningNodes.insert(i);
         }
-    }
-
-    static TFeatureFlags MakeFeatureFlags() {
-        TFeatureFlags res;
-        res.SetUseVDisksBalancing(true);
-        return res;
     }
 
     static TString PrepareData(const ui32 dataLen, const ui32 start) {

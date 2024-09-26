@@ -1625,6 +1625,20 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
     }
 
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, THttpProxyTestMock) {
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
         auto createQueueReq = CreateSqsCreateQueueRequest();
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
@@ -1645,7 +1659,7 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
-        UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
     }
 
@@ -1666,7 +1680,7 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
 
         res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
 
         for (int i = 0; i < 20; ++i) {
@@ -1698,16 +1712,58 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
 
-        NJson::TJsonValue getQueueAttributes;
-        getQueueAttributes["QueueUrl"] = resultQueueUrl;
-        NJson::TJsonArray attributeNames = {"DelaySeconds"};
-        getQueueAttributes["AttributeNames"] = attributeNames;
+        {
+            NJson::TJsonValue getQueueAttributes;
+            getQueueAttributes["QueueUrl"] = resultQueueUrl;
+            NJson::TJsonArray attributeNames = {"DelaySeconds"};
+            getQueueAttributes["AttributeNames"] = attributeNames;
 
-        res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue resultJson;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
-        UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            NJson::TJsonValue resultJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
+            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            NJson::TJsonValue getQueueAttributes;
+            getQueueAttributes["QueueUrl"] = resultQueueUrl;
+            NJson::TJsonArray attributeNames = {
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesDelayed",
+                "ApproximateNumberOfMessagesNotVisible",
+                "CreatedTimestamp",
+                "DelaySeconds",
+                "MaximumMessageSize",
+                "MessageRetentionPeriod",
+                "ReceiveMessageWaitTimeSeconds",
+                "RedrivePolicy",
+                "VisibilityTimeout",
+                "FifoQueue",
+                "ContentBasedDeduplication",
+                "QueueArn"
+            };
+            getQueueAttributes["AttributeNames"] = attributeNames;
+
+            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            NJson::TJsonValue resultJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
+            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            NJson::TJsonValue getQueueAttributes;
+            getQueueAttributes["QueueUrl"] = resultQueueUrl;
+            NJson::TJsonArray attributeNames = {"All"};
+            getQueueAttributes["AttributeNames"] = attributeNames;
+
+            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            NJson::TJsonValue resultJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
+            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        }
     }
 
     Y_UNIT_TEST_F(TestListQueues, THttpProxyTestMock) {
@@ -1911,8 +1967,8 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
         auto succesful0 = json["Successful"][0];
         UNIT_ASSERT(succesful0["Id"] == "Id-0");
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageAttributes").empty());
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
     }
 

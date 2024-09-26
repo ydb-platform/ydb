@@ -57,6 +57,22 @@ TInsertionSummary::TCounters TInsertTable::Commit(
     return counters;
 }
 
+TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data) {
+    TInsertionSummary::TCounters counters;
+    counters.Rows += data.GetMeta().GetNumRows();
+    counters.RawBytes += data.GetMeta().GetRawBytes();
+    counters.Bytes += data.BlobSize();
+
+    AddBlobLink(data.GetBlobRange().BlobId);
+    const ui64 pathId = data.GetPathId();
+    auto& pathInfo = Summary.GetPathInfo(pathId);
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
+    dbTable.Commit(data);
+    pathInfo.AddCommitted(std::move(data));
+
+    return counters;
+}
+
 void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
@@ -132,7 +148,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
             if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
                 continue;
             }
-            result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetInsertWriteId(), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
                 start, finish, data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }

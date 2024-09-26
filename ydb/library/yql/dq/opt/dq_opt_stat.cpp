@@ -600,7 +600,13 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnno
             if (!inputStats) {
                 return;
             }
-
+            
+            // We have a special case of Olap tables, where statistics is computed before lambda, but
+            // is finalized after visiting labda (which may contain a filter)
+            if (typeCtx->GetStats(input.Get())){
+                inputStats = typeCtx->GetStats(input.Get());
+            }
+            
             typeCtx->SetStats( lambda.Args().Arg(0).Raw(), inputStats );
         }
     }

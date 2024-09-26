@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(6),
                             NLs::HasEffectiveRight("+U:user0@builtin"),
-                            NLs::HasNotEffectiveRight("+U:user1@builtin:-")});
+                            NLs::HasNoEffectiveRight("+U:user1@builtin:-")});
 
         {
             TestMkDir(runtime, ++txId, "/MyRoot/DirA", "DirB");
@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/DirB"),
                            {NLs::PathVersionEqual(5),
                             NLs::HasEffectiveRight("+U:user0@builtin"),
-                            NLs::HasNotEffectiveRight("+U:user1@builtin:-")});
+                            NLs::HasNoEffectiveRight("+U:user1@builtin:-")});
 
     }
 

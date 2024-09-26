@@ -96,6 +96,7 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
             expectedMinPartitions,
             debugHint
         );
+        return true;
     };
 }
 
@@ -110,10 +111,25 @@ auto CreateHasIndexChecker(const TString& indexName) {
     };
 }
 
+auto CreateHasSerialChecker(i64 nextValue, bool nextUsed) {
+    return [=](const TTableDescription& tableDescription) {
+        for (const auto& column : tableDescription.GetTableColumns()) {
+            if (column.Name == "Key") {
+                UNIT_ASSERT(column.SequenceDescription.has_value());
+                UNIT_ASSERT(column.SequenceDescription->SetVal.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextValue, nextValue);
+                UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextUsed, nextUsed);
+                return true;
+            }
+        }
+        return false;
+    };
+}
+
 void CheckTableDescription(TSession& session, const TString& path, auto&& checker,
     const TDescribeTableSettings& settings = {}
 ) {
-    checker(GetTableDescription(session, path, settings));
+    UNIT_ASSERT(checker(GetTableDescription(session, path, settings)));
 }
 
 void CheckBuildIndexOperationsCleared(TDriver& driver) {
@@ -330,6 +346,41 @@ void TestIndexTableSplitBoundariesArePreserved(
     UNIT_ASSERT_EQUAL(restoredKeyRanges, originalKeyRanges);
 }
 
+void TestRestoreTableWithSerial(
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Serial,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+        )",
+        table
+    ));
+    ExecuteDataModificationQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Value
+            )
+            VALUES (1), (2), (3), (4), (5), (6), (7);
+        )",
+        table
+    ));
+    const auto originalContent = GetTableContent(session, table);
+
+    backup(table);
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore(table);
+
+    CheckTableDescription(session, table, CreateHasSerialChecker(8, false), TDescribeTableSettings().WithSetVal(true));
+    CompareResults(GetTableContent(session, table), originalContent);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -472,6 +523,23 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         CheckTableDescription(session, table, CreateHasIndexChecker(index));
         CheckBuildIndexOperationsCleared(driver);
+    }
+
+    Y_UNIT_TEST(BasicRestoreTableWithSerial) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithSerial(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
     }
 }
 
@@ -673,6 +741,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexPartitions,
+            testEnv.GetSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    Y_UNIT_TEST(RestoreTableWithSerial) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithSerial(
+            table,
             testEnv.GetSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())

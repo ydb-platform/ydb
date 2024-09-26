@@ -54,6 +54,7 @@ struct TSchemaOperation {
         ETypeAlterCdcStream = 14,
         ETypeDropCdcStream = 15,
         ETypeMoveIndex = 16,
+        ETypeCreateIncrementalRestoreSrc = 17,
 
         ETypeUnknown = Max<ui32>()
     };
@@ -109,6 +110,7 @@ struct TSchemaOperation {
     bool IsCreateCdcStream() const { return Type == ETypeCreateCdcStream; }
     bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; }
     bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; }
+    bool IsCreateIncrementalRestoreSrc() const { return Type == ETypeCreateIncrementalRestoreSrc; }
 
     bool IsReadOnly() const { return ReadOnly; }
 };

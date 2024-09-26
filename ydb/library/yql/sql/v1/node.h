@@ -1384,6 +1384,14 @@ namespace NSQLTranslationV1 {
         bool MissingOk;
     };
 
+    struct TBackupParameters {
+        bool Incremental = false;
+    };
+
+    struct TRestoreParameters {
+        TString At;
+    };
+
     TString IdContent(TContext& ctx, const TString& str);
     TString IdContentFromString(TContext& ctx, const TString& str);
     TTableHints GetContextHints(TContext& ctx);
@@ -1527,6 +1535,13 @@ namespace NSQLTranslationV1 {
         const TObjectOperatorContext& context);
     TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
         const TDropBackupCollectionParameters& params,
+        const TObjectOperatorContext& context);
+
+    TNodePtr BuildBackup(TPosition pos, const TString& id,
+        const TBackupParameters& params,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildRestore(TPosition pos, const TString& id,
+        const TRestoreParameters& params,
         const TObjectOperatorContext& context);
 
     template<class TContainer>

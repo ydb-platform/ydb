@@ -15,7 +15,8 @@ using namespace NActors;
 
 struct TEvIncrementalRestoreScan {
     enum EEv {
-        EvNoMoreData = EventSpaceBegin(TKikimrEvents::ES_INCREMENTAL_RESTORE_SCAN),
+        EvServe = EventSpaceBegin(TKikimrEvents::ES_INCREMENTAL_RESTORE_SCAN),
+        EvNoMoreData,
         EvFinished,
 
         EvEnd,
@@ -23,13 +24,18 @@ struct TEvIncrementalRestoreScan {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_INCREMENTAL_RESTORE_SCAN));
 
+    struct TEvServe: public TEventLocal<TEvServe, EvServe> {};
     struct TEvNoMoreData: public TEventLocal<TEvNoMoreData, EvNoMoreData> {};
-    struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {};
+    struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
+        TEvFinished() = default;
+        TEvFinished(ui64 txId) : TxId(txId) {}
+        ui64 TxId;
+    };
 };
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
-        std::function<TActorId(const TActorContext& ctx)> changeSenderFactory,
+        std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
         const TPathId& sourcePathId,
         TUserTable::TCPtr table,
         const TPathId& targetPathId,

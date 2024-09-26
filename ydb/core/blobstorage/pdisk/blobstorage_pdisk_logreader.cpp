@@ -294,7 +294,7 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , SizeLimit(sizeLimit)
     , Result(new NPDisk::TEvReadLogResult(
         NKikimrProto::ERROR, position, TLogPosition::Invalid(), false,
-        pDisk->GetStatusFlags(owner, ownerGroupType), nullptr, owner))
+        pDisk->GetStatusFlags(owner, ownerGroupType), "", owner))
     , ChunkInfo(nullptr)
     , Sector(new TDoubleBuffer(pDisk))
     , ChunkOwnerMap(IsInitial ? new TMap<ui32, TChunkState>() : nullptr)
@@ -374,7 +374,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         bool isOk = RegisterBadOffsets(badOffsets);
         if (!isOk) {
             P_LOG(PRI_ERROR, BPD01, "Log is damaged and unrevocerable");
-                
+
             ReplyError();
             return;
         }

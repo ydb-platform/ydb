@@ -1599,6 +1599,62 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, {}, context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore55: {
+            // backup_stmt: BACKUP object_ref (INCREMENTAL)?;
+            auto& node = core.GetAlt_sql_stmt_core55().GetRule_backup_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref2().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref2().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            bool incremental = node.HasBlock3();
+
+            const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks,
+                                 BuildBackup(
+                                     Ctx.Pos(),
+                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TBackupParameters{
+                                         .Incremental = incremental,
+                                     },
+                                     context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore56: {
+            // restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
+            auto& node = core.GetAlt_sql_stmt_core56().GetRule_restore_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref2().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref2().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            TString at;
+            if (node.HasBlock3()) {
+                const TString stringValue = Ctx.Token(node.GetBlock3().GetToken2());
+                const auto unescaped = StringContent(Ctx, Ctx.Pos(), stringValue);
+                if (!unescaped) {
+                    return false;
+                }
+                at = unescaped->Content;
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks,
+                                 BuildRestore(
+                                     Ctx.Pos(),
+                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TRestoreParameters{
+                                         .At = at,
+                                     },
+                                     context));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

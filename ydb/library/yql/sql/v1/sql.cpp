@@ -174,6 +174,8 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore52: // create resource pool classifier
         case TRule_sql_stmt_core::kAltSqlStmtCore53: // alter resource pool classifier
         case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore55: // backup
+        case TRule_sql_stmt_core::kAltSqlStmtCore56: // restore
             return false;
     }
 }

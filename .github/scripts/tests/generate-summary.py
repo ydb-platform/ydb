@@ -346,11 +346,15 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset)
     return summary
 
 
-def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
+def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bool, is_test_result_ignored: bool)->tuple[str, list[str]]:
     color = "red"
     if summary.is_failed:
-        color = "red" if is_last_retry else "yellow"
-        result = f"Some tests failed, follow the links below."
+        if is_test_result_ignored:
+            color = "yellow"
+            result = f"Some tests failed, follow the links below. This fail is not in blocking policy yet"
+        else:
+            color = "red" if is_last_retry else "yellow"
+            result = f"Some tests failed, follow the links below."
         if not is_last_retry:
             result += " Going to retry failed tests..."
     else:
@@ -397,6 +401,7 @@ def main():
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument('--is_retry', required=True, type=int)
     parser.add_argument('--is_last_retry', required=True, type=int)
+    parser.add_argument('--is_test_result_ignored', required=True, type=int)
     parser.add_argument('--comment_color_file', required=True)
     parser.add_argument('--comment_text_file', required=True)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
@@ -412,12 +417,12 @@ def main():
     summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
     write_summary(summary)
 
-    if summary.is_failed:
+    if summary.is_failed and not args.is_test_result_ignored:
         overall_status = "failure"
     else:
         overall_status = "success"
 
-    color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
+    color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry), is_test_result_ignored=args.is_test_result_ignored)
 
     with open(args.comment_color_file, "w") as f:
         f.write(color)

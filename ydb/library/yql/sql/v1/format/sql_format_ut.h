@@ -1626,3 +1626,23 @@ Y_UNIT_TEST(ResourcePoolClassifierOperations) {
     TSetup setup;
     setup.Run(cases);
 }
+
+Y_UNIT_TEST(Backup) {
+    TCases cases = {
+        {"\tBaCKup\n\n TestCollection      incremENTAl",
+         "BACKUP TestCollection INCREMENTAL;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Restore) {
+    TCases cases = {
+        {"resToRe\n\n\n TestCollection       aT\n  \t \n     '2024-06-16_20-14-02'",
+         "RESTORE TestCollection AT '2024-06-16_20-14-02';\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}

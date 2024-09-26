@@ -81,6 +81,8 @@ private:
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         EJoinKind joinKind,
+        bool leftAny,
+        bool rightAny,
         bool isCommutative,
         const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
         const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
@@ -409,6 +411,8 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
+    bool leftAny,
+    bool rightAny,
     bool isCommutative,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
@@ -419,7 +423,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
 ) {
     double bestCost = std::numeric_limits<double>::infinity();
-    EJoinAlgoType bestAlgo{};
+    EJoinAlgoType bestAlgo = EJoinAlgoType::Undefined;
     bool bestJoinIsReversed = false;
 
     for (auto joinAlgo : AllJoinAlgos) {
@@ -452,13 +456,13 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         }
     }
 
-    Y_ENSURE(bestCost != std::numeric_limits<double>::infinity(), "No join was chosen!");
+    Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
 
     if (bestJoinIsReversed) {
-        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, ctx, maybeCardHint);
+        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, ctx, maybeCardHint);
     }
     
-    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, ctx, maybeCardHint);
+    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, ctx, maybeCardHint);
 }
 
 /* 
@@ -489,6 +493,8 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         leftNodes,
         rightNodes,
         csgCmpEdge->JoinKind,
+        csgCmpEdge->LeftAny,
+        csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
         csgCmpEdge->JoinConditions,
         reversedEdge->JoinConditions,

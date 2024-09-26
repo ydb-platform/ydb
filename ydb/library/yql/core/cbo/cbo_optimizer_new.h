@@ -177,7 +177,7 @@ struct TOptimizerHints {
     std::shared_ptr<TJoinAlgoHints> JoinAlgoHints = std::make_shared<TJoinAlgoHints>();
     std::shared_ptr<TJoinOrderHints> JoinOrderHints = std::make_shared<TJoinOrderHints>();
 
-    TVector<TString> GetUnappliedHintStrings();
+    TVector<TString> GetUnappliedString();
 
     /* 
      *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):
@@ -295,6 +295,10 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
     TVector<TString> RightJoinKeys;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
+    /////////////////// 'ANY' flag means leaving only one row from the join side.
+    bool LeftAny;
+    bool RightAny;
+    ///////////////////
     bool IsReorderable;
 
     TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
@@ -302,7 +306,10 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
         const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
-        bool nonReorderable=false);
+        bool leftAny,
+        bool rightAny,
+        bool nonReorderable = false
+    );
     virtual ~TJoinOptimizerNode() {}
     virtual TVector<TString> Labels();
     virtual void Print(std::stringstream& stream, int ntabs=0);

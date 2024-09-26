@@ -48,6 +48,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 
 {% note info %}
 
+
 These settings cannot be reset.
 
 {% endnote %}
@@ -60,6 +61,7 @@ These settings cannot be reset.
 
 The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
 
+
 ```yql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -68,6 +70,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ```
 
 ## Deleting an index {#drop-index}
+
 
 `DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
 
@@ -94,6 +97,7 @@ Replacement of atomic indexes under load is supported by the command [{{ ydb-cli
 {% endif %}
 
 Example of index renaming:
+
 
 ```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;

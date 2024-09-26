@@ -127,7 +127,7 @@ message TFeatureFlags {
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
-    optional bool UseVDisksBalancing = 111 [default = false];
+    reserved 111; // UseVDisksBalancing
     optional bool EnableViews = 112 [default = false];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
@@ -162,4 +162,6 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
     optional bool EnableParameterizedDecimal = 145 [default = false];
+    optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = false];
+    optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
 }

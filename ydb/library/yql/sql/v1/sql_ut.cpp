@@ -7206,14 +7206,14 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
                 CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                     RANK=20,
                     RESOURCE_POOL='wgUserQueries',
-                    MEMBERNAME='yandex_query@abc'
+                    MEMBER_NAME='yandex_query@abc'
                 );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"membername" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"member_name" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
             }
         };
@@ -7243,7 +7243,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                    SET (RANK = 30, Weight = 5, MEMBERNAME = "test@user"),
+                    SET (RANK = 30, Weight = 5, MEMBER_NAME = "test@user"),
                     RESET (Resource_Pool);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -7251,7 +7251,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"membername" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"member_name" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
             }
         };
@@ -7329,5 +7329,92 @@ Y_UNIT_TEST_SUITE(OlapPartitionCount) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "PARTITION_COUNT can be used only with STORE=COLUMN");
+    }
+}
+
+Y_UNIT_TEST_SUITE(Backup) {
+    Y_UNIT_TEST(Simple) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                BACKUP TestCollection;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'incremental"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(Incremental) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                BACKUP TestCollection INCREMENTAL;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'incremental"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(Restore) {
+    Y_UNIT_TEST(Simple) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                RESTORE TestCollection;
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'restore"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AtPoint) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                RESTORE TestCollection AT '2024-06-16_20-14-02';
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('at '"2024-06-16_20-14-02")#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'restore"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }

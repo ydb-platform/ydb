@@ -120,13 +120,6 @@ public:
         return bool(StreamAdaptor_);
     }
 
-    TString GetPeer() const override {
-        // Decode URL-encoded square brackets
-        auto ip = TString(this->Context.peer());
-        CGIUnescape(ip);
-        return ip;
-    }
-
     bool SslServer() const override {
         return Server_->SslServer();
     }
@@ -166,6 +159,10 @@ public:
             RequestRegistered_ = false;
         }
         UnRef();
+    }
+
+    TString GetPeer() const override {
+        return TBaseAsyncContext<TService>::GetPeer();
     }
 
     TInstant Deadline() const override {

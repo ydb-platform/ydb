@@ -436,8 +436,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
-    LOG_ROW_DISPATCHER_INFO("TEvGetNextBatch from " << ev->Sender.ToString());
-    Cerr << "TEvGetNextBatch ok" << Endl;
+    LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender.ToString());
 
     Metrics.InFlyAsyncInputData->Set(0);
     auto it = Clients.find(ev->Sender);
@@ -450,7 +449,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TTopicSession::HandleNewEvents() {
-    ui64 maxHandledEvents = 10;
+    ui64 maxHandledEvents = 50;
     while (true) {
         if (!ReadSession) {
             return;
@@ -468,7 +467,6 @@ void TTopicSession::HandleNewEvents() {
             break;
         }
     }
-    //Cerr << "HandleNewEvents end" << Endl;
 }
 
 void TTopicSession::CloseTopicSession() {

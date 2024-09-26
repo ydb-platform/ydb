@@ -182,7 +182,6 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 
 void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
     auto configData = TFileInput(fqCfgFile).ReadAll();
-
     using ::google::protobuf::TextFormat;
     if (!TextFormat::ParseFromString(configData, fqConfig)) {
         ythrow yexception() << "Bad format of fq configuration";
@@ -340,8 +339,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
     NYql::NLog::ELevel loggingLevel,
-    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
-    const TVector<TActorSystemManager::TSetupModifier>& setupModifiers
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -352,9 +350,6 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
     }
 
-    std::for_each(setupModifiers.cbegin(), setupModifiers.cend(), [&](const auto& mod) {
-        actorSystemManager->ApplySetupModifier(mod);
-    });
     // One can modify actor system setup via actorSystemManager->ApplySetupModifier().
     // TODO: https://st.yandex-team.ru/YQL-16131
     // This will be useful for DQ Gateway initialization refactoring.
@@ -500,7 +495,7 @@ int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
     TString fqCfgFile;
-   //TString progFile;
+    TString progFile;
     TVector<TString> progFiles;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
@@ -568,8 +563,8 @@ int RunMain(int argc, const char* argv[])
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
         .Optional()
-        //.RequiredArgument("FILE")
-        .AppendTo(&progFiles);
+        .RequiredArgument("FILE")
+        .StoreResult(&progFile);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
         .NoArgument()
@@ -940,12 +935,10 @@ int RunMain(int argc, const char* argv[])
 
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
-    TVector<TActorSystemManager::TSetupModifier> setupModifiers;
-
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory, setupModifiers);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {
@@ -1136,8 +1129,7 @@ int RunMain(int argc, const char* argv[])
             {MakeYtUrlLister()}
         )
     );
-    int result = 0;
-    for (const auto& progFile : progFiles) {
+
     TProgramPtr program;
     if (res.Has("replay") && res.Has("capture")) {
         YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
@@ -1188,14 +1180,13 @@ int RunMain(int argc, const char* argv[])
         runOptions.ValidateResultFormat = true;
     }
 
-    result &= RunProgram(std::move(program), runOptions, clusters, sqlFlags);
+    int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);
     if (res.Has("metrics")) {
         NProto::TMetricsRegistrySnapshot snapshot;
         snapshot.SetDontIncrement(true);
         metricsRegistry->TakeSnapshot(&snapshot);
         auto output = MakeHolder<TFileOutput>(metricsFile);
         SerializeToTextFormat(snapshot, *output.Get());
-    }
     }
 
     if (result == 0 && res.Has("capture")) {

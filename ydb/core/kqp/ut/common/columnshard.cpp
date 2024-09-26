@@ -112,7 +112,7 @@ namespace NKqp {
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 
-    void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) {
+    void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) const {
         auto it = TableClient->StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
         TString result = StreamResultToYson(it, false, opStatus);

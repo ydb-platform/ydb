@@ -235,9 +235,20 @@ message TReadSplitsRequest {
     // If empty, the connector will return the split data from the very beginning.
     TContinuation continuation = 6;
 
-    // This flag makes request fail with an error if Connector was not able 
-    // to push down the predicate to the data source completely.
-    bool fail_if_cannot_pushdown = 7;
+    enum EFiltering {
+        // If Connector cannot push down the predicate to the data source completely
+        // (due to the lack of data type support, for example), it doesn't apply filter at all
+        // and returns the full result of `SELECT columns FROM table`.
+        // It's YDB's duty to filter the output on its own side. 
+        FILTERING_OPTIONAL = 0;
+        // If Connector cannot push down the predicate to the data source completely,
+        // it terminates the request and returns an error.
+        FILTERING_MANDATORY = 1;
+    }
+
+    // Determines various modes of server behavior in the context of predicate pushdown.
+    // If not specified, the default value is `FILTERING_OPTIONAL``. 
+    EFiltering filtering = 7;
 
     reserved 5;
 }

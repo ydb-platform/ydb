@@ -267,16 +267,14 @@ void TCommandWithInput::ParseInputFormats() {
                         }
                         InputFramingFormat = framingFormat;
                     } else {
-                        throw TMisuseException() << "Stdin framing formats " << InputFormat << " and " << format
-                                                << " are mutually exclusive, choose only one of them.";
+                        throw TMisuseException() << "Stdin framing format " << format << " is not allowed.";
                     }
                     break;
                 }
                 default:
                     if (AllowedInputFormats.contains(format)) {
                         if (InputFormat != EDataFormat::Default) {
-                            throw TMisuseException() << "Stdin formats " << InputFormat << " and " << format
-                                                    << " are mutually exclusive, choose only one of them.";
+                            throw TMisuseException() << "Stdin format " << format << " is not allowed.";
                         }
                         InputFormat = format;
                     }

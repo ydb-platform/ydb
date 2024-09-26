@@ -259,8 +259,8 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::SendMessageResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
             Ydb::Ymq::V1::SendMessageResult result;
-            result.set_md5_of_message_attributes(GetResponse(resp).GetMD5OfMessageAttributes());
-            result.set_md5_of_message_body(GetResponse(resp).GetMD5OfMessageBody());
+            result.set_m_d_5_of_message_attributes(GetResponse(resp).GetMD5OfMessageAttributes());
+            result.set_m_d_5_of_message_body(GetResponse(resp).GetMD5OfMessageBody());
             result.set_message_id(GetResponse(resp).GetMessageId());
             result.set_sequence_number(std::to_string(GetResponse(resp).GetSequenceNumber()));
             return result;
@@ -347,8 +347,8 @@ namespace NKikimr::NYmq::V1 {
                 }
 
                 dstMessage.set_body(srcMessage.GetData());
-                dstMessage.set_md5_of_body(srcMessage.GetMD5OfMessageBody());
-                dstMessage.set_md5_of_message_attributes(srcMessage.GetMD5OfMessageAttributes());
+                dstMessage.set_m_d_5_of_body(srcMessage.GetMD5OfMessageBody());
+                dstMessage.set_m_d_5_of_message_attributes(srcMessage.GetMD5OfMessageAttributes());
 
                 for (const auto& srcAttribute: srcMessage.GetMessageAttributes()) {
                     Ydb::Ymq::V1::MessageAttribute dstAttribute;
@@ -448,75 +448,41 @@ namespace NKikimr::NYmq::V1 {
 
         Ydb::Ymq::V1::GetQueueAttributesResult GetResult(const NKikimrClient::TSqsResponse& resp) override {
             Ydb::Ymq::V1::GetQueueAttributesResult result;
-            for (const auto& attributeName : Attributes) {
-                if (attributeName == APPROXIMATE_NUMBER_OF_MESSAGES) {
-                    AddAttribute(
-                        result,
-                        APPROXIMATE_NUMBER_OF_MESSAGES,
-                        GetResponse(resp).GetApproximateNumberOfMessages()
-                    );
-                } else if (attributeName == APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED) {
-                    AddAttribute(
-                        result,
-                        APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED,
-                        GetResponse(resp).GetApproximateNumberOfMessagesDelayed()
-                    );
-                } else if (attributeName == CREATED_TIMESTAMP) {
-                    AddAttribute(
-                        result,
-                        CREATED_TIMESTAMP,
-                        GetResponse(resp).GetCreatedTimestamp()
-                    );
-                } else if (attributeName == DELAY_SECONDS) {
-                    AddAttribute(
-                        result,
-                        DELAY_SECONDS,
-                        GetResponse(resp).GetDelaySeconds()
-                    );
-                } else if (attributeName == LAST_MODIFIED_TIMESTAMP) {
-                    AddAttribute(
-                        result,
-                        LAST_MODIFIED_TIMESTAMP,
-                        GetResponse(resp).GetLastModifiedTimestamp()
-                    );
-                } else if (attributeName == MAXIMUM_MESSAGE_SIZE) {
-                    AddAttribute(
-                        result,
-                        MAXIMUM_MESSAGE_SIZE,
-                        GetResponse(resp).GetMaximumMessageSize()
-                    );
-                } else if (attributeName == MESSAGE_RETENTION_PERIOD) {
-                    AddAttribute(
-                        result,
-                        MESSAGE_RETENTION_PERIOD,
-                        GetResponse(resp).GetMessageRetentionPeriod()
-                    );
-                } else if (attributeName == QUEUE_ARN) {
-                    AddAttribute(
-                        result,
-                        QUEUE_ARN,
-                        GetResponse(resp).GetQueueArn()
-                    );
-                } else if (attributeName == RECEIVE_MESSAGE_WAIT_TIME_SECONDS) {
-                    AddAttribute(
-                        result,
-                        RECEIVE_MESSAGE_WAIT_TIME_SECONDS,
-                        GetResponse(resp).GetReceiveMessageWaitTimeSeconds()
-                    );
-                } else if (attributeName == VISIBILITY_TIMEOUT) {
-                    AddAttribute(
-                        result,
-                        VISIBILITY_TIMEOUT,
-                        GetResponse(resp).GetVisibilityTimeout()
-                    );
-                } else if (attributeName == REDRIVE_POLICY) {
-                    AddAttribute(
-                        result,
-                        REDRIVE_POLICY,
-                        GetResponse(resp).GetRedrivePolicy()
-                    );
-                }
+            const auto& attrs = resp.GetGetQueueAttributes();
+            if (attrs.HasApproximateNumberOfMessages()) {
+                AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES, attrs.GetApproximateNumberOfMessages());
             }
+            if (attrs.HasApproximateNumberOfMessagesDelayed()) {
+                AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED, attrs.GetApproximateNumberOfMessagesDelayed());
+            }
+            if (attrs.HasCreatedTimestamp()) {
+                AddAttribute(result, CREATED_TIMESTAMP, attrs.GetCreatedTimestamp());
+            }
+            if (attrs.HasDelaySeconds()) {
+                AddAttribute(result, DELAY_SECONDS, attrs.GetDelaySeconds());
+            }
+            if (attrs.HasLastModifiedTimestamp()) {
+                AddAttribute(result, LAST_MODIFIED_TIMESTAMP, attrs.GetLastModifiedTimestamp());
+            }
+            if (attrs.HasMaximumMessageSize()) {
+                AddAttribute(result, MAXIMUM_MESSAGE_SIZE, attrs.GetMaximumMessageSize());
+            }
+            if (attrs.HasMessageRetentionPeriod()) {
+                AddAttribute(result, MESSAGE_RETENTION_PERIOD, attrs.GetMessageRetentionPeriod());
+            }
+            if (attrs.HasQueueArn()) {
+                AddAttribute(result, QUEUE_ARN, attrs.GetQueueArn());
+            }
+            if (attrs.HasReceiveMessageWaitTimeSeconds()) {
+                AddAttribute(result, RECEIVE_MESSAGE_WAIT_TIME_SECONDS, attrs.GetReceiveMessageWaitTimeSeconds());
+            }
+            if (attrs.HasVisibilityTimeout()) {
+                AddAttribute(result, VISIBILITY_TIMEOUT, attrs.GetVisibilityTimeout());
+            }
+            if (attrs.HasRedrivePolicy()) {
+                AddAttribute(result, REDRIVE_POLICY, attrs.GetRedrivePolicy());
+            }
+
             return result;
         }
 
@@ -819,8 +785,8 @@ namespace NKikimr::NYmq::V1 {
                 } else {
                     auto currentSuccessful = result.Addsuccessful();
                     currentSuccessful->Setid(entry.GetId());
-                    currentSuccessful->Setmd5_of_message_attributes(entry.GetMD5OfMessageAttributes());
-                    currentSuccessful->Setmd5_of_message_body(entry.GetMD5OfMessageBody());
+                    currentSuccessful->set_m_d_5_of_message_attributes(entry.GetMD5OfMessageAttributes());
+                    currentSuccessful->set_m_d_5_of_message_body(entry.GetMD5OfMessageBody());
                     currentSuccessful->Setmessage_id(entry.GetMessageId());
                     currentSuccessful->Setsequence_number(std::to_string(entry.GetSequenceNumber()));
                 }

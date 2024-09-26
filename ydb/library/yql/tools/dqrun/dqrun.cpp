@@ -496,7 +496,6 @@ int RunMain(int argc, const char* argv[])
     TString gatewaysCfgFile;
     TString fqCfgFile;
     TString progFile;
-    TVector<TString> progFiles;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
     TString user = GetUsername();

@@ -128,7 +128,7 @@ namespace NYql::NDqs {
         auto logSettings = MakeIntrusive<NActors::NLog::TSettings>(loggerActorId,
             0, NActors::NLog::PRI_INFO);
         static TString defaultComponent = "ActorLib";
-        logSettings->Append(0, 1024 , [&](NActors::NLog::EComponent) -> const TString & { return defaultComponent; });
+        logSettings->Append(0, 1024, [&](NActors::NLog::EComponent) -> const TString & { return defaultComponent; });
         TString explanation = "";
         if (YQL_CVLOG_ACTIVE(NLog::ELevel::TRACE, NLog::EComponent::CoreDq)) {
             logSettings->SetLevel(NActors::NLog::PRI_TRACE, 535 /*NKikimrServices::KQP_COMPUTE*/, explanation);

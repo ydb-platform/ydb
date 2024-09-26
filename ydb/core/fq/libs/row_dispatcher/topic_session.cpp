@@ -294,7 +294,6 @@ void TTopicSession::SubscribeOnNextEvent() {
     Metrics.InFlySubscribe->Inc();
     NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
-        //Cerr << "WaitEvent ok" << Endl;
         actorSystem->Send(selfId, new NFq::TEvPrivate::TEvPqEventsReady());
     });
 }
@@ -437,7 +436,6 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvGetNextBatch from " << ev->Sender.ToString());
-
     Metrics.InFlyAsyncInputData->Set(0);
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {

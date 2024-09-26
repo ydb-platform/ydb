@@ -52,9 +52,8 @@ bool TDecimalType::Validate(ui32 precision, ui32 scale, TString& error) {
         error = Sprintf("Decimal precision %u should be more than scale %u", precision, scale);
         return false;
     }
-    return true;   
+    return true;
 }
-
 
 } // namespace NKikimr::NScheme
 

@@ -71,11 +71,7 @@ private:
 
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 
-<<<<<<< HEAD
 constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(1);    
-=======
-constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(100);    
->>>>>>> upstream/main
 
 public:
     TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = ""): 

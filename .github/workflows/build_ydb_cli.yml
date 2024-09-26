@@ -37,7 +37,9 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: ${{ inputs.commit_sha }}
-    
+
+    - name: Print env vars
+      run: gci env:* | sort-object name
 #    - name: Print uname
 #      run: uname -a
     

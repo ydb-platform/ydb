@@ -134,9 +134,6 @@ struct TBlobManagerCounters {
 // The implementation of BlobManager that hides all GC-related details
 class TBlobManager : public IBlobManager, public TCommonBlobsTracker {
 private:
-    static constexpr ui64 GC_INTERVAL_SECONDS = 30;
-
-private:
     using TBlobAddress = NBlobOperations::NBlobStorage::TBlobAddress;
     class TGCContext;
     const TTabletId SelfTabletId;

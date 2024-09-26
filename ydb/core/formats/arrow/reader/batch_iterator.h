@@ -44,7 +44,8 @@ public:
 
     TBatchIterator(TRWSortableBatchPosition&& keyColumns)
         : ControlPointFlag(true)
-        , KeyColumns(std::move(keyColumns)) {
+        , KeyColumns(std::move(keyColumns))
+    {
 
     }
 

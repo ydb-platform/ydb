@@ -90,9 +90,10 @@ jobs:
       - name: Unzip s3
         run: tar -xf s3cmd-2.4.0.tar.gz
       - name: Install s3
-        run: cd s3cmd-2.4.0
-             sudo python3 setup.py install
-             cd ..
+        run: |
+          cd s3cmd-2.4.0
+          sudo python3 setup.py install
+          cd ..
 #      - name: Set up S3cmd cli tool
 #        uses: s3-actions/s3cmd@v1.8.0
 #        with:
@@ -109,10 +110,11 @@ jobs:
           s3_key_secret: ${{ secrets.CLI_S3_KEY_SECRET_ID }}
 
       - name: prepare directories
-        run: mkdir -p ${{ inputs.version }}/linux/amd64
-             mkdir -p ${{ inputs.version }}/darwin/amd64
-             mkdir -p ${{ inputs.version }}/windows/amd64
-             mkdir -p ${{ inputs.version }}/darwin/arm64
+        run: |
+          mkdir -p ${{ inputs.version }}/linux/amd64
+          mkdir -p ${{ inputs.version }}/darwin/amd64
+          mkdir -p ${{ inputs.version }}/windows/amd64
+          mkdir -p ${{ inputs.version }}/darwin/arm64
 
       - name: copy linux binary
         uses: actions/download-artifact@v4

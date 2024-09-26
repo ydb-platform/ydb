@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             /* 5: */ {"SELECT", "WS", "ID_PLAIN (rom)", "EOF"},
             /* 6: */ {"EOF"},
             /* 7: */ {"ID_PLAIN (lect)", "EOF"},
-            /* 8: */ {"SELECT", "EOF"},
+            /* 8: */ {"SELECT", "WS", "EOF"},
         };
         TestInvalidTokensSkipped(/* antlr4 = */ false, actual);
     }
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             /* 5: */ {"SELECT", "WS", "FROM", "EOF"},
             /* 6: */ {"EOF"},
             /* 7: */ {"ID_PLAIN (elect)", "EOF"},
-            /* 8: */ {"SELECT", "EOF"},
+            /* 8: */ {"SELECT", "WS", "EOF"},
         };
         TestInvalidTokensSkipped(/* antlr4 = */ true, actual);
     }

@@ -204,7 +204,6 @@ namespace NYdb {
                 token.Name == "TILDA" ||
                 token.Name == "ASTERISK" ||
                 token.Name == "SLASH" ||
-                token.Name == "BACKSLASH" ||
                 token.Name == "PERCENT" ||
                 token.Name == "SEMICOLON" ||
                 token.Name == "DOT" ||
@@ -216,9 +215,6 @@ namespace NYdb {
                 token.Name == "COMMAT" ||
                 token.Name == "DOUBLE_COMMAT" ||
                 token.Name == "DOLLAR" ||
-                token.Name == "QUOTE_DOUBLE" ||
-                token.Name == "QUOTE_SINGLE" ||
-                token.Name == "BACKTICK" ||
                 token.Name == "LBRACE_CURLY" ||
                 token.Name == "RBRACE_CURLY" ||
                 token.Name == "CARET" ||

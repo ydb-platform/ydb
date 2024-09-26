@@ -143,6 +143,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "\"\\\"\"", "ssss");
         Check(highlight, "\"select\"select", "sssssssssvvvvv");
         Check(highlight, "\"select\"group", "sssssssskkkkk");
+        Check(highlight, "SELECT \\\"😁\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
     }
 
     Y_UNIT_TEST(Number) {

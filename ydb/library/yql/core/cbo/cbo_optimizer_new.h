@@ -101,15 +101,15 @@ struct TCardinalityHints {
 struct TJoinAlgoHints {
     struct TJoinAlgoHint {
         TVector<TString> JoinLabels;
-        EJoinAlgoType JoinHint;
+        EJoinAlgoType Algo;
         TString StringRepr;
         bool Applied = false;
     };
 
     TVector<TJoinAlgoHint> Hints;
 
-    void PushBack(TVector<TString> labels, EJoinAlgoType joinHint, TString stringRepr) {
-        Hints.push_back({.JoinLabels = std::move(labels), .JoinHint = joinHint, .StringRepr = std::move(stringRepr)});
+    void PushBack(TVector<TString> labels, EJoinAlgoType algo, TString stringRepr) {
+        Hints.push_back({.JoinLabels = std::move(labels), .Algo = algo, .StringRepr = std::move(stringRepr)});
     }
 };
 

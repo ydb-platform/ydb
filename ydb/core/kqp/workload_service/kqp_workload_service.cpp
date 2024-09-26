@@ -232,6 +232,11 @@ public:
 
 private:
     void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            LOG_D("Successfully fetched database info, DatabaseId: " << ev->Get()->DatabaseId << ", Serverless: " << ev->Get()->Serverless);
+        } else {
+            LOG_D("Failed to fetch database info, DatabaseId: " << ev->Get()->DatabaseId << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+        }
         GetOrCreateDatabaseState(ev->Get()->DatabaseId)->UpdateDatabaseInfo(ev);
     }
 
@@ -549,6 +554,7 @@ private:
         if (databaseIt != DatabaseToState.end()) {
             return &databaseIt->second;
         }
+        LOG_I("Creating new database state for id " << databaseId);
         return &DatabaseToState.insert({databaseId, TDatabaseState{.ActorContext = ActorContext(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless}}).first->second;
     }
 

@@ -2,6 +2,7 @@
 
 #include <queue>
 
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
@@ -75,6 +76,10 @@ struct TDatabaseState {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
             return;
+        }
+
+        if (Serverless != ev->Get()->Serverless) {
+            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvKqp::TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->DatabaseId, ev->Get()->Serverless));
         }
 
         LastUpdateTime = TInstant::Now();

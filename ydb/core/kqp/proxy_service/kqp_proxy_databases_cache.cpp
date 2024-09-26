@@ -194,13 +194,6 @@ TDatabasesCache::TDatabasesCache(TDuration idleTimeout)
     : IdleTimeout(idleTimeout)
 {}
 
-const TString& TDatabasesCache::GetTenantName() {
-    if (!TenantName) {
-        TenantName = CanonizePath(AppData()->TenantName);
-    }
-    return TenantName;
-}
-
 void TDatabasesCache::UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext) {
     auto it = DatabasesCache.find(event->Get()->Database);
     if (it == DatabasesCache.end()) {

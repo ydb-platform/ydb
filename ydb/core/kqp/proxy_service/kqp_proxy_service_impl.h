@@ -659,13 +659,10 @@ public:
 
     template <typename TEvent>
     bool SetDatabaseIdOrDefer(TEvent& event, i32 requestType, TActorContext actorContext) {
-        if (!event->Get()->GetDatabaseId().empty()) {
-            return true;
-        }
-
         const auto& database = CanonizePath(event->Get()->GetDatabase());
-        if (database.empty() || database == GetTenantName()) {
-            event->Get()->SetDatabaseId(GetTenantName());
+        const auto& tenantName = CanonizePath(AppData()->TenantName);
+        if (database.empty() || database == tenantName) {
+            event->Get()->SetDatabaseId(tenantName);
             return true;
         }
 
@@ -689,7 +686,6 @@ public:
     void StopSubscriberActor(TActorContext actorContext) const;
 
 private:
-    const TString& GetTenantName();
     void SubscribeOnDatabase(const TString& database, TActorContext actorContext);
     void PingDatabaseSubscription(const TString& database, TActorContext actorContext) const;
 

@@ -105,7 +105,7 @@ struct TEvTxProcessing {
         }
     };
 
-    struct TEvReadSet : public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> {
+    struct TEvReadSet: public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> {
         TEvReadSet()
         {}
 

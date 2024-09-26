@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/public/lib/value/value.h>
 

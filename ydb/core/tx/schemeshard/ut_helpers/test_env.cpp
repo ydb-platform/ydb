@@ -542,6 +542,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
     app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
+    app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

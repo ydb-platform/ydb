@@ -43,14 +43,18 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
     const bool needActualization = indexInfo.GetSchemeNeedActualization();
     auto newVersion = indexInfo.GetVersion();
     if (LastNotDeletedVersion.has_value() && (*LastNotDeletedVersion < newVersion)) {
-        database->GetDatabase().OnCommit([&versionToKey, &database, this]() {
+        TEMPLOG("Removing last deleted prepare");
+        auto table = database->Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
+        database->GetDatabase().OnCommit([&versionToKey, table, this]() {
+            auto tableCopy = std::move(table);
+            TEMPLOG("Removing last deleted commit");
             auto iter = versionToKey.find(*LastNotDeletedVersion);
             AFL_VERIFY(iter != versionToKey.end());
             for (auto& key: iter->second) {
-                database->Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>().Key(key.Id, key.PlanStep, key.TxId).Delete();
+                tableCopy.Key(key.Id, key.PlanStep, key.TxId).Delete();
             }
 
-            TEMPLOG("Removing schema version " << *LastNotDeletedVersion << " from memory, but not from db")
+            TEMPLOG("Removing schema version " << *LastNotDeletedVersion)
             RemoveVersionNoCheck(*LastNotDeletedVersion);
             LastNotDeletedVersion.reset();
         });

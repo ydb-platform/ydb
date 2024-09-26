@@ -697,7 +697,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     Y_UNIT_TEST(DeviceHaltTooLong) {
         TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};
+        // testCtx.TestCtx.SectorMap->ImitateRandomWait = std::make_shared<std::pair<TDuration, TDuration>>(TDuration::Seconds(1), TDuration::Seconds(2));
+        testCtx.TestCtx.SectorMap->ImitateRandomWait = std::make_pair(TDuration::Seconds(1), TDuration::Seconds(2));
 
         TVDiskMock mock(&testCtx);
 

@@ -1,8 +1,5 @@
 name: Update dstool package
 
-on:
-  workflow_dispatch:
-
 jobs:
   update-dstool:
     runs-on: ubuntu-latest

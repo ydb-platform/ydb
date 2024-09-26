@@ -42,6 +42,27 @@ namespace NKikimr {
         {}
     };
 
+    double DefragThreshold(
+        const TOutOfSpaceState& oos,
+        double defaultPercent,
+        double hugeDefragFreeSpaceBorder
+    ) {
+        double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
+        return defaultPercent * multiplier;
+    }
+
+    bool HugeHeapDefragmentationRequired(
+        ui32 hugeCanBeFreedChunks,
+        ui32 hugeTotalChunks,
+        float defragThreshold) {
+        
+        if (hugeCanBeFreedChunks < 10)
+            return false;
+        
+        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
+        return percentOfGarbage >= defragThreshold;
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // HugeHeapDefragmentationRequired
     // We calculate allowd percent of garbage as a percent of chunks
@@ -53,16 +74,8 @@ namespace NKikimr {
             ui32 hugeTotalChunks,
             double defaultPercent,
             double hugeDefragFreeSpaceBorder) {
-
-        if (hugeCanBeFreedChunks < 10)
-            return false;
-
-        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
-
-        double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
-        double maxPercentOfGarbage = defaultPercent * multiplier;
-
-        return percentOfGarbage >= maxPercentOfGarbage;
+        double defragThreshold = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
+        return HugeHeapDefragmentationRequired(hugeCanBeFreedChunks, hugeTotalChunks, defragThreshold);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -116,6 +129,7 @@ namespace NKikimr {
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
                     double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
+                    DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
                         TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(DCtx->MaxChunksToDefrag);
                         Y_ABORT_UNLESS(chunksToDefrag);

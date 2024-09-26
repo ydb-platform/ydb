@@ -80,7 +80,7 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
         if (LastSavedNormalizerId && (ui32)nType <= *LastSavedNormalizerId) {
             continue;
         }
-        if (nType == ENormalizerSequentialId::MAX)  {
+        if (nType == ENormalizerSequentialId::MAX) {
             continue;
         }
         auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(::ToString(nType), ctx)));

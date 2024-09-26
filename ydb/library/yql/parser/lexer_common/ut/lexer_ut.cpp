@@ -24,6 +24,14 @@ TVector<TString> GetIssueMessages(ILexer::TPtr& lexer, TString queryUtf8) {
     return messages;
 }
 
+TVector<TString> GetTokenNames(ILexer::TPtr& lexer, TString queryUtf8) {
+    TVector<TString> names;
+    for (auto& token : Tokenize(lexer, queryUtf8).first) {
+        names.emplace_back(std::move(token.Name));
+    }
+    return names;
+}
+
 void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
     if (lhs.Name == "EOF" && rhs.Name == "EOF") {
         return;
@@ -74,18 +82,57 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         }
     }
 
+    TVector<TString> InvalidQueries();
+
+    void TestInvalidTokensSkipped(bool antlr4, const TVector<TVector<TString>>& expected) {
+        auto lexer = MakeLexer(/* ansi = */ false, antlr4);
+
+        auto input = InvalidQueries();
+        UNIT_ASSERT_EQUAL(input.size(), expected.size());
+
+        for (size_t i = 0; i < input.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(GetTokenNames(lexer, input[i]), expected[i]);
+        }
+    }
+
+    TVector<TString> InvalidQueries() {
+        return {
+            /* 0: */ "😊",
+            /* 1: */ "select \"aaaa",
+            /* 2: */ "\"\\\"",
+            /* 3: */ "😊 SELECT * FR",
+            /* 4: */ "! SELECT *  from",
+            /* 5: */ "😊select ! from",
+        };
+    }
+
+    Y_UNIT_TEST(ErrorRecoveryAntlr3) {
+        TestInvalidTokensSkipped(/* antlr4 = */ false, {
+            /* 0: */ {"EOF"},
+            /* 1: */ {"SELECT", "WS", "EOF"},
+            /* 2: */ {"EOF"},
+            /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN", "EOF"},
+            /* 4: */ {"ID_PLAIN", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
+            /* 5: */ {"SELECT", "WS", "ID_PLAIN", "EOF"},
+        });
+    }
+
+    Y_UNIT_TEST(ErrorRecoveryAntlr4) {
+        TestInvalidTokensSkipped(/* antlr4 = */ true, {
+            /* 0: */ {"EOF"},
+            /* 1: */ {"SELECT", "WS", "EOF"},
+            /* 2: */ {"EOF"},
+            /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN", "EOF"},
+            /* 4: */ {"SELECT", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
+            /* 5: */ {"SELECT", "WS", "FROM", "EOF"},
+        });
+    }
+
     Y_UNIT_TEST(IssuesCollected) {
         auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
         auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
 
-        const TVector<TString> queriesUtf8 = {
-            "😊",
-            "select \"aaaa",
-            "\"\\\"",
-            "😊 SELECT * FR",
-        };
-
-        for (const auto& query : queriesUtf8) {
+        for (const auto& query : InvalidQueries()) {
             auto issues3 = GetIssueMessages(lexer3, query);
             auto issues4 = GetIssueMessages(lexer4, query);
 

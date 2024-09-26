@@ -12,8 +12,11 @@ namespace NYql {
 
 class TBlockingEQueue {
 public:
+    TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
+    }
     void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e) {
         with_lock(Mutex_) {
+            CanPush_.WaitI(Mutex_, [this] () {return Events_.size() < MaxSize_;});
             Events_.push_back(std::move(e));
         }
         CanPop_.BroadCast();
@@ -29,19 +32,17 @@ public:
         with_lock(Mutex_) {
             if (block) {
                 CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
-
-                auto front = Events_.front();
-                Events_.pop_front();
-                return front;
             } else {
                 if (!CanPopPredicate()) {
                     return {};
                 }
-
-                auto front = Events_.front();
-                Events_.pop_front();
-                return front;
             }
+            auto front = Events_.front();
+            Events_.pop_front();
+            if (Events_.size() < MaxSize_) {
+                CanPush_.BroadCast();
+            }
+            return front;
         }
     }
 
@@ -63,10 +64,12 @@ private:
         return !Events_.empty() && !Stopped_;
     }
 
+    size_t MaxSize_;
     TDeque<NYdb::NTopic::TReadSessionEvent::TEvent> Events_;
     bool Stopped_ = false;
     TMutex Mutex_;
     TCondVar CanPop_;
+    TCondVar CanPush_;
 };
 
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
@@ -188,7 +191,7 @@ private:
     }
     
     TFile File_;
-    TBlockingEQueue EventsQ_;
+    TBlockingEQueue EventsQ_ {1024};
     NYdb::NTopic::TPartitionSession::TPtr Session_;
     TString ProducerId_;
     std::thread FilePoller_;

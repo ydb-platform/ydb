@@ -89,6 +89,10 @@ jobs:
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
       - name: Unzip s3
         run: tar -xf s3cmd-2.4.0.tar.gz
+      - name: Install s3
+        run: cd s3cmd-2.4.0
+             sudo python3 setup.py install
+             cd ..
 #      - name: Set up S3cmd cli tool
 #        uses: s3-actions/s3cmd@v1.8.0
 #        with:
@@ -135,5 +139,5 @@ jobs:
         run: ls -R ${{ inputs.version }}
 
       - name: Print result
-        run: s3cmd-2.4.0/s3cmd put --recursive ${{ inputs.version }} release/
+        run: s3cmd put --recursive ${{ inputs.version }} release/
       

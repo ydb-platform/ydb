@@ -34,11 +34,11 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     
-    - name: MSVS content
-      run: Dir "C:\Program Files (x86)\Microsoft Visual Studio"
+    - name: MSVS 14 content
+      run: Dir "C:\Program Files (x86)\Microsoft Visual Studio 14.0"
     
     - name: BuildTools content | Get-Childitem
-      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio 14.0\2022\BuildTools"
     
     - name: Checkout
       uses: actions/checkout@v4

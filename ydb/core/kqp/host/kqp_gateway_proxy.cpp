@@ -2206,6 +2206,194 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateBackupCollection(const TString& cluster, const NYql::TCreateBackupCollectionSettings& settings) override {
+        CHECK_PREPARED_DDL(CreateBackupCollection);
+
+        try {
+            Y_UNUSED(cluster, settings);
+            return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
+            // if (cluster != SessionCtx->GetCluster()) {
+            //     return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            // }
+
+            // TString error;
+            // std::pair<TString, TString> pathPair;
+            // if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+            //     return MakeFuture(ResultFromError<TGenericResult>(error));
+            // }
+
+            // NKikimrSchemeOp::TModifyScheme tx;
+            // tx.SetWorkingDir(pathPair.first);
+            // tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBackupCollection);
+
+            // auto& op = *tx.MutableBackupCollection();
+            // op.SetName(pathPair.second);
+
+            // auto& config = *op.MutableConfig();
+            // auto& params = *config.MutableSrcConnectionParams();
+            // if (const auto& connectionString = settings.Settings.ConnectionString) {
+            //     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+            //     params.SetEndpoint(parseResult.Endpoint);
+            //     params.SetDatabase(parseResult.Database);
+            //     params.SetEnableSsl(parseResult.EnableSsl);
+            // }
+            // if (const auto& endpoint = settings.Settings.Endpoint) {
+            //     params.SetEndpoint(*endpoint);
+            // }
+            // if (const auto& database = settings.Settings.Database) {
+            //     params.SetDatabase(*database);
+            // }
+            // if (const auto& oauth = settings.Settings.OAuthToken) {
+            //     oauth->Serialize(*params.MutableOAuthToken());
+            // }
+            // if (const auto& staticCreds = settings.Settings.StaticCredentials) {
+            //     staticCreds->Serialize(*params.MutableStaticCredentials());
+            // }
+
+            // auto& targets = *config.MutableSpecific();
+            // for (const auto& [src, dst] : settings.Targets) {
+            //     auto& target = *targets.AddTargets();
+            //     target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
+            //     target.SetDstPath(AdjustPath(dst, GetDatabase()));
+            // }
+
+            // if (IsPrepare()) {
+            //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            //     auto& phyTx = *phyQuery.AddTransactions();
+            //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            //     phyTx.MutableSchemeOperation()->MutableCreateBackupCollection()->Swap(&tx);
+
+            //     TGenericResult result;
+            //     result.SetSuccess();
+            //     return MakeFuture(result);
+            // } else {
+            //     return Gateway->ModifyScheme(std::move(tx));
+            // }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterBackupCollection(const TString& cluster, const NYql::TAlterBackupCollectionSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterBackupCollection);
+
+        try {
+            Y_UNUSED(cluster, settings);
+            return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
+            // if (cluster != SessionCtx->GetCluster()) {
+            //     return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            // }
+
+            // std::pair<TString, TString> pathPair;
+            // {
+            //     TString error;
+            //     if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+            //         return MakeFuture(ResultFromError<TGenericResult>(error));
+            //     }
+            // }
+
+            // NKikimrSchemeOp::TModifyScheme tx;
+            // tx.SetWorkingDir(pathPair.first);
+            // tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterBackupCollection);
+
+            // auto& op = *tx.MutableAlterBackupCollection();
+            // op.SetName(pathPair.second);
+
+            // if (const auto& done = settings.Settings.StateDone) {
+            //     auto& state = *op.MutableState();
+            //     state.MutableDone()->SetFailoverMode(
+            //         static_cast<NKikimrBackupCollection::TBackupCollectionState::TDone::EFailoverMode>(done->FailoverMode));
+            // }
+
+            // if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
+            //         settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            //     auto& config = *op.MutableConfig();
+            //     auto& params = *config.MutableSrcConnectionParams();
+            //     if (const auto& connectionString = settings.Settings.ConnectionString) {
+            //         const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+            //         params.SetEndpoint(parseResult.Endpoint);
+            //         params.SetDatabase(parseResult.Database);
+            //     }
+            //     if (const auto& endpoint = settings.Settings.Endpoint) {
+            //         params.SetEndpoint(*endpoint);
+            //     }
+            //     if (const auto& database = settings.Settings.Database) {
+            //         params.SetDatabase(*database);
+            //     }
+            //     if (const auto& oauth = settings.Settings.OAuthToken) {
+            //         oauth->Serialize(*params.MutableOAuthToken());
+            //     }
+            //     if (const auto& staticCreds = settings.Settings.StaticCredentials) {
+            //         staticCreds->Serialize(*params.MutableStaticCredentials());
+            //     }
+            // }
+
+            // if (IsPrepare()) {
+            //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            //     auto& phyTx = *phyQuery.AddTransactions();
+            //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            //     phyTx.MutableSchemeOperation()->MutableAlterBackupCollection()->Swap(&tx);
+
+            //     TGenericResult result;
+            //     result.SetSuccess();
+            //     return MakeFuture(result);
+            // } else {
+            //     return Gateway->ModifyScheme(std::move(tx));
+            // }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const NYql::TDropBackupCollectionSettings& settings) override {
+        CHECK_PREPARED_DDL(DropBackupCollection);
+
+        try {
+            Y_UNUSED(cluster, settings);
+            return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
+            // if (cluster != SessionCtx->GetCluster()) {
+            //     return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            // }
+
+            // std::pair<TString, TString> pathPair;
+            // {
+            //     TString error;
+            //     if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+            //         return MakeFuture(ResultFromError<TGenericResult>(error));
+            //     }
+            // }
+
+            // NKikimrSchemeOp::TModifyScheme tx;
+            // tx.SetWorkingDir(pathPair.first);
+            // if (settings.Cascade) {
+            //     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollectionCascade);
+            // } else {
+            //     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollection);
+            // }
+
+            // auto& op = *tx.MutableDrop();
+            // op.SetName(pathPair.second);
+
+            // if (IsPrepare()) {
+            //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            //     auto& phyTx = *phyQuery.AddTransactions();
+            //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            //     phyTx.MutableSchemeOperation()->MutableDropBackupCollection()->Swap(&tx);
+
+            //     TGenericResult result;
+            //     result.SetSuccess();
+            //     return MakeFuture(result);
+            // } else {
+            //     return Gateway->ModifyScheme(std::move(tx));
+            // }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }

@@ -833,6 +833,27 @@ struct TAnalyzeSettings {
     TVector<TString> Columns;
 };
 
+struct TBackupCollectionSettings {
+    TMaybe<TString> Database;
+};
+
+struct TCreateBackupCollectionSettings {
+    TString Name;
+    TVector<std::pair<TString, TString>> Entries;
+    TBackupCollectionSettings Settings;
+};
+
+struct TAlterBackupCollectionSettings {
+    TString Name;
+    TBackupCollectionSettings Settings;
+};
+
+struct TDropBackupCollectionSettings {
+    TString Name;
+    bool Cascade = false;
+};
+
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -1025,6 +1046,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterObject(const TString& cluster, const TAlterObjectSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateBackupCollection(const TString& cluster, const TCreateBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterBackupCollection(const TString& cluster, const TAlterBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const TDropBackupCollectionSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 

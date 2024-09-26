@@ -133,6 +133,7 @@ DEFINE_ENUM(EAbortReason,
     ((UnresolvedNodeId)                ( 53))
     ((RootVolumePreparationFailed)     ( 54))
     ((InterruptionFailed)              ( 55))
+    ((OperationIncarnationChanged)     ( 56))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

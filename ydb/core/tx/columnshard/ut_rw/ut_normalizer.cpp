@@ -152,7 +152,36 @@ public:
     }
 };
 
-class TPortionsCleaner: public NYDBTest::ILocalDBModifier {
+class TSchemaVersionsCleaner : public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+        NIceDb::TNiceDb db(txc.DB);
+        auto rowset = db.Table<Schema::IndexPortions>().Select();
+        UNIT_ASSERT(rowset.IsReady());
+
+        ui64 minVersion = (ui64)-1;
+        while (!rowset.EndOfSet()) {
+            auto version = rowset.GetValue<Schema::IndexPortions::SchemaVersion>();
+            if (version < minVersion) {
+                minVersion = version;
+            }
+            UNIT_ASSERT(rowset.Next());
+        }
+
+        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
+        TString serialized;
+        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+        info.MutableSchema()->SetVersion(minVersion - 1);
+        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
+        db.Table<Schema::SchemaPresetVersionInfo>().Key(11, 1, 1).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
+
+        db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
+
+    }
+};
+
+class TPortionsCleaner : public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -259,6 +288,10 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
+        auto* repair = runtime.GetAppData().ColumnShardConfig.MutableRepairs()->Add();
+        repair->SetClassName("SchemaVersionCleaner");
+        repair->SetDescription("Removing unused schema versions");
+
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
@@ -308,9 +341,14 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TPortionsCleaner>();
     }
 
+    Y_UNIT_TEST(SchemaVersionsNormalizer) {
+        TestNormalizerImpl<TSchemaVersionsCleaner>();
+    }
+
     Y_UNIT_TEST(CleanEmptyPortionsNormalizer) {
         TestNormalizerImpl<TEmptyPortionsCleaner>();
     }
+
 
     Y_UNIT_TEST(EmptyTablesNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {

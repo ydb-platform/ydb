@@ -142,16 +142,23 @@ TBufferPoolCommon::TBufferPoolCommon(ui32 bufferSize, ui32 bufferCount, TBufferP
     : TBufferPool(bufferSize, bufferCount, params)
 {
     TBufferPool::UseHugePages = false;
-    Size = AlignUp((size_t)bufferSize, Alignment) * bufferCount + Alignment - 1;
+    Size = AlignUp((size_t)bufferSize * bufferCount, Alignment);
+    auto pageSize = sysconf(_SC_PAGE_SIZE);
+    Y_VERIFY(pageSize >= (i64)Alignment);
     ui8 *alignedData;
     if (HugePages) {
         void *ptr = mmap(NULL, Size, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
                  -1, 0);
-        Cerr << "ptr# " << ptr << " Alignment# " << Alignment << " Size# " << Size << Endl;
-        Y_VERIFY_S(ptr != MAP_FAILED, strerror(errno));
-        RawBufferHuge = ptr;
-        alignedData = (ui8*)AlignUp(RawBufferHuge, Alignment);
+        Cerr << "Create buffer pool, mmap_ptr# " << ptr << " Alignment# " << Alignment << " Size# " << Size << Endl;
+        if (ptr == MAP_FAILED) {
+            Cerr << "hugepages mmap failed with# " << strerror(errno) << Endl;
+            RawBuffer.Reset(new ui8[Size]);
+            alignedData = (ui8*)AlignUp(RawBuffer.Get(), Alignment);
+        } else {
+            RawBufferHuge = ptr;
+            alignedData = (ui8*)AlignUp(RawBufferHuge, Alignment);
+        }
     } else {
         RawBuffer.Reset(new ui8[Size]);
         alignedData = (ui8*)AlignUp(RawBuffer.Get(), Alignment);
@@ -161,12 +168,9 @@ TBufferPoolCommon::TBufferPoolCommon(ui32 bufferSize, ui32 bufferCount, TBufferP
 }
 
 TBufferPoolCommon::~TBufferPoolCommon() {
-    Cerr << "~TBufferPoolCommon" << Endl;
-
-    if (HugePages) {
-        void *ptr = RawBufferHuge;
-        munmap(ptr, Size);
-        RawBufferHuge = nullptr;
+    if (HugePages && RawBufferHuge) {
+        int ret = munmap(RawBufferHuge, Size);
+        Y_VERIFY_S(ret == 0, "munmap failed, ptr# " << (void*)RawBufferHuge << " strerror# " << strerror(errno));
     }
 }
 

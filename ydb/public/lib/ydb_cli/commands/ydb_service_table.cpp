@@ -746,11 +746,8 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
 
         while (!IsInterrupted()) {
             auto streamPart = result.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (streamPart.EOS()) {
-                    break;
-                }
-                ThrowOnError(streamPart);
+            if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                break;
             }
 
             if (streamPart.HasResultSet()) {
@@ -896,11 +893,8 @@ int TCommandExplain::Run(TConfig& config) {
         SetInterruptHandlers();
         while (!IsInterrupted()) {
             auto tablePart = result.ReadNext().GetValueSync();
-            if (!tablePart.IsSuccess()) {
-                if (tablePart.EOS()) {
-                    break;
-                }
-                ThrowOnError(tablePart);
+            if (ThrowOnErrorAndCheckEOS(tablePart)) {
+                break;
             }
             if (tablePart.HasQueryStats()) {
                 auto proto = NYdb::TProtoAccessor::GetProto(tablePart.GetQueryStats());
@@ -939,11 +933,8 @@ int TCommandExplain::Run(TConfig& config) {
         SetInterruptHandlers();
         while (!IsInterrupted()) {
             auto tablePart = result.ReadNext().GetValueSync();
-            if (!tablePart.IsSuccess()) {
-                if (tablePart.EOS()) {
-                    break;
-                }
-                ThrowOnError(tablePart);
+            if (ThrowOnErrorAndCheckEOS(tablePart)) {
+                break;
             }
             if (tablePart.GetStats()) {
                 auto proto = NYdb::TProtoAccessor::GetProto(*tablePart.GetStats());
@@ -1179,12 +1170,9 @@ void TCommandReadTable::PrintResponse(NTable::TTablePartIterator& result) {
 
     while (!IsInterrupted()) {
         auto tablePart = result.ReadNext().GetValueSync();
-        if (!tablePart.IsSuccess()) {
-            if (tablePart.EOS()) {
+        if (ThrowOnErrorAndCheckEOS(tablePart)) {
                 break;
             }
-            ThrowOnError(tablePart);
-        }
         if (CountOnly) {
             TResultSetParser parser(tablePart.ExtractPart());
             while (parser.TryNextRow()) {

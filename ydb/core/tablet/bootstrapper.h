@@ -38,7 +38,7 @@ struct TBootstrapperInfo : public TThrRefBase {
     TDuration OfflineDelay;
     bool StartFollowers;
 
-    TBootstrapperInfo(TTabletSetupInfo *setupInfo)
+    TBootstrapperInfo(TTabletSetupInfo* setupInfo)
         : SetupInfo(setupInfo)
         , WatchThreshold(TDuration::MilliSeconds(200))
         , OfflineDelay(TDuration::Seconds(3))
@@ -46,7 +46,7 @@ struct TBootstrapperInfo : public TThrRefBase {
     {}
 };
 
-IActor* CreateBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby = false);
+IActor* CreateBootstrapper(TTabletStorageInfo* tabletInfo, TBootstrapperInfo* bootstrapperInfo, bool standby = false);
 TActorId MakeBootstrapperID(ui64 tablet, ui32 node);
 
 }

@@ -92,8 +92,10 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
         
-        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
-            ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
+        if (status == TStatus::Ok) {
+            for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
+                ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
+            }
         }
 
         return status;

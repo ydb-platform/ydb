@@ -32,6 +32,7 @@ extern void InitViewerBrowseJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitQueryJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitStorageJsonHandlers(TJsonHandlers& jsonHandlers);
 
@@ -120,6 +121,13 @@ public:
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
+                .RelPath = "query",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = monitoringAllowedSIDs,
+            });
+            mon->RegisterActorPage({
                 .RelPath = "scheme",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
@@ -144,6 +152,7 @@ public:
             InitVDiskJsonHandlers(JsonHandlers);
             InitStorageJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
+            InitQueryJsonHandlers(JsonHandlers);
             InitSchemeJsonHandlers(JsonHandlers);
             InitViewerBrowseJsonHandlers(JsonHandlers);
 

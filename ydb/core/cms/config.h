@@ -1,12 +1,14 @@
 #pragma once
 
 #include "pdisk_state.h"
+#include "pdisk_status.h"
 
 #include <ydb/core/protos/cms.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NCms {
 
@@ -30,6 +32,8 @@ struct TCmsSentinelConfig {
     ui32 RoomRatio;
     ui32 RackRatio;
 
+    TMaybeFail<EPDiskStatus> EvictVDisksStatus;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -45,6 +49,7 @@ struct TCmsSentinelConfig {
         config.SetRackRatio(RackRatio);
 
         SaveStateLimits(config);
+        SaveEvictVDisksStatus(config);
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
@@ -63,6 +68,8 @@ struct TCmsSentinelConfig {
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);
+
+        EvictVDisksStatus = LoadEvictVDisksStatus(config);
     }
 
     void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
@@ -128,6 +135,31 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::Unknown] = 0;
 
         return stateLimits;
+    }
+
+    static TMaybeFail<EPDiskStatus> LoadEvictVDisksStatus(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
+        using EEvictVDisksStatus = NKikimrCms::TCmsConfig::TSentinelConfig;
+        switch (config.GetEvictVDisksStatus()) {
+            case EEvictVDisksStatus::UNKNOWN:
+            case EEvictVDisksStatus::FAULTY:
+                return EPDiskStatus::FAULTY;
+            case EEvictVDisksStatus::DISABLED:
+                return Nothing();
+        }
+        return EPDiskStatus::FAULTY;
+    }
+
+    void SaveEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
+        using EEvictVDisksStatus = NKikimrCms::TCmsConfig::TSentinelConfig;
+
+        if (EvictVDisksStatus.Empty()) {
+            config.SetEvictVDisksStatus(EEvictVDisksStatus::DISABLED);
+            return;
+        }
+
+        if (*EvictVDisksStatus == EPDiskStatus::FAULTY) {
+            config.SetEvictVDisksStatus(EEvictVDisksStatus::FAULTY);
+        }
     }
 };
 

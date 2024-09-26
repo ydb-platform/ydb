@@ -76,6 +76,7 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
     };
+
     const auto& domainInfo = entry.DomainInfo;
 
     if (domainInfo->IsServerless()) {
@@ -93,12 +94,6 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
 void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    TULID operationId;
-
-    if (!operationId.ParseString(Params[EParamType::OPERATION_ID])
-            || record.GetOperationId() != operationId.ToBinary()) {
-        HttpReply("Wrong OperationId");
-    }
 
     switch (record.GetStatus()) {
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED:
@@ -118,7 +113,6 @@ void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
 
 void THttpRequest::Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
     const auto msg = ev->Get();
-
     if (!msg->Success || !msg->Data) {
         const auto status = std::to_string(static_cast<ui32>(msg->Status));
         HttpReply("Error occurred while loading statistics. Status: " + status);
@@ -167,9 +161,7 @@ void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
     }
 
     const auto statisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
-
-    TULIDGenerator ulidGen;
-    const auto operationId = ulidGen.Next(TActivationContext::Now());
+    const auto operationId = TULIDGenerator().Next(TActivationContext::Now());
 
     auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
     auto& record = analyze->Record;
@@ -238,7 +230,6 @@ void THttpRequest::PassAway() {
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
     TBase::PassAway();
 }
-
 
 
 } // NStat

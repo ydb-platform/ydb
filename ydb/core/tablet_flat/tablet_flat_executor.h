@@ -280,6 +280,7 @@ enum class ETerminationReason {
     MemoryLimitExceeded = 1,
 };
 
+
 class ITransaction : TNonCopyable {
 public:
     using TTransactionContext = NTabletFlatExecutor::TTransactionContext;

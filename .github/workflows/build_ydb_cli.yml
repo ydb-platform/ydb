@@ -38,7 +38,13 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
 
-    - name: Print env vars
+    - name: Print env vars before installing Windows SDK
+      run: gci env:* | sort-object name
+    
+    - name: Install windows10 SDK
+      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
+
+    - name: Print env vars after installing Windows SDK
       run: gci env:* | sort-object name
 #    - name: Print uname
 #      run: uname -a

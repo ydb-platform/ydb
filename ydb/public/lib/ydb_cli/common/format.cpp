@@ -188,8 +188,6 @@ void TCommandWithInput::AddLegacyInputFormats(TClientCommand::TConfig& config, c
     for (const auto& newName : newNames) {
         config.Opts->MutuallyExclusive(legacyName, newName);
     }
-    config.Opts->MutuallyExclusive("stdin-format", "input-format");
-    config.Opts->MutuallyExclusive("stdin-format", "input-framing");
 }
 
 void TCommandWithInput::AddLegacyJsonInputFormats(TClientCommand::TConfig& config) {

@@ -6,6 +6,7 @@
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/folder/path.h>
 #include <util/system/file.h>
 
 namespace NYql {
@@ -214,18 +215,26 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
     TString topicPath = settings.Topics_.front().Path_;
-
+    Y_ENSURE(settings.Topics_.front().PartitionIds_.size() == 1);
+    ui64 partitionId = settings.Topics_.front().PartitionIds_.front();
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
-    Y_ENSURE(filePath);
-    
-    // TODO
-    ui64 sessionId = 0;
-    ui64 partitionId = 0;
+    Y_ENSURE(topicsIt->second.Path);
 
+    TString filePath;
+    if (TFsPath(*topicsIt->second.Path).IsDirectory()) {
+        filePath = TString(*topicsIt->second.Path) + "/" + ToString(partitionId);
+    } else {
+        if (TFsPath(*topicsIt->second.Path).Exists() && topicsIt->second.PartitionsCount == 1) {
+            filePath = *topicsIt->second.Path;
+        } else {
+            filePath = TString(*topicsIt->second.Path) + "_" + ToString(partitionId);
+        }
+    }
+
+    ui64 sessionId = 0;
     return std::make_shared<TFileTopicReadSession>(
-        TFile(*filePath, EOpenMode::TEnum::RdOnly),
+        TFile(filePath, EOpenMode::TEnum::RdOnly),
         MakeIntrusive<TDummyPartitionSession>(sessionId, topicPath, partitionId)
     );
 }

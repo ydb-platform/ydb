@@ -54,7 +54,7 @@ TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
     with_lock (Mutex) {
         Y_ENSURE(topic.Cluster);
         Y_ENSURE(topic.Path);
-        const auto key = std::make_pair(topic.Cluster, topic.Path);
+        const auto key = std::make_pair(topic.Cluster, topic.TopicName);
         Y_ENSURE(Topics.emplace(key, topic).second, "Already inserted dummy topic {" << topic.Cluster << ", " << topic.Path << "}");
         return *this;
     }

@@ -2175,11 +2175,7 @@ class MSVCLinker(MSVC, Linker):
         linker_lib = self.tc.lib
 
         emit('_MSVC_LIB', '"{}"'.format(linker_lib))
-        emit('_MSVC_LIB_OLD_UNQUOTED', linker_lib)
-        emit('_MSVC_LIB_OLD', '${quo:_MSVC_LIB_OLD_UNQUOTED}')
         emit('_MSVC_LINK', '"{}"'.format(linker))
-        emit('_MSVC_LINK_OLD_UNQUOTED', linker)
-        emit('_MSVC_LINK_OLD', '${quo:_MSVC_LINK_OLD_UNQUOTED}')
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')

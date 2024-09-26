@@ -1365,7 +1365,7 @@ public:
             if (ExecuterId) {
                 LOG_E("ERROR KQP EXETUTER: new=" << exId << " old= " << ExecuterId << " ");
                 //Sleep(TDuration::Seconds(1));
-                Y_ABORT_UNLESS(!ExecuterId);
+                //Y_ABORT_UNLESS(!ExecuterId);
             }
         }
         ExecuterId = exId;

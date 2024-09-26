@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
     void CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierId, const TQueryRunnerSettings& settings, const TString& poolId) {
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
-            GRANT ALL ON `)" << CanonizePath(settings.Database_) << R"(` TO `)" << settings.UserSID_ << R"(`;
+            GRANT ALL ON `)" << CanonizePath(settings.Database_ ? settings.Database_ : ydb->GetSettings().DomainName_) << R"(` TO `)" << settings.UserSID_ << R"(`;
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=0
             );

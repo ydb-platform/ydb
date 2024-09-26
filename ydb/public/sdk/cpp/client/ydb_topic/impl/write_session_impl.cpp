@@ -539,27 +539,32 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 
     const TTransactionId txId = MakeTransactionId(*tx);
     TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
-    if (txInfo->Subscribed) {
-        return;
+
+    with_lock(txInfo->Lock) {
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
+        txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
     }
 
-    txInfo->IsActive = true;
-    txInfo->Subscribed = true;
-    txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
-
     auto callback = [txInfo]() {
-        txInfo->CommitCalled = true;
+        with_lock(txInfo->Lock) {
+            txInfo->CommitCalled = true;
 
-        if (txInfo->WriteCount == txInfo->AckCount) {
-            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
-            return txInfo->AllAcksReceived.GetFuture();
+            if (txInfo->WriteCount == txInfo->AckCount) {
+                txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+                return txInfo->AllAcksReceived.GetFuture();
+            }
+
+            if (txInfo->IsActive) {
+                return txInfo->AllAcksReceived.GetFuture();
+            }
+
+            return NThreading::MakeFuture(MakeSessionExpiredError());
         }
-
-        if (txInfo->IsActive) {
-            return txInfo->AllAcksReceived.GetFuture();
-        }
-
-        return NThreading::MakeFuture(MakeSessionExpiredError());
     };
 
     tx->AddPrecommitCallback(std::move(callback));
@@ -579,15 +584,17 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
     const TTransactionId& txId = p->second;
     TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
 
-    ++txInfo->AckCount;
+    with_lock(txInfo->Lock) {
+        ++txInfo->AckCount;
 
-    LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-             LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << txId.second<< ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << txId.second<< ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
 
-    if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
-        txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+        if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
+            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
 
-        Txs.erase(txId);
+            Txs.erase(txId);
+        }
     }
 }
 
@@ -1178,6 +1185,9 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id) {
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
     SentOriginalMessages.pop();
+
+    WrittenInTx.erase(id);
+
     return result;
 }
 

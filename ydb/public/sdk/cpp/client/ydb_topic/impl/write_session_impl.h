@@ -304,6 +304,7 @@ private:
     };
 
     struct TTransactionInfo {
+        TSpinLock Lock;
         bool IsActive = false;
         bool Subscribed = false;
         NThreading::TPromise<TStatus> AllAcksReceived;

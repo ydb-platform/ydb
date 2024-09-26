@@ -2249,7 +2249,10 @@ void TPDisk::ProcessChunkWriteQueue() {
 void TPDisk::ProcessChunkReadQueue() {
     NHPTimer::STime now = HPNow();
     // Size (bytes) of elementary sectors block, it is useless to read/write less than that blockSize
-    ui64 bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
+    ui64 bufferSize;
+    with_lock(StateMutex) {
+        bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
+    }
 
     for (auto& req : JointChunkReads) {
         req->SpanStack.PopOk();

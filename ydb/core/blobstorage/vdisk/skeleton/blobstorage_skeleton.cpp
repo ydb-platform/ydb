@@ -1930,7 +1930,7 @@ namespace NKikimr {
 
                 // create Hull
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
-                        Config->FeatureFlags.GetUseVDisksBalancing(), std::move(*ev->Get()->Uncond),
+                        Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
                         ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                         Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
@@ -2556,15 +2556,30 @@ namespace NKikimr {
                 // don't run balancing for the static group
                 return;
             }
-            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
+            bool balancingEnabled = Config->BalancingEnableSend || Config->BalancingEnableDelete;
+            if (!balancingEnabled || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }
             if (BalancingId) {
                 Send(BalancingId, new NActors::TEvents::TEvPoison());
                 ActiveActors.Erase(BalancingId);
             }
+            TBalancingCfg balancingCfg{
+                .EnableSend=Config->BalancingEnableSend,
+                .EnableDelete=Config->BalancingEnableDelete,
+                .BalanceOnlyHugeBlobs=Config->BalancingBalanceOnlyHugeBlobs,
+                .JobGranularity=Config->BalancingJobGranularity,
+                .BatchSize=Config->BalancingBatchSize,
+                .MaxToSendPerEpoch=Config->BalancingMaxToSendPerEpoch,
+                .MaxToDeletePerEpoch=Config->BalancingMaxToDeletePerEpoch,
+                .ReadBatchTimeout=Config->BalancingReadBatchTimeout,
+                .SendBatchTimeout=Config->BalancingSendBatchTimeout,
+                .RequestBlobsOnMainTimeout=Config->BalancingRequestBlobsOnMainTimeout,
+                .DeleteBatchTimeout=Config->BalancingDeleteBatchTimeout,
+                .EpochTimeout=Config->BalancingEpochTimeout,
+            };
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
+                balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }

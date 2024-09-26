@@ -165,6 +165,7 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
+        
         SINK_LOG_T("SendData. Batch: " << batch.RowCount()
             << ". Checkpoint: " << checkpoint.Defined()
             << ". Finished: " << finished);
@@ -194,6 +195,7 @@ public:
 
             LWPROBE(PqWriteDataToSend, TString(TStringBuilder() << TxId), SinkParams.GetTopicPath(), data);
             SINK_LOG_T("Received data for sending: " << data);
+            Cerr << Now() << "   --------------    PQ sink: send data, count " << data << Endl;
 
             const auto messageSize = GetItemSize(data);
             if (messageSize > MaxMessageSize) {

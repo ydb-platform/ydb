@@ -4,7 +4,7 @@
 namespace NKikimr::NViewer {
 
 void InitStorageGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 4);
+    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 5);
 }
 
 void InitStorageJsonHandlers(TJsonHandlers& jsonHandlers) {

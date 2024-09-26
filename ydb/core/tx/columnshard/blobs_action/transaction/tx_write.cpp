@@ -23,15 +23,18 @@ bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
     auto userData = batch.BuildInsertionUserData(*Self);
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    NOlap::TCommittedData commitData(userData, Self->GetLastPlannedSnapshot(), Self->Generation(), writeId);
+    AFL_VERIFY(CommitSnapshot);
+    NOlap::TCommittedData commitData(userData, *CommitSnapshot, Self->Generation(), writeId);
     if (Self->TablesManager.HasTable(userData->GetPathId())) {
-        Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
+        auto counters = Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
+        Self->Counters.GetTabletCounters()->OnWriteCommitted(counters);
     }
     Self->UpdateInsertTableCounters();
     return true;
 }
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
+    CommitSnapshot = NOlap::TSnapshot::MaxForPlanStep(Self->GetOutdatedStep());
     TMemoryProfileGuard mpg("TTxWrite::Execute");
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
@@ -94,17 +97,6 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
                 Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
-            } else if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
-                NKikimrTxColumnShard::TCommitWriteTxBody proto;
-                proto.SetLockId(operation->GetLockId());
-                TString txBody;
-                Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
-                auto op = Self->GetProgressTxController().StartProposeOnExecute(
-                    TTxController::TTxInfo(
-                        NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId(), writeMeta.GetSource(), operation->GetCookie(), {}),
-                    txBody, txc);
-                AFL_VERIFY(!op->IsFail());
-                ResultOperators.emplace_back(op);
             } else {
                 auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
                 NKikimrDataEvents::TLock lock;
@@ -151,13 +143,16 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         if (!writeMeta.HasLongTxId()) {
             auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
             if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetTableId(),
-                    buffer.GetAggregations()[i]->GetRecordBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
-                Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetTableId())) {
+                    auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetTableId(),
+                        buffer.GetAggregations()[i]->GetRecordBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                    Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                }
             }
             if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
-                Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), Self->GetLastTxSnapshot());
+                AFL_VERIFY(CommitSnapshot);
+                Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
             }
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());

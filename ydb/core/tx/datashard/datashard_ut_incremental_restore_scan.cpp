@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         auto* scan = CreateIncrementalRestoreScan(
             sender,
-            [&](const TActorContext&) {
+            [&](const TActorContext&, TActorId) {
                 return sender2;
             },
             sourcePathId,
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TPathId targetPathId = dstTable.PathId;
         TPathId sourcePathId = srcTable.PathId;
 
-        TDataShardId sourceDatashard;
+        TDataShardId sourceDatashard{};
 
         {
             auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();

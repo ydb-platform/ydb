@@ -420,12 +420,12 @@ private:
 
 class TResourcePoolsCache {
     struct TClassifierInfo {
-        const TString Membername;
+        const TString MemberName;
         const TString PoolId;
         const i64 Rank;
 
         TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
-            : Membername(classifierSettings.Membername)
+            : MemberName(classifierSettings.MemberName)
             , PoolId(classifierSettings.ResourcePool)
             , Rank(classifierSettings.Rank)
         {}
@@ -593,7 +593,7 @@ private:
         TString poolId = "";
         i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
-            if (classifier.Membername != userSID) {
+            if (classifier.MemberName != userSID) {
                 continue;
             }
 
@@ -640,6 +640,65 @@ private:
     bool EnableResourcePools = false;
     bool EnableResourcePoolsOnServerless = false;
     bool SubscribedOnResourcePoolClassifiers = false;
+};
+
+class TDatabasesCache {
+public:
+    struct TDelayedEvent {
+        THolder<IEventHandle> Event;
+        i32 RequestType;
+    };
+
+private:
+    struct TDatabaseInfo {
+        TString DatabaseId;  // string "<scheme shard id>:<domain path id>:<database path>"
+        std::vector<TDelayedEvent> DelayedEvents;
+    };
+
+public:
+    TDatabasesCache(TDuration idleTimeout = TDuration::Seconds(60));
+
+    template <typename TEvent>
+    bool SetDatabaseIdOrDefer(TEvent& event, i32 requestType, TActorContext actorContext) {
+        if (!event->Get()->GetDatabaseId().empty()) {
+            return true;
+        }
+
+        const auto& database = CanonizePath(event->Get()->GetDatabase());
+        if (database.empty() || database == GetTenantName()) {
+            event->Get()->SetDatabaseId(GetTenantName());
+            return true;
+        }
+
+        auto& databaseInfo = DatabasesCache[database];
+        if (databaseInfo.DatabaseId) {
+            PingDatabaseSubscription(database, actorContext);
+            event->Get()->SetDatabaseId(databaseInfo.DatabaseId);
+            return true;
+        }
+
+        SubscribeOnDatabase(database, actorContext);
+        databaseInfo.DelayedEvents.push_back(TDelayedEvent{
+            .Event = std::move(event),
+            .RequestType = requestType
+        });
+
+        return false;
+    }
+
+    void UpdateDatabaseInfo(TEvKqp::TEvUpdateDatabaseInfo::TPtr& event, TActorContext actorContext);
+    void StopSubscriberActor(TActorContext actorContext) const;
+
+private:
+    const TString& GetTenantName();
+    void SubscribeOnDatabase(const TString& database, TActorContext actorContext);
+    void PingDatabaseSubscription(const TString& database, TActorContext actorContext) const;
+
+private:
+    const TDuration IdleTimeout;
+    std::unordered_map<TString, TDatabaseInfo> DatabasesCache;
+    TActorId SubscriberActor;
+    TString TenantName;
 };
 
 }  // namespace NKikimr::NKqp

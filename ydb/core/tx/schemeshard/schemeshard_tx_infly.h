@@ -137,6 +137,7 @@ struct TTxState {
         item(TxCreateResourcePool, 91) \
         item(TxDropResourcePool, 92) \
         item(TxAlterResourcePool, 93) \
+        item(TxRestoreIncrementalBackupAtTable, 94) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -423,6 +424,7 @@ struct TTxState {
         case TxAlterView:
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
+        case TxRestoreIncrementalBackupAtTable:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -495,6 +497,7 @@ struct TTxState {
         case TxCopySequence:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
+        case TxRestoreIncrementalBackupAtTable:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -602,6 +605,7 @@ struct TTxState {
         case TxCreateView:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
+        case TxRestoreIncrementalBackupAtTable:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:

@@ -70,15 +70,11 @@ struct TDatabaseState {
         subscribers.clear();
     }
 
-    void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void UpdateDatabaseInfo(const TEvFetchDatabaseResponse::TPtr& ev) {
         DatabaseUnsupported = ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
             return;
-        }
-
-        if (Serverless != ev->Get()->Serverless) {
-            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless));
         }
 
         LastUpdateTime = TInstant::Now();

@@ -1,0 +1,32 @@
+pragma FeatureR010="prototype";
+pragma config.flags("TimeOrderRecoverDelay", "-2000");
+pragma config.flags("TimeOrderRecoverAhead", "2000");
+
+
+$data = SELECT * FROM pq.`match` 
+    WITH (
+        format=json_each_row,
+        SCHEMA
+        (
+            time UINT64,
+            key STRING,
+            event_class STRING
+        ))
+    WHERE event_class = "event_class777";
+
+
+$match =
+    select * from $data
+    MATCH_RECOGNIZE(
+        ORDER BY CAST(time as Timestamp)
+        MEASURES 
+            LAST(M1.time) as m1_dt
+        ONE ROW PER MATCH
+        PATTERN ( M1  )
+        DEFINE
+            M1 as  True
+    );
+
+INSERT INTO pq.`match`
+SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow()))))
+from $match;

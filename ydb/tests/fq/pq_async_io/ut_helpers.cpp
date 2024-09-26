@@ -1,6 +1,7 @@
 #include "ut_helpers.h"
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
 
@@ -71,6 +72,14 @@ void TPqIoTestFixture::InitSource(
         const THashMap<TString, TString> secureParams;
         const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
 
+        TPqGatewayServices pqServices(
+            Driver,
+            nullptr,
+            nullptr,
+            std::make_shared<TPqGatewayConfig>(),
+            nullptr
+        );
+
         auto [dqSource, dqSourceAsActor] = CreateDqPqReadActor(
             std::move(settings),
             0,
@@ -84,7 +93,7 @@ void TPqIoTestFixture::InitSource(
             actor.SelfId(),
             actor.GetHolderFactory(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            nullptr,
+            CreatePqNativeGateway(std::move(pqServices)),
             freeSpace);
 
         actor.InitAsyncInput(dqSource, dqSourceAsActor);

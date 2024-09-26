@@ -21,6 +21,7 @@ SRCS(
     json_handlers.h
     json_handlers_browse.cpp
     json_handlers_operation.cpp
+    json_handlers_query.cpp
     json_handlers_pdisk.cpp
     json_handlers_scheme.cpp
     json_handlers_storage.cpp

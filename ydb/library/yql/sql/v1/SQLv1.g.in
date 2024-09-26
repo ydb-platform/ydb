@@ -1732,9 +1732,6 @@ COLON:         ':';
 COMMAT:        '@';
 DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
-QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
-QUOTE_SINGLE:  '\'';
-BACKTICK:      '`';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
 CARET:         '^';
@@ -1742,6 +1739,10 @@ NAMESPACE:     '::';
 ARROW:         '->';
 RBRACE_SQUARE: ']';
 LBRACE_SQUARE: '['; // pair ]
+
+fragment QUOTE_DOUBLE:  '"';
+fragment QUOTE_SINGLE:  '\'';
+fragment BACKTICK:      '`';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');

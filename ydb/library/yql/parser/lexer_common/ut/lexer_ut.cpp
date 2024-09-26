@@ -103,6 +103,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             /* 3: */ "😊 SELECT * FR",
             /* 4: */ "! SELECT *  from",
             /* 5: */ "😊select ! from",
+            /* 6: */ "\"",
         };
     }
 
@@ -114,6 +115,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN", "EOF"},
             /* 4: */ {"ID_PLAIN", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
             /* 5: */ {"SELECT", "WS", "ID_PLAIN", "EOF"},
+            /* 6: */ {"EOF"},
         });
     }
 
@@ -125,6 +127,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN", "EOF"},
             /* 4: */ {"SELECT", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
             /* 5: */ {"SELECT", "WS", "FROM", "EOF"},
+            /* 6: */ {"EOF"},
         });
     }
 

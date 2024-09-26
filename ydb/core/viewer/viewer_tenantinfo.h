@@ -640,7 +640,7 @@ public:
                 TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                 auto* domain = domains->GetDomain();
                 TStackVec<TTabletId, 64> tablets;
-                TTabletId hiveId;
+                TTabletId hiveId = {};
                 if (entry.DomainInfo) {
                     for (TTabletId tabletId : entry.DomainInfo->Params.GetCoordinators()) {
                         tablets.emplace_back(tabletId);

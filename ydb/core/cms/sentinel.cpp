@@ -613,11 +613,11 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         Reply();
     }
 
-    bool IsNodeLocked(ui32 nodeId) {
-        auto& clusterInfo = CmsState->ClusterInfo;
+    bool IsNodeLocked(ui32 nodeId) const {
+        const auto& clusterInfo = CmsState->ClusterInfo;
 
         if (clusterInfo && clusterInfo->HasNode(nodeId)) {
-            auto& node = clusterInfo->Node(nodeId);
+            const auto& node = clusterInfo->Node(nodeId);
             TErrorInfo unused;
             if (node.IsLocked(unused, TDuration::Zero(), TInstant::Zero(), TDuration::Zero())) {
                 return true;

@@ -11,6 +11,44 @@ extern "C" {
 
 namespace NKikimr::NSchemeShard {
 
+bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
+    Name = columnSchema.GetName();
+    if (!!columnSchema.GetStorageId()) {
+        StorageId = columnSchema.GetStorageId();
+    }
+    if (!Name) {
+        errors.AddError("empty field name");
+        return false;
+    }
+    if (columnSchema.HasDefaultValue()) {
+        DefaultValue = columnSchema.GetDefaultValue();
+    }
+    if (columnSchema.HasDataAccessorConstructor()) {
+        if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
+            errors.AddError("cannot parse accessor constructor from proto");
+            return false;
+        }
+    }
+    if (columnSchema.HasColumnFamilyId()) {
+        ColumnFamilyId = columnSchema.GetColumnFamilyId();
+    }
+
+    if (columnSchema.HasColumnFamilyName()) {
+        ColumnFamilyName = columnSchema.GetColumnFamilyName();
+    }
+    if (columnSchema.HasSerializer()) {
+        if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
+            errors.AddError("cannot parse serializer diff from proto");
+            return false;
+        }
+    }
+    if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
+        errors.AddError("cannot parse dictionary encoding diff from proto");
+        return false;
+    }
+    return true;
+}
+
     bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
         if (!columnSchema.GetName()) {
             errors.AddError("Columns cannot have an empty name");
@@ -20,6 +58,12 @@ namespace NKikimr::NSchemeShard {
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
         StorageId = columnSchema.GetStorageId();
+        if (columnSchema.HasColumnFamilyId()) {
+            ColumnFamilyId = columnSchema.GetColumnFamilyId();
+        }
+        if (columnSchema.HasColumnFamilyName()) {
+            ColumnFamilyName = columnSchema.GetColumnFamilyName();
+        }
         if (columnSchema.HasSerializer()) {
             NArrow::NSerialization::TSerializerContainer serializer;
             if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
@@ -112,6 +156,12 @@ namespace NKikimr::NSchemeShard {
             DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
             AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
         }
+        if (columnSchema.HasColumnFamilyId()) {
+            ColumnFamilyId = columnSchema.GetColumnFamilyId();
+        }
+        if (columnSchema.HasColumnFamilyName()) {
+            ColumnFamilyName = columnSchema.GetColumnFamilyName();
+        }
         if (columnSchema.HasSerializer()) {
             NArrow::NSerialization::TSerializerContainer serializer;
             AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
@@ -144,6 +194,12 @@ namespace NKikimr::NSchemeShard {
         columnSchema.SetNotNull(NotNullFlag);
         columnSchema.SetStorageId(StorageId);
         *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
+        if (ColumnFamilyId.has_value()) {
+            columnSchema.SetColumnFamilyId(ColumnFamilyId.value());
+        }
+        if (ColumnFamilyName.has_value()) {
+            columnSchema.SetColumnFamilyName(columnSchema.GetColumnFamilyName());
+        }
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
@@ -161,7 +217,31 @@ namespace NKikimr::NSchemeShard {
         }
     }
 
-    bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
+    bool TOlapColumnAdd::HasColumnFamily() const {
+        return GetColumnFamilyId().has_value() || GetColumnFamilyName().has_value();
+    }
+
+    bool TOlapColumnAdd::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
+        if (GetColumnFamilyId().has_value()) {
+            SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
+        } else {
+            TString familyName = GetColumnFamilyName().value();
+            auto idIt = columnFamilies.GetColumnFamiliesByName().find(familyName);
+
+            if (idIt.IsEnd()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot set column family `" << familyName << "` for column `" << GetName() << "`. Family not found");
+                return false;
+            }
+
+            SetColumnFamilyId(idIt->second);
+            SetSerializer(columnFamilies.GetByIdVerified(idIt->second)->GetSerializerContainer());
+        }
+        return true;
+    }
+
+    bool TOlapColumnAdd::ApplyDiff(
+        const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
         if (diffColumn.GetDefaultValue()) {
             auto conclusion = DefaultValue.ParseFromString(*diffColumn.GetDefaultValue(), Type);
@@ -181,8 +261,44 @@ namespace NKikimr::NSchemeShard {
         if (diffColumn.GetStorageId()) {
             StorageId = *diffColumn.GetStorageId();
         }
+        if (diffColumn.GetColumnFamilyId().has_value()) {
+            if (IsKeyColumn()) {
+                auto columnFamily = columnFamilies.GetByIdVerified(diffColumn.GetColumnFamilyId().value());
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot alter column family `" << columnFamily->GetName() << "` for PK column `" << GetName() << "`");
+                return false;
+            }
+
+            ColumnFamilyId = diffColumn.GetColumnFamilyId();
+        }
+        if (diffColumn.GetColumnFamilyName().has_value()) {
+            if (IsKeyColumn()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                                                                      << "Cannot alter column family `" << diffColumn.GetColumnFamilyName()
+                                                                      << "` for PK column `" << GetName() << "`");
+                return false;
+            }
+            ColumnFamilyName = diffColumn.GetColumnFamilyName();
+            auto idIt = columnFamilies.GetColumnFamiliesByName().find(ColumnFamilyName.value());
+            if (idIt.IsEnd()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot alter column family `" << ColumnFamilyName
+                                                                                   << "` for column `" << GetName() << "`. Family not found");
+                return false;
+            }
+            ColumnFamilyId = idIt->second;
+        }
+
         if (diffColumn.GetSerializer()) {
+            // if (IsKeyColumn()) {
+            //     errors.AddError(NKikimrScheme::StatusSchemeError,
+            //         TStringBuilder() << "Can't alter compression for PK column `" << GetName() << "`");
+            //     return false;
+            // }
             Serializer = diffColumn.GetSerializer();
+        } else {
+            if (HasColumnFamily() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {
+                return false;
+            }
         }
         {
             auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);

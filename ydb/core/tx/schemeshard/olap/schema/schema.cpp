@@ -93,7 +93,12 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
+    THashSet<ui32> alterColumnFamilyId;
+    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId, alterColumnFamilyId)) {
+        return false;
+    }
+
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, alterColumnFamilyId, errors, NextColumnId)) {
         return false;
     }
 
@@ -120,10 +125,12 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
+    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
     Version = tableSchema.GetVersion();
     Y_ABORT_UNLESS(tableSchema.HasEngine());
     Engine = tableSchema.GetEngine();
 
+    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
@@ -132,11 +139,13 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
     resultLocal.SetVersion(Version);
 
     Y_ABORT_UNLESS(HasEngine());
     resultLocal.SetEngine(GetEngineUnsafe());
 
+    ColumnFamilies.Serialize(resultLocal);
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);
@@ -144,6 +153,10 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
 }
 
 bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (!ColumnFamilies.Validate(opSchema, errors)) {
+        return false;
+    }
+
     if (!Columns.Validate(opSchema, errors)) {
         return false;
     }

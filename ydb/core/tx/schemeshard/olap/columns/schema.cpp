@@ -15,7 +15,8 @@ void TOlapColumnSchema::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescr
     Id = columnSchema.GetId();
 }
 
-bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, const TOlapColumnFamiliesDescription& columnFamilies,
+    const THashSet<ui32>& alterColumnFamilyId, IErrorCollector& errors, ui32& nextEntityId) {
     if (Columns.empty() && schemaUpdate.GetAddColumns().empty()) {
         errors.AddError(NKikimrScheme::StatusSchemeError, "No add columns specified");
         return false;
@@ -38,9 +39,18 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
                 return false;
             }
         }
+        if (column.IsKeyColumn() && ((column.GetColumnFamilyName().has_value() && column.GetColumnFamilyName().value() != "default") ||
+                                        (column.GetColumnFamilyId().has_value() && column.GetColumnFamilyId().value() != 0))) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, "Key column '" + column.GetName() + "' must be in `default` column family");
+            return false;
+        }
         TOlapColumnSchema newColumn(column, nextEntityId++);
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
+        }
+        if (!newColumn.GetSerializer().has_value() && newColumn.HasColumnFamily() &&
+            !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {
+            return false;
         }
 
         Y_ABORT_UNLESS(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
@@ -56,7 +66,7 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
             auto itColumn = Columns.find(it->second);
             Y_ABORT_UNLESS(itColumn != Columns.end());
             TOlapColumnSchema& newColumn = itColumn->second;
-            if (!newColumn.ApplyDiff(columnDiff, errors)) {
+            if (!newColumn.ApplyDiff(columnDiff, columnFamilies, errors)) {
                 return false;
             }
         }
@@ -87,6 +97,21 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
         }
         ColumnsByName.erase(columnName);
         Columns.erase(columnInfo->GetId());
+    }
+
+    // Alter column family
+    if (!alterColumnFamilyId.empty()) {
+        for (auto& [_, column] : Columns) {
+            if (!column.GetColumnFamilyId().has_value()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot alter family for column `" << column.GetName() << "`. Column family is not set");
+                return false;
+            }
+            ui32 id = column.GetColumnFamilyId().value();
+            if (alterColumnFamilyId.contains(id)) {
+                column.SetSerializer(columnFamilies.GetByIdVerified(id)->GetSerializerContainer());
+            }
+        }
     }
 
     return true;
@@ -150,6 +175,18 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         }
         if (colProto.HasId() && colProto.GetId() != col->GetId()) {
             errors.AddError("Column '" + colName + "' has id " + colProto.GetId() + " that does not match schema preset");
+            return false;
+        }
+
+        if (colProto.HasColumnFamilyId() && colProto.GetColumnFamilyId() != col->GetColumnFamilyId()) {
+            errors.AddError(
+                "Column '" + colName + "' has column family id " + colProto.GetColumnFamilyId() + " that does not match schema preset");
+            return false;
+        }
+
+        if (colProto.HasColumnFamilyName() && colProto.GetColumnFamilyName() != col->GetColumnFamilyName()) {
+            errors.AddError(
+                "Column '" + colName + "' has column family name `" + colProto.GetColumnFamilyName() + "` that does not match schema preset");
             return false;
         }
 

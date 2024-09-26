@@ -444,6 +444,17 @@ message TOlapColumn {
     }
 }
 
+message TOlapColumnFamily {
+    optional string Name = 1;
+    optional uint32 Id = 2;
+    optional TOlapColumn.TSerializer Serializer = 3;
+}
+
+message TOlapColumnFamilyDiff {
+    optional string Name = 1;
+    optional TOlapColumn.TSerializer Serializer = 2;
+}
+
 message TOlapColumnDiff {
     optional string Name = 1;
     optional TDictionaryEncodingSettings DictionaryEncoding = 4;
@@ -451,6 +462,8 @@ message TOlapColumnDiff {
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
+    optional uint32 ColumnFamilyId = 9;
+    optional string ColumnFamilyName = 10;
 }
 
 message TOlapColumnDescription {
@@ -471,6 +484,8 @@ message TOlapColumnDescription {
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
+    optional uint32 ColumnFamilyId = 14;
+    optional string ColumnFamilyName = 15;
 }
 
 message TRequestedBloomFilter {
@@ -592,6 +607,10 @@ message TColumnTableSchema {
     optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     optional TColumnTableSchemeOptions Options = 12;
+
+    repeated TOlapColumnFamily ColumnFamilies = 13;
+    // Internal fields
+    optional uint32 NextColumnFamilyId = 14;
 }
 
 message TColumnTableRequestedOptions {
@@ -608,6 +627,8 @@ message TAlterColumnTableSchema {
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
     optional TColumnTableRequestedOptions Options = 12;
+    repeated TOlapColumnFamily AddColumnFamily = 13;
+    repeated TOlapColumnFamilyDiff AlterColumnFamily = 14;
 }
 
 // Schema presets are used to manage multiple tables with the same schema

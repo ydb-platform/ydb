@@ -7,6 +7,10 @@ namespace NKikimr::NSchemeShard {
             Engine = tableSchema.GetEngine();
         }
 
+        if (!ColumnFamilies.Parse(tableSchema, errors)) {
+            return false;
+        }
+
         if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
             return false;
         }
@@ -15,6 +19,10 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+        if (!ColumnFamilies.Parse(alterRequest, errors)) {
+            return false;
+        }
+
         if (!Columns.Parse(alterRequest, errors)) {
             return false;
         }

@@ -35,10 +35,18 @@ private:
 
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
-            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
-            auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
-            if (parse.IsFail()) {
-                return parse;
+            if (dsColumn.HasType()) {
+                NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
+                auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+                if (parse.IsFail()) {
+                    return parse;
+                }
+            } else {
+                NKikimrSchemeOp::TOlapColumnDiff* olapColumn = alterSchema->AddAlterColumns();
+                auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+                if (parse.IsFail()) {
+                    return parse;
+                }
             }
         }
 
@@ -50,6 +58,16 @@ private:
                 return parse;
             }
         }
+
+        for (auto&& family : dsDescription.GetPartitionConfig().GetColumnFamilies()) {
+            NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
+            NKikimrSchemeOp::TOlapColumnFamily* olapColumnFamily = alterSchema->AddAddColumnFamily();
+            auto parse = ParseFromDSRequest(family, *olapColumnFamily);
+            if (parse.IsFail()) {
+                return parse;
+            }
+        }
+
         return TConclusionStatus::Success();
     }
 
@@ -71,11 +89,38 @@ private:
         if (dsColumn.HasDefaultFromSequence()) {
             return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }
-        if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            return TConclusionStatus::Fail("FamilyName and Family not supported");
+        if (dsColumn.HasFamilyName()) {
+            olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        } else if (dsColumn.HasFamily()) {
+            olapColumn.SetColumnFamilyId(dsColumn.GetFamily());
         }
         return TConclusionStatus::Success();
     }
+
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDiff& olapColumn) const {
+        olapColumn.SetName(dsColumn.GetName());
+        if (dsColumn.HasDefaultFromSequence()) {
+            return TConclusionStatus::Fail("DefaultFromSequence not supported");
+        }
+        if (dsColumn.HasFamilyName()) {
+            olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        } else if (dsColumn.HasFamily()) {
+            olapColumn.SetColumnFamilyId(dsColumn.GetFamily());
+        }
+        return TConclusionStatus::Success();
+    }
+
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TFamilyDescription& dsColumnFamily, NKikimrSchemeOp::TOlapColumnFamily& olapColumnFamily) const {
+        olapColumnFamily.SetName(dsColumnFamily.GetName());
+        auto serializer = olapColumnFamily.MutableSerializer();
+        serializer->SetClassName("ARROW_SERIALIZER");
+        auto arrowCompression = serializer->MutableArrowCompression();
+        arrowCompression->SetCodec(dsColumnFamily.GetColumnCodec());
+        return TConclusionStatus::Success();
+    }
+
 public:
     TConclusion<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify) {
         NKikimrSchemeOp::TAlterColumnTable result;

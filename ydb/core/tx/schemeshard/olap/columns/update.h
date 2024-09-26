@@ -1,13 +1,15 @@
 #pragma once
-#include <ydb/core/formats/arrow/dictionary/diff.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/schemeshard/olap/common/common.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/formats/arrow/accessor/abstract/request.h>
+#include <ydb/core/formats/arrow/dictionary/diff.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
+#include <ydb/core/tx/schemeshard/olap/column_families/schema.h>
+#include <ydb/core/tx/schemeshard/olap/common/common.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -19,37 +21,11 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
+    YDB_READONLY_DEF(std::optional<ui32>, ColumnFamilyId);
+    YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+
 public:
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
-        Name = columnSchema.GetName();
-        if (!!columnSchema.GetStorageId()) {
-            StorageId = columnSchema.GetStorageId();
-        }
-        if (!Name) {
-            errors.AddError("empty field name");
-            return false;
-        }
-        if (columnSchema.HasDefaultValue()) {
-            DefaultValue = columnSchema.GetDefaultValue();
-        }
-        if (columnSchema.HasDataAccessorConstructor()) {
-            if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
-                errors.AddError("cannot parse accessor constructor from proto");
-                return false;
-            }
-        }
-        if (columnSchema.HasSerializer()) {
-            if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
-                errors.AddError("cannot parse serializer diff from proto");
-                return false;
-            }
-        }
-        if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
-            errors.AddError("cannot parse dictionary encoding diff from proto");
-            return false;
-        }
-        return true;
-    }
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors);
 };
 
 class TOlapColumnAdd {
@@ -60,10 +36,14 @@ private:
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
     YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
-    YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
+    YDB_ACCESSOR_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
+
+    YDB_ACCESSOR_DEF(std::optional<ui32>, ColumnFamilyId);
+    YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
         : KeyOrder(keyOrder) {
@@ -73,6 +53,9 @@ public:
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
+    bool HasColumnFamily() const;
+    bool ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
+    bool ApplyDiff(const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool IsKeyColumn() const {
         return !!KeyOrder;
     }

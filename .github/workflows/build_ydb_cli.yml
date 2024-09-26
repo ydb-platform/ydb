@@ -53,7 +53,7 @@ jobs:
 #      run: cat ydb/apps/ydb/version.txt
     
     - name: Build binary with ya make
-      run: python ya make ydb/apps/ydb
+      run: python ya make ydb/apps/ydb -DUSE_CLANG_CL=yes --host-platform-flag USE_CLANG_CL=yes
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4

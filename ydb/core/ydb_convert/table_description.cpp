@@ -687,7 +687,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         }
         cd->SetType(NScheme::TypeName(typeInfo, typeMod));
 
-        if(NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+        if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *cd->MutableTypeInfo());
         }
 
@@ -739,7 +739,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
         columnDesc->SetNotNull(column.not_null());
 
-        if(NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+        if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
         }
     }

@@ -30,7 +30,7 @@ void CreateSimpleDataTypes(TKikimrRunner& kikimr) {
             col_timestamp Timestamp,
             col_interval Interval,
             col_decimal Decimal(22, 9),
-            col_decimal_35 Decimal(35,10),
+            col_decimal_35 Decimal(35, 10),
             PRIMARY KEY (col_uint64)
         ) WITH (
             PARTITION_AT_KEYS = (100, 200, 300)

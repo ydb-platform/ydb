@@ -377,13 +377,13 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
     auto columnToProto = [] (TString columnName, 
         TMap<TString, NSharding::IShardingBase::TColumn>::const_iterator columnIt,
-        ::NKikimrKqp::TKqpColumnMetadataProto* columnProto
-        ) {
+        ::NKikimrKqp::TKqpColumnMetadataProto* columnProto)
+    {
         columnProto->SetName(columnName);
         columnProto->SetId(columnIt->second.Id);
         columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
 
-        if(NScheme::NTypeIds::IsParametrizedType(columnIt->second.Type.GetTypeId())) {
+        if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.Type.GetTypeId())) {
             ProtoFromTypeInfo(columnIt->second.Type, columnIt->second.TypeMod, *columnProto->MutableTypeInfo());
         }
     };

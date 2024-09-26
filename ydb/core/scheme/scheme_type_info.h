@@ -4,8 +4,9 @@
 #include <ydb/core/scheme_types/scheme_types.h>
 
 namespace NKikimrProto {
-class TTypeInfo;
+    class TTypeInfo;
 }
+
 namespace NKikimr::NScheme {
 
 ::TString TypeName(const TTypeInfo typeInfo, const ::TString& typeMod = {});

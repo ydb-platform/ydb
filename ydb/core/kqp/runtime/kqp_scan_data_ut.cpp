@@ -37,8 +37,8 @@ struct TDataRow {
             {20, TTypeInfo(NTypeIds::Datetime64), ""},
             {21, TTypeInfo(NTypeIds::Timestamp64), ""},
             {22, TTypeInfo(NTypeIds::Interval64), ""},
-            {23, TTypeInfo(NScheme::TDecimalType(22,9)), ""},
-            {24, TTypeInfo(NScheme::TDecimalType(35,10)), ""},
+            {23, TTypeInfo(NScheme::TDecimalType(22, 9)), ""},
+            {24, TTypeInfo(NScheme::TDecimalType(35, 10)), ""},
         };
     }
 
@@ -236,8 +236,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Utf8        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Yson        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Json        , {16, 8 } },
-            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType(22,9), {16, 8 } },
-            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType(35,10), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType(22, 9), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType(35, 10), {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Date        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Datetime    , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Timestamp   , {16, 8 } },
@@ -265,8 +265,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Datetime64  , {16, 8 } },
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Timestamp64 , {16, 8 } },
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Interval64  , {16, 8 } },
-            {NUdf::TUnboxedValuePod(decimalVal  ), NScheme::TDecimalType(22,9), {16, 16} },
-            {NUdf::TUnboxedValuePod(decimal35Val  ), NScheme::TDecimalType(35,10), {16, 16} },
+            {NUdf::TUnboxedValuePod(decimalVal  ), NScheme::TDecimalType(22, 9), {16, 16} },
+            {NUdf::TUnboxedValuePod(decimal35Val  ), NScheme::TDecimalType(35, 10), {16, 16} },
             {NUdf::TUnboxedValuePod::Embedded("12charecters"), NTypeIds::String , {16, 12 } },
             {NUdf::TUnboxedValuePod::Embedded("foooo"), NTypeIds::String , {16, 8 } },
             {NUdf::TUnboxedValuePod::Embedded("FOOD!"), NTypeIds::Utf8   , {16, 8 } },

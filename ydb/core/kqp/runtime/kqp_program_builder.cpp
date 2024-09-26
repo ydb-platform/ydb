@@ -18,7 +18,7 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
         switch (column.Type) {
             case NUdf::TDataType<NUdf::TDecimal>::Id: {
                 const NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
-                type = TDataDecimalType::Create(decimal.GetPrecision(),decimal.GetScale(),builder.GetTypeEnvironment());
+                type = TDataDecimalType::Create(decimal.GetPrecision(), decimal.GetScale(), builder.GetTypeEnvironment());
                 if (!column.NotNull)
                     type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;

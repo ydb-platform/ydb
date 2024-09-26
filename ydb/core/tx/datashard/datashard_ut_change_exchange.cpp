@@ -1965,7 +1965,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"timestamp_value", "Timestamp", false, false},
                 {"interval_value", "Interval", false, false},
                 {"decimal_value", "Decimal", false, false},
-                {"decimal35_value", "Decimal(35,10)", false, false},
+                {"decimal35_value", "Decimal(35, 10)", false, false},
                 {"dynumber_value", "DyNumber", false, false},
                 {"string_value", "String", false, false},
                 {"utf8_value", "Utf8", false, false},

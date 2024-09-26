@@ -44,7 +44,6 @@ protected:
     bool EnabledGrpcService = false;
     bool GracefulShutdownSupported = false;
     TDuration MinDelayBeforeShutdown;
-    TDuration DelayBeforeShutdown2;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;

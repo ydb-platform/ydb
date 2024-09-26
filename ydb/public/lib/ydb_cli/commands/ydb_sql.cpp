@@ -125,11 +125,8 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
 
         while (!IsInterrupted()) {
             auto streamPart = result.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (streamPart.EOS()) {
-                    break;
-                }
-                ThrowOnError(streamPart);
+            if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                break;
             }
 
             if (streamPart.HasResultSet() && !ExplainAnalyzeMode) {

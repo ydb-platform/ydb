@@ -81,6 +81,10 @@ jobs:
     needs: build-platform-specific-binary
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
       - name: Unzip s3

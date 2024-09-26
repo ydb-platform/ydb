@@ -17,7 +17,7 @@
 - [{#T}](system-views.md)
 - [{#T}](cdc.md)
 - [{#T}](custom-attributes.md)
-- [{#T}](resource-consumption-management.md)
+{% if feature_resource_pool == true and feature_resource_pool_classifier == true %}- [{#T}](resource-consumption-management.md){% endif %}
 - Справка:
 
   - [{#T}](../yql/reference/index.md)

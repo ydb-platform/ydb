@@ -154,8 +154,7 @@ public:
             } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 int precision = typeInProto.decimal_type().precision();
                 int scale = typeInProto.decimal_type().scale();
-                if (!NScheme::TDecimalType::Validate(precision, scale, errorMessage))
-                if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
+                if (!NScheme::TDecimalType::Validate(precision, scale, errorMessage)) {
                     errorMessage = Sprintf("%s for column %s", errorMessage.c_str(), name.c_str());
                     return false;
                 }

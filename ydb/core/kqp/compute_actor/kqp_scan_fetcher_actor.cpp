@@ -48,7 +48,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
         NScheme::TTypeId typeId = Meta.GetKeyColumnTypes().at(i);
         NScheme::TTypeInfo typeInfo = NScheme::NTypeIds::IsParametrizedType(typeId) ?
             NScheme::TypeInfoFromProto(typeId,Meta.GetKeyColumnTypeInfos().at(i)) :
-            NScheme::TTypeInfo(typeId);  
+            NScheme::TTypeInfo(typeId);
         KeyColumnTypes.push_back(typeInfo);
     }
 }

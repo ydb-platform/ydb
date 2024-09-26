@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[21].Get<i64 >(), row.Timestamp64);
             UNIT_ASSERT_EQUAL(container[22].Get<i64 >(), row.Interval64 );
             UNIT_ASSERT_EQUAL(container[23].GetInt128(), row.Decimal    );
-            UNIT_ASSERT_EQUAL(container[24].GetInt128(), row.Decimal35    );
+            UNIT_ASSERT_EQUAL(container[24].GetInt128(), row.Decimal35  );
         }
 
         UNIT_ASSERT(scanData.IsEmpty());

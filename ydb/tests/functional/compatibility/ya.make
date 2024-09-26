@@ -5,9 +5,8 @@ TEST_SRCS(
     test_compatibility.py
 )
 
-TIMEOUT(3600)
-SIZE(LARGE)
-TAG(ya:fat)
+TIMEOUT(600)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydbd

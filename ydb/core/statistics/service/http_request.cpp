@@ -213,7 +213,7 @@ void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
             const auto columnTag = tableInfo.Id;
             const auto typeId = tableInfo.PType.GetTypeId();
             const auto& pathId = entry.TableId.PathId;
-            Register(CreateLoadStatisticsQuery(SelfId(), pathId, EStatType::COUNT_MIN_SKETCH, columnTag, typeId));
+            Register(CreateLoadStatisticsQuery(SelfId(), Params[EParamType::PATH], pathId, EStatType::COUNT_MIN_SKETCH, columnTag, typeId));
             return;
         }
     }

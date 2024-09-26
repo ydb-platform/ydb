@@ -6,6 +6,7 @@ on:
       - 'stable-*'
       - 'stream-nb-*'
       - '*-stable-*'
+      - 'dev-*'
     types:
       - 'opened'
       - 'synchronize'

@@ -2,6 +2,8 @@
 
 #include <util/system/align.h>
 
+#include <sys/mman.h>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -134,17 +136,38 @@ TBufferPool::~TBufferPool() {
 //
 // TBufferPoolCommon
 //
+constexpr bool HugePages = true;
+
 TBufferPoolCommon::TBufferPoolCommon(ui32 bufferSize, ui32 bufferCount, TBufferPool::TPDiskParams params)
     : TBufferPool(bufferSize, bufferCount, params)
 {
     TBufferPool::UseHugePages = false;
-    RawBuffer.Reset(new ui8[AlignUp((size_t)bufferSize, Alignment) * bufferCount + Alignment - 1]);
-    ui8 *alignedData = (ui8*)AlignUp(RawBuffer.Get(), Alignment);
+    Size = AlignUp((size_t)bufferSize, Alignment) * bufferCount + Alignment - 1;
+    ui8 *alignedData;
+    if (HugePages) {
+        void *ptr = mmap(NULL, Size, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                 -1, 0);
+        Cerr << "ptr# " << ptr << " Alignment# " << Alignment << " Size# " << Size << Endl;
+        Y_VERIFY_S(ptr != MAP_FAILED, strerror(errno));
+        RawBufferHuge = ptr;
+        alignedData = (ui8*)AlignUp(RawBufferHuge, Alignment);
+    } else {
+        RawBuffer.Reset(new ui8[Size]);
+        alignedData = (ui8*)AlignUp(RawBuffer.Get(), Alignment);
+    }
     Y_ABORT_UNLESS((ui64)alignedData % Alignment == 0);
     MarkUpPool(alignedData);
 }
 
 TBufferPoolCommon::~TBufferPoolCommon() {
+    Cerr << "~TBufferPoolCommon" << Endl;
+
+    if (HugePages) {
+        void *ptr = RawBufferHuge;
+        munmap(ptr, Size);
+        RawBufferHuge = nullptr;
+    }
 }
 
 TBufferPool *CreateBufferPool(ui64 size, ui32 bufferCount, bool UseHugePages, TBufferPool::TPDiskParams params) {

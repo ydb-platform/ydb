@@ -155,6 +155,8 @@ public:
 //
 class TBufferPoolCommon : public TBufferPool {
     TArrayHolder<ui8> RawBuffer;
+    void *RawBufferHuge;
+    size_t Size;
 public:
     TBufferPoolCommon(ui32 bufferSize, ui32 bufferCount, TBufferPool::TPDiskParams params);
     virtual ~TBufferPoolCommon();

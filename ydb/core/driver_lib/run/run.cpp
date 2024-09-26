@@ -1772,8 +1772,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     // Wait for a minimum delay to make sure that clients forget about this node
-    auto timeLeftBeforeShutdown = MinDelayBeforeShutdown - TDuration::Seconds(timer.Passed());
-    Sleep(timeLeftBeforeShutdown);
+    auto passedTime = TDuration::Seconds(timer.Passed());
+    if (MinDelayBeforeShutdown > passedTime) {
+        Sleep(MinDelayBeforeShutdown - passedTime);
+    }
 
     if (ActorSystem) {
         ActorSystem->BroadcastToProxies([](const TActorId& proxyId) {

@@ -3,7 +3,6 @@
 #include <ydb/core/tx/columnshard/tables_manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap {
 
@@ -23,7 +22,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0, static_cast<NColumnShard::TColumnShard*>(txc.Owner));
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

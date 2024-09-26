@@ -23,10 +23,6 @@ namespace NTable {
 
 namespace NTabletFlatExecutor {
 
-namespace NFlatExecutorSetup {
-    struct ITablet;
-}
-
 class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
@@ -251,7 +247,6 @@ public:
     NTable::TDatabase &DB;
     NWilson::TSpan &TransactionSpan;
     NWilson::TSpan TransactionExecutionSpan;
-    NFlatExecutorSetup::ITablet* Owner = nullptr;
 
 private:
     bool Rescheduled_ = false;

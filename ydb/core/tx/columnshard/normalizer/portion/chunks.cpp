@@ -3,7 +3,6 @@
 
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 
@@ -136,7 +135,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const 
         return tasks;
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), 0, static_cast<NColumnShard::TColumnShard*>(txc.Owner));
+    TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

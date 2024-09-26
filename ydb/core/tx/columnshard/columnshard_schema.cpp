@@ -22,7 +22,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         ui64 planStep = GetPlanStep(constructor);
 
         TEMPLOG("Loaded schema version " << constructor.GetSchemaVersion() << " planstep " << planStep << " txid " << constructor.GetWriteTxId() << " dedup id " << constructor.GetDedupId() << " rec type " << (ui32)constructor.GetRecType());
-        insertTable.CS->VersionAddRef(planStep, constructor.GetWriteTxId(), constructor.GetPathId(), constructor.GetDedupId(), (ui8)constructor.GetRecType(), constructor.GetSchemaVersion());
+        insertTable.VersionCounts->VersionAddRef(TInsertKey(planStep, constructor.GetWriteTxId(), constructor.GetPathId(), constructor.GetDedupId(), (ui8)constructor.GetRecType()), constructor.GetSchemaVersion());
         switch (constructor.GetRecType()) {
             case Schema::EInsertTableIds::Inserted:
                 insertTable.AddInserted(constructor.BuildInsertedOrAborted(dsGroupSelector), true);

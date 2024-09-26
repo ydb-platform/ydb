@@ -25,7 +25,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
         for (auto&& p : i.second.GetPortions()) {
             p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
             txc.DB.OnCommit([self = Self, portion = p.GetPortion(), pathId = p.GetPathId(), schema = p.GetSchemaVersionVerified()]() {
-                self->VersionAddRef(portion, pathId, schema);
+                self->TablesManager.VersionCounts.VersionAddRef(portion, pathId, schema);
             });
         }
     }

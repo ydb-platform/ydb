@@ -3,7 +3,6 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -30,11 +29,6 @@ public:
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")("portion_id", portionInfo->GetAddress().DebugString());
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
             portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
-            NColumnShard::TColumnShard* self = static_cast<NColumnShard::TColumnShard*>(txc.Owner);
-            AFL_VERIFY(self != nullptr);
-            txc.DB.OnCommit([self, portion = portionInfo->GetPortion(), pathId = portionInfo->GetPathId(), schema = portionInfo->GetSchemaVersionVerified()]() {
-                self->VersionAddRef(portion, pathId, schema);
-            });
         }
         if (BrokenPortions.size()) {
             TStringBuilder sb;

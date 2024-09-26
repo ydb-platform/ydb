@@ -27,30 +27,31 @@
 
 namespace NKikimr::NOlap {
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NColumnShard::TColumnShard* cs, NIceDb::TNiceDb* database)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, TVersionCounts* versionCounts, TVersionToKey* versionToKey, NIceDb::TNiceDb* database)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
-    , CS(cs)
-    , Database(database)
+    , VersionCounts(versionCounts)
+    , VersionToKey(versionToKey)
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, schema);
+    RegisterSchemaVersion(snapshot, schema, database);
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema, NColumnShard::TColumnShard* cs, NIceDb::TNiceDb* database)
+    const TSnapshot& snapshot, TIndexInfo&& schema, TVersionCounts* versionCounts, TVersionToKey* versionToKey, NIceDb::TNiceDb* database)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
-    , CS(cs)
-    , Database(database) {
+    , VersionCounts(versionCounts)
+    , VersionToKey(versionToKey)
+{
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, std::move(schema));
+    RegisterSchemaVersion(snapshot, std::move(schema), database);
 }
 
 const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const {
@@ -133,7 +134,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo, NIceDb::TNiceDb* database) {
     bool switchOptimizer = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
@@ -141,16 +142,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
     }
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
-    auto lastNotDeleted = VersionedIndex.LastNotDeletedVersion;
-    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
-    if (lastNotDeleted.has_value() && !VersionedIndex.LastNotDeletedVersion.has_value()) {
-        auto& versionToKey = CS->TablesManager.VersionToKey;
-        auto iter = versionToKey.find(*lastNotDeleted);
-        AFL_VERIFY(iter != versionToKey.end());
-        for (auto& key: iter->second) {
-            Database->Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>().Key(key.Id, key.PlanStep, key.TxId).Delete();
-        }
-    }
+    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo), database, *VersionToKey);
     if (isCriticalScheme) {
         if (!ActualizationStarted) {
             ActualizationStarted = true;
@@ -169,11 +161,11 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb* database) {
     std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager, SchemaObjectsCache);
     AFL_VERIFY(indexInfoOptional);
     NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
-    RegisterSchemaVersion(snapshot, std::move(indexInfo));
+    RegisterSchemaVersion(snapshot, std::move(indexInfo), database);
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -221,7 +213,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             if (portion.HasSchemaVersion()) {
-                CS->VersionAddRef(portion.GetPortionIdVerified(), portion.GetPathId(), portion.GetSchemaVersion());
+                VersionCounts->VersionAddRef(portion.GetPortionIdVerified(), portion.GetPathId(), portion.GetSchemaVersion());
             }
         })) {
             return false;

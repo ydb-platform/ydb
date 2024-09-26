@@ -3,10 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
-
-#include <ydb/core/tx/columnshard/common/log.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
@@ -30,15 +27,6 @@ public:
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
             portion->RemoveFromDatabase(db);
-            NColumnShard::TColumnShard* cs = static_cast<NColumnShard::TColumnShard*>(txc.Owner);
-            txc.DB.OnCommit([cs, portion = portion->GetPortion(), pathId = portion->GetPathId(), schema = portion->GetSchemaVersionVerified(), db = &txc.DB]() {
-                TEMPLOG("Removing portion from normalizer");
-                ui32 refCount = cs->VersionRemoveRef(portion, pathId, schema);
-                if (refCount == 0) {
-                    TEMPLOG("Ref count is set to 0 for version " << schema << " need to delete");
-                    cs->RemoveUnusedSchemaVersion(db, schema);
-                }
-            });
         }
         return true;
     }

@@ -9,7 +9,7 @@
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NColumnShard {
-class TColumnShard;
+class TVersionCounts;
 }
 
 namespace NKikimr::NOlap {
@@ -29,8 +29,8 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
-    TInsertTableAccessor(NColumnShard::TColumnShard* cs = nullptr)
-        : CS(cs)
+    TInsertTableAccessor(NColumnShard::TVersionCounts* versionCounts = nullptr)
+        : VersionCounts(versionCounts)
     {
     }
 
@@ -95,7 +95,7 @@ public:
     }
 
 public:
-    NKikimr::NColumnShard::TColumnShard* CS;
+    NColumnShard::TVersionCounts* VersionCounts;
 };
 
 class TInsertTable: public TInsertTableAccessor {
@@ -104,10 +104,11 @@ private:
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
-    TInsertTable(NColumnShard::TColumnShard* cs = nullptr)
-        : TInsertTableAccessor(cs)
+    TInsertTable(NColumnShard::TVersionCounts* versionCounts = nullptr)
+        : TInsertTableAccessor(versionCounts)
     {
     }
+
 
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;

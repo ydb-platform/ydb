@@ -1,6 +1,7 @@
 #include "versioned_index.h"
 #include "snapshot_scheme.h"
 
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 
@@ -32,7 +33,7 @@ void TVersionedIndex::RemoveVersionNoCheck(ui64 version) {
     Snapshots.erase(itSnap);
 }
 
-const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo, NIceDb::TNiceDb* database, THashMap<ui64, std::vector<TSchemaKey>>& versionToKey) {
     if (Snapshots.empty()) {
         PrimaryKey = indexInfo.GetPrimaryKey();
     } else {
@@ -42,9 +43,17 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
     const bool needActualization = indexInfo.GetSchemeNeedActualization();
     auto newVersion = indexInfo.GetVersion();
     if (LastNotDeletedVersion.has_value() && (*LastNotDeletedVersion < newVersion)) {
-        TEMPLOG("Removing schema version " << *LastNotDeletedVersion << " from memory, but not from db")
-        RemoveVersionNoCheck(*LastNotDeletedVersion);
-        LastNotDeletedVersion.reset();
+        database->GetDatabase().OnCommit([&versionToKey, &database, this]() {
+            auto iter = versionToKey.find(*LastNotDeletedVersion);
+            AFL_VERIFY(iter != versionToKey.end());
+            for (auto& key: iter->second) {
+                database->Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>().Key(key.Id, key.PlanStep, key.TxId).Delete();
+            }
+
+            TEMPLOG("Removing schema version " << *LastNotDeletedVersion << " from memory, but not from db")
+            RemoveVersionNoCheck(*LastNotDeletedVersion);
+            LastNotDeletedVersion.reset();
+        });
     }
     auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
     if (!itVersion.second) {

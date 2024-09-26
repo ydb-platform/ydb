@@ -104,7 +104,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(Self);
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(&Self->TablesManager.VersionCounts);
         if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
             ACFL_ERROR("step", "TInsertTable::Load_Fails");
             return false;
@@ -115,7 +115,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID(), Self);
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
             if (!tManagerLocal.InitFromDB(db)) {
@@ -239,7 +239,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 }
 
 bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    txc.Owner = Self;
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
@@ -341,7 +340,6 @@ private:
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
-    txc.Owner = Self;
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
     if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {

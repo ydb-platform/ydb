@@ -18,7 +18,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         if (self != nullptr) { // nullptr can happen in tests
             context.DB->OnCommit([self, portion = portionInfo.GetPortion(), pathId = portionInfo.GetPathId(), schema = portionInfo.GetSchemaVersionVerified()]() {
-                self->VersionAddRef(portion, pathId, schema);
+                self->TablesManager.VersionCounts.VersionAddRef(portion, pathId, schema);
             });
         }
     }
@@ -38,7 +38,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         if (self != nullptr) { // nullptr can happen in tests
             context.DB->OnCommit([self, portion = portionInfo.GetPortion(), pathId = portionInfo.GetPathId(), schema = portionInfo.GetSchemaVersionVerified()]() {
-                self->VersionAddRef(portion, pathId, schema);
+                self->TablesManager.VersionCounts.VersionAddRef(portion, pathId, schema);
             });
         }
     }

@@ -143,24 +143,6 @@ public:
 
 class TTablesManager {
 private:
-    class TSchemaKey {
-    public:
-        ui64 PlanStep;
-        ui64 TxId;
-        ui32 Id;
-
-    public:
-        TSchemaKey() = default;
-
-        TSchemaKey(ui32 id, ui64 planStep, ui64 txId)
-            : PlanStep(planStep)
-            , TxId(txId)
-            , Id(id)
-        {
-        }
-    };
-
-private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
@@ -168,13 +150,13 @@ private:
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
-    NColumnShard::TColumnShard* CS = nullptr;
 
 public:
-    THashMap<ui64, std::vector<TSchemaKey>> VersionToKey;
+    TVersionCounts VersionCounts;
+    TVersionToKey VersionToKey;
 
 public:
-    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, NColumnShard::TColumnShard* cs);
+    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
     bool TryFinalizeDropPathOnComplete(const ui64 pathId);

@@ -28,7 +28,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
         pathIds.emplace(p.GetPathId());
         context.DB->OnCommit([self, portion = p.GetPortion(), pathId = p.GetPathId(), schema = p.GetSchemaVersionVerified(), db = context.DB]() {
             TEMPLOG("Removing portion from cleanup");
-            ui32 refCount = self->VersionRemoveRef(portion, pathId, schema);
+            ui32 refCount = self->TablesManager.VersionCounts.VersionRemoveRef(portion, pathId, schema);
             if (refCount == 0) {
                 TEMPLOG("Ref count is set to 0 for version " << schema << " need to delete");
                 self->TablesManager.RemoveUnusedSchemaVersion(db, schema);

@@ -263,6 +263,15 @@ namespace {
         return columnTypeError;
     }
 
+    TString GetColumnTypeName(const TTypeAnnotationNode* type, const NKikimr::NScheme::TTypeInfo& typeInfo) {
+        if (type->GetKind() == ETypeAnnotationKind::Data &&
+            type->Cast<TDataExprType>()->GetSlot() != EDataSlot::Decimal) {
+            return ToString(type->Cast<TDataExprType>()->GetName());
+        } else {
+            return NKikimr::NScheme::TypeName(typeInfo);;
+        }
+    }
+    
     NKikimr::NScheme::TTypeInfo GetColumnTypeInfo(const TTypeAnnotationNode* type) {
         if (type->GetKind() == ETypeAnnotationKind::Pg) {
             auto pgTypeId = type->Cast<TPgExprType>()->GetId();
@@ -910,7 +919,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             columnMeta.Name = columnName;
 
             columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
-            columnMeta.Type = NKikimr::NScheme::TypeName(columnMeta.TypeInfo);
+            columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
@@ -1358,8 +1367,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     }
 
                     columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
-                    columnMeta.Type = NKikimr::NScheme::TypeName(columnMeta.TypeInfo);
-
+                    columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
                     if (columnTuple.Size() > 3) {
                         auto families = columnTuple.Item(3);

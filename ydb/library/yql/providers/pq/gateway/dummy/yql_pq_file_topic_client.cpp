@@ -16,7 +16,7 @@ public:
     }
     void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t rows) {
         with_lock(Mutex_) {
-            CanPush_.WaitI(Mutex_, [this] () {return Size_ < MaxSize_;});
+            CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
             Events_.emplace_back(std::move(e), rows );
             Size_ += rows;
         }
@@ -52,6 +52,7 @@ public:
         with_lock(Mutex_) {
             Stopped_ = true;
             CanPop_.BroadCast();
+            CanPush_.BroadCast();
         }
     }
     

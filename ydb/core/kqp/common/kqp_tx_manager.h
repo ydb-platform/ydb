@@ -54,6 +54,8 @@ public:
     virtual bool IsSingleShard() const = 0;
     virtual bool IsEmpty() const = 0;
 
+    virtual bool IsVolatile() const = 0;
+
     virtual bool HasSnapshot() const = 0;
     virtual void SetHasSnapshot(bool hasSnapshot) = 0;
 

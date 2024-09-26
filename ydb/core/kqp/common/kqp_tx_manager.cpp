@@ -84,11 +84,10 @@ public:
         }
 
         if (broken && !LocksIssue) {
-            const auto& lockInfo = shardInfo.Locks.at(lock.GetKey());
-            if (lockInfo.LocksAcquireFailure) {
+            if (isLocksAcquireFailure) {
                 LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE);
                 return false;
-            } else if (lockInfo.Invalidated) {
+            } else if (isInvalidated) {
                 TStringBuilder message;
                 message << "Transaction locks invalidated. Tables: ";
                 bool first = true;
@@ -174,6 +173,10 @@ public:
         return GetShardsCount() == 0;
     }
 
+    bool IsVolatile() const override {
+        return true;
+    }
+
     bool HasSnapshot() const override {
         return ValidSnapshot;
     }
@@ -204,8 +207,11 @@ public:
         AFL_ENSURE(!IsReadOnly());
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
-            if (shardInfo.Flags & EAction::WRITE) {
+            if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
+                if (IsVolatile()) {
+                    SendingShards.insert(shardId);
+                }
             }
             if (!shardInfo.Locks.empty()) {
                 SendingShards.insert(shardId);
@@ -213,6 +219,28 @@ public:
 
             AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
             shardInfo.State = EShardState::PREPARING;
+        }
+
+        Y_ABORT_UNLESS(!ReceivingShards.empty());
+
+        //ui64 arbiter = 0;
+        const size_t minArbiterMeshSize = 5; // TODO: make configurable?
+        if ((IsVolatile() &&
+            ReceivingShards.size() >= minArbiterMeshSize))
+        {
+            std::vector<ui64> candidates;
+            candidates.reserve(ReceivingShards.size());
+            for (ui64 candidate : ReceivingShards) {
+                // Note: all receivers are also senders in volatile transactions
+                if (Y_LIKELY(SendingShards.contains(candidate))) {
+                    candidates.push_back(candidate);
+                }
+            }
+            if (candidates.size() >= minArbiterMeshSize) {
+                // Select a random arbiter
+                const ui32 index = RandomNumber<ui32>(candidates.size());
+                Arbiter = candidates.at(index);
+            }
         }
 
         ShardsToWait = ShardsIds;
@@ -230,7 +258,7 @@ public:
         TPrepareInfo result {
             .SendingShards = SendingShards,
             .ReceivingShards = ReceivingShards,
-            .Arbiter = std::nullopt,
+            .Arbiter = Arbiter,
         };
 
         return result;
@@ -270,6 +298,8 @@ public:
                     && IsSingleShard()));
             shardInfo.State = EShardState::EXECUTING;
         }
+
+        ShardsToWait = ReceivingShards;
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -296,9 +326,11 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
         shardInfo.State = EShardState::FINISHED;
 
+        Y_ABORT_UNLESS(ShardsToWait.empty() || !IsSingleShard());
+
         // Either all shards committed or all shards failed,
         // so we need to wait only for one answer.
-        return true;
+        return ShardsToWait.contains(shardId) || ShardsToWait.empty();
     }
 
 private:
@@ -331,6 +363,7 @@ private:
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;
+    std::optional<ui64> Arbiter;
 
     THashSet<ui64> ShardsToWait;
 

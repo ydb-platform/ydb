@@ -321,7 +321,7 @@ public:
         }
 
         // TODO: support buffer actor
-        bool replied = ExecutePhyTx(/*tx*/ nullptr, /*commit*/ true, false);
+        bool replied = ExecutePhyTx(/*tx*/ nullptr, /*commit*/ true);
         if (!replied) {
             Become(&TKqpSessionActor::ExecuteState);
         }
@@ -1093,11 +1093,10 @@ public:
         if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately();
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
-            ExecutePhyTx(tx, commit, false);
+            ExecutePhyTx(tx, commit);
         } else {
             ReplySuccess();
         }
-        //}
     }
 
     void ExecuteDeferredEffectsImmediately() {
@@ -1123,7 +1122,7 @@ public:
         SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
     }
 
-    bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit, bool) {
+    bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         if (tx) {
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
@@ -1363,7 +1362,11 @@ public:
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
-            Y_ABORT_UNLESS(!ExecuterId);
+            if (ExecuterId) {
+                LOG_E("ERROR KQP EXETUTER: new=" << exId << " old= " << ExecuterId << " ");
+                //Sleep(TDuration::Seconds(1));
+                Y_ABORT_UNLESS(!ExecuterId);
+            }
         }
         ExecuterId = exId;
     }

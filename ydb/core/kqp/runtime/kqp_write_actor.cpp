@@ -68,10 +68,12 @@ namespace {
             for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
                 protoLocks->AddReceivingShards(receivingShardId);
             }
+            //Y_ABORT_UNLESS(prepareSettings.Arbiter);
             if (prepareSettings.Arbiter) {
                 protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
             }
         } else if (prepareSettings.ArbiterColumnShard == shardId) {
+            Y_ABORT_UNLESS(false);
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
             for (const ui64 sendingShardId : prepareSettings.SendingShards) {
                 protoLocks->AddSendingShards(sendingShardId);
@@ -80,6 +82,7 @@ namespace {
                 protoLocks->AddReceivingShards(receivingShardId);
             }
         } else {
+            Y_ABORT_UNLESS(false);
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
             protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
             protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
@@ -774,7 +777,7 @@ public:
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
         evWrite->Record.SetTxMode(isPrepare
-            ? NKikimrDataEvents::TEvWrite::MODE_PREPARE
+            ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE //NKikimrDataEvents::TEvWrite::MODE_PREPARE
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
         if (isImmediateCommit) {
@@ -813,7 +816,7 @@ public:
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-            0,
+            IEventHandle::FlagTrackDelivery,
             metadata->Cookie);
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
@@ -1249,7 +1252,6 @@ public:
 
             auto& writeInfo = WriteInfos[settings.TableId];
             if (!writeInfo.WriteTableActor) {
-                CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId);
                 writeInfo.WriteTableActor = new TKqpTableWriteActor(
                     this,
                     settings.TableId,
@@ -1261,6 +1263,7 @@ public:
                     Alloc,
                     TxManager);
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
+                CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
             auto cookie = writeInfo.WriteTableActor->Open(settings.OperationType, std::move(settings.Columns));
@@ -1305,6 +1308,7 @@ public:
             auto& writeInfo = WriteInfos.at(tableId);
 
             if (!writeInfo.WriteTableActor->IsReady()) {
+                CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
                 return;
             }
 
@@ -1341,6 +1345,7 @@ public:
             //if (GetTotalFreeSpace() >= item.DataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
+                CA_LOG_D("ProcessAckQueue ACK" << AckQueue.front().ForwardActorId);
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             //} else {
@@ -1359,7 +1364,9 @@ public:
 
         if (needToFlush) {
             for (auto& [_, info] : WriteInfos) {
+                CA_LOG_D("FLUSH TEST");
                 if (info.WriteTableActor->IsReady()) {
+                    CA_LOG_D("FLUSH READY");
                     info.WriteTableActor->Flush();
                 }
             }
@@ -1367,6 +1374,7 @@ public:
     }
 
     void Flush() {
+        CA_LOG_D("Start FLUSHING");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::FLUSHING;
         for (auto& [_, queue] : DataQueues) {
@@ -1376,6 +1384,7 @@ public:
     }
 
     void Prepare(const ui64 txId) {
+        CA_LOG_D("Start PREPARE");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
         for (auto& [_, queue] : DataQueues) {
@@ -1391,6 +1400,7 @@ public:
     }
 
     void ImmediateCommit() {
+        CA_LOG_D("Start COMMIT I");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
         for (auto& [_, queue] : DataQueues) {
@@ -1405,6 +1415,7 @@ public:
     }
 
     void DistributedCommit() {
+        CA_LOG_D("Start COMMIT D");
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
         for (auto& [_, queue] : DataQueues) {
@@ -1418,6 +1429,7 @@ public:
     }
 
     void Rollback() {
+        CA_LOG_D("Start ROLLBACK");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
     }
@@ -1438,7 +1450,7 @@ public:
             }
             auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isRollback
                 ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
-                : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+                : NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE); //NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             if (isRollback) {
                 FillEvWriteRollback(evWrite.get(), shardId, TxManager);
@@ -1484,6 +1496,7 @@ public:
         transaction.SetTxId(*TxId);
         transaction.SetMinStep(commitInfo.MinStep);
         transaction.SetMaxStep(commitInfo.MaxStep);
+        transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
 
         for (const auto& shardInfo : commitInfo.ShardsInfo) {
             auto& item = *affectedSet.Add();
@@ -1492,7 +1505,7 @@ public:
         }
 
         //TODO: NDataIntegrity & Volatile
-        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator);
+        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator << " volitale=" << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0));
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
     }
 
@@ -1772,6 +1785,7 @@ public:
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::PREPARING) {
+            CA_LOG_D("ProcessWritePreparedShard: ignored");
             return;
         }
         const auto& record = ev->Get()->Record;
@@ -1792,6 +1806,7 @@ public:
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::COMMITTING) {
+            CA_LOG_D("ProcessWriteCompletedShard: ignored");
             return;
         }
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
@@ -1814,6 +1829,7 @@ public:
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) override {
         if (State != EState::PREPARING) {
+            CA_LOG_D("OnPrepared: ignored");
             return;
         }
         Y_UNUSED(preparedInfo, dataSize);
@@ -1828,6 +1844,7 @@ public:
 
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
         if (State != EState::COMMITTING) {
+            CA_LOG_D("OnCommitted: ignored");
             return;
         }
         Y_UNUSED(shardId, dataSize);
@@ -1950,6 +1967,7 @@ private:
     }
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
+        CA_LOG_D("TKqpForwardWriteActor Recv from=" << BufferActorId);
         EgressStats.Bytes += DataSize;
         EgressStats.Chunks++;
         EgressStats.Splits++;
@@ -1963,8 +1981,11 @@ private:
         }
 
         if (Closed) {
+            CA_LOG_D("TKqpForwardWriteActor FINISH");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+            return;
         }
+        CA_LOG_D("TKqpForwardWriteActor RESUME free=" << GetFreeSpace());
         Callbacks->ResumeExecution();
     }
 
@@ -1998,6 +2019,7 @@ private:
             };
         }
 
+        CA_LOG_D("TKqpForwardWriteActor SEND data=" << DataSize << " closed=" << Closed);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
     }
 
@@ -2032,12 +2054,14 @@ private:
         Data->emplace_back(std::move(data));
         DataSize += size;
 
+        CA_LOG_D("TKqpForwardWriteActor ADD DATA : " << size << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
             WriteToBuffer();
         }
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        CA_LOG_E("TKqpForwardWriteActor ERROR : " << message);
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));

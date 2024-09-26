@@ -908,9 +908,10 @@ public:
         void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
             i64 dataSize = 0;
-            while (BatchesInFlight < maxCount
-                    && BatchesInFlight < Batches.size()
-                    && dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize) {
+            Y_UNUSED(dataSize, maxCount);
+            while (/*BatchesInFlight < maxCount
+                    && */BatchesInFlight < Batches.size()
+                    /*&& dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize()*/) {
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }

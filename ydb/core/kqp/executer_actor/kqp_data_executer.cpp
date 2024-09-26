@@ -289,7 +289,7 @@ public:
             BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
-        if (!BufferActorId || ReadOnlyTx) {
+        if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
             Become(&TKqpDataExecuter::FinalizeState);
             LOG_D("DON'T SEND ANYTHING " << BufferActorId);
             MakeResponseAndPassAway();

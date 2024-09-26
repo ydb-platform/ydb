@@ -81,7 +81,9 @@
 
     ```yaml
     grpc_config:
-      services: [legacy, discovery]
+      services:
+      - legacy
+      - discovery
       ca: "/opt/ydb/certs/ca.crt"
       cert: "/opt/ydb/certs/node.crt"
       key: "/opt/ydb/certs/node.key"
@@ -91,23 +93,31 @@
 
     ```yaml
     client_certificate_authorization:
-    request_client_certificate: true
-    client_certificate_definitions:
-      - member_groups: ["registration-node@cert"]
-        subject_terms:
-        - short_name: "C"
-          values: ["RU"]
-        - short_name: "ST"
-          values: ["Moscow"]
-        - short_name: "L"
-          values: ["Moscow"]
-        - short_name: "O"
-          values: ["My Organization"]
-        - short_name: "OU"
-          values: ["My organization unit"]
-        - short_name: "CN"
-          values: ["node2.ydb.tech"]
-          suffixes: [".ydb.tech"]
+      request_client_certificate: true
+      client_certificate_definitions:
+        - member_groups:
+          - "registration-node@cert"
+          subject_terms:
+          - short_name: "C"
+            values:
+            - "RU"
+          - short_name: "ST"
+            values:
+            - "Moscow"
+          - short_name: "L"
+            values:
+            - "Moscow"
+          - short_name: "O"
+            values:
+            - "My Organization"
+          - short_name: "OU"
+            values:
+            - "My organization unit"
+          - short_name: "CN"
+            values:
+            - "node2.ydb.tech"
+            suffixes:
+            - ".ydb.tech"
     ```
 
     Так как динамический узел может предоставить в качестве аутентификационной информации только сертификат, в системе такой узел будет известен под именем, соответствующим полю `Subject` предоставленного сертификата.

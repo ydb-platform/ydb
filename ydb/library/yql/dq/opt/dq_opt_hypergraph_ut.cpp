@@ -5,17 +5,21 @@
 
 #include "dq_opt_make_join_hypergraph.h"
 
+#include <memory>
+
 using namespace NYql;
 using namespace NNodes;
 using namespace NYql::NDq;
 
 std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute, TString tablePrefix="e") {
-    std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", nullptr);
+    std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", std::make_shared<TOptimizerStatistics>());
+    root->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{tablePrefix + "1"});
     for (size_t i = 1; i < size; ++i) {
         auto eiStr = tablePrefix + ToString(i + 1);
         auto eiPrevStr = tablePrefix + ToString(i);
 
-        auto ei = std::make_shared<TRelOptimizerNode>(eiStr, nullptr);
+        auto ei = std::make_shared<TRelOptimizerNode>(eiStr, std::make_shared<TOptimizerStatistics>());
+        ei->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{eiStr});
 
         std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
         joinConditions.insert({TJoinColumn(eiPrevStr, onAttribute), TJoinColumn(eiStr, onAttribute)});
@@ -26,6 +30,20 @@ std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute
     }
 
     return root;
+}
+
+template <typename TProviderContext = TBaseProviderContext>
+std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root) {
+    auto ctx = TProviderContext();
+    auto optimizer = 
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max()));
+    
+    Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
+    auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root));
+    Cout << "Optimized Tree:" << Endl;
+    std::stringstream ss; res->Print(ss);
+    Cout << ss.str() << Endl;
+    return res;
 }
 
 Y_UNIT_TEST_SUITE(HypergraphBuild) {

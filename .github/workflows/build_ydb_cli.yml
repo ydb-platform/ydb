@@ -22,27 +22,30 @@ jobs:
   build-platform-specific-binary:
     strategy:
       matrix:
-        os:
-          - ubuntu-latest
-          #- macos-13
-          #- macos-latest
-          #- windows-latest
+        include:
+          - { os: windows, runner: windows-latest, shell: pwsh }
+#          - { os: linux, runner: ubuntu-latest, shell: bash }
+#          - { os: macos-amd, runner: macos-13, shell: bash }
+#          - { os: macos-arm, runner: macos-latest, shell: bash }
     name: Build YDB CLI for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell} {0}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
         ref: ${{ inputs.commit_sha }}
     
-    - name: Print uname
-      run: uname -a
+#    - name: Print uname
+#      run: uname -a
     
-    - name: Print YDB CLI version
-      run: cat ydb/apps/ydb/version.txt
+#    - name: Print YDB CLI version
+#      run: cat ydb/apps/ydb/version.txt
     
     - name: Build binary with ya make
-      run: ./ya make ydb/apps/ydb
+      run: python ya make ydb/apps/ydb
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4
@@ -60,27 +63,27 @@ jobs:
       - name: prepare directories
         run: mkdir -p binaries/linux/amd64
              mkdir -p binaries/darwin/amd64
-#             mkdir -p binaries/windows/amd64
-#             mkdir -p binaries/darwin/arm64
+             mkdir -p binaries/windows/amd64
+             mkdir -p binaries/darwin/arm64
 #      - name: copy darwin amd64 binary
 #        uses: actions/download-artifact@v4
 #        with:
-#          name: macos-13-binary
+#          name: macos-amd-binary
 #          path: binaries/darwin/amd64/
 #      - name: copy darwin arm64 binary
 #        uses: actions/download-artifact@v4
 #        with:
-#          name: macos-latest-binary
+#          name: macos-arm-binary
 #          path: binaries/darwin/arm64/
-      - name: copy linux binary
-        uses: actions/download-artifact@v4
-        with:
-          name: ubuntu-latest-binary
-          path: binaries/linux/amd64/
-#      - name: copy windows binary
+#      - name: copy linux binary
 #        uses: actions/download-artifact@v4
 #        with:
-#          name: windows-latest-binary
-#          path: binaries/windows/amd64/
+#          name: linux-binary
+#          path: binaries/linux/amd64/
+      - name: copy windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: binaries/windows/amd64/
       - name: Print result
         run: ls -R binaries

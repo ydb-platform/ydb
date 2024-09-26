@@ -48,7 +48,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -63,6 +63,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -1161,6 +1162,11 @@ private:
                 } catch (const NDB::Exception& ex) {
                     Issues.AddIssue(TIssue(ex.message()));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    RetryStuff->Cancel();
+                } catch (const TCodeLineException& ex) {
+                    LOG_CORO_D(ex.what());
+                    Issues.AddIssue(ex.GetRawMessage());
+                    FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
                     RetryStuff->Cancel();
                 }
             }

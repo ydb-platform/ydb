@@ -43,7 +43,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         return TConclusionStatus::Fail("no data in batch");
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
-    auto subsetConclusion = NArrow::TColumnOperator().BuildSequentialSubset(OriginalBatch, indexSchema);
+    auto subsetConclusion = NArrow::TColumnOperator().IgnoreOnDifferentFieldTypes().BuildSequentialSubset(OriginalBatch, indexSchema);
     if (subsetConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())(
             "problem", subsetConclusion.GetErrorMessage());

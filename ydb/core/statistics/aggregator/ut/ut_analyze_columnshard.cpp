@@ -9,8 +9,6 @@
 namespace NKikimr {
 namespace NStat {
 
-
-
 Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeTable) {
         TTestEnv env(1, 1);

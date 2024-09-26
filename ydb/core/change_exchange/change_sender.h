@@ -174,6 +174,10 @@ protected:
         return ReadySenders == Senders.size();
     }
 
+    inline bool IsAllSendersReadyOrUninit() {
+        return ReadySenders + UninitSenders == Senders.size();
+    }
+
     void SetPartitionResolver(IPartitionResolverVisitor* partitionResolver) {
         PartitionResolver.Reset(partitionResolver);
     }
@@ -194,6 +198,7 @@ private:
 
     THashMap<ui64, TSender> Senders; // ui64 is partition id
     ui64 ReadySenders = 0;
+    ui64 UninitSenders = 0;
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TIncompleteRecord> PendingBody;
     TMap<ui64, IChangeRecord::TPtr> PendingSent; // ui64 is order

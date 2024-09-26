@@ -842,6 +842,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
+                            if (!externalDataSourceMetadata.Success()) {
+                                promise.SetValue(externalDataSourceMetadata);
+                                return;
+                            }
+
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
                                 externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);

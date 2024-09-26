@@ -263,7 +263,7 @@ private:
 
         auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
         policy.RetryLimitCount = 2;
-        NTabletPipe::TClientConfig pipeConfig{policy};
+        NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
         pipeConfig.ForceLocal = true;
         localTablets.TabletsPipes[tabletId] = Register(NTabletPipe::CreateClient(SelfId(), tabletId, pipeConfig));
     }
@@ -687,7 +687,7 @@ private:
                 }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
-                Register(CreateLoadStatisticsQuery(SelfId(),
+                Register(CreateLoadStatisticsQuery(SelfId(), "",
                     req.PathId, request.StatType, *req.ColumnTag, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;
@@ -1117,7 +1117,7 @@ private:
             return;
         }
         auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        NTabletPipe::TClientConfig pipeConfig{policy};
+        NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
         SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), StatisticsAggregatorId, pipeConfig));
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,

@@ -400,6 +400,10 @@ private:
     THashMap<ui64, TReadIntervals> ReadIntervalsByPathId;
 
 public:
+    bool HasReadIntervals(const ui64 pathId) const {
+        return ReadIntervalsByPathId.contains(pathId);
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         for (auto&& i : ReadIntervalsByPathId) {

@@ -336,6 +336,8 @@ namespace NKikimr {
             virtual bool IsStopped() const = 0;
         };
 
+        struct TClientConfig;
+
         struct TClientRetryPolicy {
             ui32 RetryLimitCount = std::numeric_limits<ui32>::max();
             TDuration MinRetryTime = TDuration::MilliSeconds(10);
@@ -343,7 +345,7 @@ namespace NKikimr {
             ui32 BackoffMultiplier = 2;
             bool DoFirstRetryInstantly = true;
 
-            operator bool() const {
+            explicit operator bool() const {
                 return RetryLimitCount != 0;
             }
 
@@ -360,6 +362,9 @@ namespace NKikimr {
             static TClientRetryPolicy WithRetries() {
                 return {};
             }
+
+            // Allow implicit conversion from retry policy to client config
+            operator TClientConfig() const;
         };
 
         struct TClientRetryState {
@@ -378,19 +383,26 @@ namespace NKikimr {
             bool PreferLocal = false;
             bool CheckAliveness = false;
             bool ExpectShutdown = false;
-            TClientRetryPolicy RetryPolicy;
 
-            TClientConfig()
-                : RetryPolicy(TClientRetryPolicy::WithoutRetries())
-            {}
+            // The default client config policy is without retries
+            // The default-constructed policy itself uses retries however
+            TClientRetryPolicy RetryPolicy = TClientRetryPolicy::WithoutRetries();
 
-            TClientConfig(TClientRetryPolicy retryPolicy)
-                : RetryPolicy(std::move(retryPolicy))
-            {}
+            // Client skips the first resolve attempt when specified
+            // Useful when tablet is already resolved externally
+            TActorId HintTablet{}; // e.g. TEvInfo::CurrentLeader
+            TActorId HintTabletActor{}; // e.g. TEvInfo::CurrentLeaderTablet
         };
 
+        // Allow implicit conversion from retry policy to client config
+        inline TClientRetryPolicy::operator TClientConfig() const {
+            return TClientConfig{
+                .RetryPolicy = *this,
+            };
+        }
+
         // Returns client actor.
-        IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config = TClientConfig());
+        IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config = {});
 
         // Sends data via client actor.
         // Payload will be delivered as a event to the owner of server.

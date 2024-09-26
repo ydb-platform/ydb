@@ -19,7 +19,7 @@ services:
         echo \"$$(dig tests-fq-generic-analytics-ydb +short) tests-fq-generic-analytics-ydb\" >> /etc/hosts; cat /etc/hosts;
         /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
     container_name: tests-fq-generic-analytics-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.9-rc.2@sha256:ebaefb6a93d8d1504436e222f3eb106b38ca944f91ccdd12f118172e5986633b
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.9-rc.4@sha256:cf9e6a2f82ebacd3118c3a0c7dca23fd0fa24929b7f6c0c0c1eeaf6e1272cc48
     ports:
       - "2130"
   greenplum:

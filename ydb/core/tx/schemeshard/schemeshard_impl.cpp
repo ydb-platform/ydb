@@ -1600,6 +1600,8 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMoveTable:
     case TTxState::TxMoveTableIndex:
         return TPathElement::EPathState::EPathStateCreate;
+    case TTxState::TxRestoreIncrementalBackupAtTable:
+        return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
     }
     return oldState;
 }
@@ -4458,6 +4460,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
+    EnableParameterizedDecimal = appData->FeatureFlags.GetEnableParameterizedDecimal();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -7041,6 +7044,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
+    EnableParameterizedDecimal = featureFlags.GetEnableParameterizedDecimal();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7379,7 +7383,7 @@ void TSchemeShard::ConnectToSA() {
         return;
     }
     auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    NTabletPipe::TClientConfig pipeConfig{policy};
+    NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
     SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), (ui64)StatisticsAggregatorId, pipeConfig));
 
     auto connect = std::make_unique<NStat::TEvStatistics::TEvConnectSchemeShard>();

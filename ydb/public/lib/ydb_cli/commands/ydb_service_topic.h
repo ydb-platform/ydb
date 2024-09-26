@@ -225,12 +225,12 @@ namespace NYdb::NConsoleClient {
     protected:
         void AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NTopic::ECodec>& allowedCodecs);
         void ParseCodec();
-        NTopic::ECodec GetCodec() const;
+        TMaybe<NTopic::ECodec> GetCodec() const;
 
     private:
         TVector<NTopic::ECodec> AllowedCodecs_;
         TString CodecStr_;
-        NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
+        TMaybe<NTopic::ECodec> Codec_;
     };
 
     class TCommandTopicWrite: public TYdbCommand,

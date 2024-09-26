@@ -42,8 +42,8 @@
 `grpc.topic.stream_write.bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.uncommitted_bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.errors`<br/>`RATE`, штуки | Количество ошибок при вызове метода  `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
-`grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
-`grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.partition_throttled_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, ожидавших на квоте.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_active_count`<br/>`GAUGE`, штуки | Количество открытых сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_created`<br/>`RATE`, штуки | Количество созданных сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
@@ -154,8 +154,10 @@
 `topic.read.lag_messages`<br/>`RATE`, штуки | Суммарное по топику количество невычитанных данным читателем сообщений.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.read.lag_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, у которых разница между временем чтения и временем создания сообщения попадает в заданный интервал.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.write.bytes`<br/>`RATE`, байты | Размер записанных данных.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.uncommited_bytes`<br/>`RATE`, байты | Размер данных, записанных в рамках ещё не завершённых транзакций.<br/>Метки:<br/>- _topic_ — название топика.
 `topic.write.uncompressed_bytes`<br/>`RATE`, байты | Размер разжатых записанных данных.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.write.messages`<br/>`RATE`, штуки | Количество записанных сообщений.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных в рамках ещё не завершённых транзакций.<br/>Метки:<br/>- _topic_ — название топика.
 `topic.write.message_size_bytes`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в байтах. Показывает количество сообщений, размер которых соответствует границам интервала.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.write.lag_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, у которых разница между временем записи и временем создания сообщения попадает в заданный интервал.<br/>Метки:<br/>- _topic_ – название топика.
 
@@ -186,3 +188,13 @@
 `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последний час, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последнюю минуту, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальное время простоя партиции на запись.<br/>Метки:<br/>- _topic_ – название топика.
+
+## Метрики пулов ресурсов {#resource_pools}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, штуки | Средняя загрузка базы данных, по этой метрики работает `DATABASE_LOAD_CPU_THRESHOLD`.
+`kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, штуки | Лимит на число одновременно работающих запросов.
+`kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, штуки | Текущее число одновременно работающих запросов. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.
+`kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, штуки | Размер очереди запросов, ожидающих выполнения.
+`kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, штуки | Количество запросов, ожидающих в очереди на выполнение. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.

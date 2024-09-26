@@ -10,7 +10,8 @@ PEERDIR(
 
     # for NYql::NUdf alloc stuff used in binary_json
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/sql/pg
+    ydb/library/yql/parser/pg_wrapper
 )
 
 ADDINCL(

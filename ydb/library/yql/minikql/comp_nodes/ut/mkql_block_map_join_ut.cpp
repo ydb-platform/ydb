@@ -63,7 +63,7 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
     const auto listTupleType = pgmBuilder.NewListType(leftTuple);
     leftArg = pgmBuilder.Arg(listTupleType);
 
-    const auto leftWideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
+    const auto leftWideStream = pgmBuilder.FromFlow(pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
         [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
             TRuntimeNode::TList wide;
             wide.reserve(tupleType->GetElementsCount());
@@ -71,14 +71,14 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
                 wide.emplace_back(pgmBuilder.Nth(tupleNode, i));
             }
             return wide;
-        });
+        }));
 
-    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideFlow, dictNode, joinKind,
+    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideStream, dictNode, joinKind,
                                                       leftKeyColumns, leftKeyDrops);
-    const auto joinItems = GetWideComponents(AS_TYPE(TFlowType, joinNode.GetStaticType()));
+    const auto joinItems = GetWideComponents(AS_TYPE(TStreamType, joinNode.GetStaticType()));
     const auto resultType = AS_TYPE(TTupleType, pgmBuilder.NewTupleType(joinItems));
 
-    const auto rootNode = pgmBuilder.Collect(pgmBuilder.NarrowMap(joinNode,
+    const auto rootNode = pgmBuilder.Collect(pgmBuilder.FromFlow(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(joinNode),
         [&](TRuntimeNode::TList items) -> TRuntimeNode {
             TVector<TRuntimeNode> tupleElements;
             tupleElements.reserve(resultType->GetElementsCount());
@@ -86,7 +86,7 @@ const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKin
                 tupleElements.emplace_back(items[i]);
             }
             return pgmBuilder.NewTuple(tupleElements);
-        }));
+        })));
 
     return rootNode;
 }
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestInnerOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestInnerMultiOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestLeftOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestLeftMultiOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestLeftSemiOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
     Y_UNIT_TEST(TestLeftOnlyOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     Y_UNIT_TEST(TestInnerOn1) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     Y_UNIT_TEST(TestInnerMultiOn1) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -772,7 +772,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     Y_UNIT_TEST(TestLeftOn1) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     Y_UNIT_TEST(TestLeftMultiOn1) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -876,7 +876,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     Y_UNIT_TEST(TestLeftSemiOn1) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -915,7 +915,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
     Y_UNIT_TEST(TestLeftOnlyOn1) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::fill(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
     Y_UNIT_TEST(TestInnerOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1010,7 +1010,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
     Y_UNIT_TEST(TestInnerMultiOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1062,7 +1062,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
     Y_UNIT_TEST(TestLeftOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1111,7 +1111,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
     Y_UNIT_TEST(TestLeftMultiOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1167,7 +1167,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
     Y_UNIT_TEST(TestLeftSemiOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1204,7 +1204,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
     Y_UNIT_TEST(TestLeftOnlyOnUint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1250,7 +1250,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
     Y_UNIT_TEST(TestInnerOnUint64Uint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1304,7 +1304,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
     Y_UNIT_TEST(TestInnerMultiOnUint64Uint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1363,7 +1363,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
     Y_UNIT_TEST(TestLeftOnUint64Uint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1419,7 +1419,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
     Y_UNIT_TEST(TestLeftMultiOnUint64Uint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1483,7 +1483,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
     Y_UNIT_TEST(TestLeftSemiOnUint64Uint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
@@ -1529,7 +1529,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
     Y_UNIT_TEST(TestLeftOnlyOnUint64Uint64) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" flow.
+        // 1. Make input for the "left" stream.
         TVector<ui64> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;

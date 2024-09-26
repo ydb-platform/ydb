@@ -379,9 +379,9 @@ private:
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
         if (!KqpCompileResult) {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(QueryId));
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(QueryId), std::move(QueryAst));
         } else {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(KqpCompileResult->Query));
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst));
         }
 
         Reply();
@@ -456,10 +456,6 @@ private:
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
-
-        if (QueryAst) {
-            KqpCompileResult->Ast = QueryAst->Ast;
-        }
     }
 
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
@@ -478,7 +474,7 @@ private:
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, kqpResult.Issues(), ETableReadType::Other, std::move(QueryId), {}, true);
+                Uid, status, kqpResult.Issues(), ETableReadType::Other, std::move(QueryId), std::move(QueryAst), true);
             Reply();
             return;
         }
@@ -496,7 +492,7 @@ private:
 
         auto queryType = QueryId.Settings.QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, std::move(QueryId));
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, std::move(QueryId), std::move(QueryAst));
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {

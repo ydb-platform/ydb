@@ -1,10 +1,19 @@
 #include "incr_restore_scan.h"
+#include "change_exchange_impl.h"
 
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/util/testactorsys.h>
+#include <ydb/core/tx/scheme_board/helpers.h>
 
 namespace NKikimr::NDataShard {
+
+using namespace NDataShard::NKqpHelpers;
+using namespace NSchemeShard;
+using namespace NSchemeBoard;
+using namespace Tests;
 
 class TDriverMock
     : public NTable::IDriver
@@ -101,6 +110,35 @@ private:
     TActorId Impl;
 };
 
+static void SetupLogging(TTestActorRuntime& runtime) {
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::CONTINUOUS_BACKUP, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+}
+
+TShardedTableOptions SimpleTable() {
+    return TShardedTableOptions();
+}
+
+TMaybe<TPathId> GetTablePathId(TTestActorRuntime& runtime, TActorId sender, TString path) {
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+
+    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+    if (reply->Get()->GetRecord().GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
+        return {};
+    }
+
+    return GetPathId(reply->Get()->GetRecord());
+}
+
 Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
     Y_UNIT_TEST(Empty) {
         TPortManager pm;
@@ -113,8 +151,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         auto sender = runtime.AllocateEdgeActor();
         auto sender2 = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        SetupLogging(runtime);
 
         TUserTable::TPtr table = new TUserTable;
         NTable::TScheme::TTableSchema tableSchema;
@@ -134,7 +171,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         auto* scan = CreateIncrementalRestoreScan(
             sender,
-            [&](const TActorContext&) {
+            [&](const TActorContext&, TActorId) {
                 return sender2;
             },
             sourcePathId,
@@ -164,6 +201,142 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         });
 
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);
+    }
+
+    Y_UNIT_TEST(ChangeSenderEmpty) {
+        TPortManager pm;
+        Tests::TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        CreateShardedTable(
+             server,
+             edgeActor,
+             "/Root",
+             "IncrBackupTable",
+             SimpleTable()
+                .AllowSystemColumnNames(true)
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"value", "Uint32", false, false},
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+
+        TPathId targetPathId = *GetTablePathId(runtime, edgeActor, "/Root/Table");
+        TPathId sourcePathId = *GetTablePathId(runtime, edgeActor, "/Root/IncrBackupTable");
+
+        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, TDataShardId{}, sourcePathId, targetPathId);
+
+        auto changeSenderActor = runtime.Register(changeSender);
+        runtime.EnableScheduleForActor(changeSenderActor);
+        runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvServe>(edgeActor);
+
+        auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();
+        runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+
+        runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(edgeActor);
+    }
+
+    Y_UNIT_TEST(ChangeSenderSimple) {
+        TPortManager pm;
+        Tests::TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        auto [_, dstTable] = CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        auto [srcShards, srcTable] = CreateShardedTable(
+             server,
+             edgeActor,
+             "/Root",
+             "IncrBackupTable",
+             SimpleTable()
+                .AllowSystemColumnNames(true)
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"value", "Uint32", false, false},
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+
+        TPathId targetPathId = dstTable.PathId;
+        TPathId sourcePathId = srcTable.PathId;
+
+        TDataShardId sourceDatashard{};
+
+        {
+            auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+            runtime.SendToPipe(srcShards[0], edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(edgeActor);
+            sourceDatashard.ActorId = ev->Sender;
+        }
+
+        auto* changeSender = CreateIncrRestoreChangeSender(edgeActor, sourceDatashard, sourcePathId, targetPathId);
+        auto changeSenderActor = runtime.Register(changeSender);
+
+        {
+            runtime.EnableScheduleForActor(changeSenderActor);
+            runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvServe>(edgeActor);
+        }
+
+        {
+
+            NKikimrChangeExchange::TDataChange body;
+            TVector<TCell> keyCells = { TCell::Make(ui32(0)) };
+            auto key = TSerializedCellVec::Serialize(keyCells);
+            body.MutableKey()->AddTags(0);
+            body.MutableKey()->SetData(key);
+            body.MutableErase();
+
+            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::IncrementalRestore)
+                .WithOrder(0)
+                .WithGroup(0)
+                .WithPathId(targetPathId)
+                .WithTableId(sourcePathId)
+                .WithBody(body.SerializeAsString())
+                .WithSource(TChangeRecord::ESource::InitialScan)
+                .Build();
+
+            {
+                const auto& record = *recordPtr;
+                TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+                records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
+
+                auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>(records);
+                runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+            }
+
+            runtime.GrabEdgeEventRethrow<NChangeExchange::TEvChangeExchange::TEvRequestRecords>(edgeActor);
+
+            {
+                TVector<TChangeRecord::TPtr> records;
+                records.emplace_back(recordPtr);
+
+                auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRecords>(records);
+                runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+            }
+
+            runtime.GrabEdgeEventRethrow<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(edgeActor);
+        }
+
+        // there is a race here between noMoreData and all senders is ready or unint right now
+
+        {
+            auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();
+            runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
+
+            runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(edgeActor);
+        }
     }
 }
 

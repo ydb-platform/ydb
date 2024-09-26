@@ -32,7 +32,7 @@ struct TYdbSetupSettings {
     std::unordered_set<TString> SharedTenants;
     std::unordered_set<TString> ServerlessTenants;
     TDuration InitializationTimeout = TDuration::Seconds(10);
-    TDuration RequestsTimeout;
+    bool SameSession = false;
 
     bool DisableDiskMock = false;
     bool UseRealPDisks = false;
@@ -94,6 +94,7 @@ struct TRequestOptions {
     TString PoolId;
     TString UserSID;
     TString Database;
+    TDuration Timeout;
 };
 
 }  // namespace NKqpRun

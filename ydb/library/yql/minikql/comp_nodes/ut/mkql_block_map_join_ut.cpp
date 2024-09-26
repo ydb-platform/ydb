@@ -273,35 +273,50 @@ void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
 //
 // Auxiliary routines to build list nodes from the given vectors.
 //
+template <typename Type>
+struct TTypeMapper {
+    TType *operator()(TProgramBuilder& pb) {
+        return pb.NewDataType(NUdf::TDataType<Type>::Id);
+    }
+    TRuntimeNode operator()(TProgramBuilder& pb, TType*, const Type& value) {
+        return pb.NewDataLiteral<Type>(value);
+    }
+};
+
+template <>
+struct TTypeMapper<TString> {
+    TType *operator()(TProgramBuilder& pb) {
+        return pb.NewDataType(NUdf::EDataSlot::String);
+    }
+    TRuntimeNode operator()(TProgramBuilder& pb, TType*, const TString& value) {
+        return pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
+    }
+};
+
+template <typename TNested>
+struct TTypeMapper<std::optional<TNested>> {
+    TType *operator()(TProgramBuilder& pb) {
+        return pb.NewOptionalType(TTypeMapper<TNested>{}(pb));
+    }
+    TRuntimeNode operator()(TProgramBuilder& pb, TType* itemType, const std::optional<TNested>& value) {
+        if (value == std::nullopt) {
+            return pb.NewEmptyOptional(itemType);
+        } else {
+            return pb.NewOptional(TTypeMapper<TNested>{}(pb, nullptr, *value));
+        }
+    }
+};
 
 template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     const TVector<Type>& vector
 ) {
-    TType* itemType;
-    if constexpr (std::is_same_v<Type, std::optional<TString>>) {
-        itemType = pb.NewOptionalType(pb.NewDataType(NUdf::EDataSlot::String));
-    } else if constexpr (std::is_same_v<Type, TString>) {
-        itemType = pb.NewDataType(NUdf::EDataSlot::String);
-    } else {
-        itemType =  pb.NewDataType(NUdf::TDataType<Type>::Id);
-    }
+    TType* itemType = TTypeMapper<Type>{}(pb);
 
     TRuntimeNode::TList listItems;
     std::transform(vector.cbegin(), vector.cend(), std::back_inserter(listItems),
         [&](const auto value) {
-            TRuntimeNode item;
-            if constexpr (std::is_same_v<Type, std::optional<TString>>) {
-                if (value == std::nullopt) {
-                    return pb.NewEmptyOptional(itemType);
-                } else {
-                    return pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>(*value));
-                }
-            } else if constexpr (std::is_same_v<Type, TString>) {
-                return pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
-            } else {
-                return pb.NewDataLiteral<Type>(value);
-            }
+            return TTypeMapper<std::decay_t<decltype(value)>>{}(pb, itemType, value);
         });
 
     return {pb.NewList(itemType, listItems)};

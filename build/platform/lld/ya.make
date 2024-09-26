@@ -48,8 +48,6 @@ ELSEIF (OS_DARWIN OR OS_IOS)
         LDFLAGS(
             -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
         )
-    ELSEIF (XCODE)
-        LDFLAGS(-DYA_XCODE)
     ELSE()
         LDFLAGS(
             -fuse-ld=lld

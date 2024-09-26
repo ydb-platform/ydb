@@ -21,10 +21,12 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
     void AddState(TPDiskStatus& st, const EPDiskState state) {
         st.AddState(state, false);
+        Cerr << st.GetStatus() << " " << st.GetState() << " " << st.GetPrevState() << " " << st.GetStateCounter() << Endl;
     }
 
     void AddStateNodeLocked(TPDiskStatus& st, const EPDiskState state) {
         st.AddState(state, true);
+        Cerr << st.GetStatus() << " " << st.GetState() << " " << st.GetPrevState() << " " << st.GetStateCounter() << Endl;
     }
 
     Y_UNIT_TEST(PDiskInitialStatus) {
@@ -141,6 +143,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         UNIT_ASSERT(!st.IsChanged());
 
         for (ui32 i = 0; i < GoodStateLimit - 1; ++i) {
+            Cerr << "i = " << i << Endl;
             AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
             UNIT_ASSERT(!st.IsChanged());
         }

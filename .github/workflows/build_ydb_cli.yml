@@ -81,6 +81,10 @@ jobs:
     needs: build-platform-specific-binary
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
       - name: Prepare s3cmd
         uses: ./.github/actions/s3cmd
         with:

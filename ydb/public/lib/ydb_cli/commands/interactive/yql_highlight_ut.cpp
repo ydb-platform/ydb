@@ -125,6 +125,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(QuotedIdentifier) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
+        Check(highlight, "`/cluster", "uuuuuuuuu");
     }
 
     Y_UNIT_TEST(String) {
@@ -134,6 +135,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "\"", "u");
         Check(highlight, "\"\"\"", "ssu");
         Check(highlight, "\"\\\"", "uuu");
+        Check(highlight, "\"test select from", "uuuuu uuuuuu uuuu");
         Check(highlight, "\"\\\"\"", "ssss");
     }
 

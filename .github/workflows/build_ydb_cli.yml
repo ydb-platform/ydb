@@ -141,5 +141,5 @@ jobs:
         run: ls -R ${{ inputs.version }}
 
       - name: Print result
-        run: s3cmd put --recursive ${{ inputs.version }} release/
+        run: s3cmd put --recursive ${{ inputs.version }} s3://${{ vars.CLI_S3_ENDPOINT }}/${{ vars.CLI_S3_BUCKET }}/release/
       

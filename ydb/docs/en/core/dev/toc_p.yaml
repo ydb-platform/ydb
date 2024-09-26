@@ -34,3 +34,8 @@ items:
   href: terraform.md
 - name: Custom attributes
   href: custom-attributes.md
+- name: Troubleshooting
+  href: troubleshooting/index.md
+  include:
+    mode: link
+    path: troubleshooting/toc_p.yaml

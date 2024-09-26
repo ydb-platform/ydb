@@ -24,8 +24,6 @@ class TJsonPDiskRestart : public TViewerPipeClient {
 protected:
     using TThis = TJsonPDiskRestart;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
@@ -39,8 +37,7 @@ protected:
 
 public:
     TJsonPDiskRestart(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
     void Bootstrap() override {
@@ -69,7 +66,7 @@ public:
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
+        TBase::InitConfig();
 
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);

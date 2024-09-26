@@ -37,9 +37,7 @@ protected:
     using TThis = TJsonVDiskRequest<RequestType, ResponseType>;
     using TBase = TViewerPipeClient;
     using THelper = TJsonVDiskRequestHelper<RequestType, ResponseType>;
-    IViewer* Viewer;
     TActorId Initiator;
-    NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
     bool AllEnums = false;
     ui32 Timeout = 0;
@@ -57,9 +55,8 @@ protected:
 
 public:
     TJsonVDiskRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
+        : TBase(viewer, ev)
         , Initiator(ev->Sender)
-        , Event(ev)
     {}
 
     void Bootstrap() override {
@@ -81,7 +78,7 @@ public:
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
+        TBase::InitConfig();
 
 
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);

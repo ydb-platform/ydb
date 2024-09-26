@@ -53,7 +53,7 @@ public:
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         ExpandSubElements = FromStringWithDefault<ui32>(params.Get("subs"), ExpandSubElements);
-        InitConfig(params);
+        InitConfig();
 
         if (params.Has("schemeshard_id")) {
             THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();

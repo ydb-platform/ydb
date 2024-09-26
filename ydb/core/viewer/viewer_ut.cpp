@@ -1839,10 +1839,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
     TString PostExecuteScript(TKeepAliveHttpClient& httpClient, TString query) {
         TStringStream requestBody;
         requestBody
-            << "{ \"query\": \"" << query << "\","
-            << " \"database\": \"/Root/Test\","
-            << " \"syntax\": \"yql_v1\","
-            << " \"stats\": \"none\" }";
+            << "{ \"database\": \"/Root\","
+            << " \"script_content\": {"
+                << " \"text\": \"" << query << "\"},"
+            << " \"exec_mode\": \"EXEC_MODE_EXECUTE\" }";
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -1862,7 +1862,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/operation/get?timeout=600000&id=" << id
-                                                            << "&database=%2FRoot%2FTest", &responseStream, headers);
+                                                            << "&database=%2FRoot", &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         return response;
@@ -1876,8 +1876,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         headers["Authorization"] = "test_ydb_token";
         id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
-                                                            << "/query/script/fetch?timeout=600000&id=" << id
-                                                            << "&database=%2FRoot%2FTest"
+                                                            << "/query/script/fetch?timeout=600000&operation_id=" << id
+                                                            << "&database=%2FRoot"
                                                             << "&rows_limit=" << ROWS_LIMIT, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
@@ -1885,6 +1885,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     Y_UNIT_TEST(QueryExecuteScript) {
+        Cerr << "iiiiiii 0 " << Endl;
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -1907,30 +1908,40 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
 
+        Cerr << "iiiiiii 0-1 " << Endl;
         PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query");
+        Cerr << "iiiiiii 0-2 " << Endl;
         for (ui32 i = 1; i <= ROWS_N; ++i) {
             PostQuery(httpClient, TStringBuilder() << "INSERT INTO `/Root/Test` (Key, Value) VALUES (" << i << ", 'testvalue');", "execute-query");
         }
+        Cerr << "iiiiiii 0-3 " << Endl;
 
         NJson::TJsonReaderConfig jsonCfg;
         NJson::TJsonValue json;
 
+        Cerr << "iiiiiii 1 " << Endl;
         TString response = PostExecuteScript(httpClient, "SELECT * FROM `/Root/Test`;");
+        Cerr << "iiiiiii 1 response: " << response << Endl;
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
         UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "SUCCESS", response);
         TString id = json["id"].GetString();
 
         Sleep(TDuration::MilliSeconds(1000));
 
+        Cerr << "iiiiiii 2 " << Endl;
         response = GetOperation(httpClient, id);
+        Cerr << "iiiiiii 2 response: " << response << Endl;
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
         UNIT_ASSERT_EQUAL_C(json["issues"].GetArray().size(), 0, response);
 
+        Cerr << "iiiiiii 3 " << Endl;
         response = GetFetchScript(httpClient, id);
+        Cerr << "iiiiiii 3 response: " << response << Endl;
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
         UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "SUCCESS", response);
         auto rows = json["result_set"].GetMap().at("rows").GetArray();
         UNIT_ASSERT_EQUAL_C(rows.size(), ROWS_LIMIT, response);
+        Cerr << "iiiiiii 4 " << Endl;
     }
 
 }

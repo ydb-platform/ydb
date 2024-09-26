@@ -14,7 +14,6 @@ using namespace NActors;
 class TJsonCompute : public TViewerPipeClient {
     using TThis = TJsonCompute;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     THashMap<TPathId, TTabletId> HiveBySubDomainKey;
@@ -25,7 +24,6 @@ class TJsonCompute : public TViewerPipeClient {
     THashMap<TNodeId, TVector<const NKikimrWhiteboard::TTabletStateInfo*>> TabletInfoIndex;
     THashMap<TNodeId, const NKikimrHive::THiveNodeStats*> HiveNodeStatsIndex;
     THashMap<TNodeId, TString> TenantPathByNodeId;
-    NMon::TEvHttpInfo::TPtr Event;
     TVector<TNodeId> NodeIds;
     THashSet<TNodeId> PassedNodeIds;
     THashSet<TNodeId> FoundNodeIds;
@@ -70,8 +68,7 @@ class TJsonCompute : public TViewerPipeClient {
 
 public:
     TJsonCompute(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
     TString GetDomainId(TPathId pathId) {
@@ -98,7 +95,7 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        InitConfig(params);
+        InitConfig();
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         Path = params.Get("path");

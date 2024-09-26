@@ -12,12 +12,10 @@ using namespace NActors;
 class TJsonNetInfo : public TViewerPipeClient {
     using TThis = TJsonNetInfo;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
     std::unordered_map<TString, NKikimrViewer::TTenant> TenantByPath;
     std::unordered_map<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     std::unordered_map<TString, std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResult;
     std::unique_ptr<TEvHive::TEvResponseHiveDomainStats> HiveStats;
-    NMon::TEvHttpInfo::TPtr Event;
     std::vector<TNodeId> NodeIds;
     std::unordered_map<TNodeId, std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse>> NodeSysInfo;
     std::unordered_map<TNodeId, std::unique_ptr<TEvWhiteboard::TEvNodeStateResponse>> NodeNetInfo;
@@ -29,15 +27,14 @@ class TJsonNetInfo : public TViewerPipeClient {
 
 public:
     TJsonNetInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
     void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        InitConfig(params);
+        InitConfig();
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Path = params.Get("path");
 

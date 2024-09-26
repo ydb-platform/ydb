@@ -38,9 +38,7 @@ protected:
     using TThis = TJsonStorageBase;
 
     using TNodeId = ui32;
-    IViewer* Viewer;
     TActorId Initiator;
-    NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
@@ -112,14 +110,13 @@ protected:
     THashMap<TString, TGroupRow> GroupRowsByGroupId;
 
     TJsonStorageBase(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Initiator(ev->Sender)
-        , Event(std::move(ev))
+        : TBase(viewer, ev)
+        , Initiator(Event->Sender)
     {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        InitConfig(params);
+        InitConfig();
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         FilterTenant = params.Get("tenant");
         TString filterStoragePool = params.Get("pool");

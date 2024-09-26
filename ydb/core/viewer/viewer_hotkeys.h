@@ -45,7 +45,7 @@ public:
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);
         PollingFactor = std::max(0.0f, std::min(FromStringWithDefault<float>(params.Get("polling_factor"), 0.2), 1.0f));
         EnableSampling = FromStringWithDefault<bool>(params.Get("enable_sampling"), false);
-        InitConfig(params);
+        InitConfig();
 
         THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
         FillParams(request->Record.MutableDescribePath(), params);

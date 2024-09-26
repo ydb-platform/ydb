@@ -94,11 +94,10 @@ public:
     }
 
     TJsonQueryOld(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {
         const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
+        InitConfig();
         ParseCgiParameters(params);
         if (IsPostContent()) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
@@ -113,7 +112,7 @@ public:
         auto& request = ViewerRequest->Get()->Record.GetQueryRequest();
 
         TCgiParameters params(request.GetUri());
-        InitConfig(params);
+        InitConfig();
         ParseCgiParameters(params);
 
         TStringBuf content = request.GetContent();

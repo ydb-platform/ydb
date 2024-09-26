@@ -293,23 +293,22 @@ concept TRequestWithOperationParams = requires(TRequest& request) {
 };
 
 template<TRequestWithOperationParams TRequest>
-void SetRequestSyncOperationMode(TRequest& request, Ydb::Operations::OperationParams::OperationMode operationMode = Ydb::Operations::OperationParams::SYNC) {
-    request.mutable_operation_params()->set_operation_mode(operationMode);
+void SetRequestSyncOperationMode(TRequest& request) {
+    request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 }
 
 template<class TRequest>
-void SetRequestSyncOperationMode(TRequest&, Ydb::Operations::OperationParams::OperationMode) {
+void SetRequestSyncOperationMode(TRequest&) {
     // nothing
 }
 
 template<typename TRpc>
 NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
         const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        TActorSystem* actorSystem, bool internalCall = false, Ydb::Operations::OperationParams::OperationMode operationMode = Ydb::Operations::OperationParams::SYNC)
-{
+        TActorSystem* actorSystem, bool internalCall = false) {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
-    SetRequestSyncOperationMode(proto, operationMode);
+    SetRequestSyncOperationMode(proto);
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
     auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall);
@@ -320,8 +319,8 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
 }
 
 template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false, Ydb::Operations::OperationParams::OperationMode operationMode = Ydb::Operations::OperationParams::SYNC) {
-    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall, operationMode);
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false) {
+    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall);
 }
 
 template<typename TRpc>

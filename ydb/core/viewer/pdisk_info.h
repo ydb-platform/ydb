@@ -56,7 +56,7 @@ public:
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
+        TBase::InitConfig();
 
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Retries = FromStringWithDefault<ui32>(params.Get("retries"), 3);

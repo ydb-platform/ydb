@@ -13,8 +13,6 @@ class TPDiskStatus : public TViewerPipeClient {
 protected:
     using TThis = TPDiskStatus;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
 
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Response;
@@ -24,8 +22,7 @@ protected:
 
 public:
     TPDiskStatus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
     void Bootstrap() override {
@@ -89,7 +86,7 @@ public:
             return PassAway();
         }
 
-        TBase::InitConfig(params);
+        TBase::InitConfig();
 
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
 

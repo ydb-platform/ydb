@@ -353,6 +353,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
+            case TKikimrKey::Type::BackupCollection:
+                return TStatus::Ok;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -1429,6 +1431,20 @@ public:
                         .Ptr();
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for replication"));
+                    return nullptr;
+                }
+                break;
+            }
+            case TKikimrKey::Type::BackupCollection: {
+                auto settings = NCommon::ParseWriteBackupCollectionSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "create") {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unimplemented"));
+                    return nullptr;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for backup collection"));
                     return nullptr;
                 }
                 break;

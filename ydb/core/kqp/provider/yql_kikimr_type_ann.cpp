@@ -223,6 +223,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::BackupCollection:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;

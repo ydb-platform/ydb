@@ -89,6 +89,7 @@ public:
         Permission,
         PGObject,
         Replication,
+        BackupCollection,
     };
 
     struct TViewDescription {

@@ -432,6 +432,9 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
+    } else if (tagName == "backupCollection") {
+        KeyType = Type::BackupCollection;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;

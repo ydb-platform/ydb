@@ -1,3 +1,5 @@
+from __future__ import print_function
+from future.utils import raise_
 import os
 import sys
 import time
@@ -66,7 +68,7 @@ def fetch(tarball_url, sky_id, integrity, integrity_algorithm, file_name, tries=
             time.sleep(i)
 
     if exc_info:
-        raise exc_info[0], exc_info[1], exc_info[2]
+        raise_(exc_info[0], exc_info[1], exc_info[2])
 
     return fetched_file
 
@@ -104,7 +106,7 @@ if __name__ == "__main__":
         main(args)
     except Exception as e:
         logging.exception(e)
-        print >>sys.stderr, open(args.abs_log_path).read()
+        print(open(args.abs_log_path).read(), file=sys.stderr)
         sys.stderr.flush()
 
         import error

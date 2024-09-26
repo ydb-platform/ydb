@@ -55,10 +55,18 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        if (!IsAllowedType(Type.GetTypeId())){
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
+        if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            if (!TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+        } else {
+            if (!IsAllowedType(Type.GetTypeId())){
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
         }
+
 
         auto arrowTypeResult = NArrow::GetArrowType(Type);
         const auto arrowTypeStatus = arrowTypeResult.status();

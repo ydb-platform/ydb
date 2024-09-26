@@ -167,6 +167,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "SELECT \"😁\" FROM test", "kkkkkk sss kkkk vvvv");
         Check(highlight, "SELECT \"编码\" FROM test", "kkkkkk ssss kkkk vvvv");
         Check(highlight, "SELECT \"ай\" FROM test", "kkkkkk ssss kkkk vvvv");
+        Check(highlight, "🤗🤗🤗🤗🤗🤗 select", "uuuuuu kkkkkk");
     }
 
     Y_UNIT_TEST(Typing) {

@@ -32,6 +32,7 @@ void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
     UNIT_ASSERT_EQUAL(lhs.Name, rhs.Name);
     UNIT_ASSERT_EQUAL(lhs.Content, rhs.Content);
     UNIT_ASSERT_EQUAL(lhs.Line, rhs.Line);
+    UNIT_ASSERT_EQUAL(lhs.RawPos, rhs.RawPos);
 }
 
 void AssertEquivialent(const TParsedTokenList& lhs, const TParsedTokenList& rhs) {

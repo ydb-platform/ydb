@@ -4,6 +4,8 @@
 
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
 
+#include <util/charset/utf8.h>
+
 namespace NProtoAST {
 
     template <typename TParser, typename TLexer>
@@ -60,6 +62,10 @@ namespace NProtoAST {
             try {
                 Lexer.ReportErrors(&errors);
                 auto src = Lexer.get_tokSource();
+
+                const char* prev = reinterpret_cast<const char*>(Lexer.get_input()->get_data());
+                ui32 pos = 0;
+
                 for (;;) {
                     auto token = src->nextToken();
                     auto type = token->getType();
@@ -69,6 +75,12 @@ namespace NProtoAST {
                     last.Content = token->getText();
                     last.Line = token->get_line();
                     last.LinePos = token->get_charPositionInLine();
+
+                    const char* start = reinterpret_cast<const char*>(token->get_startIndex());
+                    pos += GetNumberOfUTF8Chars(TStringBuf(prev, start));
+                    last.RawPos = pos;
+                    prev = start;
+
                     onNextToken(std::move(last));
                     if (isEOF) {
                         break;

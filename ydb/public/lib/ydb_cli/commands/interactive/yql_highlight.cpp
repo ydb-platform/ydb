@@ -127,15 +127,13 @@ namespace NYdb {
         void YQLHighlight::Apply(TStringBuf queryUtf8, Colors& colors) {
             Tokens = Tokenize(TString(queryUtf8));
 
-            ui32 Position = 0;
             for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
                 const auto& token = Tokens.at(i);
                 const auto color = ColorOf(token, i);
 
-                const std::ptrdiff_t start = Position;
-
-                Position += GetNumberOfUTF8Chars(token.Content);
-                const std::ptrdiff_t stop = Position;
+                const std::ptrdiff_t start = token.RawPos;
+                const std::ptrdiff_t length = GetNumberOfUTF8Chars(token.Content);
+                const std::ptrdiff_t stop = start + length;
 
                 std::fill(std::next(std::begin(colors), start),
                           std::next(std::begin(colors), stop), color);

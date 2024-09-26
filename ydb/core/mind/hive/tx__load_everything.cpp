@@ -181,7 +181,7 @@ public:
             }
         }
 
-        Self->BuildCurrentConfig();
+        /*Self->BuildCurrentConfig();
         if (Self->CurrentConfig.HasWarmUpEnabled()) {
             Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
         } else {
@@ -191,7 +191,7 @@ public:
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumMemory.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumNetwork.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
-
+*/
         auto owners = db.Table<Schema::TabletOwners>().Select();
         if (!owners.IsReady()) {
             return false;
@@ -201,7 +201,7 @@ public:
             auto end = owners.GetValue<Schema::TabletOwners::End>();
             auto ownerId = owners.GetValue<Schema::TabletOwners::OwnerId>();
 
-            Self->Keeper.AddOwnedSequence(ownerId, {begin, end});
+           // Self->Keeper.AddOwnedSequence(ownerId, {begin, end});
             if (!owners.Next()) {
                 return false;
             }
@@ -213,7 +213,7 @@ public:
             return false;
         }
         while (!sequences.EndOfSet()) {
-            auto begin = sequences.GetValue<Schema::Sequences::Begin>();
+           /* auto begin = sequences.GetValue<Schema::Sequences::Begin>();
             auto end = sequences.GetValue<Schema::Sequences::End>();
             auto next = sequences.GetValue<Schema::Sequences::Next>();
             auto ownerId = sequences.GetValue<Schema::Sequences::OwnerId>();
@@ -234,7 +234,7 @@ public:
                 BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << Self->TabletID());
                 Self->Keeper.AddOwnedSequence(Self->TabletID(), seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
-            }
+            }*/
             // remove after upgrade ^^^^
 
             if (!sequences.Next()) {
@@ -248,12 +248,12 @@ public:
         if (!tabletTypeAllowedMetrics.IsReady())
             return false;
         while (!tabletTypeAllowedMetrics.EndOfSet()) {
-            auto type = tabletTypeAllowedMetrics.GetValue<Schema::TabletTypeMetrics::TabletType>();
+           /* auto type = tabletTypeAllowedMetrics.GetValue<Schema::TabletTypeMetrics::TabletType>();
             auto& allowedMetrics = Self->TabletTypeAllowedMetrics[type];
             allowedMetrics = tabletTypeAllowedMetrics.GetValue<Schema::TabletTypeMetrics::AllowedMetricIDs>();
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCounterFieldNumber) == allowedMetrics.end()) {
                 allowedMetrics.emplace_back(NKikimrTabletBase::TMetrics::kCounterFieldNumber);
-            }
+            }*/
             if (!tabletTypeAllowedMetrics.Next())
                 return false;
         }

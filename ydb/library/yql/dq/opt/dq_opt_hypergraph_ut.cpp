@@ -87,22 +87,8 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         
         UNIT_ASSERT(graph.GetEdges().size() == 12);
 
-        class TFakeContext: public TBaseProviderContext {
-            double ComputeJoinCost(
-                const TOptimizerStatistics &leftStats, 
-                const TOptimizerStatistics &rightStats, 
-                const double, 
-                const double, 
-                EJoinAlgoType
-            ) const override {
-                return 
-                    leftStats.Labels  && leftStats.Labels->size()  == 1 &&  leftStats.Labels->at(0) == "e1" && 
-                    rightStats.Labels && rightStats.Labels->size() == 1 && rightStats.Labels->at(0) == "e3" ? -1: 0;
-            }
-        };
-
         CheckClique(graph); 
-        Enumerate<TFakeContext>(root);
+        Enumerate(root);
     }
 
     Y_UNIT_TEST(SimpleChain5NodesTransitiveClosure) {

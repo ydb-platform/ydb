@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
-import os
-import random
-import string
-import time
-
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
+
 
 class TestCompatibility(object):
     @classmethod
@@ -39,14 +35,14 @@ class TestCompatibility(object):
 
     def test_simple(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-        
+
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 session.execute_scheme(
                     "create table `sample_table` (id Uint64, value Uint64, payload Utf8, PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
                 )
                 id_ = 0
-                
+
                 upsert_count = 200
                 iteration_count = 1
                 for i in range(iteration_count):
@@ -67,7 +63,6 @@ class TestCompatibility(object):
                         "Root/sample_table", rows, column_types
                     )
 
-
                 query = "SELECT SUM(value) from sample_table"
                 result_sets = session.transaction().execute(
                     query, commit_tx=True
@@ -75,8 +70,8 @@ class TestCompatibility(object):
                 for row in result_sets[0].rows:
                     print(" ".join([str(x) for x in list(row.values())]))
 
-                assert(len(result_sets) == 1)
-                assert(len(result_sets[0].rows) == 1)
+                assert len(result_sets) == 1
+                assert len(result_sets[0].rows) == 1
                 result = list(result_sets[0].rows[0].values())
-                assert(len(result) == 1)
-                assert(result[0] == upsert_count * iteration_count)
+                assert len(result) == 1
+                assert result[0] == upsert_count * iteration_count

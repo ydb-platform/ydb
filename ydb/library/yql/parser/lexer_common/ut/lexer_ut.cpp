@@ -24,10 +24,16 @@ TVector<TString> GetIssueMessages(ILexer::TPtr& lexer, TString queryUtf8) {
     return messages;
 }
 
-TVector<TString> GetTokenNames(ILexer::TPtr& lexer, TString queryUtf8) {
+TVector<TString> GetTokenViews(ILexer::TPtr& lexer, TString queryUtf8) {
     TVector<TString> names;
     for (auto& token : Tokenize(lexer, queryUtf8).first) {
-        names.emplace_back(std::move(token.Name));
+        TString view = std::move(token.Name);
+        if (view == "ID_PLAIN" || view == "STRING_VALUE") {
+            view.append(" (");
+            view.append(token.Content);
+            view.append(")");
+        }
+        names.emplace_back(std::move(view));
     }
     return names;
 }
@@ -66,8 +72,8 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
                 "FROM ydb -- главная таблица 数据库 \n"
                 "WHERE count < 6\n"
                 "  AND name = \"可靠性\"\n"
-                "  AND count > 12"
-            ),
+                "  AND count > 12"),
+            "\"select\"select",
         };
 
         auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
@@ -91,7 +97,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_EQUAL(input.size(), expected.size());
 
         for (size_t i = 0; i < input.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(GetTokenNames(lexer, input[i]), expected[i]);
+            UNIT_ASSERT_VALUES_EQUAL(GetTokenViews(lexer, input[i]), expected[i]);
         }
     }
 
@@ -104,31 +110,39 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             /* 4: */ "! SELECT *  from",
             /* 5: */ "😊select ! from",
             /* 6: */ "\"",
+            /* 7: */ "!select",
+            /* 8: */ "SELECT \\\"😁\\\" FROM test",
         };
     }
 
     Y_UNIT_TEST(ErrorRecoveryAntlr3) {
-        TestInvalidTokensSkipped(/* antlr4 = */ false, {
+        TVector<TVector<TString>> actual = {
             /* 0: */ {"EOF"},
             /* 1: */ {"SELECT", "WS", "EOF"},
             /* 2: */ {"EOF"},
-            /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN", "EOF"},
-            /* 4: */ {"ID_PLAIN", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
-            /* 5: */ {"SELECT", "WS", "ID_PLAIN", "EOF"},
+            /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN (FR)", "EOF"},
+            /* 4: */ {"ID_PLAIN (ELECT)", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
+            /* 5: */ {"SELECT", "WS", "ID_PLAIN (rom)", "EOF"},
             /* 6: */ {"EOF"},
-        });
+            /* 7: */ {"ID_PLAIN (lect)", "EOF"},
+            /* 8: */ {"SELECT", "EOF"},
+        };
+        TestInvalidTokensSkipped(/* antlr4 = */ false, actual);
     }
 
     Y_UNIT_TEST(ErrorRecoveryAntlr4) {
-        TestInvalidTokensSkipped(/* antlr4 = */ true, {
+        TVector<TVector<TString>> actual = {
             /* 0: */ {"EOF"},
             /* 1: */ {"SELECT", "WS", "EOF"},
             /* 2: */ {"EOF"},
-            /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN", "EOF"},
+            /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN (FR)", "EOF"},
             /* 4: */ {"SELECT", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
             /* 5: */ {"SELECT", "WS", "FROM", "EOF"},
             /* 6: */ {"EOF"},
-        });
+            /* 7: */ {"ID_PLAIN (elect)", "EOF"},
+            /* 8: */ {"SELECT", "EOF"},
+        };
+        TestInvalidTokensSkipped(/* antlr4 = */ true, actual);
     }
 
     Y_UNIT_TEST(IssuesCollected) {
@@ -141,7 +155,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
 
             UNIT_ASSERT(!issues3.empty());
             UNIT_ASSERT(!issues4.empty());
-        }        
+        }
     }
 
     Y_UNIT_TEST(IssueMessagesAntlr3) {
@@ -152,7 +166,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         TVector<TString> expected = {
             "<main>:1:0: Error: Unexpected character '\xF0\x9F\x98\x8A' (Unicode character <128522>) : cannot match to any predicted input...",
             "<main>:1:1: Error: Unexpected character : cannot match to any predicted input...",
-            "<main>:1:2: Error: Unexpected character : cannot match to any predicted input...", 
+            "<main>:1:2: Error: Unexpected character : cannot match to any predicted input...",
             "<main>:1:3: Error: Unexpected character : cannot match to any predicted input...",
         };
 

@@ -77,6 +77,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "й", "u");
         Check(highlight, "编", "u");
         Check(highlight, "🥲", "u");
+        Check(highlight, "!select", "uuvvvvv");
+        Check(highlight, "!sselect", "uukkkkkk");
     }
 
     Y_UNIT_TEST(Keyword) {
@@ -125,7 +127,9 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(QuotedIdentifier) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
+        Check(highlight, "`test`select", "qqqqqqkkkkkk");
         Check(highlight, "`/cluster", "uuuuuuuuu");
+        Check(highlight, "`🥲`", "qqq");
     }
 
     Y_UNIT_TEST(String) {
@@ -137,6 +141,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "\"\\\"", "uuu");
         Check(highlight, "\"test select from", "uuuuu uuuuuu uuuu");
         Check(highlight, "\"\\\"\"", "ssss");
+        Check(highlight, "\"select\"select", "sssssssssvvvvv");
+        Check(highlight, "\"select\"group", "sssssssskkkkk");
     }
 
     Y_UNIT_TEST(Number) {

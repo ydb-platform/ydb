@@ -1,5 +1,12 @@
 name: Update dstool package
 
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+
 jobs:
   update-dstool:
     runs-on: ubuntu-latest
@@ -7,25 +14,24 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.6'
 
       - name: Install dependencies
         run: |
+          set -ex
           python -m pip install --upgrade pip
           pip install build twine
 
-      - name: Clone repository
-        run: |
-          mkdir github
-          cd github
-          git clone https://github.com/ydb-platform/ydb.git
-          cd ydb
-          ydb_root=$(pwd)
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
 
       - name: Compile proto files and build package
         run: |
+          set -ex
           cd ${{ github.workspace }}/github/ydb
-          ./ydb/apps/dstool/compile_protos.py --ydb-root ./ 2>/dev/null
+          ./ydb/apps/dstool/compile_protos.py --ydb-root ./
           mv ydb/apps/dstool/setup.py .
           python -m build
 
@@ -34,5 +40,6 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
+          set -ex
           cd ${{ github.workspace }}/github/ydb
           python -m twine upload dist/*

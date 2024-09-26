@@ -23,8 +23,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: windows, runner: windows-latest, shell: pwsh }
-#          - { os: linux, runner: ubuntu-latest, shell: bash }
+#          - { os: windows, runner: windows-latest, shell: pwsh }
+          - { os: linux, runner: ubuntu-latest, shell: bash }
 #          - { os: macos-amd, runner: macos-13, shell: bash }
 #          - { os: macos-arm, runner: macos-latest, shell: bash }
     name: Build YDB CLI for ${{ matrix.os }}
@@ -34,14 +34,11 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     
-    - name: MSVS content
-      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio" | Get-Childitem
+#    - name: MSVS content
+#      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio" | Get-Childitem
     
-    - name: MSVS 14 content
-      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio 14.0" | Get-Childitem
-    
-    - name: BuildTools content | Get-Childitem
-      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio 14.0\2022\BuildTools"
+#    - name: MSVS 14 content
+#      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio 14.0" | Get-Childitem
     
     - name: Checkout
       uses: actions/checkout@v4
@@ -54,16 +51,22 @@ jobs:
 #    - name: Install windows10 SDK
 #      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
 
-    - name: Print env vars
-      run: gci env:* | sort-object name
+#    - name: Print env vars
+#      run: gci env:* | sort-object name
+
 #    - name: Print uname
 #      run: uname -a
     
 #    - name: Print YDB CLI version
 #      run: cat ydb/apps/ydb/version.txt
+
+
     
-    - name: Build binary with ya make
-      run: python ya make ydb/apps/ydb -DUSE_CLANG_CL=yes --host-platform-flag USE_CLANG_CL=yes
+    - name: Fake create file
+      run: echo 'test' > ydb/apps/ydb/ydb
+    
+#    - name: Build binary with ya make
+#      run: python ya make ydb/apps/ydb -DUSE_CLANG_CL=yes --host-platform-flag USE_CLANG_CL=yes
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4
@@ -78,30 +81,44 @@ jobs:
     needs: build-platform-specific-binary
     runs-on: ubuntu-latest
     steps:
+      - name: Prepare s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_endpoint: ${{ vars.CLI_S3_ENDPOINT }}
+          s3_bucket: ${{ vars.CLI_S3_BUCKET }}
+          s3_key_id: ${{ secrets.CLI_S3_KEY_ID }}
+          s3_key_secret: ${{ secrets.CLI_S3_KEY_SECRET_ID }}
+
       - name: prepare directories
-        run: mkdir -p binaries/linux/amd64
-             mkdir -p binaries/darwin/amd64
-             mkdir -p binaries/windows/amd64
-             mkdir -p binaries/darwin/arm64
+        run: mkdir -p ${{ inputs.version }}/linux/amd64
+             mkdir -p ${{ inputs.version }}/darwin/amd64
+             mkdir -p ${{ inputs.version }}/windows/amd64
+             mkdir -p ${{ inputs.version }}/darwin/arm64
+
+      - name: copy linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: ${{ inputs.version }}/linux/amd64/
 #      - name: copy darwin amd64 binary
 #        uses: actions/download-artifact@v4
 #        with:
 #          name: macos-amd-binary
-#          path: binaries/darwin/amd64/
+#          path: ${{ inputs.version }}/darwin/amd64/
 #      - name: copy darwin arm64 binary
 #        uses: actions/download-artifact@v4
 #        with:
 #          name: macos-arm-binary
-#          path: binaries/darwin/arm64/
-#      - name: copy linux binary
+#          path: ${{ inputs.version }}/darwin/arm64/
+#      - name: copy windows binary
 #        uses: actions/download-artifact@v4
 #        with:
-#          name: linux-binary
-#          path: binaries/linux/amd64/
-      - name: copy windows binary
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-binary
-          path: binaries/windows/amd64/
+#          name: windows-binary
+#          path: ${{ inputs.version }}/windows/amd64/
+
       - name: Print result
-        run: ls -R binaries
+        run: ls -R ${{ inputs.version }}
+
+      - name: Print result
+        run: s3cmd put --recursive ${{ inputs.version }} release/
+      

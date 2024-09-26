@@ -61,7 +61,7 @@ bool RestoreContext(
 
     const auto* ast = NSQLTranslationV1::SqlAST(
         contextRestorationQuery, queryName, ctx.Issues,
-        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena
+        settings.MaxErrors, settings.AnsiLexer, settings.Arena
     );
     if (!ast) {
         return false;

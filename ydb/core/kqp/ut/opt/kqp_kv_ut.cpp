@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         )").GetValueSync();
         UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
 
-        // Base case: upsert Uin64 to Decimal column
+        // Bad case: upsert Uin64 to Decimal column
         {
             NYdb::TValueBuilder rows;
             rows.BeginList();
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(issues.Contains("Unexpected type Uint64 for column Key35: expected Decimal(35,10)"), issues);
         }
         
-        // Base case: upsert Decimal to Uin64 column
+        // Bad case: upsert Decimal to Uin64 column
         {
             NYdb::TValueBuilder rows;
             rows.BeginList();
@@ -624,7 +624,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(issues.Contains("Unexpected type Decimal(35,10) for column ValueInt: expected Uint64"), issues);
         }
 
-        // Base case: upsert Decimal(35,10) to Decimal(22,9) column
+        // Bad case: upsert Decimal(35,10) to Decimal(22,9) column
         {
             NYdb::TValueBuilder rows;
             rows.BeginList();

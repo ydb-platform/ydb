@@ -63,13 +63,13 @@ inline TRetentionsConversionResult ConvertRetentions(std::optional<TString> rete
             RETENTION_MS_CONFIG_NAME,
             [&result](std::optional<ui64> retention) -> void { result.Ms = retention; }
     );
-    
+
     convertRetention(
             retentionBytes,
             RETENTION_BYTES_CONFIG_NAME,
             [&result](std::optional<ui64> retention) -> void { result.Bytes = retention; }
     );
-    
+
     return result;
 }
 
@@ -107,7 +107,7 @@ inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTo
     } else {
         return std::optional<THolder<TEvKafka::TEvTopicModificationResponse>>();
     }
-} 
+}
 
 template<class T>
 inline std::unordered_set<TString> ExtractDuplicates(
@@ -134,7 +134,7 @@ class TAlterTopicActor : public NKikimr::NGRpcProxy::V1::TUpdateSchemeActor<T, U
 public:
 
     TAlterTopicActor(
-            TActorId requester, 
+            TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName)
@@ -231,6 +231,10 @@ public:
     google::protobuf::Arena* GetArena() override {
         return nullptr;
     };
+
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() override {
+        return nullptr;
+    }
 
     bool HasClientCapability(const TString& capability) const override {
         Y_UNUSED(capability);

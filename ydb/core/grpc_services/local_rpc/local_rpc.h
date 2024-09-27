@@ -122,6 +122,7 @@ public:
         , DatabaseName(databaseName)
         , RequestType(requestType)
         , InternalCall(internalCall)
+        , Arena(MakeIntrusive<NActors::TProtoArenaHolder>())
     {
         if (token && !token->empty()) {
             InternalToken = new NACLib::TUserToken(*token);
@@ -189,7 +190,11 @@ public:
     }
 
     google::protobuf::Arena* GetArena() override {
-        return &Arena;
+        return Arena->Get();
+    }
+
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() override {
+        return Arena;
     }
 
     const google::protobuf::Message* GetRequest() const override {
@@ -284,7 +289,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
     const TString EmptySerializedTokenMessage_;
     TMap<TString, TString> PeerMeta;
-    google::protobuf::Arena Arena;
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
 };
 
 template<class TRequest>

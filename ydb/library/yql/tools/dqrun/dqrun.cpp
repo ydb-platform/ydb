@@ -99,7 +99,6 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
-#include <util/folder/iterator.h>
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/generic/scope.h>
@@ -1134,11 +1133,11 @@ int RunMain(int argc, const char* argv[])
     );
 
     TVector<TProgramPtr> programs;
-    for (const auto& entry : TDirIterator(progFiles)) {
-        if (entry.fts_type != FTS_F) {
-            continue;
+    for (int i = 0;; ++i) {
+        auto progFile = TString("data/query/" + std::to_string(i) + ".txt");
+        if (!NFs::Exists(progFile)) {
+            break;
         }
-        const auto& progFile = entry.fts_path;
 
     TProgramPtr program;
     if (res.Has("replay") && res.Has("capture")) {

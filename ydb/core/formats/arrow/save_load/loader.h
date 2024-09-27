@@ -25,23 +25,7 @@ private:
 public:
     std::shared_ptr<IChunkedArray> BuildDefaultAccessor(const ui32 recordsCount) const;
 
-    bool IsEqualTo(const TColumnLoader& item) const {
-        if (!!Transformer != !!item.Transformer) {
-            return false;
-        } else if (!!Transformer && !Transformer->IsEqualTo(*item.Transformer)) {
-            return false;
-        }
-        if (!Serializer.IsEqualTo(item.Serializer)) {
-            return false;
-        }
-        if (!AccessorConstructor->IsEqualTo(item.AccessorConstructor)) {
-            return false;
-        }
-        if (NArrow::ScalarCompareNullable(DefaultValue, item.DefaultValue)) {
-            return false;
-        }
-        return true;
-    }
+    bool IsEqualTo(const TColumnLoader& item) const;
 
     TString DebugString() const;
 

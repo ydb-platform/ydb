@@ -1,6 +1,7 @@
 #include "loader.h"
 
 #include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -63,6 +64,24 @@ std::shared_ptr<IChunkedArray> TColumnLoader::BuildAccessor(
 
 std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TColumnLoader::BuildDefaultAccessor(const ui32 recordsCount) const {
     return AccessorConstructor->ConstructDefault(TChunkConstructionData(recordsCount, DefaultValue, ResultField->type())).DetachResult();
+}
+
+bool TColumnLoader::IsEqualTo(const TColumnLoader& item) const {
+    if (!!Transformer != !!item.Transformer) {
+        return false;
+    } else if (!!Transformer && !Transformer->IsEqualTo(*item.Transformer)) {
+        return false;
+    }
+    if (!Serializer.IsEqualTo(item.Serializer)) {
+        return false;
+    }
+    if (!AccessorConstructor.IsEqualTo(item.AccessorConstructor)) {
+        return false;
+    }
+    if (NArrow::ScalarCompareNullable(DefaultValue, item.DefaultValue)) {
+        return false;
+    }
+    return true;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

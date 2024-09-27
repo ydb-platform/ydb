@@ -148,53 +148,35 @@ public:
             }
             const auto& colInfo = *colInfoPtr;
 
+            TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
+
+            TString parseProtoError;
+            NScheme::TTypeInfo typeInfo;
+            if (!NScheme::TypeInfoFromProto(typeInProto, typeInfo, parseProtoError)){
+                errorMessage = Sprintf("Type parse error for column %s: %s",
+                    name.c_str(), parseProtoError.c_str());
+                return false;
+            }
+
+            TString inTypeName = NScheme::TypeName(typeInfo, typeInfo.GetPgTypeMod(colInfo.PTypeMod));
+
+            if (typeInfo != colInfo.PType) {
+                errorMessage = Sprintf("Unexpected type %s for column %s: expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
+                return false;
+            }
+
             i32 typmod = -1;
-            if (typeInProto.has_type_id() && typeInProto.type_id() == colInfo.PType.GetTypeId()) {
-                //nothing to check more
-                ;
-            } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                ui32 precision = typeInProto.decimal_type().precision();
-                ui32 scale = typeInProto.decimal_type().scale();
-                if (!NScheme::TDecimalType::Validate(precision, scale, errorMessage)) {
-                    errorMessage = Sprintf("%s for column %s", errorMessage.c_str(), name.c_str());
-                    return false;
-                }
-                if (NScheme::TDecimalType(precision, scale) != colInfo.PType.GetDecimalType()) {
-                    errorMessage = Sprintf("Type Decimal(%u,%u) doesn't match type %s for column %s", 
-                        precision, scale, NScheme::TypeName(colInfo.PType).c_str(), name.c_str());
-                    return false;
-                }
-            } else if (typeInProto.has_pg_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                const auto& typeName = typeInProto.pg_type().type_name();
-                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errorMessage = Sprintf("Unknown pg type for column %s: %s",
-                                           name.c_str(), typeName.c_str());
-                    return false;
-                }
-
-                const auto typeInRequest = NScheme::TTypeInfo(typeDesc);
-                if (typeInRequest != colInfo.PType) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(colInfo.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
-                    return false;
-                }
-
-                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
-                    const auto result = NPg::BinaryTypeModFromTextTypeMod(colInfo.PTypeMod, typeDesc);
+            if (typeInProto.has_pg_type()) {
+                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInfo.GetPgTypeDesc())) {
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(colInfo.PTypeMod, typeInfo.GetPgTypeDesc());
                     if (result.Error) {
                         errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
-                            name.c_str(), NScheme::TypeName(colInfo.PType, colInfo.PTypeMod).c_str(),
-                            result.Error->c_str());
+                            name.c_str(), inTypeName.c_str(), result.Error->c_str());
                         return false;
                     }
                     typmod = result.Typmod;
                 }
-            } else {
-                errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(colInfo.PType).c_str());
-                return false;
             }
 
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), colInfo.KeyOrder + 1));

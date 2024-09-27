@@ -484,14 +484,32 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
-            i32 typmod = -1;
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
+            TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
+
             const Ydb::Type& typeInProto = reqColumns[pos].second;
+            
+            TString parseProtoError;
+            NScheme::TTypeInfo typeInRequest;
+            if (!NScheme::TypeInfoFromProto(typeInProto, typeInRequest, parseProtoError)){
+                errorMessage = Sprintf("Type parse error for column %s: %s",
+                    name.c_str(), parseProtoError.c_str());
+                return false;
+            }
+
+            TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
+
+            if (typeInRequest != ci.PType) {
+                errorMessage = Sprintf("Unexpected type %s for column %s: expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
+                return false;
+            }
+
+            i32 typmod = -1;
 
             if (typeInProto.has_type_id()) {
-                auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
                 if (!ok) {
@@ -503,28 +521,7 @@ private:
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
-            } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                ui32 precision = typeInProto.decimal_type().precision();
-                ui32 scale = typeInProto.decimal_type().scale();
-                TString error;
-                if (!NScheme::TDecimalType::Validate(precision, scale, error)) {
-                    errorMessage = Sprintf("%s for column %s", error.c_str(), name.c_str());
-                    return false;
-                }
-                if (NScheme::TDecimalType(precision, scale) != ci.PType.GetDecimalType()) {
-                    errorMessage = Sprintf("Type Decimal(%u,%u) doesn't match type %s for column %s", 
-                        precision, scale, NScheme::TypeName(ci.PType).c_str(), name.c_str());
-                    return false;
-                }
-            } else if (typeInProto.has_pg_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                const auto& typeName = typeInProto.pg_type().type_name();
-                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errorMessage = Sprintf("Unknown pg type for column %s: %s",
-                                           name.c_str(), typeName.c_str());
-                    return false;
-                }
-                auto typeInRequest = NScheme::TTypeInfo(typeDesc);
+            } else if (typeInProto.has_pg_type()) {
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
@@ -532,8 +529,8 @@ private:
                                            NScheme::TypeName(typeInRequest).c_str());
                     return false;
                 }
-                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
-                    auto result = NPg::BinaryTypeModFromTextTypeMod(ci.PTypeMod, typeDesc);
+                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
+                    auto result = NPg::BinaryTypeModFromTextTypeMod(ci.PTypeMod, typeInRequest.GetPgTypeDesc());
                     if (result.Error) {
                         errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
                             name.c_str(), NScheme::TypeName(ci.PType, ci.PTypeMod).c_str(),
@@ -542,10 +539,6 @@ private:
                     }
                     typmod = result.Typmod;
                 }
-            } else {
-                errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(ci.PType).c_str());
-                return false;
             }
 
             bool notNull = entry.NotNullColumns.contains(ci.Name);

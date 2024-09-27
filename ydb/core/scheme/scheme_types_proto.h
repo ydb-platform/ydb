@@ -30,6 +30,7 @@ NKikimrProto::TTypeInfo DefaultDecimalProto();
 void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringType& typeMod, ::NKikimrProto::TTypeInfo& typeInfoProto);
 
 NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrProto::TTypeInfo& typeInfoProto);
+bool TypeInfoFromProto(const ::Ydb::Type& typeProto, NScheme::TTypeInfo& typeInfo, ::TString& error);
 
 void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, ::Ydb::Type& typeProto, bool notNull = true);
 void ProtoFromPgType(const NKikimr::NPg::ITypeDesc* pgDesc, ::Ydb::PgType& pgProto);

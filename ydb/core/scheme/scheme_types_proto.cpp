@@ -1,5 +1,6 @@
 #include "scheme_types_proto.h"
 
+#include <util/string/printf.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 
@@ -98,6 +99,34 @@ NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrPro
     }
     default:
         return NScheme::TTypeInfo(typeId);
+    }
+}
+
+bool TypeInfoFromProto(const ::Ydb::Type& typeProto, NScheme::TTypeInfo& typeInfo, TString& error) {
+    if (typeProto.has_type_id()) {
+        typeInfo = NScheme::TTypeInfo(typeProto.type_id());
+        return true;
+    } else if (typeProto.has_decimal_type()) {
+        ui32 precision = typeProto.decimal_type().precision();
+        ui32 scale = typeProto.decimal_type().scale();
+        if (!NScheme::TDecimalType::Validate(precision, scale, error)) {
+            return false;
+        }
+        typeInfo = NScheme::TTypeInfo(TDecimalType(precision, scale));
+        return true;
+    } else if (typeProto.has_pg_type()) {
+        const auto& typeName = typeProto.pg_type().type_name();
+        auto pgDesc = NPg::TypeDescFromPgTypeName(typeName);
+        if (!pgDesc) {
+            error = Sprintf("Unknown pg type %s", typeProto.pg_type().type_name().c_str());
+            return false;
+        }
+
+        typeInfo = NScheme::TTypeInfo(pgDesc);
+        return true;
+    } else {
+        error = "Unexpected type";
+        return false;
     }
 }
 

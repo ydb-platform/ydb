@@ -307,14 +307,45 @@ void TNodeBroker::AddDelayedListNodesRequest(ui64 epoch,
 
 void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 {
-    ui64 version = ev->Get()->Record.GetCachedVersion();
+    auto *msg = ev->Get();
 
     NKikimrNodeBroker::TNodesInfo info;
     Epoch.Serialize(*info.MutableEpoch());
     info.SetDomain(DomainId);
     TAutoPtr<TEvNodeBroker::TEvNodesInfo> resp = new TEvNodeBroker::TEvNodesInfo(info);
-    if (version != Epoch.Version)
+
+    bool optimized = false;
+
+    if (msg->Record.HasCachedVersion()) {
+        if (msg->Record.GetCachedVersion() == Epoch.Version) {
+            // Client has an up-to-date list already
+            optimized = true;
+        } else {
+            // We may be able to only send added nodes in the same epoch when
+            // all deltas are cached up to the current epoch inclusive.
+            ui64 neededFirstVersion = msg->Record.GetCachedVersion() + 1;
+            if (!EpochDeltasVersions.empty() &&
+                EpochDeltasVersions.front() <= neededFirstVersion &&
+                EpochDeltasVersions.back() == Epoch.Version &&
+                neededFirstVersion <= Epoch.Version)
+            {
+                ui64 firstIndex = neededFirstVersion - EpochDeltasVersions.front();
+                if (firstIndex > 0) {
+                    // Note: usually there is a small number of nodes added
+                    // between subsequent requests, so this substr should be
+                    // very cheap.
+                    resp->PreSerializedData = EpochDeltasCache.substr(EpochDeltasEndOffsets[firstIndex - 1]);
+                } else {
+                    resp->PreSerializedData = EpochDeltasCache;
+                }
+                optimized = true;
+            }
+        }
+    }
+
+    if (!optimized) {
         resp->PreSerializedData = EpochCache;
+    }
 
     LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                 "Send TEvNodesInfo for epoch " << Epoch.ToString());
@@ -324,12 +355,16 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 
 void TNodeBroker::ProcessDelayedListNodesRequests()
 {
+    THashSet<TActorId> processed;
     while (!DelayedListNodesRequests.empty()) {
         auto it = DelayedListNodesRequests.begin();
         if (it->first > Epoch.Id)
             break;
 
-        ProcessListNodesRequest(it->second);
+        // Avoid processing more than one request from the same sender
+        if (processed.insert(it->second->Sender).second) {
+            ProcessListNodesRequest(it->second);
+        }
         DelayedListNodesRequests.erase(it);
     }
 }
@@ -447,6 +482,10 @@ void TNodeBroker::PrepareEpochCache()
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
+
+    EpochDeltasCache.clear();
+    EpochDeltasVersions.clear();
+    EpochDeltasEndOffsets.clear();
 }
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
@@ -461,6 +500,16 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
+
+    if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Epoch.Version) {
+        EpochDeltasCache.clear();
+        EpochDeltasVersions.clear();
+        EpochDeltasEndOffsets.clear();
+    }
+
+    EpochDeltasCache += delta;
+    EpochDeltasVersions.push_back(Epoch.Version);
+    EpochDeltasEndOffsets.push_back(EpochDeltasCache.size());
 }
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)

@@ -2227,5 +2227,10 @@ message TAbstractObjectDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
 
-    map<string, Ydb.Value> Features = 6;
+    optional string Type = 4;
+    optional TAbstractObjectProperties Properties = 5;
+}
+
+message TAbstractObjectProperties {
+    map<string, Ydb.Value> Properties = 1;
 }

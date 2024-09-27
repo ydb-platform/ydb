@@ -12,11 +12,9 @@ namespace NKikimr::NSchemeShard::NAbstractObject {
 
 TPath::TChecker IsParentPathValid(const TPath& parentPath);
 
-bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath);
+bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TString& typeId);
 
-bool Validate(const NKikimrSchemeOp::TAbstractObjectDescription& description, TString& errorStr);
-
-TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(const NKikimrSchemeOp::TAbstractObjectDescription& description,
+TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(const NKikimrSchemeOp::TModifyAbstractObject& description,
     TSchemeShard& context, const NMetadata::NModifications::TBaseObject::TPtr& oldMetadata);
 
 TAbstractObjectInfo::TPtr CreateAbstractObject(const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion);

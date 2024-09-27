@@ -4874,17 +4874,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 const ui64 alterVersion = rowset.GetValue<Schema::AbstractObjects::AlterVersion>();
                 const TString typeId = rowset.GetValue<Schema::AbstractObjects::TypeId>();
-                const TString data = rowset.GetValue<Schema::AbstractObjects::Record>();
+                const TString data = rowset.GetValue<Schema::AbstractObjects::Properties>();
 
                 const NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
                 AFL_VERIFY(cBehaviour)("type_id", typeId);
                 const auto objectManager = cBehaviour->GetObjectManager();
                 AFL_VERIFY(objectManager)("type_id", typeId);
 
-                Ydb::ResultSet recordProto;
-                AFL_VERIFY(recordProto.ParseFromString(data))("type_id", typeId)("path_id", pathId);
+                NKikimrSchemeOp::TAbstractObjectProperties propertiesProto;
+                AFL_VERIFY(propertiesProto.ParseFromString(data))("type_id", typeId)("path_id", pathId);
                 NMetadata::NInternal::TTableRecord record;
-                AFL_VERIFY(record.DeserializeFromProto(recordProto))("type_id", typeId)("path_id", pathId)("proto", recordProto.DebugString());
+                AFL_VERIFY(record.DeserializeFromProto(propertiesProto.GetProperties()))("type_id", typeId)("path_id", pathId)("proto", propertiesProto.DebugString());
                 const auto object = objectManager->DeserializeFromRecord(record);
                 AFL_VERIFY(object);
 

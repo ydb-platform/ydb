@@ -10,6 +10,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/services/metadata/service.h>
 
 #include <util/datetime/base.h>
 

@@ -24,7 +24,7 @@ Y_HAS_MEMBER(ResetFeatures); // for alter
 class TObjectSettingsImpl {
 public:
     using TFeaturesExtractor = NYql::TFeaturesExtractor;
-    using TProto = NKikimrSchemeOp::TAbstractObjectDescription;
+    using TProto = NKikimrSchemeOp::TModifyAbstractObject;
 
 private:
     using TFeatures = THashMap<TString, TString>;

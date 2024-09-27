@@ -3021,7 +3021,7 @@ void TSchemeShard::PersistAbstractObject(NIceDb::TNiceDb& db, TPathId pathId, co
     db.Table<Schema::AbstractObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::AbstractObjects::AlterVersion>(alterVersion),
         NIceDb::TUpdate<Schema::AbstractObjects::TypeId>(typeId),
-        NIceDb::TUpdate<Schema::AbstractObjects::Record>(recordRow.SerializeAsString())
+        NIceDb::TUpdate<Schema::AbstractObjects::Properties>(recordRow.SerializeAsString())
     );
 }
 

@@ -13,6 +13,8 @@ public:
 
     virtual void OnPreprocessingFinished(NYql::TObjectSettingsImpl result) = 0;
     virtual void OnPreprocessingProblem(const TString& errorMessage) = 0;
+
+    virtual ~IPreprocessingController() = default;
 };
 
 class TSchemeObjectOperationsManager: public IOperationsManager {

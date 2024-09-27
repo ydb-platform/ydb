@@ -1828,10 +1828,10 @@ struct Schema : NIceDb::Schema {
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct TypeId : Column<4, NScheme::NTypeIds::String> {};
-        struct Record : Column<5, NScheme::NTypeIds::String> {}; // Ydb::Value
+        struct Properties : Column<5, NScheme::NTypeIds::String> {}; // TAbstractObjectProperties
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, TypeId, Record>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, TypeId, Properties>;
     };
 
     using TTables = SchemaTables<

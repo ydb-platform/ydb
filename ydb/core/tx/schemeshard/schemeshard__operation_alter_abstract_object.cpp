@@ -130,7 +130,7 @@ public:
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
         const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NAbstractObject::IsParentPathValid(result, parentPath));
+        RETURN_RESULT_UNLESS(NAbstractObject::IsParentPathValid(result, parentPath, abstractObjectDescription.GetType()));
 
         const TPath& dstPath = parentPath.Child(name);
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();

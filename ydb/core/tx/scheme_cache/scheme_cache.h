@@ -272,6 +272,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TResourcePoolDescription Description;
     };
 
+    struct TAbstractObjectInfo : public TAtomicRefCount<TAbstractObjectInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TAbstractObjectDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -324,6 +329,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TFileStoreInfo> FileStoreInfo;
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
+        TIntrusiveConstPtr<TResourcePoolInfo> AbstractObjectInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

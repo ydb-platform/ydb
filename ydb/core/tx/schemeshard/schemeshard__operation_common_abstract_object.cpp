@@ -56,7 +56,7 @@ bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& par
     return static_cast<bool>(checks);
 }
 
-TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(const NKikimrSchemeOp::TAbstractObjectDescription& description,
+TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(const NKikimrSchemeOp::TModifyAbstractObject& description,
     TSchemeShard& context, const NMetadata::NModifications::TBaseObject::TPtr& oldMetadata) {
     const TString& typeId = description.GetType();
 
@@ -79,7 +79,7 @@ TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(co
 }
 
 TAbstractObjectInfo::TPtr CreateAbstractObject(const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion) {
-    return MakeIntrusive<TAbstractObjectInfo>(metadata, alterVersion);
+    return MakeIntrusive<TAbstractObjectInfo>(alterVersion, metadata);
 }
 
 TAbstractObjectInfo::TPtr ModifyAbstractObject(

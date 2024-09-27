@@ -78,7 +78,6 @@ public:
     }
 };
 
-// TODO: Consider making most of these constraints virtual functions of TBaseObject and removing functions from (T|I)ObjectManager
 template <typename T>
 concept RecordSerializableObject = std::derived_from<T, TBaseObject> && requires {
     { T::GetTypeId() } -> std::same_as<TString>;

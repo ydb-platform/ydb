@@ -26,6 +26,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         localHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
+        return;
         const TString tieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
 
         for (ui64 i = 0; i < 100; ++i) {

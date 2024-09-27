@@ -4615,7 +4615,6 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
 
         event->TopicConverter = tx.TopicConverter;
         event->Config = tx.TabletConfig;
-        event->ExplicitMessageGroups = explicitMessageGroups;
 
         ctx.Send(partition.Actor, std::move(event));
     }

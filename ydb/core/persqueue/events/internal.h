@@ -854,8 +854,6 @@ struct TEvPQ {
         ui64 TxId;
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
-
-        TMessageGroupsPtr ExplicitMessageGroups;
     };
 
     struct TEvProposePartitionConfigResult : public TEventLocal<TEvProposePartitionConfigResult, EvProposePartitionConfigResult> {

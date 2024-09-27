@@ -67,7 +67,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
 
         const auto& info = result.GetResult().SourceIdInfo;
-        Y_ABORT_UNLESS(AutoPartitioning || info.GetExplicit());
+        Y_ABORT_UNLESS(info.GetExplicit());
 
         MaxSeqNo = info.GetSeqNo();
         Ready();
@@ -266,14 +266,12 @@ public:
             const TDataShardId& dataShard,
             ui32 partitionId,
             ui64 shardId,
-            bool autoPartitioning,
             const TUserTable::TCdcStream& stream)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
-        , AutoPartitioning(autoPartitioning)
         , Serializer(CreateChangeRecordSerializer({
             .StreamFormat = stream.Format,
             .StreamMode = stream.Mode,
@@ -303,7 +301,6 @@ private:
     const ui32 PartitionId;
     const ui64 ShardId;
     const TString SourceId;
-    const bool AutoPartitioning;
     THolder<IChangeRecordSerializer> Serializer;
     mutable TMaybe<TString> LogPrefix;
 
@@ -708,8 +705,8 @@ class TCdcChangeSenderMain
 
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(schema);
 
-        TopicAutoPartitioning = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
-        if (TopicAutoPartitioning) {
+        bool topicAutoPartitioning = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
+        if (topicAutoPartitioning) {
             KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(BuildSimplePartitioning(pqDesc));
             SetPartitionResolver(new TBoundaryPartitionResolver(pqDesc));
         } else {
@@ -742,7 +739,7 @@ class TCdcChangeSenderMain
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, TopicAutoPartitioning, Stream);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -846,8 +843,6 @@ private:
     ui64 TopicVersion;
     THolder<NKikimr::TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
-
-    bool TopicAutoPartitioning = false;
 
 }; // TCdcChangeSenderMain
 

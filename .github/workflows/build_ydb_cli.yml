@@ -75,9 +75,7 @@ jobs:
           echo "testmatrix={\"include\":[{\"project\":\"foo\",\"config\":\"Debug\"},{\"project\":\"bar\",\"config\":\"Release\"}]}"
           echo "testmatrix=$MATRIX"
           
-          echo "matrix=<<EOF" >> $GITHUB_OUTPUT
-          echo "$MATRIX" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 # https://github.com/github/docs/issues/21529
 
   build-platform-specific-binary:

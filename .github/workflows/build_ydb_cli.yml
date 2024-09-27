@@ -50,6 +50,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Create file with future platform list
+        id: set-matrix
         run: |
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux }}" == "true" ]; then

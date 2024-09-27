@@ -286,6 +286,7 @@ private:
     THashSet<ui64> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
+    TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
 
     bool WriteTxsInProgress = false;
 

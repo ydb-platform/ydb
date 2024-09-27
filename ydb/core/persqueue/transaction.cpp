@@ -231,6 +231,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, const NKikimrP
     for (auto& p : *partitionsData.MutablePartition()) {
         if (p.GetPartitionId() == partition.GetPartitionId()) {
             info = &p;
+            break;
         }
     }
     if (!info) {

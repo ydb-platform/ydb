@@ -642,9 +642,7 @@ class TCdcChangeSenderMain
         TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning;
         partitioning.reserve(pqDesc.GetPartitions().size());
         for (const auto& partition : pqDesc.GetPartitions()) {
-            if (::NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
-                partitioning.emplace_back(partition.GetPartitionId());
-            }
+            partitioning.emplace_back(partition.GetPartitionId());
         }
 
         return partitioning;

@@ -288,7 +288,6 @@ message TMessageGroup {
     optional bytes Id = 1;
     // Range of the key to which it is allowed to write.
     optional TPartitionKeyRange KeyRange = 2;
-    optional uint64 SeqNo = 3;
 }
 
 enum ETopicPartitionStatus {

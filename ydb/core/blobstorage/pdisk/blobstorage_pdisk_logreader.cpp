@@ -201,7 +201,10 @@ struct TLogReader::TSectorData {
         , PreparedOffset(0)
         , PreparedSize(0)
         , IsScheduled(false)
-    {}
+    {
+      Y_VERIFY_S(buffer && dataSize <= buffer->Size(), "buffer has size less than log reader's sector, dataSize# "
+                     << dataSize << " bufferSize# " << (buffer ? (i64)buffer->Size() : -1));
+    }
 
     TString ToString() {
         TStringStream str;

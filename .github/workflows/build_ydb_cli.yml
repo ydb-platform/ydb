@@ -69,6 +69,8 @@ jobs:
             echo 'Adding windows job to matrix'
             MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
           fi
+
+          echo "$MATRIX"
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
       

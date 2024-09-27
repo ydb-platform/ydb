@@ -14,11 +14,11 @@ class TBlockingEQueue {
 public:
     TBlockingEQueue(size_t maxSize):MaxSize_(maxSize) {
     }
-    void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t rows) {
+    void Push(NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) {
         with_lock(Mutex_) {
             CanPush_.WaitI(Mutex_, [this] () {return Stopped_ || Size_ < MaxSize_;});
-            Events_.emplace_back(std::move(e), rows );
-            Size_ += rows;
+            Events_.emplace_back(std::move(e), size );
+            Size_ += size;
         }
         CanPop_.BroadCast();
     }
@@ -38,9 +38,9 @@ public:
                     return {};
                 }
             }
-            auto [front, rows] = std::move(Events_.front());
+            auto [front, size] = std::move(Events_.front());
             Events_.pop_front();
-            Size_ -= rows;
+            Size_ -= size;
             if (Size_ < MaxSize_) {
                 CanPush_.BroadCast();
             }
@@ -181,13 +181,15 @@ private:
         while (!EventsQ_.IsStopped()) {
             TString rawMsg;
             TVector<TMessage> msgs;
+            size_t size = 0;
 
             while (size_t read = fi.ReadLine(rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
                 MsgOffset_++;
+                size += rawMsg.size();
             }
             if (!msgs.empty()) {
-                EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), msgs.size());
+                EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), size);
             }
 
             Sleep(FILE_POLL_PERIOD);
@@ -195,7 +197,7 @@ private:
     }
     
     TFile File_;
-    TBlockingEQueue EventsQ_ {16384};
+    TBlockingEQueue EventsQ_ {4_MB};
     NYdb::NTopic::TPartitionSession::TPtr Session_;
     TString ProducerId_;
     std::thread FilePoller_;

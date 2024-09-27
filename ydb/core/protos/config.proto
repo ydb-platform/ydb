@@ -1935,6 +1935,10 @@ message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
 
+message TShutdownConfig {
+    optional uint32 MinDelayBeforeShutdownSeconds = 1;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -2019,6 +2023,7 @@ message TAppConfig {
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
 	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
+    optional TShutdownConfig ShutdownConfig = 84;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

@@ -54,11 +54,19 @@ jobs:
           set -ex
           MATRIX='[]'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
-            echo 'linux true'
+            echo 'Adding linux job to matrix'
             MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
           fi
+          if [ "${{ inputs.darwin-amd }}" == "true" ]; then
+            echo 'Adding darwin-amd job to matrix'
+            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash"}]')
+          fi
+          if [ "${{ inputs.darwin-arm }}" == "true" ]; then
+            echo 'Adding darwin-arm job to matrix'
+            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "darwin-arm", "runner": "macos-latest", "shell": "bash"}]')
+          fi
           if [ "${{ inputs.build-windows }}" == "true" ]; then
-            echo 'windows true'
+            echo 'Adding windows job to matrix'
             MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
           fi
           
@@ -69,7 +77,7 @@ jobs:
     needs: build-matrix
     strategy:
       matrix:
-        include: ${{ fromJSON(needs.compute-matrix.outputs.matrix) }}
+        include: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
 #          - { os: linux, runner: ubuntu-latest, shell: bash }
 #          - { os: darwin-amd, runner: macos-13, shell: bash }
 #          - { os: darwin-arm, runner: macos-latest, shell: bash }

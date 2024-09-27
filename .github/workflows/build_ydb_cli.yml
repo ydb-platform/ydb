@@ -80,8 +80,6 @@ jobs:
     steps:
       - name: Print matrix
         run: echo '${{ needs.build-matrix.outputs.matrix }}'
-      - name: Print matrix fromJson
-        run: echo '${{ fromJSON(needs.build-matrix.outputs.matrix) }}'
       
   build-platform-specific-binary:
     name: Build YDB CLI for ${{ matrix.os }}

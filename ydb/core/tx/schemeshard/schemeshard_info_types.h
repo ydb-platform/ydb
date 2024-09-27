@@ -3420,6 +3420,18 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
 struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
     using TPtr = TIntrusivePtr<TBackupCollectionInfo>;
 
+    static TPtr New() {
+        return new TBackupCollectionInfo();
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TBackupCollection& desc) {
+        TPtr result = New();
+
+        result->Properties = desc.GetProperties();
+
+        return result;
+    }
+
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TBackupCollectionProperties Properties;
 };

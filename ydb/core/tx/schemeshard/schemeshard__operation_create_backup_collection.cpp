@@ -149,15 +149,15 @@ class TCreateBackupCollection : public TSubOperation {
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
-    TPathElement::TPtr CreateResourcePoolPathElement(const TPath& dstPath) const {
-        TPathElement::TPtr resourcePool = dstPath.Base();
+    TPathElement::TPtr CreateBackupCollectionPathElement(const TPath& dstPath) const {
+        TPathElement::TPtr backupCollection = dstPath.Base();
 
-        resourcePool->CreateTxId = OperationId.GetTxId();
-        resourcePool->PathType = TPathElement::EPathType::EPathTypeBackupCollection;
-        resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
-        resourcePool->LastTxId  = OperationId.GetTxId();
+        backupCollection->CreateTxId = OperationId.GetTxId();
+        backupCollection->PathType = TPathElement::EPathType::EPathTypeBackupCollection;
+        backupCollection->PathState = TPathElement::EPathState::EPathStateCreate;
+        backupCollection->LastTxId  = OperationId.GetTxId();
 
-        return resourcePool;
+        return backupCollection;
     }
 
     static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
@@ -170,8 +170,8 @@ public:
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TString& rootPathStr = Transaction.GetWorkingDir();
-        const auto& backupCollectionDescription = Transaction.GetCreateBackupCollection();
-        const TString& name = backupCollectionDescription.GetName();
+        const auto& desc = Transaction.GetCreateBackupCollection();
+        const TString& name = desc.GetName();
         LOG_N("TCreateBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
@@ -214,40 +214,67 @@ public:
         }
 
         const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
-        const TPath& parentPath = backupCollectionsPath;
 
         // FIXME
         if (backupCollectionsPath.IsResolved()) {
             RETURN_RESULT_UNLESS(IsParentPathValid(result, backupCollectionsPath));
         }
 
-        Y_UNUSED(owner, parentPath, dstPath);
-        // const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        // RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist()));
-        // RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
-        // RETURN_RESULT_UNLESS(NResourcePool::IsDescriptionValid(result, resourcePoolDescription));
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
 
-        // const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, 1);
-        // Y_ABORT_UNLESS(resourcePoolInfo);
-        // RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
+        AddPathInSchemeShard(result, dstPath, owner);
+        auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
-        // AddPathInSchemeShard(result, dstPath, owner);
-        // const TPathElement::TPtr resourcePool = CreateResourcePoolPathElement(dstPath);
-        // NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxCreateResourcePool);
-        // NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
+        context.SS->IncrementPathDbRefCount(dstPath->PathId);
+        rootPath->IncAliveChildren();
+        rootPath.DomainInfo()->IncPathsInside();
 
-        // NIceDb::TNiceDb db(context.GetDB());
-        // NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        // NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, acl);
+        auto backupCollection = TBackupCollectionInfo::Create(desc);
+        context.SS->BackupCollections[dstPath->PathId] = backupCollection;
+        context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
 
-        // IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
+        // in progress
+
+        TTxState& txState = context.SS->CreateTx(
+            OperationId,
+            TTxState::TxCreateBackupCollection,
+            pathEl->PathId);
+        txState.Shards.clear();
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        const TString& acl = Transaction.GetModifyACL().GetDiffACL();
+        if (!acl.empty()) {
+            dstPath->ApplyACL(acl);
+        }
+
+        // context.SS->PersistPath(db, dstPath->PathId);
+        ////
+        // RegisterParentPathDependencies(context, parentPath);
+        if (rootPath.Base()->HasActiveChanges()) {
+            const TTxId parentTxId = rootPath.Base()->PlannedToCreate()
+                                         ? rootPath.Base()->CreateTxId
+                                         : rootPath.Base()->LastTxId;
+            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
+        }
+
+        // AdvanceTransactionStateToPropose(context, db);
+
+        // PersistExternalDataSource(context, db, externalDataSource,
+        //                           externalDataSourceInfo, acl);
+
+        // IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
+        //                                                   dstPath,
+        //                                                   context.SS,
+        //                                                   context.OnComplete);
 
         // UpdatePathSizeCounts(parentPath, dstPath);
 
-        Y_ABORT("unimplemented");
-
         SetState(NextState());
-
         return result;
     }
 

@@ -1519,6 +1519,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateView:
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
+    case TTxState::TxCreateBackupCollection:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:

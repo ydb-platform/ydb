@@ -1193,6 +1193,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
         return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
 
+    case TTxState::ETxType::TxCreateBackupCollection:
+        return CreateNewBackupCollection(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }

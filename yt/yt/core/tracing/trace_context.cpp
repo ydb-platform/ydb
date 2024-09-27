@@ -115,7 +115,7 @@ namespace NDetail {
 thread_local TTraceContext *CurrentTraceContextData{};
 YT_PREVENT_TLS_CACHING TTraceContext*& CurrentTraceContext()
 {
-    NYT::NOrigin::EnableOriginOverrides();
+    NYT::NDetail::EnableErrorOriginOverrides();
     asm volatile("");
     return CurrentTraceContextData;
 }

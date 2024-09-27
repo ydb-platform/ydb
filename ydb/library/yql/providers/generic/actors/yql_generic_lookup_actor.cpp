@@ -196,9 +196,6 @@ namespace NYql::NDq {
                                   NConnector::ErrorToIssues(error),
                                   NConnector::ErrorToDqStatus(error));
             actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv));
-            auto guard = Guard(*Alloc);
-            TKeyTypeHelper empty;
-            Request = IDqAsyncLookupSource::TUnboxedValueMap(0, empty.GetValueHash(), empty.GetValueEqual());
         }
 
         void Handle(NActors::TEvents::TEvPoison::TPtr) {

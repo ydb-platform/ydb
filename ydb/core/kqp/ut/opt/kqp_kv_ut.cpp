@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT(!selectResult.IsSuccess());
             TString issues = selectResult.GetIssues().ToString();
-            UNIT_ASSERT_C(issues.Contains("Type Uint64 doesn't match type Decimal(22,9) for column Key22"), issues);
+            UNIT_ASSERT_C(issues.Contains("Unexpected type for column Key22: expected Decimal(22,9)"), issues);
         }
 
         // Bad case: lookup by Decimal(35,10) value in Decimal(22,9) key

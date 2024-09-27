@@ -149,12 +149,9 @@ public:
             const auto& colInfo = *colInfoPtr;
 
             i32 typmod = -1;
-            if (typeInProto.has_type_id()) {
-                if (typeInProto.type_id() != colInfo.PType.GetTypeId()) {
-                    errorMessage = Sprintf("Type %s doesn't match type %s for column %s", 
-                        NScheme::TypeName(typeInProto.type_id()), NScheme::TypeName(colInfo.PType).c_str(), name.c_str());
-                    return false;
-                }
+            if (typeInProto.has_type_id() && typeInProto.type_id() == colInfo.PType.GetTypeId()) {
+                //nothing to check more
+                ;
             } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 ui32 precision = typeInProto.decimal_type().precision();
                 ui32 scale = typeInProto.decimal_type().scale();

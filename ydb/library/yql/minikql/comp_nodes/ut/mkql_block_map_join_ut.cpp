@@ -643,23 +643,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
         TSetup<false> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
+        TVector<std::optional<ui64>> keyInit(testSize);
         std::iota(keyInit.begin(), keyInit.end(), 1);
         TVector<ui64> subkeyInit;
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
+            [](const auto key) { return *key * 1001; });
         TVector<TString> valueInit;
         std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
+            [](const auto key) { return threeLetterValues[*key]; });
+        keyInit.back() = std::nullopt;
         // 2. Make input for the "right" dict.
         const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
         // 3. Make "expected" data.
         TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> keyExpected;
+        TVector<std::optional<ui64>> keyExpected;
         TVector<ui64> subkeyExpected;
         TVector<TString> valueExpected;
         for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!rightSet.contains(keyInit[i])) {
+            if (!(keyInit[i] && rightSet.contains(*keyInit[i]))) {
                 keyExpected.push_back(keyInit[i]);
                 subkeyExpected.push_back(subkeyInit[i]);
                 valueExpected.push_back(valueInit[i]);

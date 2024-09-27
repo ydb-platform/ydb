@@ -3131,7 +3131,7 @@ bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type
         return false;
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, false);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }

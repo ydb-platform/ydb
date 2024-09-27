@@ -5655,7 +5655,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         allInputTypes.push_back(i);
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx);
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, false);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     if (resolveStatus != IArrowResolver::OK) {
         return false;
@@ -5794,7 +5794,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 allTypes.push_back(node->Child(i)->GetTypeAnn());
             }
 
-            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx);
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, false);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
                 return true;

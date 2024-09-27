@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             );
             CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
                 RESOURCE_POOL=")" << poolId << R"(",
-                MEMBERNAME=")" << userSID << R"("
+                MEMBER_NAME=")" << userSID << R"("
             );
         )");
     }
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
                 RANK="1",
                 RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
-                MEMBERNAME=")" << settings.UserSID_ << R"("
+                MEMBER_NAME=")" << settings.UserSID_ << R"("
             );
         )");
 
@@ -766,12 +766,12 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             );
             CREATE RESOURCE POOL CLASSIFIER first_classifier WITH (
                 RESOURCE_POOL=")" << poolId << R"(",
-                MEMBERNAME=")" << firstSID << R"(",
+                MEMBER_NAME=")" << firstSID << R"(",
                 RANK=1
             );
             CREATE RESOURCE POOL CLASSIFIER second_classifier WITH (
                 RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
-                MEMBERNAME=")" << secondSID << R"(",
+                MEMBER_NAME=")" << secondSID << R"(",
                 RANK=2
             );
         )");

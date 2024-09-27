@@ -30,7 +30,7 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
     return MaxBlockSizeInBytes / std::max<size_t>(maxBlockItemSize, 1);
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type);
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, bool extraTypes = false);
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
 template<NUdf::EDataSlot slot>

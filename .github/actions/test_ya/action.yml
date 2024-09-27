@@ -278,7 +278,7 @@ runs:
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all 
-          --cache-size 2TB --force-build-depends
+          --cache-size 5TB --force-build-depends
         )
 
 

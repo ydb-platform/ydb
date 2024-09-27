@@ -53,13 +53,13 @@ jobs:
         run: |
           set -ex
           MATRIX='[]'
-          if [ ${{ inputs.build-linux }} ]; then
+          if [ "${{ inputs.build-linux }}" == "true" ]; then
             echo 'linux true'
-            MATRIX=$(echo $MATRIX | jq '. + [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
           fi
-          if [ ${{ inputs.build-windows }} ]; then
+          if [ "${{ inputs.build-windows }}" == "true" ]; then
             echo 'windows true'
-            MATRIX=$(echo $MATRIX | jq '. + [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
           fi
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT

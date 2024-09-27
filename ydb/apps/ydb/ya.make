@@ -1,6 +1,8 @@
 PROGRAM(ydb)
 
-STRIP()
+IF(RELEASE)
+    STRIP()
+ENDIF()
 
 SRCS(
     main.cpp

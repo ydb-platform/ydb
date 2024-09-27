@@ -1139,7 +1139,7 @@ void TLogReader::Reply() {
             PDisk->Format.Offset(ChunkIdx + 1, 0)
         );
     }
-    P_LOG(PRI_DEBUG, BPD01, "Reply to owner", (OwnerId, (ui32)Owner), (Result, Result->ToString()));
+    P_LOG(PRI_NOTICE, BPD01, "Reply to owner", (OwnerId, (ui32)Owner), (Result, Result->ToString()));
     PCtx->ActorSystem->Send(ReplyTo, Result.Release());
     if (!IsInitial) {
         PDisk->Mon.LogRead.CountResponse(ResultSize);

@@ -126,9 +126,7 @@ YARD_UNIT_TEST(TestLogWriteCutEqual) {
 YARD_UNIT_TEST(TestLogWriteCutEqualRandomWait) {
     for (int i = 0; i < 10; ++i) {
         TTestContext tc(false, true);
-        tc.SectorMap->ImitateRandomWait = {};
-        //tc.SectorMap->ImitateRandomWait = std::make_shared<std::pair<TDuration, TDuration>>(TDuration::MicroSeconds(500), TDuration::MicroSeconds(1000));
-        tc.SectorMap->ImitateRandomWait = std::make_pair(TDuration::MicroSeconds(500), TDuration::MicroSeconds(1000));
+        tc.SectorMap->ImitateRandomWait = {TDuration::MicroSeconds(500), TDuration::MicroSeconds(1000)};
         FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
         Run<TTestLogWriteCut<true>>(&tc, 2, MIN_CHUNK_SIZE);
         TTestLogWriteCut<true>::Reset();

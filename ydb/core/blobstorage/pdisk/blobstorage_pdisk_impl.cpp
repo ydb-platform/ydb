@@ -3424,7 +3424,6 @@ void TPDisk::Update() {
 
     {
         TGuard<TMutex> guard(StateMutex);
-
         ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
         ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
         ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);

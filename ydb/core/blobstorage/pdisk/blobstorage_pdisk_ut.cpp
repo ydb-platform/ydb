@@ -198,6 +198,24 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(mock.ReadLog() == mock.OwnedLogRecords());
     }
 
+    Y_UNIT_TEST(TestLogWriteReadWithRestarts) {
+        TActorTestContext testCtx({ false });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        for (ui32 i = 0; i < 1000; ++i) {
+            vdisk.SendEvLogSync(12346);
+            if (i % 17 == 16) {
+                vdisk.InitFull();
+            }
+            if (i % 117 == 116) {
+                testCtx.RestartPDiskSync();
+                vdisk.InitFull();
+            }
+        }
+    }
+
     // Test to reproduce bug from KIKIMR-10192
     Y_UNIT_TEST(TestLogSpliceNonceJump) {
         TActorTestContext testCtx({
@@ -697,8 +715,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     Y_UNIT_TEST(DeviceHaltTooLong) {
         TActorTestContext testCtx({ false });
-        // testCtx.TestCtx.SectorMap->ImitateRandomWait = std::make_shared<std::pair<TDuration, TDuration>>(TDuration::Seconds(1), TDuration::Seconds(2));
-        testCtx.TestCtx.SectorMap->ImitateRandomWait = std::make_pair(TDuration::Seconds(1), TDuration::Seconds(2));
+        testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};
 
         TVDiskMock mock(&testCtx);
 
@@ -962,7 +979,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
 
     void TestMajorVerionMigration(TCurrent oldInfo, TCurrent intermediateInfo, TCurrent newInfo) {
         TCompatibilityInfoTest::Reset(&oldInfo);
-    
+
         TActorTestContext testCtx({
             .IsBad = false,
             .SuppressCompatibilityCheck = false,

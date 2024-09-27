@@ -52,7 +52,6 @@ jobs:
       - name: Create file with future platform list
         id: matrix
         run: |
-          set -ex
           MATRIX='[]'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
             echo 'Adding linux job to matrix'

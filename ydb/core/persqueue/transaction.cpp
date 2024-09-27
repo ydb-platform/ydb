@@ -242,6 +242,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, const NKikimrP
 void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
+    PQ_LOG_I(">>>>> Received DATA=" << event.Data.ShortDebugString());
 
     UpdatePartitionsData(PartitionsData, event.Data);
 

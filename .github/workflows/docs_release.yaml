@@ -7,6 +7,9 @@ on:
       - 'stable-**'
     paths: 
       - 'ydb/docs/**'
+  create:
+    branches:
+      - 'stable-**'
   workflow_dispatch:
 
 jobs:

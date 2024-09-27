@@ -381,14 +381,20 @@ public:
         program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", YqlAgentToken_)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
+        auto defaultQueryCluster = DefaultCluster_;
+        auto ysonSettings = NodeFromYsonString(settings.ToString()).AsMap();
+        if (auto cluster = ysonSettings.FindPtr("cluster")) {
+            defaultQueryCluster = cluster->AsString();
+        }
+
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
 
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;
-        if (DefaultCluster_) {
-            sqlSettings.DefaultCluster = *DefaultCluster_;
+        if (defaultQueryCluster) {
+            sqlSettings.DefaultCluster = *defaultQueryCluster;
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
@@ -412,8 +418,8 @@ public:
             };
         }
 
-        if (DefaultCluster_ && !usedClusters->contains(*DefaultCluster_)) {
-            usedClusters->insert(*DefaultCluster_);
+        if (defaultQueryCluster && !usedClusters->contains(*defaultQueryCluster)) {
+            usedClusters->insert(*defaultQueryCluster);
         }
 
         std::vector<TString> clustersList(usedClusters->begin(), usedClusters->end());
@@ -441,6 +447,12 @@ public:
         program->AddCredentials({{"default_yt", NYql::TCredential("yt", "", token)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
+        auto defaultQueryCluster = DefaultCluster_;
+        auto settingsMap = NodeFromYsonString(settings.ToString()).AsMap();
+        if (auto cluster = settingsMap.FindPtr("cluster")) {
+            defaultQueryCluster = cluster->AsString();
+        }
+
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
 
@@ -466,8 +478,8 @@ public:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;
-        if (DefaultCluster_) {
-            sqlSettings.DefaultCluster = *DefaultCluster_;
+        if (defaultQueryCluster) {
+            sqlSettings.DefaultCluster = *defaultQueryCluster;
         }
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;

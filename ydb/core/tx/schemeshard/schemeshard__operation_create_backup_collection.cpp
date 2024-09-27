@@ -1,6 +1,9 @@
 #include "schemeshard__operation_common.h"
-#include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
+
+#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard {
 

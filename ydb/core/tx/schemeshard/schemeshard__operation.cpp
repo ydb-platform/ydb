@@ -914,6 +914,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
             create.MutableCreateResourcePool()->SetName(name);
             break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+            create.MutableCreateBackupCollection()->SetName(name);
+            break;
         default:
             Y_UNREACHABLE();
         }

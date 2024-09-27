@@ -47,10 +47,10 @@ jobs:
     name: Build matrix for the next job from selected platforms to build
     runs-on: ubuntu-latest
     outputs:
-      matrix: steps.matrix.outputs.matrix
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Create file with future platform list
-        id: matrix
+        id: set-matrix
         run: |
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
@@ -73,22 +73,16 @@ jobs:
           echo "Final matrix before escaping json: $MATRIX"
           MATRIX=$(echo $MATRIX | jq -cR '.')
           echo "Final matrix after escaping json: $MATRIX"
+
+          echo "testmatrix={\"include\":[{\"project\":\"foo\",\"config\":\"Debug\"},{\"project\":\"bar\",\"config\":\"Release\"}]}"
+          echo "testmatrix=$MATRIX"
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
       
-  test-matrix:
-    name: Test matrix
-    needs: build-matrix
-    runs-on: ubuntu-latest
-    steps:
-      - name: Print matrix
-        run: echo '${{ needs.build-matrix.outputs.matrix }}'
-      
   build-platform-specific-binary:
-    name: Build YDB CLI for ${{ matrix.os }}
-    needs: [ build-matrix, test-matrix ]
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+    name: Build YDB CLI for ${{ matrix.os }}
 #          - { os: linux, runner: ubuntu-latest, shell: bash }
 #          - { os: darwin-amd, runner: macos-13, shell: bash }
 #          - { os: darwin-arm, runner: macos-latest, shell: bash }

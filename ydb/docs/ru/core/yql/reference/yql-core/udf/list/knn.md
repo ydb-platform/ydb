@@ -132,7 +132,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 
 {% if backend_name == "YDB" %}
 
-### Создание таблицы
+### Создание строковой таблицы
 
 ```yql
 CREATE TABLE Facts (
@@ -151,6 +151,14 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
 
 {% else %}
 
@@ -229,7 +237,7 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 
 {% if backend_name == "YDB" %}
 
-### Создание таблицы
+### Создание строковой таблицы
 
 ```yql
 CREATE TABLE Facts (
@@ -249,6 +257,14 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
 
 {% else %}
 

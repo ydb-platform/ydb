@@ -5852,7 +5852,7 @@ public:
         auto nameNode = ListNodeNth(value->defnames, 0);
         auto name = to_lower(TString(StrVal(nameNode)));
         TString sfunc;
-        ui32 stype;
+        ui32 stype = 0;
         TString combinefunc;
         TString finalfunc;
         TString serialfunc;

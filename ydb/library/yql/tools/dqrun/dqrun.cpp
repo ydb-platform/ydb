@@ -181,6 +181,9 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 }
 
 void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
+    if (fqCfgFile.empty()) {
+        return;
+    }
     auto configData = TFileInput(fqCfgFile).ReadAll();
     using ::google::protobuf::TextFormat;
     if (!TextFormat::ParseFromString(configData, fqConfig)) {

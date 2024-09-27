@@ -9,6 +9,7 @@ on:
 
 jobs:
   update-dstool:
+    name: Update dstool package
     runs-on: ubuntu-latest
     steps:
       - name: Set up Python

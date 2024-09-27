@@ -490,7 +490,7 @@ private:
 
             const Ydb::Type& typeInProto = reqColumns[pos].second;
 
-            if (typeInProto.type_id()) {
+            if (typeInProto.has_type_id()) {
                 auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
@@ -511,7 +511,12 @@ private:
                     errorMessage = Sprintf("%s for column %s", error.c_str(), name.c_str());
                     return false;
                 }
-            } else if (typeInProto.has_pg_type()) {
+                if (NScheme::TDecimalType(precision, scale) != ci.PType.GetDecimalType()) {
+                    errorMessage = Sprintf("Type Decimal(%u,%u) doesn't match type %s for column %s", 
+                        precision, scale, NScheme::TypeName(ci.PType).c_str(), name.c_str());
+                    return false;
+                }
+            } else if (typeInProto.has_pg_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
                 const auto& typeName = typeInProto.pg_type().type_name();
                 auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {

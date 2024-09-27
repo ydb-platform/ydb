@@ -19,6 +19,10 @@ public:
         Y_ABORT_UNLESS(Scale);
     }
 
+    constexpr bool operator==(const TDecimalType& other) const {
+        return Precision == other.Precision && Scale == other.Scale;
+    }    
+
     TString CellValueToString(const std::pair<ui64, i64>& cellValue) const;
     void CellValueToStream(const std::pair<ui64, i64>& cellValue, IOutputStream& out) const;    
 

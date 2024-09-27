@@ -461,7 +461,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 break;
             case NScheme::NTypeIds::Decimal: {
                 const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName);
-                if (!featureFlags.EnableParameterizedDecimal && !(decimalType->GetPrecision() == NScheme::DECIMAL_PRECISION && decimalType->GetScale() == NScheme::DECIMAL_SCALE)){
+                if (!featureFlags.EnableParameterizedDecimal && decimalType != NScheme::TDecimalType::Default()){
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }   

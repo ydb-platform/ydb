@@ -420,12 +420,12 @@ private:
 
 class TResourcePoolsCache {
     struct TClassifierInfo {
-        const TString Membername;
+        const TString MemberName;
         const TString PoolId;
         const i64 Rank;
 
         TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
-            : Membername(classifierSettings.Membername)
+            : MemberName(classifierSettings.MemberName)
             , PoolId(classifierSettings.ResourcePool)
             , Rank(classifierSettings.Rank)
         {}
@@ -593,7 +593,7 @@ private:
         TString poolId = "";
         i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
-            if (classifier.Membername != userSID) {
+            if (classifier.MemberName != userSID) {
                 continue;
             }
 

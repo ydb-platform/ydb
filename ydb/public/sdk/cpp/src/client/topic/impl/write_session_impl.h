@@ -307,6 +307,19 @@ private:
         i64 Generation;
     };
 
+    struct TTransactionInfo {
+        TSpinLock Lock;
+        bool IsActive = false;
+        bool Subscribed = false;
+        NThreading::TPromise<TStatus> AllAcksReceived;
+        bool CommitCalled = false;
+        ui64 WriteCount = 0;
+        ui64 AckCount = 0;
+    };
+
+    using TTransactionId = std::pair<std::string, std::string>; // SessionId, TxId
+    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
 
 public:
@@ -411,6 +424,13 @@ private:
 
     bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
+    void TrySubscribeOnTransactionCommit(TTransaction* tx);
+    void CancelTransactions();
+    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
+    void TrySignalAllAcksReceived(ui64 seqNo);
+
+    void OnTransactionCommit();
+
 private:
     TWriteSessionSettings Settings;
     std::shared_ptr<TTopicClient::TImpl> Client;
@@ -472,6 +492,9 @@ private:
     std::optional<uint64_t> DirectWriteToPartitionId;
 protected:
     uint64_t MessagesAcquired = 0;
+
+    std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
+    std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
 };
 
 } // namespace NYdb::NTopic

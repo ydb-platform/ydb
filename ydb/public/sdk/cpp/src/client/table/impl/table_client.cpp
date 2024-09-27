@@ -646,12 +646,12 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     return promise.GetFuture();
 }
 
-TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, const TTransaction& tx,
+TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, const std::string& txId,
     const TCommitTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::CommitTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
-    request.set_tx_id(TStringType{tx.GetId()});
+    request.set_tx_id(TStringType{txId});
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
     auto promise = NewPromise<TCommitTransactionResult>();
@@ -684,12 +684,12 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const TTransaction& tx,
+TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const std::string& txId,
     const TRollbackTxSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::RollbackTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
-    request.set_tx_id(TStringType{tx.GetId()});
+    request.set_tx_id(TStringType{txId});
 
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),

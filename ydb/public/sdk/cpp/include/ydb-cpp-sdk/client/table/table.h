@@ -1694,6 +1694,8 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
+using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
+
 //! Represents all session operations
 //! Session is transparent logic representation of connection
 class TSession {
@@ -1831,26 +1833,21 @@ TAsyncStatus TTableClient::RetryOperation(
 class TTransaction {
     friend class TTableClient;
 public:
-    const std::string& GetId() const {
-        return TxId_;
-    }
-
-    bool IsActive() const {
-        return !TxId_.empty();
-    }
+    const std::string& GetId() const;
+    bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
-    TSession GetSession() const {
-        return Session_;
-    }
+    TSession GetSession() const;
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
 
 private:
     TTransaction(const TSession& session, const std::string& txId);
 
-    TSession Session_;
-    std::string TxId_;
+    class TImpl;
+
+    std::shared_ptr<TImpl> TransactionImpl_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

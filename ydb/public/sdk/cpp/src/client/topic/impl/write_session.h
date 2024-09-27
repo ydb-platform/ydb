@@ -36,9 +36,11 @@ public:
     void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, ui32 originalSize,
                std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
 
-    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
+               NTable::TTransaction* tx = nullptr) override;
 
-    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message,
+                      NTable::TTransaction* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -67,7 +69,9 @@ public:
     bool Write(std::string_view data, std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt,
                const TDuration& blockTimeout = TDuration::Max()) override;
 
-    bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) override;
+    bool Write(TWriteMessage&& message,
+               NTable::TTransaction* tx = nullptr,
+               const TDuration& blockTimeout = TDuration::Max()) override;
 
     uint64_t GetInitSeqNo() override;
 

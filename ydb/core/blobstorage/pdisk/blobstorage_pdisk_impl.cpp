@@ -2222,25 +2222,20 @@ void TPDisk::ProcessChunkWriteQueue() {
         TRequestBase *req = (*it);
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkWritePiece:
-            {
-                TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
-                P_LOG(PRI_NOTICE, BPD01, "ChunkWritePiece",
-                    (ChunkIdx, piece->ChunkWrite->ChunkIdx),
-                    (Offset, piece->PieceShift),
-                    (Size, piece->PieceSize)
-                );
-                bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
-                if (lastPart) {
-                    Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
-                }
-                delete piece;
-                break;
-            }
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
+
+        Y_VERIFY_S(req->GetType() == ERequestType::RequestChunkWritePiece, "Unexpected request type# " << ui64(req->GetType())
+            << " TypeName# " << TypeName(*req) << " in JointChunkWrites");
+        TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
+        P_LOG(PRI_DEBUG, BPD01, "ChunkWritePiece",
+            (ChunkIdx, piece->ChunkWrite->ChunkIdx),
+            (Offset, piece->PieceShift),
+            (Size, piece->PieceSize)
+        );
+        bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
+        if (lastPart) {
+            Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
         }
+        delete piece;
     }
     LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
     JointChunkWrites.clear();
@@ -2267,7 +2262,7 @@ void TPDisk::ProcessChunkReadQueue() {
         ui8 priorityClass = read->PriorityClass;
         NHPTimer::STime creationTime = read->CreationTime;
         Y_VERIFY(!read->IsReplied);
-        P_LOG(PRI_NOTICE, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
+        P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
             (PieceCurrentSector, piece->PieceCurrentSector),
             (PieceSizeLimit, piece->PieceSizeLimit),
             (IsTheLastPiece, piece->IsTheLastPiece),

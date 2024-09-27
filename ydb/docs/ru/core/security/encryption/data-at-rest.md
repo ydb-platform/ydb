@@ -4,4 +4,4 @@
 
 По умолчанию шифрование данных при хранении отключено. Инструкции по его включению можно найти в разделе [{#T}](../../deploy/configuration/config.md#domains-blob).
 
-Более подробную информацию о реализации можно найти в [dsproxy_encrypt.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/dsproxy/dsproxy_encrypt.cpp) и [ydb/core/blobstorage/crypto](https://github.com/ydb-platform/ydb/tree/main/ydb/core/blobstorage/crypto).
+Более подробную информацию о реализации можно найти в [ydb/core/blobstorage/dsproxy/dsproxy_encrypt.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/dsproxy/dsproxy_encrypt.cpp) и [ydb/core/blobstorage/crypto](https://github.com/ydb-platform/ydb/tree/main/ydb/core/blobstorage/crypto).

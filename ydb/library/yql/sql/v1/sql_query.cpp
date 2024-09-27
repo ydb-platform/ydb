@@ -1406,7 +1406,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildCreateBackupCollection(Ctx.Pos(),
-                                                             BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                             objectId,
                                                              TCreateBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
                                                                 .Database = database,
@@ -1468,7 +1468,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildAlterBackupCollection(Ctx.Pos(),
-                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            objectId,
                                                             TAlterBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
                                                                 .SettingsToReset = std::move(toReset),
@@ -1496,7 +1496,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildDropBackupCollection(Ctx.Pos(),
-                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                           objectId,
                                                            TDropBackupCollectionParameters {
                                                                .MissingOk = false,
                                                            },

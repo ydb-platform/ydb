@@ -2215,8 +2215,20 @@ public:
             }
 
             TString error;
+
+            auto prefix = JoinPath({SessionCtx->GetDatabase(), ".backups/collections"});
+
+            TString path;
+
+            if (!settings.Name.StartsWith(SessionCtx->GetDatabase())) {
+                path = JoinPath({SessionCtx->GetDatabase(), ".backups/collections", settings.Name});
+            } else {
+                path = settings.Name;
+            }
+
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+
+            if (!NSchemeHelpers::SplitTablePath(path, GetDatabase(), pathPair, error, true)) {
                 return MakeFuture(ResultFromError<TGenericResult>(error));
             }
 

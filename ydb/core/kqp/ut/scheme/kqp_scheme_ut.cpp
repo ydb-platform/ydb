@@ -7367,6 +7367,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
     }
 
+    Y_UNIT_TEST(CreateBackupCollectionDisabledByDefault) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_collection` WITH(
+                    STORAGE = 'cluster'
+                )
+                    TABLE `table`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections are disabled. Please contact your system administrator to enable it");
+        }
+    }
+
     Y_UNIT_TEST(CreateBackupCollection) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
@@ -7517,6 +7537,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         //     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "STATE is not supported in CREATE");
         // }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `/Root/.metadata/my_collection` WITH(
+                    STORAGE = 'cluster',
+                    COLLECT_CHANGES = 'true'
+                )
+                    TABLE `/Root/table`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections be placed in");
+        }
 
         // positive
         {

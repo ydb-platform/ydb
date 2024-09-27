@@ -6,6 +6,30 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
+TPath::TChecker IsParentPathValid(const TPath& parentPath) {
+    auto checks = parentPath.Check();
+    checks.NotUnderDomainUpgrade()
+        .IsAtLocalSchemeShard()
+        .IsResolved()
+        .NotDeleted()
+        .NotUnderDeleting()
+        .IsCommonSensePath()
+        .IsLikeDirectory();
+
+    return std::move(checks);
+}
+
+bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
+    const auto checks = IsParentPathValid(parentPath);
+    if (!checks) {
+        result->SetError(checks.GetStatus(), checks.GetError());
+    }
+
+    return static_cast<bool>(checks);
+}
+
+///
+
 class TPropose : public TSubOperationState {
 public:
     explicit TPropose(TOperationId id)
@@ -145,10 +169,10 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& resourcePoolDescription = Transaction.GetCreateResourcePool();
-        const TString& name = resourcePoolDescription.GetName();
-        LOG_N("TCreateResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        const TString& rootPathStr = Transaction.GetWorkingDir();
+        const auto& backupCollectionDescription = Transaction.GetCreateBackupCollection();
+        const TString& name = backupCollectionDescription.GetName();
+        LOG_N("TCreateBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -160,33 +184,70 @@ public:
             return result;
         }
 
-        const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NResourcePool::IsParentPathValid(result, parentPath));
+        const TPath& rootPath = TPath::Resolve(rootPathStr, context.SS);
+        {
+            const auto checks = rootPath.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
-        TPath dstPath = parentPath.Child(name);
-        const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist()));
-        RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
-        RETURN_RESULT_UNLESS(NResourcePool::IsDescriptionValid(result, resourcePoolDescription));
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
 
-        const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, 1);
-        Y_ABORT_UNLESS(resourcePoolInfo);
-        RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
+        TPath dstPath = rootPath.Child(name);
 
-        AddPathInSchemeShard(result, dstPath, owner);
-        const TPathElement::TPtr resourcePool = CreateResourcePoolPathElement(dstPath);
-        NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxCreateResourcePool);
-        NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
+        const TString& backupCollectionsDir = JoinPath({rootPath.GetDomainPathString(), ".backups/collections"});
 
-        NIceDb::TNiceDb db(context.GetDB());
-        NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, acl);
+        if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
+            result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);
+            return result;
+        }
 
-        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
+        const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
+        const TPath& parentPath = backupCollectionsPath;
 
-        UpdatePathSizeCounts(parentPath, dstPath);
+        // FIXME
+        if (backupCollectionsPath.IsResolved()) {
+            RETURN_RESULT_UNLESS(IsParentPathValid(result, backupCollectionsPath));
+        }
+
+        Y_UNUSED(owner, parentPath, dstPath);
+        // const TString& acl = Transaction.GetModifyACL().GetDiffACL();
+        // RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist()));
+        // RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
+        // RETURN_RESULT_UNLESS(NResourcePool::IsDescriptionValid(result, resourcePoolDescription));
+
+        // const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, 1);
+        // Y_ABORT_UNLESS(resourcePoolInfo);
+        // RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
+
+        // AddPathInSchemeShard(result, dstPath, owner);
+        // const TPathElement::TPtr resourcePool = CreateResourcePoolPathElement(dstPath);
+        // NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxCreateResourcePool);
+        // NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
+
+        // NIceDb::TNiceDb db(context.GetDB());
+        // NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
+        // NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, acl);
+
+        // IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
+
+        // UpdatePathSizeCounts(parentPath, dstPath);
+
+        Y_ABORT("unimplemented");
 
         SetState(NextState());
+
         return result;
     }
 

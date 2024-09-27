@@ -18,6 +18,7 @@
 #include <src/client/table/impl/data_query.h>
 #include <src/client/table/impl/request_migrator.h>
 #include <src/client/table/impl/table_client.h>
+#include <src/client/table/impl/transaction.h>
 #include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -1998,16 +1999,35 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
-    : Session_(session)
-    , TxId_(txId)
+    : TransactionImpl_(new TTransaction::TImpl(session, txId))
 {}
 
+const std::string& TTransaction::GetId() const
+{
+    return TransactionImpl_->GetId();
+}
+
+bool TTransaction::IsActive() const
+{
+    return TransactionImpl_->IsActive();
+}
+
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
-    return Session_.Client_->CommitTransaction(Session_, *this, settings);
+    return TransactionImpl_->Commit(settings);
 }
 
 TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
-    return Session_.Client_->RollbackTransaction(Session_, *this, settings);
+    return TransactionImpl_->Rollback(settings);
+}
+
+TSession TTransaction::GetSession() const
+{
+    return TransactionImpl_->GetSession();
+}
+
+void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb)
+{
+    TransactionImpl_->AddPrecommitCallback(std::move(cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

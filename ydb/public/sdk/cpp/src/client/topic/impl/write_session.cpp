@@ -45,8 +45,12 @@ void TWriteSession::WriteEncoded(TContinuationToken&& token, std::string_view da
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
-void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message)
+void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message,
+                                 NTable::TTransaction* tx)
 {
+    if (tx) {
+        message.Tx(*tx);
+    }
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
@@ -60,7 +64,11 @@ void TWriteSession::Write(TContinuationToken&& token, std::string_view data, std
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
-void TWriteSession::Write(TContinuationToken&& token, TWriteMessage&& message) {
+void TWriteSession::Write(TContinuationToken&& token, TWriteMessage&& message,
+                          NTable::TTransaction* tx) {
+    if (tx) {
+        message.Tx(*tx);
+    }
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
@@ -112,15 +120,15 @@ bool TSimpleBlockingWriteSession::Write(
     auto message = TWriteMessage(std::move(data))
         .SeqNo(seqNo)
         .CreateTimestamp(createTimestamp);
-    return Write(std::move(message), blockTimeout);
+    return Write(std::move(message), nullptr, blockTimeout);
 }
 
 bool TSimpleBlockingWriteSession::Write(
-        TWriteMessage&& message, const TDuration& blockTimeout
+        TWriteMessage&& message, NTable::TTransaction* tx, const TDuration& blockTimeout
 ) {
     auto continuationToken = WaitForToken(blockTimeout);
     if (continuationToken.has_value()) {
-        Writer->Write(std::move(*continuationToken), std::move(message));
+        Writer->Write(std::move(*continuationToken), std::move(message), tx);
         return true;
     }
     return false;

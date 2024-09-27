@@ -49,7 +49,7 @@ std::string OptionalToString<std::string>(const std::optional<std::string>& opt)
 static void CreateTables(TQueryClient client) {
     //! Creates sample tables with the ExecuteQuery method
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             CREATE TABLE series (
                 series_id Uint64,
                 title Utf8,
@@ -57,12 +57,12 @@ static void CreateTables(TQueryClient client) {
                 release_date Uint64,
                 PRIMARY KEY (series_id)
             );
-        )");
+        )";
         return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             CREATE TABLE seasons (
                 series_id Uint64,
                 season_id Uint64,
@@ -71,12 +71,12 @@ static void CreateTables(TQueryClient client) {
                 last_aired Uint64,
                 PRIMARY KEY (series_id, season_id)
             );
-        )");
+        )";
         return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             CREATE TABLE episodes (
                 series_id Uint64,
                 season_id Uint64,
@@ -85,7 +85,7 @@ static void CreateTables(TQueryClient client) {
                 air_date Uint64,
                 PRIMARY KEY (series_id, season_id, episode_id)
             );
-        )");
+        )";
         return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 }
@@ -94,23 +94,23 @@ static void CreateTables(TQueryClient client) {
 
 static void DropTables(TQueryClient client) {
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             DROP TABLE series;
-        )");
+        )";
         return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             DROP TABLE seasons;
-        )");
+        )";
         return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
     
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             DROP TABLE episodes;
-        )");
+        )";
         return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
     }));
 }
@@ -119,7 +119,7 @@ static void DropTables(TQueryClient client) {
 
 void FillTableData(TQueryClient client) {
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
         DECLARE $seriesData AS List<Struct<
             series_id: Uint64,
             title: Utf8,
@@ -165,7 +165,7 @@ void FillTableData(TQueryClient client) {
             title,
             CAST(air_date AS Uint16) AS air_date
         FROM AS_TABLE($episodesData);
-        )");
+        )";
 
         auto params = GetTablesDataParams();
 
@@ -179,11 +179,11 @@ void FillTableData(TQueryClient client) {
 void SelectSimple(TQueryClient client) {
     std::optional<TResultSet> resultSet;
     ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             SELECT series_id, title, CAST(release_date AS Date) AS release_date
             FROM series
             WHERE series_id = 1;
-        )");
+        )";
 
         auto txControl =
             // Begin a new transaction with SerializableRW mode
@@ -211,10 +211,10 @@ void SelectSimple(TQueryClient client) {
 
 void UpsertSimple(TQueryClient client) {
     ThrowOnError(client.RetryQuerySync([](TSession session) {
-        auto query = std::format(R"(
+        auto query = R"(
             UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
                 (2, 6, 1, "TBD");
-        )");
+        )";
 
         return session.ExecuteQuery(query,
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
@@ -226,7 +226,7 @@ void SelectWithParams(TQueryClient client) {
     ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
         ui64 seriesId = 2;
         ui64 seasonId = 3;
-        auto query = std::format(R"(
+        auto query = R"(
             DECLARE $seriesId AS Uint64;
             DECLARE $seasonId AS Uint64;
 
@@ -235,7 +235,7 @@ void SelectWithParams(TQueryClient client) {
             INNER JOIN series AS sr
             ON sa.series_id = sr.series_id
             WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId;
-        )");
+        )";
 
         auto params = TParamsBuilder()
             .AddParam("$seriesId")
@@ -272,13 +272,13 @@ void MultiStep(TQueryClient client) {
     ThrowOnError(client.RetryQuerySync([&resultSet](TSession session) {
         ui64 seriesId = 2;
         ui64 seasonId = 5;
-        auto query1 = std::format(R"(
+        auto query1 = R"(
             DECLARE $seriesId AS Uint64;
             DECLARE $seasonId AS Uint64;
 
             SELECT first_aired AS from_date FROM seasons
             WHERE series_id = $seriesId AND season_id = $seasonId;
-        )");
+        )";
 
         auto params1 = TParamsBuilder()
             .AddParam("$seriesId")
@@ -320,14 +320,14 @@ void MultiStep(TQueryClient client) {
         TInstant toDate = userFunc(fromDate);
 
         // Construct next query based on the results of client logic
-        auto query2 = std::format(R"(
+        auto query2 = R"(
             DECLARE $seriesId AS Uint64;
             DECLARE $fromDate AS Uint64;
             DECLARE $toDate AS Uint64;
 
             SELECT season_id, episode_id, title, air_date FROM episodes
             WHERE series_id = $seriesId AND air_date >= $fromDate AND air_date <= $toDate;
-        )");
+        )";
 
         auto params2 = TParamsBuilder()
             .AddParam("$seriesId")
@@ -384,11 +384,11 @@ void ExplicitTcl(TQueryClient client) {
         // Get newly created transaction id
         auto tx = beginResult.GetTransaction();
 
-        auto query = std::format(R"(
+        auto query = R"(
             DECLARE $airDate AS Date;
 
             UPDATE episodes SET air_date = CAST($airDate AS Uint16) WHERE title = "TBD";
-        )");
+        )";
 
         auto params = TParamsBuilder()
             .AddParam("$airDate")
@@ -414,14 +414,14 @@ void StreamQuerySelect(TQueryClient client) {
     std::cout << "> StreamQuery:" << std::endl;
 
     ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
-        auto query = std::format(R"(
+        auto query = R"(
             DECLARE $series AS List<UInt64>;
 
             SELECT series_id, season_id, title, CAST(first_aired AS Date) AS first_aired
             FROM seasons
             WHERE series_id IN $series
             ORDER BY season_id;
-        )");
+        )";
 
         auto paramsBuilder = TParamsBuilder();
         auto& listParams = paramsBuilder

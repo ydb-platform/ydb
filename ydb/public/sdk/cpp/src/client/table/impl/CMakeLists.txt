@@ -21,6 +21,7 @@ target_sources(client-ydb_table-impl PRIVATE
   readers.cpp
   request_migrator.cpp
   table_client.cpp
+  transaction.cpp
 )
 
 target_compile_options(client-ydb_table-impl PRIVATE

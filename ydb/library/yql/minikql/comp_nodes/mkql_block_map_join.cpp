@@ -265,7 +265,7 @@ private:
                             blockState.MakeRow(lookup);
                         }
                     } else {
-                        blockState.MakeRow(Dict_.Lookup(key));
+                        blockState.MakeRow(key ? Dict_.Lookup(key) : NUdf::TUnboxedValue {} );
                     }
                 }
                 if (blockState.IsNotFull() && !blockState.IsFinished()) {

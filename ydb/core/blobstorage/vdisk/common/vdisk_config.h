@@ -233,6 +233,7 @@ namespace NKikimr {
         TDuration BalancingRequestBlobsOnMainTimeout;
         TDuration BalancingDeleteBatchTimeout;
         TDuration BalancingEpochTimeout;
+        TDuration BalancingTimeToSleepIfNothingToDo;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

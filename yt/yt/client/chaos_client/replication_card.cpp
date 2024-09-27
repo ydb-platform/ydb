@@ -93,14 +93,6 @@ EReplicationCardOptionsBits ToBitMask(const TReplicationCardFetchOptions& option
     return mask;
 }
 
-bool IsReplicaProgressBeyondHistory(
-    const TReplicationProgress& replicationProgress,
-    const TReplicaHistoryItem& historyItem)
-{
-    auto minTimestamp = GetReplicationProgressMinTimestamp(replicationProgress);
-    return minTimestamp >= historyItem.Timestamp;
-}
-
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////

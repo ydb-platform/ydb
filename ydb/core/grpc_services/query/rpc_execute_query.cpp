@@ -392,7 +392,7 @@ private:
         bool hasTrailingMessage = false;
 
         auto& kqpResponse = record.GetResponse();
-        if (kqpResponse.GetYdbResults().size() > 1) {
+        if (kqpResponse.GetYdbResults().size() > 1 && QueryAction != NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Unexpected trailing message with multiple result sets.");
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);

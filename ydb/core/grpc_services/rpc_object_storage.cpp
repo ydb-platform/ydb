@@ -822,20 +822,17 @@ private:
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
             const NScheme::TTypeInfo& typeInfo = colMeta.PType;
             switch (typeInfo.GetTypeId()) {
-            case NScheme::NTypeIds::Pg: {
+            case NScheme::NTypeIds::Pg:
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
-            }
-            case NScheme::NTypeIds::Decimal: {
+            case NScheme::NTypeIds::Decimal:
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
                         typeInfo.GetDecimalType().GetPrecision(), 
                         typeInfo.GetDecimalType().GetScale()))
                     .Build();
-            }
-            default :{
+            default:
                 return NYdb::TTypeBuilder()
                     .Primitive((NYdb::EPrimitiveType)typeInfo.GetTypeId())
                     .Build();
-            }
             }
         };
 
@@ -872,7 +869,6 @@ private:
                     const NYdb::TDecimalValue decimal(valueProto, 
                         {static_cast<ui8>(colMeta.PType.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.PType.GetDecimalType().GetScale())});
                     vb.Decimal(decimal);
-                    return;
                 } else {
                     const NScheme::TTypeInfo& typeInfo = colMeta.PType;
 

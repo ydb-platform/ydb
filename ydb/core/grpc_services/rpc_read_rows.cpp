@@ -161,7 +161,7 @@ public:
             TString inTypeName = NScheme::TypeName(typeInfo, typeInfo.GetPgTypeMod(colInfo.PTypeMod));
 
             if (typeInfo != colInfo.PType) {
-                errorMessage = Sprintf("Unexpected type %s for column %s: expected %s",
+                errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
                     inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                 return false;
             }

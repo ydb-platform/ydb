@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
             UNIT_ASSERT(!upsertResult.IsSuccess());
             TString issues = upsertResult.GetIssues().ToString();
-            UNIT_ASSERT_C(issues.Contains("Unexpected type Uint64 for column Key35: expected Decimal(35,10)"), issues);
+            UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Uint64 for column Key35, but expected Decimal(35,10)"), issues);
         }
         
         // Bad case: upsert Decimal to Uin64 column
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
             UNIT_ASSERT(!upsertResult.IsSuccess());
             TString issues = upsertResult.GetIssues().ToString();
-            UNIT_ASSERT_C(issues.Contains("Unexpected type Decimal(35,10) for column ValueInt: expected Uint64"), issues);
+            UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Decimal(35,10) for column ValueInt, but expected Uint64"), issues);
         }
 
         // Bad case: upsert Decimal(35,10) to Decimal(22,9) column
@@ -641,7 +641,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
             UNIT_ASSERT(!upsertResult.IsSuccess());
             TString issues = upsertResult.GetIssues().ToString();
-            UNIT_ASSERT_C(issues.Contains("Unexpected type Decimal(35,10) for column Key22: expected Decimal(22,9)"), issues);
+            UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Decimal(35,10) for column Key22, but expected Decimal(22,9)"), issues);
         }
 
         // Good case
@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT(!selectResult.IsSuccess());
             TString issues = selectResult.GetIssues().ToString();
-            UNIT_ASSERT_C(issues.Contains("Unexpected type Uint64 for column Key22: expected Decimal(22,9)"), issues);
+            UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Uint64 for column Key22, but expected Decimal(22,9)"), issues);
         }
 
         // Bad case: lookup by Decimal(35,10) value in Decimal(22,9) key
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT(!selectResult.IsSuccess());
             TString issues = selectResult.GetIssues().ToString();
-            UNIT_ASSERT_C(issues.Contains("Unexpected type Decimal(35,10) for column Key22: expected Decimal(22,9)"), issues);
+            UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Decimal(35,10) for column Key22, but expected Decimal(22,9)"), issues);
         }
 
         // Good case

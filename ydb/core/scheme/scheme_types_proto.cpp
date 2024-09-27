@@ -125,7 +125,7 @@ bool TypeInfoFromProto(const ::Ydb::Type& typeProto, NScheme::TTypeInfo& typeInf
         typeInfo = NScheme::TTypeInfo(pgDesc);
         return true;
     } else {
-        error = "Unexpected type";
+        error = Sprintf("Unexpected type, got proto: %s", typeProto.ShortDebugString().c_str());
         return false;
     }
 }

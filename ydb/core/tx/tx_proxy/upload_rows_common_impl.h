@@ -502,7 +502,7 @@ private:
             TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
             if (typeInRequest != ci.PType) {
-                errorMessage = Sprintf("Unexpected type %s for column %s: expected %s",
+                errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
                     inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                 return false;
             }
@@ -513,9 +513,8 @@ private:
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
                 if (!ok) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
+                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                     return false;
                 }
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
@@ -524,9 +523,8 @@ private:
             } else if (typeInProto.has_pg_type()) {
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
+                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                     return false;
                 }
                 if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {

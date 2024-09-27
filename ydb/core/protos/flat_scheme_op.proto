@@ -1665,6 +1665,11 @@ enum EOperationType {
 
     ESchemeOpRestoreIncrementalBackup = 103;
     ESchemeOpRestoreIncrementalBackupAtTable = 104;
+
+    // Abstract Object
+    ESchemeOpCreateAbstractObject = 105;
+    ESchemeOpDropAbstractObject = 106;
+    ESchemeOpAlterAbstractObject = 107;
 }
 
 message TApplyIf {
@@ -1848,6 +1853,8 @@ message TModifyScheme {
     optional TResourcePoolDescription CreateResourcePool = 72;
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+
+    optional TAbstractObjectDescription ModifyAbstractObject = 74;
 }
 
 message TCopySequence {
@@ -1913,6 +1920,7 @@ enum EPathType {
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
+    EPathTypeAbstractObject = 22;
 }
 
 enum EPathSubType {
@@ -1969,6 +1977,7 @@ message TPathVersion {
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
+    optional uint64 AbstractObjectVersion = 31;
 }
 
 // Describes single path
@@ -2197,4 +2206,17 @@ message TResourcePoolDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional TResourcePoolProperties Properties = 4;
+}
+
+// NYql::TObjectSettingsImpl
+message TAbstractObjectDescription {
+    optional string Type = 1;
+    optional string Object = 2;
+
+    optional bool ExistingOk = 3;
+    optional bool MissingOk = 4;
+    optional bool ReplaceIfExists = 5;
+
+    map<string, Ydb.Value> Features = 6;
+    repeated string ResetFeatures = 7;
 }

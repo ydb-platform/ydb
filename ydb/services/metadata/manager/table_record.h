@@ -13,6 +13,7 @@ private:
 public:
     std::vector<Ydb::Column> SelectOwnedColumns(const std::vector<Ydb::Column>& columns) const;
     Ydb::ResultSet BuildRecordSet() const;
+    Ydb::Value BuildRow() const;
     ui32 GetColumnsCount() const {
         return Values.size();
     }

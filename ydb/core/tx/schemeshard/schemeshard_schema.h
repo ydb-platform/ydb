@@ -1823,6 +1823,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
 
+    struct AbstractObjects : Table<111> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct TypeId : Column<4, NScheme::NTypeIds::String> {};
+        struct Record : Column<5, NScheme::NTypeIds::String> {}; // Ydb::Value
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, TypeId, Record>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1932,7 +1943,8 @@ struct Schema : NIceDb::Schema {
         BuildColumnOperationSettings,
         View,
         BackgroundSessions,
-        ResourcePool
+        ResourcePool,
+        AbstractObjects
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

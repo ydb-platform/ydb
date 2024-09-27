@@ -235,6 +235,10 @@ bool TPathElement::IsResourcePool() const {
     return PathType == EPathType::EPathTypeResourcePool;
 }
 
+bool TPathElement::IsAbstractObject() const {
+    return PathType == EPathType::EPathTypeAbstractObject;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

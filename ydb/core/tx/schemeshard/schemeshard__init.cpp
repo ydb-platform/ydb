@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -4852,6 +4853,39 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         blobDepot->BlobDepotTabletId = jt->second.TabletID;
                     }
                 }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Abstract objects
+        {
+            auto rowset = db.Table<Schema::AbstractObjects>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::AbstractObjects::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::AbstractObjects::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                const ui64 alterVersion = rowset.GetValue<Schema::AbstractObjects::AlterVersion>();
+                const TString typeId = rowset.GetValue<Schema::AbstractObjects::TypeId>();
+                const TString data = rowset.GetValue<Schema::AbstractObjects::Record>();
+
+                const NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
+                AFL_VERIFY(cBehaviour)("type_id", typeId);
+                const auto objectManager = cBehaviour->GetObjectManager();
+                AFL_VERIFY(objectManager)("type_id", typeId);
+
+                Ydb::Value record;
+                AFL_VERIFY(record.ParseFromString(data))("type_id", typeId)("path_id", pathId)("data", data);
+                const auto object = objectManager->DeserializeFromRecord(record);
+
+                Self->AbstractObjects.emplace(pathId, new TAbstractObjectInfo(alterVersion, object));
 
                 if (!rowset.Next()) {
                     return false;

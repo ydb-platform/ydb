@@ -44,6 +44,13 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
         if (!originalSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
             return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
+        // TODO: incapsulate in a function
+        {
+            const TString& tiering = ttl.GetData().GetUseTiering();
+            if (TPath::Resolve(tiering, context.GetSSOperationContext()->SS)) {
+                return TConclusionStatus::Fail("Unknown tiering: " + tiering);
+            }
+        }
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }
 

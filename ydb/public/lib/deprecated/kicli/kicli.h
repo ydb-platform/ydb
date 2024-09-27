@@ -587,7 +587,8 @@ public:
         ExternalTable,
         ExternalDataSource,
         View,
-        ResourcePool
+        ResourcePool,
+        AbstractObject
     };
 
     TSchemaObject(TSchemaObject&&) = default;

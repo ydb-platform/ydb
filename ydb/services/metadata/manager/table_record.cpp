@@ -68,16 +68,21 @@ TTableRecord& TTableRecord::SetColumn(const TString& columnId, const Ydb::Value&
 
 Ydb::ResultSet TTableRecord::BuildRecordSet() const {
     Ydb::ResultSet result;
-    Ydb::Value row;
     for (auto&& i : Values) {
         Ydb::Column column;
         column.set_name(i.first);
 //        column.set_type(i.second.type());
-        *result.add_columns() = column;
+    }
+    *result.add_rows() = BuildRow();
+    return result;
+}
+
+Ydb::Value TTableRecord::BuildRow() const {
+    Ydb::Value row;
+    for (auto&& i : Values) {
         *row.add_items() = i.second;
     }
-    *result.add_rows() = row;
-    return result;
+    return row;
 }
 
 bool TTableRecord::SameColumns(const TTableRecord& item) const {

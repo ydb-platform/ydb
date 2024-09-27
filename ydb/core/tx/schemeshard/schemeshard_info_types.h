@@ -21,6 +21,7 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/services/metadata/manager/object.h>
 
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/storage_pools.h>
@@ -3415,6 +3416,25 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TResourcePoolProperties Properties;
+};
+
+struct TAbstractObjectInfo : TSimpleRefCount<TAbstractObjectInfo> {
+    using TPtr = TIntrusivePtr<TAbstractObjectInfo>;
+
+    ui64 AlterVersion = 0;
+    NMetadata::NModifications::TBaseObject::TPtr Object;
+
+    TAbstractObjectInfo(const ui64 alterVersion, NMetadata::NModifications::TBaseObject::TPtr object)
+        : AlterVersion(alterVersion)
+        , Object(std::move(object)) {
+    }
+
+    template <typename T>
+    const std::shared_ptr<T>& GetAsVerified() const {
+        auto converted = std::dynamic_pointer_cast<T>(Object);
+        AFL_VERIFY(converted);
+        return converted;
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

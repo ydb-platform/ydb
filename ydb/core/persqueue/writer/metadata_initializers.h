@@ -37,6 +37,10 @@ public:
         return nullptr;
     }
 
+    std::shared_ptr<NMetadata::NModifications::IObjectManager> GetObjectManager() const override {
+        return nullptr;
+    }
+
     static TClassBehaviourPtr GetInstant() {
         static TClassBehaviourPtr res{new TSrcIdMetaInitManager()};
         return res;

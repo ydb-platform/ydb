@@ -1193,6 +1193,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
         return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
 
+    // AbstractObject
+    case TTxState::ETxType::TxCreateAbstractObject:
+        return CreateNewAbstractObject(NextPartId(), txState);
+    case TTxState::ETxType::TxDropAbstractObject:
+        return CreateDropAbstractObject(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterAbstractObject:
+        return CreateAlterAbstractObject(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1440,6 +1448,14 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateDropResourcePool(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return {CreateAlterResourcePool(NextPartId(), tx)};
+
+    // AbstractObject
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateAbstractObject:
+        return {CreateNewAbstractObject(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropAbstractObject:
+        return {CreateDropAbstractObject(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterAbstractObject:
+        return {CreateAlterAbstractObject(NextPartId(), tx)};
 
     // IncrementalBackup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:

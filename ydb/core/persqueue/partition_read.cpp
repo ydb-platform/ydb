@@ -1001,7 +1001,9 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
             ctx, EndOffset, Partition, &UsersInfoStorage->GetOrCreate(info.User, ctx),
             info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
         ));
-        const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
+        const auto* ev = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+        Y_ABORT_UNLESS(ev);
+        const auto& resp = ev->Response;
         if (info.IsSubscription) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(1);
         }

@@ -2,7 +2,7 @@
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/context.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
-#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 

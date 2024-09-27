@@ -32,6 +32,10 @@ struct TEvPrivate {
         EvAlterDstResult,
         EvRemoveWorker,
         EvDescribeTargetsResult,
+        EvRequestCreateStream,
+        EvAllowCreateStream,
+        EvRequestDropStream,
+        EvAllowDropStream,
 
         EvEnd,
     };
@@ -219,6 +223,18 @@ struct TEvPrivate {
 
         explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
         TString ToString() const override;
+    };
+
+    struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {
+    };
+
+    struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {
+    };
+
+    struct TEvRequestDropStream: public TEventLocal<TEvRequestDropStream, EvRequestDropStream> {
+    };
+
+    struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
     };
 
 }; // TEvPrivate

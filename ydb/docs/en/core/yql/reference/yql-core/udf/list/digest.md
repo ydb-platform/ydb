@@ -12,7 +12,7 @@ A set of commonly used hash functions.
 * `Digest::MurMurHash32(String{Flags:AutoMap}) -> Uint32`
 * `Digest::MurMurHash2A(String{Flags:AutoMap}) -> Uint64`
 * `Digest::MurMurHash2A32(String{Flags:AutoMap}) -> Uint32`
-* `Digest::CityHash(String{Flags:AutoMap}) -> Uint64`
+* `Digest::CityHash(String{Flags:AutoMap}, [Uint64?]) -> Uint64`: The second optional argument is seed
 * `Digest::CityHash128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
 * `Digest::NumericHash(Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::Md5Hex(String{Flags:AutoMap}) -> String`

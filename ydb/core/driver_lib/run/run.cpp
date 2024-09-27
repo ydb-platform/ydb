@@ -785,7 +785,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasKesus) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasKesus.IsRlAllowed()));
+                AppData->InFlightLimiterRegistry, grpcRequestProxies[0], hasKesus.IsRlAllowed()));
         }
 
         if (hasPQ) {

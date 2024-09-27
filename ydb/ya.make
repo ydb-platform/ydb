@@ -6,7 +6,12 @@ RECURSE(
     mvp
     public
     services
-    tests
     tools
     yql_docs
 )
+
+IF(NOT EXPORT_CMAKE)
+  RECURSE(
+    tests
+  )
+ENDIF()

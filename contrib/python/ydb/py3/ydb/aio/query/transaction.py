@@ -15,8 +15,8 @@ from ...query.transaction import (
 logger = logging.getLogger(__name__)
 
 
-class QueryTxContextAsync(BaseQueryTxContext):
-    async def __aenter__(self) -> "QueryTxContextAsync":
+class QueryTxContext(BaseQueryTxContext):
+    async def __aenter__(self) -> "QueryTxContext":
         """
         Enters a context manager and returns a transaction
 
@@ -47,7 +47,7 @@ class QueryTxContextAsync(BaseQueryTxContext):
                 pass
             self._prev_stream = None
 
-    async def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContextAsync":
+    async def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContext":
         """WARNING: This API is experimental and could be changed.
 
         Explicitly begins a transaction
@@ -114,6 +114,7 @@ class QueryTxContextAsync(BaseQueryTxContext):
         """WARNING: This API is experimental and could be changed.
 
         Sends a query to Query Service
+
         :param query: (YQL or SQL text) to be executed.
         :param parameters: dict with parameters and YDB types;
         :param commit_tx: A special flag that allows transaction commit.
@@ -146,6 +147,7 @@ class QueryTxContextAsync(BaseQueryTxContext):
             lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
+                session_state=self._session_state,
                 tx=self,
                 commit_tx=commit_tx,
                 settings=self.session._settings,

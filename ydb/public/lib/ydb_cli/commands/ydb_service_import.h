@@ -38,6 +38,7 @@ private:
     TString Description;
     ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
+    bool NoACL = true;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

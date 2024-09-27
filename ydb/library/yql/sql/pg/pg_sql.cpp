@@ -5274,8 +5274,8 @@ private:
     void ScanRows(const TString& query) {
         QuerySize = query.Size();
         RowStarts.push_back(0);
-        TPosition position(1, 1);
-        TTextWalker walker(position);
+        TPosition position(0, 1);
+        TTextWalker walker(position, true);
         auto prevRow = position.Row;
         for (ui32 i = 0; i < query.Size(); ++i) {
             walker.Advance(query[i]);

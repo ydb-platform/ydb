@@ -1,5 +1,7 @@
 # Deploying a {{ ydb-short-name }} cluster on virtual or bare-metal servers
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on multiple bare-metal or virtual servers.
 
 ## Getting started {#before-start}

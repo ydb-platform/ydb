@@ -548,8 +548,7 @@ private:
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            // TODO(babenko): switch to std::string
-            traceContext->AddTag("user", TString(request.AuthenticatedUser));
+            traceContext->AddTag("user", request.AuthenticatedUser);
             traceContext->AddTag("request_id", request.Id);
         });
 

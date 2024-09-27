@@ -6,9 +6,9 @@
 
 ### Список функций
 
-* ```Math::Pi() -> Double```
-* ```Math::E() -> Double```
-* ```Math::Eps() -> Double```
+* `Math::Pi() -> Double`
+* `Math::E() -> Double`
+* `Math::Eps() -> Double`
 
 ### Примеры
 
@@ -22,9 +22,9 @@ SELECT Math::Eps(); -- 2.220446049250313e-16
 
 ### Список функций
 
-* ```Math::IsInf(Double{Flags:AutoMap}) -> Bool```
-* ```Math::IsNaN(Double{Flags:AutoMap}) -> Bool```
-* ```Math::IsFinite(Double{Flags:AutoMap}) -> Bool```
+* `Math::IsInf(Double{Flags:AutoMap}) -> Bool`
+* `Math::IsNaN(Double{Flags:AutoMap}) -> Bool`
+* `Math::IsFinite(Double{Flags:AutoMap}) -> Bool`
 
 ### Примеры
 
@@ -37,35 +37,35 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 
 ### Список функций
 
-* ```Math::Abs(Double{Flags:AutoMap}) -> Double```
-* ```Math::Acos(Double{Flags:AutoMap}) -> Double```
-* ```Math::Asin(Double{Flags:AutoMap}) -> Double```
-* ```Math::Asinh(Double{Flags:AutoMap}) -> Double```
-* ```Math::Atan(Double{Flags:AutoMap}) -> Double```
-* ```Math::Cbrt(Double{Flags:AutoMap}) -> Double```
-* ```Math::Ceil(Double{Flags:AutoMap}) -> Double```
-* ```Math::Cos(Double{Flags:AutoMap}) -> Double```
-* ```Math::Cosh(Double{Flags:AutoMap}) -> Double```
-* ```Math::Erf(Double{Flags:AutoMap}) -> Double```
-* ```Math::ErfInv(Double{Flags:AutoMap}) -> Double```
-* ```Math::ErfcInv(Double{Flags:AutoMap}) -> Double```
-* ```Math::Exp(Double{Flags:AutoMap}) -> Double```
-* ```Math::Exp2(Double{Flags:AutoMap}) -> Double```
-* ```Math::Fabs(Double{Flags:AutoMap}) -> Double```
-* ```Math::Floor(Double{Flags:AutoMap}) -> Double```
-* ```Math::Lgamma(Double{Flags:AutoMap}) -> Double```
-* ```Math::Rint(Double{Flags:AutoMap}) -> Double```
-* ```Math::Sigmoid(Double{Flags:AutoMap}) -> Double```
-* ```Math::Sin(Double{Flags:AutoMap}) -> Double```
-* ```Math::Sinh(Double{Flags:AutoMap}) -> Double```
-* ```Math::Sqrt(Double{Flags:AutoMap}) -> Double```
-* ```Math::Tan(Double{Flags:AutoMap}) -> Double```
-* ```Math::Tanh(Double{Flags:AutoMap}) -> Double```
-* ```Math::Tgamma(Double{Flags:AutoMap}) -> Double```
-* ```Math::Trunc(Double{Flags:AutoMap}) -> Double```
-* ```Math::Log(Double{Flags:AutoMap}) -> Double```
-* ```Math::Log2(Double{Flags:AutoMap}) -> Double```
-* ```Math::Log10(Double{Flags:AutoMap}) -> Double```
+* `Math::Abs(Double{Flags:AutoMap}) -> Double`
+* `Math::Acos(Double{Flags:AutoMap}) -> Double`
+* `Math::Asin(Double{Flags:AutoMap}) -> Double`
+* `Math::Asinh(Double{Flags:AutoMap}) -> Double`
+* `Math::Atan(Double{Flags:AutoMap}) -> Double`
+* `Math::Cbrt(Double{Flags:AutoMap}) -> Double`
+* `Math::Ceil(Double{Flags:AutoMap}) -> Double`
+* `Math::Cos(Double{Flags:AutoMap}) -> Double`
+* `Math::Cosh(Double{Flags:AutoMap}) -> Double`
+* `Math::Erf(Double{Flags:AutoMap}) -> Double`
+* `Math::ErfInv(Double{Flags:AutoMap}) -> Double`
+* `Math::ErfcInv(Double{Flags:AutoMap}) -> Double`
+* `Math::Exp(Double{Flags:AutoMap}) -> Double`
+* `Math::Exp2(Double{Flags:AutoMap}) -> Double`
+* `Math::Fabs(Double{Flags:AutoMap}) -> Double`
+* `Math::Floor(Double{Flags:AutoMap}) -> Double`
+* `Math::Lgamma(Double{Flags:AutoMap}) -> Double`
+* `Math::Rint(Double{Flags:AutoMap}) -> Double`
+* `Math::Sigmoid(Double{Flags:AutoMap}) -> Double`
+* `Math::Sin(Double{Flags:AutoMap}) -> Double`
+* `Math::Sinh(Double{Flags:AutoMap}) -> Double`
+* `Math::Sqrt(Double{Flags:AutoMap}) -> Double`
+* `Math::Tan(Double{Flags:AutoMap}) -> Double`
+* `Math::Tanh(Double{Flags:AutoMap}) -> Double`
+* `Math::Tgamma(Double{Flags:AutoMap}) -> Double`
+* `Math::Trunc(Double{Flags:AutoMap}) -> Double`
+* `Math::Log(Double{Flags:AutoMap}) -> Double`
+* `Math::Log2(Double{Flags:AutoMap}) -> Double`
+* `Math::Log10(Double{Flags:AutoMap}) -> Double`
 
 ### Примеры
 
@@ -78,11 +78,11 @@ SELECT Math::Trunc(1.2345); -- 1
 
 ### Список функций
 
-* ```Math::Atan2(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double```
-* ```Math::Fmod(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double```
-* ```Math::Hypot(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double```
-* ```Math::Pow(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double```
-* ```Math::Remainder(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double```
+* `Math::Atan2(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
+* `Math::Fmod(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
+* `Math::Hypot(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
+* `Math::Pow(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
+* `Math::Remainder(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
 
 ### Примеры
 
@@ -95,8 +95,8 @@ SELECT Math::Remainder(2.1, 2); -- 0.1
 
 ### Список функций
 
-* ```Math::Ldexp(Double{Flags:AutoMap}, Int32{Flags:AutoMap}) -> Double```
-* ```Math::Round(Double{Flags:AutoMap}, [Int32?]) -> Double``` - во втором аргументе указывается степень 10, до которой округляем (отрицательная для знаков после запятой и положительная для округления до десятков—тысяч—миллионов); по умолчанию 0
+* `Math::Ldexp(Double{Flags:AutoMap}, Int32{Flags:AutoMap}) -> Double`
+* `Math::Round(Double{Flags:AutoMap}, [Int32?]) -> Double` - во втором аргументе указывается степень 10, до которой округляем (отрицательная для знаков после запятой и положительная для округления до десятков—тысяч—миллионов); по умолчанию 0
 
 ### Примеры
 
@@ -109,7 +109,7 @@ SELECT Math::Round(1.2345, -2); -- 1.23
 
 ### Список функций
 
-* ```Math::FuzzyEquals(Double{Flags:AutoMap}, Double{Flags:AutoMap}, [Double?]) -> Bool``` - сравнивает два Double на нахождение внутри окрестности, задаваемой третьим аргументом; по умолчанию 1.0e-13. Окрестность указывается в относительных единицах от минимального по модулю аргумента.
+* `Math::FuzzyEquals(Double{Flags:AutoMap}, Double{Flags:AutoMap}, [Double?]) -> Bool` - сравнивает два Double на нахождение внутри окрестности, задаваемой третьим аргументом; по умолчанию 1.0e-13. Окрестность указывается в относительных единицах от минимального по модулю аргумента.
 
 {% note alert %}
 
@@ -127,8 +127,8 @@ SELECT Math::FuzzyEquals(1.01, 1.0, 0.05); -- true
 
 ### Список функций
 
-* ```Math::Mod(Int64{Flags:AutoMap}, Int64) -> Int64?```
-* ```Math::Rem(Int64{Flags:AutoMap}, Int64) -> Int64?```
+* `Math::Mod(Int64{Flags:AutoMap}, Int64) -> Int64?`
+* `Math::Rem(Int64{Flags:AutoMap}, Int64) -> Int64?`
 
 Ведут себя аналогично встроенному оператору % в случае неотрицательных аргументов. Различия заметны при отрицательных аргументах:
 
@@ -148,11 +148,11 @@ SELECT Math::Rem(-1, 7);        -- -1
 
 ### Список функций
 
-* ```Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards negative infinity
-* ```Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards nearest representable value
-* ```Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards zero
-* ```Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards positive infinity
-* ```Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>```
+* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards negative infinity
+* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards nearest representable value
+* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards zero
+* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards positive infinity
+* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>`
 
 Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответсвии с режимом, заданным вторым аргументом.
 

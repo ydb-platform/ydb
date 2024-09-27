@@ -51,7 +51,7 @@ namespace NBalancing {
             } else if (ev->Sender == DeleterId) {
                 IsDeleteCompleted = true;
             } else {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB05, "Unexpected id", (Id, ev->Sender));
+                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB05, "Unexpected actor id", (Id, ev->Sender));
             }
         }
 
@@ -76,30 +76,37 @@ namespace NBalancing {
 
         TBatchedQueue<TPartInfo> SendOnMainParts;
         TBatchedQueue<TLogoBlobID> TryDeleteParts;
+        std::unordered_map<TLogoBlobID, TVector<TPartInfo>> TryDeletePartsFullData; // if part on main by ingress, but actualy it is not, we could not delete it, so we need to send it on main
 
         TBatchManager BatchManager;
+
+        TInstant StartTime;
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         //  Main logic
         ///////////////////////////////////////////////////////////////////////////////////////////
 
         void ContinueBalancing() {
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
+
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
-                Send(Ctx->SkeletonId, new TEvStartBalancing());
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
                 PassAway();
                 return;
             }
 
             // ask for repl token to continue balancing
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
             Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
         }
 
         void ScheduleJobQuant() {
+            Ctx->MonGroup.ReplTokenAquired()++;
+
             // once repl token received, start balancing - waking up sender and deleter
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
                 (SendPartsLeft, SendOnMainParts.Size()), (DeletePartsLeft, TryDeleteParts.Size()),
                 (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
 
@@ -115,68 +122,114 @@ namespace NBalancing {
                 // not all vdisks are connected
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Not all vdisks are connected, balancing should work only for full groups"),
                     (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisksInGroup, GInfo->GetTotalVDisksNum()));
-                Send(Ctx->SkeletonId, new TEvStartBalancing());
                 PassAway();
                 return;
             }
 
+            const auto& top = GInfo->GetTopology();
+            TPartsCollectorMerger merger(top.GType);
             THPTimer timer;
 
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
-                if (cnt % 100 == 99 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
+                if (cnt % 128 == 127 && TDuration::Seconds(timer.Passed()) > Ctx->Cfg.JobGranularity) {
                     // actor should not block the thread for a long time, so we should yield
                     STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
                 }
 
-                const auto& top = GInfo->GetTopology();
                 const auto& key = It.GetCurKey().LogoBlobID();
 
-                TPartsCollectorMerger merger(top.GType);
+                if (Ctx->Cfg.BalanceOnlyHugeBlobs && !Ctx->HugeBlobCtx->IsHugeBlob(GInfo->Type, key, Ctx->MinREALHugeBlobInBytes)) {
+                    // skip non huge blobs
+                    continue;
+                }
+
+                merger.Clear();
                 It.PutToMerger(&merger);
 
                 auto [moveMask, delMask] = merger.Ingress.HandoffParts(&top, Ctx->VCtx->ShortSelfVDisk, key);
 
-                if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty()) {
-                    // collect parts to send on main
-                    for (const auto& [parts, data]: merger.Parts) {
-                        if (!(partsToSend & parts).Empty()) {
-                            SendOnMainParts.Data.emplace_back(TPartInfo{
-                                .Key=It.GetCurKey().LogoBlobID(),
-                                .PartsMask=parts,
-                                .PartData=data
-                            });
+                // collect parts to send on main
+                if (Ctx->Cfg.EnableSend && SendOnMainParts.Size() < Ctx->Cfg.MaxToSendPerEpoch) {
+                    if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty()) {
+                        for (const auto& [parts, data]: merger.Parts) {
+                            if (!(partsToSend & parts).Empty()) {
+                                SendOnMainParts.Data.emplace_back(TPartInfo{
+                                    .Key=It.GetCurKey().LogoBlobID(),
+                                    .PartsMask=parts,
+                                    .PartData=data
+                                });
+                            }
                         }
                     }
                 }
 
-                if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty()) {
-                    // collect parts to delete
-                    for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
-                        TryDeleteParts.Data.emplace_back(TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx + 1));
-                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.Data.back().ToString()));
+                // collect parts to delete
+                if (Ctx->Cfg.EnableDelete && TryDeleteParts.Size() < Ctx->Cfg.MaxToDeletePerEpoch) {
+                    if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty()) {
+                        auto key = It.GetCurKey().LogoBlobID();
+                        for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
+                            TryDeleteParts.Data.emplace_back(TLogoBlobID(key, partIdx + 1));
+                            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.Data.back().ToString()));
+                        }
+
+                        for (const auto& [parts, data]: merger.Parts) {
+                            if (!(partsToDelete & parts).Empty()) {
+                                TryDeletePartsFullData[key].emplace_back(TPartInfo{
+                                    .Key=key, .PartsMask=parts, .PartData=data
+                                });
+                            }
+                        }
                     }
                 }
 
-                merger.Clear();
+                if (SendOnMainParts.Size() >= Ctx->Cfg.MaxToSendPerEpoch && TryDeleteParts.Size() >= Ctx->Cfg.MaxToDeletePerEpoch) {
+                    // reached the limit of parts to send and delete
+                    break;
+                }
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
                 (SendOnMainParts, SendOnMainParts.Data.size()), (TryDeleteParts, TryDeleteParts.Data.size()));
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
 
             // start balancing
             ContinueBalancing();
         }
 
         void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "TEvCompleted"), (Type, ev->Type));
             BatchManager.Handle(ev);
+
+            if (StartTime + Ctx->Cfg.EpochTimeout < TlsActivationContext->Now()) {
+                Ctx->MonGroup.EpochTimeouts()++;
+                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
+                PassAway();
+                return;
+            }
+
             if (BatchManager.IsBatchCompleted()) {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
 
                 ContinueBalancing();
+            }
+        }
+
+        void Handle(TEvBalancingSendPartsOnMain::TPtr ev) {
+            Ctx->MonGroup.OnMainByIngressButNotRealy() += ev->Get()->Ids.size();
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB05, VDISKP(Ctx->VCtx, "Received from deleter TEvBalancingSendPartsOnMain"), (Parts, ev->Get()->Ids.size()));
+            for (const auto& id: ev->Get()->Ids) {
+                if (auto it = TryDeletePartsFullData.find(TLogoBlobID(id, 0)); it != TryDeletePartsFullData.end()) {
+                    for (const auto& part: it->second) {
+                        if (part.PartsMask.Get(id.PartId() - 1)) {
+                            SendOnMainParts.Data.push_back(part);
+                            break;
+                        }
+                    }
+                } else {
+                    Y_DEBUG_ABORT_S("Part not found in TryDeletePartsFullData");
+                }
             }
         }
 
@@ -199,8 +252,8 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
             if (ev.Get()->Type == TEvReplToken::EventType) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"));
-                ScheduleJobQuant();
+                STLOG(PRI_ERROR, BS_VDISK_BALANCING, BSVB06, VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
+                ContinueBalancing();
             }
         }
 
@@ -233,6 +286,7 @@ namespace NBalancing {
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
+            Send(Ctx->SkeletonId, new TEvStartBalancing());
             TActorBootstrapped::PassAway();
         }
 
@@ -241,6 +295,7 @@ namespace NBalancing {
             cFunc(NActors::TEvents::TEvWakeup::EventType, CollectKeys)
             cFunc(TEvReplToken::EventType, ScheduleJobQuant)
             hFunc(NActors::TEvents::TEvCompleted, Handle)
+            hFunc(TEvBalancingSendPartsOnMain, Handle)
 
             // System events
             hFunc(NActors::TEvents::TEvUndelivered, Handle)
@@ -257,8 +312,9 @@ namespace NBalancing {
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
             , It(Ctx->Snap.HullCtx, &Ctx->Snap.LogoBlobsSnap)
-            , SendOnMainParts(BATCH_SIZE)
-            , TryDeleteParts(BATCH_SIZE)
+            , SendOnMainParts(Ctx->Cfg.BatchSize)
+            , TryDeleteParts(Ctx->Cfg.BatchSize)
+            , StartTime(TlsActivationContext->Now())
         {
         }
 

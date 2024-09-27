@@ -999,7 +999,7 @@ private:
     static TExprNode::TPtr GetResOrPullResult(const TExprNode& node, const IDataProvider::TFillSettings& fillSettings,
         const NKikimrMiniKQL::TResult& resultValue, TExprContext& ctx)
     {
-        TVector<TString> columnHints(NCommon::GetResOrPullColumnHints(node));
+        TColumnOrder columnHints(NCommon::GetResOrPullColumnHints(node));
 
         auto protoValue = &resultValue;
         YQL_ENSURE(resultValue.GetArena());

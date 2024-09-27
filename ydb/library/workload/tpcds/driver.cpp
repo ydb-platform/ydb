@@ -1,20 +1,20 @@
-#include "driver.h"
 #include <library/cpp/resource/resource.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 #include <util/stream/mem.h>
+
+#ifdef _unix_
 #include <netinet/in.h>
+#else
+#include <winsock2.h>
+#endif
 
 extern "C" {
     #include <ydb/library/benchmarks/gen/tpcds-dbgen/dist.h>
     #include <ydb/library/benchmarks/gen/tpcds-dbgen/genrand.h>
     #include <ydb/library/benchmarks/gen/tpcds-dbgen/dcomp.h>
 }
-
-#ifndef LINUX
-    #define LINUX
-#endif
 
 #define FL_LOADED    0x01
 
@@ -134,11 +134,8 @@ extern "C" int dist_weight(int *dest, char *d, int index, int wset) {
     dist_t *dist;
     int res;
     
-    if ((d_idx = find_dist(d)) == NULL)
-    {
-        char msg[80];
-        sprintf(msg, "Invalid distribution name '%s'", d);
-        INTERNAL(msg);
+    if ((d_idx = find_dist(d)) == NULL) {
+        Cerr << "Invalid distribution name '" << d << "'" << Endl;
     }
     
     dist = d_idx->dist;
@@ -176,9 +173,7 @@ extern "C" int dist_op(void *dest, int op, char *d_name, int vset, int wset, int
     int i_res = 1;
 
     if ((d = find_dist(d_name)) == NULL) {
-        char msg[80];
-        sprintf(msg, "Invalid distribution name '%s'", d_name);
-        INTERNAL(msg);
+        Cerr << "Invalid distribution name '" << d_name << "'" << Endl;
         assert(d != NULL);
     }
 

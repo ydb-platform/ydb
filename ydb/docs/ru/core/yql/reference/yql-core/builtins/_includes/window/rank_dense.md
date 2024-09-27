@@ -13,7 +13,7 @@
 
 ### Сигнатура
 
-```
+```yql
 RANK([T])->Uint64
 DENSE_RANK([T])->Uint64
 PERCENT_RANK([T])->Double
@@ -21,22 +21,23 @@ PERCENT_RANK([T])->Double
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
    RANK(my_column) OVER w
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
-``` yql
+
+```yql
 SELECT
    DENSE_RANK() OVER w
 FROM my_table
 WINDOW w AS (ORDER BY my_column);
 ```
-``` yql
+
+```yql
 SELECT
    PERCENT_RANK() OVER w
 FROM my_table
 WINDOW w AS (ORDER BY my_column);
 ```
-

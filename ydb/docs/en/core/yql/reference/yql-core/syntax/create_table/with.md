@@ -31,18 +31,58 @@ WITH (
 
 {% if backend_name == "YDB" %}
 
-In the `WITH` clause, you can also specify TTL (Time to Live) — the lifespan of a row. [TTL](../../../../concepts/ttl.md) automatically removes rows from the string table when the specified number of seconds have passed from the time recorded in the TTL column. TTL can be set when the table is created or added later via `ALTER TABLE`. The code below will create a string table with TTL:
 
-```yql
-CREATE TABLE my_table (
-    id Uint64,
-    title Utf8,
-    expire_at Timestamp,
-    PRIMARY KEY (id)
-)
-WITH (
-    TTL = Interval("PT0S") ON expire_at
-);
+A colum-oriented table is created by specifying the parameter `STORE = COLUMN` in the `WITH` clause:
+
+```sql
+ CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Timestamp NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  PARTITION BY HASH(b)
+  WITH (
+    STORE = COLUMN
+  );
 ```
+
+The properties and capabilities of columnar tables are described in the article [{#T}](../../../../concepts/datamodel/table.md), and the specifics of their creation through YQL are described on the page [{#T}](./index.md). Also, the TTL (Time to Live) — the lifespan of a row — can be specified in the WITH clause for row-based and columnar tables. [TTL](../../../../concepts/ttl.md) automatically deletes rows when the specified number of seconds has passed since the time recorded in the TTL column. TTL can be specified when creating row-based and columnar tables or added later using the `ALTER TABLE` command only for row-based tables.
+
+Example of creating a row-oriented and column-oriented tables with TTL:
+
+{% list tabs %}
+
+- Creating row-oriented table with TTL
+
+    ```sql
+    CREATE TABLE my_table (
+        id Uint64,
+        title Utf8,
+        expire_at Timestamp,
+        PRIMARY KEY (id)
+    )
+    WITH (
+        TTL = Interval("PT0S") ON expire_at
+    );
+    ```
+
+- Creating column-oriented table with TTL
+
+    ```sql
+    CREATE TABLE table_name (
+        a Uint64 NOT NULL,
+        b Timestamp NOT NULL,
+        c Float,
+        PRIMARY KEY (a, b)
+    )
+    PARTITION BY HASH(b)
+    WITH (
+        STORE = COLUMN,
+        TTL = Interval("PT0S") ON b
+    );
+    ```
+
+{% endlist %}
 
 {% endif %}

@@ -100,19 +100,29 @@ private:
     TMaybe<TKeyBound> To_;
 };
 
+struct TSequenceDescription {
+    struct TSetVal {
+        i64 NextValue;
+        bool NextUsed;
+    };
+    std::optional<TSetVal> SetVal;
+};
+
 struct TTableColumn {
     TString Name;
     TType Type;
     TString Family;
     std::optional<bool> NotNull;
+    std::optional<TSequenceDescription> SequenceDescription;
 
     TTableColumn() = default;
 
-    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt)
+    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt, std::optional<TSequenceDescription> sequenceDescription = std::nullopt)
         : Name(std::move(name))
         , Type(std::move(type))
         , Family(std::move(family))
         , NotNull(std::move(notNull))
+        , SequenceDescription(std::move(sequenceDescription))
     { }
 
     // Conversion from TColumn for API compatibility
@@ -636,7 +646,7 @@ private:
     TTableDescription();
     explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull);
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription);
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
 
     // common
@@ -854,6 +864,7 @@ public:
     TTableBuilder& AddNonNullableColumn(const TString& name, const TPgType& type, const TString& family = TString());
     TTableBuilder& SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
     TTableBuilder& SetPrimaryKeyColumn(const TString& primaryKeyColumn);
+    TTableBuilder& AddSerialColumn(const TString& name, const EPrimitiveType& type, TSequenceDescription sequenceDescription, const TString& family = TString());
 
     // common
     TTableBuilder& AddSecondaryIndex(const TIndexDescription& indexDescription);
@@ -1629,6 +1640,7 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithKeyShardBoundary, false);
     FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
+    FLUENT_SETTING_DEFAULT(bool, WithSetVal, false);
 };
 
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
@@ -1679,6 +1691,8 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
 
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
+
+using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
 
 //! Represents all session operations
 //! Session is transparent logic representation of connection
@@ -1817,26 +1831,22 @@ TAsyncStatus TTableClient::RetryOperation(
 class TTransaction {
     friend class TTableClient;
 public:
-    const TString& GetId() const {
-        return TxId_;
-    }
-
-    bool IsActive() const {
-        return !TxId_.empty();
-    }
+    const TString& GetId() const;
+    bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
-    TSession GetSession() const {
-        return Session_;
-    }
+    TSession GetSession() const;
+
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
 
 private:
     TTransaction(const TSession& session, const TString& txId);
 
-    TSession Session_;
-    TString TxId_;
+    class TImpl;
+
+    std::shared_ptr<TImpl> TransactionImpl_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

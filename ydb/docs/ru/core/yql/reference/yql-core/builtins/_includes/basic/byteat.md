@@ -19,7 +19,7 @@ ByteAt(Utf8?, Uint32)->Uint8?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     ByteAt("foo", 0), -- 102
     ByteAt("foo", 1), -- 111

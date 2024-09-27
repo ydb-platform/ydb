@@ -773,41 +773,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
         .Done();
 }
 
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnorderedPublishTarget(TExprBase node, TExprContext& ctx) const {
-    auto publish = node.Cast<TYtPublish>();
-
-    auto cluster = TString{publish.DataSink().Cluster().Value()};
-    auto pubTableInfo = TYtTableInfo(publish.Publish());
-    if (auto commitEpoch = pubTableInfo.CommitEpoch.GetOrElse(0)) {
-        const TYtTableDescription& nextDescription = State_->TablesData->GetTable(cluster, pubTableInfo.Name, commitEpoch);
-        YQL_ENSURE(nextDescription.RowSpec);
-        if (!nextDescription.RowSpec->IsSorted()) {
-            bool modified = false;
-            TVector<TYtOutput> outs;
-            for (auto out: publish.Input()) {
-                if (!IsUnorderedOutput(out) && TYqlRowSpecInfo(GetOutTable(out).Cast<TYtOutTable>().RowSpec()).IsSorted()) {
-                    outs.push_back(Build<TYtOutput>(ctx, out.Pos())
-                        .InitFrom(out)
-                        .Mode()
-                            .Value(ToString(EYtSettingType::Unordered))
-                        .Build()
-                        .Done());
-                    modified = true;
-                } else {
-                    outs.push_back(out);
-                }
-            }
-            if (modified) {
-                return Build<TYtPublish>(ctx, publish.Pos())
-                    .InitFrom(publish)
-                    .Input()
-                        .Add(outs)
-                    .Build()
-                    .Done();
-            }
-        }
-    }
-    return node;
-}
-
 }  // namespace NYql

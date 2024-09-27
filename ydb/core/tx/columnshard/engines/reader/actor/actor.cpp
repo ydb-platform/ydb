@@ -58,7 +58,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , DataFormat(dataFormat)
     , TabletId(tabletId)
     , ReadMetadataRange(readMetadataRange)
-    , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
+    , Timeout(timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT)
     , ScanCountersPool(scanCountersPool)
     , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
     , ComputeShardingPolicy(computeShardingPolicy) {
@@ -72,7 +72,6 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     );
     auto g = Stats->MakeGuard("bootstrap");
     ScanActorId = ctx.SelfID;
-    Schedule(Deadline, new TEvents::TEvWakeup);
 
     Y_ABORT_UNLESS(!ScanIterator);
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
@@ -88,6 +87,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
     } else {
+        ScheduleWakeup(GetDeadline());
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
@@ -176,7 +176,11 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
         "Scan " << ScanActorId << " guard execution timeout"
         << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
-    Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
+    if (TMonotonic::Now() >= GetDeadline()) {
+        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
+    } else {
+        ScheduleWakeup(GetDeadline());
+    }
 }
 
 bool TColumnShardScan::ProduceResults() noexcept {
@@ -377,6 +381,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     }
     ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
     AckReceivedInstant.reset();
+    LastResultInstant = TMonotonic::Now();
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
 
@@ -414,4 +419,17 @@ void TColumnShardScan::ReportStats() {
     Bytes = 0;
 }
 
+void TColumnShardScan::ScheduleWakeup(const TMonotonic deadline) {
+    if (deadline != TMonotonic::Max()) {
+        Schedule(deadline, new TEvents::TEvWakeup);
+    }
+}
+
+TMonotonic TColumnShardScan::GetDeadline() const {
+    AFL_VERIFY(StartInstant);
+    if (LastResultInstant) {
+        return *LastResultInstant + Timeout;
+    }
+    return *StartInstant + Timeout;
+}
 }

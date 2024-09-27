@@ -20,4 +20,3 @@ LIMIT 7 OFFSET 3;
 SELECT key FROM my_table
 LIMIT 3, 7; -- equivalent to the previous example
 ```
-

@@ -212,6 +212,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         if (tx.HasAlterUserAttributes()) {
             scheme.MutableAlterUserAttributes()->CopyFrom(tx.GetAlterUserAttributes());
         }
+        if (tx.HasModifyACL()) {
+            scheme.MutableModifyACL()->CopyFrom(tx.GetModifyACL());
+        }
 
         result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences));
     }

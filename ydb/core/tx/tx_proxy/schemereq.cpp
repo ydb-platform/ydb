@@ -213,8 +213,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
+            Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
+
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
-            Y_ABORT("no implementation for ESchemeOpCreateIndexBuild/ESchemeOpCreateColumnBuild");
+            Y_ABORT("no implementation for ESchemeOpCreateIndexBuild");
 
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
             Y_ABORT("no implementation for ESchemeOpInitiateBuildIndexMainTable");
@@ -358,6 +360,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
         }
     }
@@ -806,6 +809,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return false;
         }
         return true;

@@ -19,6 +19,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         {'s', Coloring.string},
         {'n', Coloring.number},
         {'u', Coloring.unknown},
+        {'c', Coloring.comment},
         {' ', YQLHighlight::Color::DEFAULT},
     };
 
@@ -182,5 +183,16 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
                 Check(highlight, prefix, pattern_prefix);
             }
         }
+    }
+
+    Y_UNIT_TEST(Comment) {
+        YQLHighlight highlight(Coloring);
+        Check(highlight, "- select", "o kkkkkk");
+        Check(highlight, "select -- select", "kkkkkk ccccccccc");
+        Check(highlight, "-- select\nselect", "cccccccccckkkkkk");
+        Check(highlight, "/* select */", "cccccccccccc");
+        Check(highlight, "select /* select */ select", "kkkkkk cccccccccccc kkkkkk");
+        Check(highlight, "/**/ --", "cccc cc");
+        Check(highlight, "/*/**/*/", "ccccccoo");
     }
 }

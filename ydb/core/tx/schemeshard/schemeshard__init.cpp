@@ -1916,6 +1916,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& view = Self->Views[pathId] = new TViewInfo();
                 view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
                 view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD view->CapturedContext.ParseFromString(
+                    rowset.GetValue<Schema::View::CapturedContext>()
+                );
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
@@ -4378,6 +4381,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Table::CreateTableRequest scheme;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(scheme, rowset.GetValue<Schema::ImportItems::Scheme>()));
                         item.Scheme = scheme;
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::Permissions>()) {
+                        Ydb::Scheme::ModifyPermissionsRequest permissions;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(permissions, rowset.GetValue<Schema::ImportItems::Permissions>()));
+                        item.Permissions = permissions;
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());

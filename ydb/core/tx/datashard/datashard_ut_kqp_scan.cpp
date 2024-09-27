@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  * Trick executor to think that all datashard are located on node 1.
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         Cerr.Flush();
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  * Trick executor to think that all datashard are located on node 1.
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         nodeId = firstNodeId;
                     }
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
@@ -535,7 +535,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  * Trick executor to think that all datashard are located on node 1.
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime.GetNodeId(0);

@@ -12,11 +12,12 @@
 
 Команда `profile create` создает новый профиль с заданными значениями параметров:
 
-``` bash
+```bash
 {{ ydb-cli }} config profile create <profile_name> <connection_options>
 ```
 
 В данной команде:
+
 - `<profile_name>` -- обязательное имя профиля
 - `<connection options>` -- [параметры соединения](../../connect.md#command-line-pars) для записи в профиле. Необходимо указание как минимум одного параметра соединения, иначе команда будет выполняться в [интерактивном режиме](#interactive).
 
@@ -26,11 +27,12 @@
 
 Команда `profile replace` создает или заменяет профиль с заданными значениями параметров:
 
-``` bash
+```bash
 {{ ydb-cli }} config profile replace <profile_name> [connection_options]
 ```
 
 В данной команде:
+
 - `<profile_name>` -- обязательное имя профиля
 - `<connection options>` -- необязательные [параметры соединения](../../connect.md#command-line-pars) для записи в профиле
 
@@ -40,11 +42,12 @@
 
 Команда `profile update` изменяет параметры существующего профиля:
 
-``` bash
+```bash
 {{ ydb-cli }} config profile update <profile_name> [connection_options] [reset-options]
 ```
 
 В данной команде:
+
 - `<profile_name>` -- обязательное имя профиля
 - `<connection options>` -- необязательные [параметры соединения](../../connect.md#command-line-pars) для записи в профиле
 - `<reset options>` -- необязательные опции удаления параметров из существующего профиля. Возможные значения:
@@ -149,7 +152,7 @@
 
   2. Если существующих профилей нет, или выбран вариант `1` на предыдущем шаге, то запрашивается имя профиля для создания:
 
-     ``` text
+     ```text
      Please enter name for a new profile:
      ```
 

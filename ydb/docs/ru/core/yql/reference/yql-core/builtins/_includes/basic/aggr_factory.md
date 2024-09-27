@@ -19,7 +19,7 @@ SELECT
 FROM my_table;
 ```
 
-## AggregateTransform... {#aggregatetransform}
+## AggregateTransformInput {#aggregatetransform}
 
 `AggregateTransformInput()` преобразует фабрику для [агрегационных функций](../../aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой перед началом выполнения агрегации производится указанное преобразование входных элементов.
 
@@ -38,6 +38,8 @@ SELECT ListAggregate([1,2,3], $f); -- 6
 SELECT ListAggregate(["1","2","3"], $g); -- 6
 SELECT ListAggregate([1,2,3], $h); -- 12
 ```
+
+## AggregateTransformOutput {#aggregatetransformoutput}
 
 `AggregateTransformOutput()` преобразует фабрику для [агрегационных функций](../../aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой после окончания выполнения агрегации производится указанное преобразование результата.
 

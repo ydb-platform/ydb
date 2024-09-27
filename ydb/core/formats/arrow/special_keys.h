@@ -1,5 +1,8 @@
 #pragma once
-#include <ydb/core/formats/arrow/replace_key.h>
+
+#include "arrow_helpers.h"
+
+#include <ydb/library/formats/arrow/replace_key.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NArrow {

@@ -87,9 +87,11 @@ The [ydbops](https://github.com/ydb-platform/ydbops) utility tool uses CMS for c
 ### Rolling restart {##rolling-restart}
 
 To perform a rolling restart of the entire cluster, you can use the command:
-```
+
+```bash
 $ ydbops restart --endpoint grpc://<cluster-fqdn> --availability-mode strong
 ```
+
 If your systemd unit name is different from the default one, you may need to override it with `--systemd-unit` flag.
 
 The `ydbops` utility will automatically create a maintenance task to restart the entire cluster using the given availability mode. As it progresses, the `ydbops` will refresh the maintenance task and acquire exclusive locks on the nodes in the CMS until all nodes are restarted.

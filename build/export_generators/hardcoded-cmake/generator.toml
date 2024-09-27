@@ -72,6 +72,11 @@ copy=["cmake/antlr.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr.cmake"]}]
 
 [[rules]]
+attrs=["run_antlr4"]
+copy=["cmake/antlr4.cmake"]
+add_values=[{attr="includes", values=["cmake/antlr4.cmake"]}]
+
+[[rules]]
 attrs=[
     "target_bison_parser",
     "target_flex_lexers"

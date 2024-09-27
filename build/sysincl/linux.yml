@@ -3,10 +3,8 @@
 - includes:
   - a.out.h
   - aliases.h
-  - ansidecl.h
   - argp.h
   - argz.h
-  - bfd.h
   - error.h
   - execinfo.h
   - fpu_control.h
@@ -15,7 +13,6 @@
   - gconv.h
   - gshadow.h
   - ieee754.h
-  - libio.h
   - mcheck.h
   - netash/ash.h
   - netatalk/at.h

@@ -818,6 +818,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         targetName = tx.GetCreateResourcePool().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        targetName = tx.GetCreateBackupCollection().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;

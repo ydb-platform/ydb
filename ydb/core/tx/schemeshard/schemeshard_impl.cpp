@@ -2999,6 +2999,15 @@ void TSchemeShard::PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId
     db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::BackupCollection::AlterVersion>{backupCollection->AlterVersion},
+        NIceDb::TUpdate<Schema::BackupCollection::Properties>{backupCollection->Properties.SerializeAsString()}
+    );
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 

@@ -30,32 +30,45 @@ bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& par
 
 ///
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
+private:
+    const TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TCreateBackupCollection TPropose"
+            << ", operationId: " << OperationId;
+    }
+
 public:
     explicit TPropose(TOperationId id)
         : OperationId(std::move(id))
-    {}
+    {
+    }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+
+        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+            << ": step# " << step);
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateResourcePool);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateBackupCollection);
 
-        const TPathId& pathId = txState->TargetPathId;
-        const TPath& path = TPath::Init(pathId, context.SS);
+        const auto pathId = txState->TargetPathId;
+        const auto path = TPath::Init(pathId, context.SS);
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
+
+        context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
 
         NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Add(1);
-
         IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+
         context.SS->ClearDescribePathCaches(pathPtr);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
@@ -68,19 +81,11 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateResourcePool);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateBackupCollection);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
-
-private:
-    TString DebugHint() const override {
-        return TStringBuilder() << "TCreateResourcePool TPropose, operationId: " << OperationId << ", ";
-    }
-
-private:
-    const TOperationId OperationId;
 };
 
 class TCreateBackupCollection : public TSubOperation {
@@ -229,7 +234,6 @@ public:
         AddPathInSchemeShard(result, dstPath, owner);
         auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
-        context.SS->IncrementPathDbRefCount(dstPath->PathId);
         rootPath->IncAliveChildren();
         rootPath.DomainInfo()->IncPathsInside();
 
@@ -248,11 +252,6 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        if (!acl.empty()) {
-            dstPath->ApplyACL(acl);
-        }
-
-        // context.SS->PersistPath(db, dstPath->PathId);
         ////
         // RegisterParentPathDependencies(context, parentPath);
         if (rootPath.Base()->HasActiveChanges()) {
@@ -263,16 +262,32 @@ public:
         }
 
         // AdvanceTransactionStateToPropose(context, db);
+        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+        context.OnComplete.ActivateTx(OperationId);
 
         // PersistExternalDataSource(context, db, externalDataSource,
         //                           externalDataSourceInfo, acl);
+        const auto& backupCollectionPathId = pathEl->PathId;
 
-        // IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
-        //                                                   dstPath,
-        //                                                   context.SS,
-        //                                                   context.OnComplete);
+        context.SS->BackupCollections[dstPath->PathId] = backupCollection;
+        context.SS->IncrementPathDbRefCount(backupCollectionPathId);
 
-        // UpdatePathSizeCounts(parentPath, dstPath);
+        if (!acl.empty()) {
+            pathEl->ApplyACL(acl);
+        }
+        context.SS->PersistPath(db, backupCollectionPathId);
+
+        context.SS->PersistBackupCollection(db,
+                                            backupCollectionPathId,
+                                            backupCollection);
+        context.SS->PersistTxState(db, OperationId);
+
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
+                                                          dstPath,
+                                                          context.SS,
+                                                          context.OnComplete);
+
+        UpdatePathSizeCounts(rootPath, dstPath);
 
         SetState(NextState());
         return result;

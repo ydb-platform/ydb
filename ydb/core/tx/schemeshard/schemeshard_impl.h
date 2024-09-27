@@ -824,6 +824,8 @@ public:
     void PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool);
     void PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId);
 
+    void PersistBackupCollection(NIceDb::TNiceDb &db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
+
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
     enum class EHiveSelection : uint8_t {

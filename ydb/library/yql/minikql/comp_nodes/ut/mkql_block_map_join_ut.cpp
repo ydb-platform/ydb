@@ -300,9 +300,9 @@ template <typename TNested>
 class TTypeMapper<std::optional<TNested>>: TTypeMapper<TNested> {
     using TBase = TTypeMapper<TNested>;
     public:
-    TTypeMapper(TProgramBuilder &pb): TBase(pb) {}
+    TTypeMapper(TProgramBuilder& pb): TBase(pb) {}
     auto GetType() { return TBase::Pb.NewOptionalType(TBase::GetType()); }
-    auto GetValue(const std::optional<TNested> &value) {
+    auto GetValue(const std::optional<TNested>& value) {
         if (value == std::nullopt) {
             return TBase::Pb.NewEmptyOptional(GetType());
         } else {
@@ -777,7 +777,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinNullKeysTest) {
         TVector<TString> valueExpected;
         TVector<TString> rightExpected;
         for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!keyInit[i]) continue;
+            if (!keyInit[i]) {
+                continue;
+            }
             const auto& found = rightMultiMap.find(*keyInit[i]);
             if (found != rightMultiMap.cend()) {
                 for (const auto& right : found->second) {

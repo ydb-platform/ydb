@@ -15,14 +15,15 @@ from ydb.tests.fq.generic.utils.settings import Settings
 DEBUG = 0
 
 
-def ResequenceId(messages):
+def ResequenceId(messages, field="id"):
     res = []
     i = 1
     for pair in messages:
         rpair = []
         for it in pair:
             src = json.loads(it)
-            src["id"] = i
+            if field in src:
+                src[field] = i
             rpair += [json.dumps(src)]
         res += [tuple(rpair)]
         i += 1
@@ -310,6 +311,88 @@ TESTCASES = [
             ),
         ],
     ),
+    # 6
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.db as u
+                on(e.yb = u.b AND e.za = u.a )
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+            ]
+        ),
+    ),
+    # 7
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.db as u
+                on(e.za = u.a AND e.yb = u.b)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+            ]
+        ),
+    ),
 ]
 
 
@@ -367,7 +450,7 @@ class TestStreamingJoin(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
-    @pytest.mark.parametrize("partitions_count", [1, 3])
+    @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(

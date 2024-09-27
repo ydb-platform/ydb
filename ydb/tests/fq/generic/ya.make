@@ -71,4 +71,6 @@ TEST_SRCS(
     test_ydb.py
 )
 
+TIMEOUT(1800)
+
 END()

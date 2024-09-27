@@ -260,12 +260,10 @@ private:
                         if ((key && Dict_.Contains(key)) == RightRequired) {
                             blockState.CopyRow();
                         }
-                    } else if constexpr (RightRequired) {
-                        if (NUdf::TUnboxedValue lookup; key && (lookup = Dict_.Lookup(key))) {
-                            blockState.MakeRow(lookup);
-                        }
-                    } else {
-                        blockState.MakeRow(key ? Dict_.Lookup(key) : NUdf::TUnboxedValue {} );
+                    } else if (NUdf::TUnboxedValue lookup; key && (lookup = Dict_.Lookup(key))) {
+                        blockState.MakeRow(lookup);
+                    } else if constexpr (!RightRequired) {
+                        blockState.MakeRow(NUdf::TUnboxedValue());
                     }
                 }
                 if (blockState.IsNotFull() && !blockState.IsFinished()) {

@@ -95,12 +95,16 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
         std::vector<TActorId> boots;
         auto tabletInfo = CreateSimpleTabletStorageInfo(tabletId);
         auto setupInfo = CreateSimpleTabletSetupInfo();
+        auto bootInfo = MakeIntrusive<TBootstrapperInfo>(setupInfo.Get());
         for (ui32 nodeIdx : nodeIdxs) {
-            auto bootInfo = MakeIntrusive<TBootstrapperInfo>(setupInfo.Get());
-            for (ui32 otherNodeIdx : nodeIdxs) {
-                if (otherNodeIdx != nodeIdx) {
-                    bootInfo->OtherNodes.push_back(runtime.GetNodeId(otherNodeIdx));
-                }
+            bootInfo->Nodes.push_back(runtime.GetNodeId(nodeIdx));
+        }
+        THashMap<ui32, TActorId> started;
+        for (ui32 nodeIdx : nodeIdxs) {
+            if (started.contains(nodeIdx)) {
+                // Start one bootstrapper per node
+                boots.push_back(started.at(nodeIdx));
+                continue;
             }
             boots.push_back(runtime.Register(CreateBootstrapper(tabletInfo.Get(), bootInfo.Get()), nodeIdx));
             runtime.EnableScheduleForActor(boots.back());
@@ -109,6 +113,7 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
                 MakeBootstrapperID(tabletId, runtime.GetNodeId(nodeIdx)),
                 boots.back(),
                 nodeIdx);
+            started[nodeIdx] = boots.back();
         }
         return boots;
     }
@@ -421,6 +426,24 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
 
         runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(sender);
         Y_UNUSED(client2);
+    }
+
+    Y_UNIT_TEST(DuplicateNodes) {
+        TTestBasicRuntime runtime(3);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        StartSimpleTabletBootstrappers(runtime, {1, 1, 2, 2});
+
+        size_t boots = 0;
+        auto observer = runtime.AddObserver<TEvTablet::TEvBoot>([&](auto&) {
+            ++boots;
+        });
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Tablet must boot exactly once
+        UNIT_ASSERT_VALUES_EQUAL(boots, 1u);
     }
 
 } // Y_UNIT_TEST_SUITE(BootstrapperTest)

@@ -1247,7 +1247,7 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
             LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvVStatus Marker# BSVS20");
             auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
-                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone));
+                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone, Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2577,6 +2577,7 @@ namespace NKikimr {
                 .RequestBlobsOnMainTimeout=Config->BalancingRequestBlobsOnMainTimeout,
                 .DeleteBatchTimeout=Config->BalancingDeleteBatchTimeout,
                 .EpochTimeout=Config->BalancingEpochTimeout,
+                .TimeToSleepIfNothingToDo=Config->BalancingTimeToSleepIfNothingToDo,
             };
             auto balancingCtx = std::make_shared<TBalancingCtx>(
                 balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);

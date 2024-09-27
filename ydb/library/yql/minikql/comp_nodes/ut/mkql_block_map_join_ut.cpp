@@ -273,36 +273,40 @@ void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
 //
 // Auxiliary routines to build list nodes from the given vectors.
 //
+
+struct TTypeMapperBase {
+    TProgramBuilder& Pb;
+    TType* ItemType;
+    auto GetType() { return ItemType; }
+};
+
 template <typename Type>
-struct TTypeMapper {
-    TType *operator()(TProgramBuilder& pb) {
-        return pb.NewDataType(NUdf::TDataType<Type>::Id);
-    }
-    TRuntimeNode operator()(TProgramBuilder& pb, TType*, const Type& value) {
-        return pb.NewDataLiteral<Type>(value);
+struct TTypeMapper: TTypeMapperBase {
+    TTypeMapper(TProgramBuilder& pb): TTypeMapperBase {pb, pb.NewDataType(NUdf::TDataType<Type>::Id) } {}
+    auto GetValue(const Type& value) {
+        return Pb.NewDataLiteral<Type>(value);
     }
 };
 
 template <>
-struct TTypeMapper<TString> {
-    TType *operator()(TProgramBuilder& pb) {
-        return pb.NewDataType(NUdf::EDataSlot::String);
-    }
-    TRuntimeNode operator()(TProgramBuilder& pb, TType*, const TString& value) {
-        return pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
+struct TTypeMapper<TString>: TTypeMapperBase {
+    TTypeMapper(TProgramBuilder& pb): TTypeMapperBase {pb, pb.NewDataType(NUdf::EDataSlot::String)} {}
+    auto GetValue(const TString& value) {
+        return Pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
     }
 };
 
 template <typename TNested>
-struct TTypeMapper<std::optional<TNested>> {
-    TType *operator()(TProgramBuilder& pb) {
-        return pb.NewOptionalType(TTypeMapper<TNested>{}(pb));
-    }
-    TRuntimeNode operator()(TProgramBuilder& pb, TType* itemType, const std::optional<TNested>& value) {
+class TTypeMapper<std::optional<TNested>>: TTypeMapper<TNested> {
+    using TBase = TTypeMapper<TNested>;
+    public:
+    TTypeMapper(TProgramBuilder &pb): TBase(pb) {}
+    auto GetType() { return TBase::Pb.NewOptionalType(TBase::GetType()); }
+    auto GetValue(const std::optional<TNested> &value) {
         if (value == std::nullopt) {
-            return pb.NewEmptyOptional(itemType);
+            return TBase::Pb.NewEmptyOptional(GetType());
         } else {
-            return pb.NewOptional(TTypeMapper<TNested>{}(pb, nullptr, *value));
+            return TBase::Pb.NewOptional(TBase::GetValue(*value));
         }
     }
 };
@@ -311,15 +315,15 @@ template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     const TVector<Type>& vector
 ) {
-    TType* itemType = TTypeMapper<Type>{}(pb);
+    TTypeMapper<Type> mapper(pb);
 
     TRuntimeNode::TList listItems;
     std::transform(vector.cbegin(), vector.cend(), std::back_inserter(listItems),
         [&](const auto value) {
-            return TTypeMapper<Type>{}(pb, itemType, value);
+            return mapper.GetValue(value);
         });
 
-    return {pb.NewList(itemType, listItems)};
+    return {pb.NewList(mapper.GetType(), listItems)};
 }
 
 template<typename Type, typename... Tail>

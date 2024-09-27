@@ -14,7 +14,7 @@ inline constexpr const char* LevelTable_EmbeddingColumn = "__ydb_embedding";
 inline constexpr const char* PostingTable = "indexImplPostingTable";
 inline constexpr const char* PostingTable_ParentIdColumn = LevelTable_ParentIdColumn;
 
-inline constexpr const char* TmpPostingTableSuffix0 = "0tmp";
-inline constexpr const char* TmpPostingTableSuffix1 = "1tmp";
+inline constexpr const char* BuildPostingTableSuffix0 = "0build";
+inline constexpr const char* BuildPostingTableSuffix1 = "1build";
 
 }

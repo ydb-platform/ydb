@@ -94,7 +94,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
-            if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
+            if (NTableIndex::IsBuildImplTable(indexImplTableName)) {
                 bool rejected = false;
                 auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, rejected);
                 if (rejected) {

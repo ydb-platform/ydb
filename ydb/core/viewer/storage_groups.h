@@ -547,7 +547,6 @@ public:
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
-                                                    .set(+EGroupFields::Usage)
                                                     .set(+EGroupFields::Used)
                                                     .set(+EGroupFields::Limit)
                                                     .set(+EGroupFields::Latency);

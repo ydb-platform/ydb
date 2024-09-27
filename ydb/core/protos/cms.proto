@@ -433,6 +433,8 @@ message TCmsConfig {
 
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
+
+        optional uint32 GoodStateLimit = 16 [default = 5];
     }
 
     message TLogConfig {

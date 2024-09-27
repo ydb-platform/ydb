@@ -90,8 +90,9 @@ public:
             .MaxKeysInRequest = 1000 // TODO configure me
         };
         auto guard = Guard(*Alloc);
-        LookupSource = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
-        RegisterWithSameMailbox(LookupSource.second);
+        auto LookupSource = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
+        MaxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
+        LookupSourceId = RegisterWithSameMailbox(LookupSource.second);
     }
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
@@ -165,7 +166,7 @@ private: //IDqComputeActorAsyncInput
     }
 
     void PassAway() final {
-        Send(LookupSource.second->SelfId(), new NActors::TEvents::TEvPoison{});
+        Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
         KeysForLookup.reset();
@@ -193,11 +194,10 @@ private: //IDqComputeActorAsyncInput
              NUdf::TUnboxedValue* inputRowItems;
              NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
-            const auto maxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(maxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
             LruCache->Prune(now);
             while (
-                (KeysForLookup->size() < maxKeysInRequest) &&
+                (KeysForLookup->size() < MaxKeysInRequest) &&
                 ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), keyItems);
@@ -217,7 +217,7 @@ private: //IDqComputeActorAsyncInput
                 }
             }
             if (!KeysForLookup->empty()) {
-                LookupSource.first->AsyncLookup(KeysForLookup);
+                Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             } else {
                 KeysForLookup.reset();
             }
@@ -261,7 +261,8 @@ protected:
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
 protected:
-    std::pair<IDqAsyncLookupSource*, NActors::IActor*> LookupSource;
+    NActors::TActorId LookupSourceId;
+    size_t MaxKeysInRequest;
     const TVector<size_t> LookupInputIndexes;
     const TVector<size_t> OtherInputIndexes;
     const NMiniKQL::TMultiType* const InputRowType;

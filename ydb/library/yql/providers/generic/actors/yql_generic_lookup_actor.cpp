@@ -128,6 +128,7 @@ namespace NYql::NDq {
 
     private: // events
         STRICT_STFUNC(StateFunc,
+                      hFunc(TEvLookupRequest, Handle);
                       hFunc(TEvListSplitsIterator, Handle);
                       hFunc(TEvListSplitsPart, Handle);
                       hFunc(TEvReadSplitsIterator, Handle);
@@ -199,6 +200,11 @@ namespace NYql::NDq {
 
         void Handle(NActors::TEvents::TEvPoison::TPtr) {
             PassAway();
+        }
+
+        void Handle(TEvLookupRequest::TPtr ev) {
+            auto guard = Guard(*Alloc);
+            CreateRequest(ev->Get()->Request.lock());
         }
 
     private:

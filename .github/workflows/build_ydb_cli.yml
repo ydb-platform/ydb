@@ -43,16 +43,38 @@ defaults:
     shell: bash
 
 jobs:
+  build-matrix:
+    name: Build matrix for the next job from selected platforms to build
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: steps.matrix.outputs.matrix
+    steps:
+      - name: Create file with future platform list
+        run: |
+          set -ex
+          MATRIX='[]'
+          if [ ${{ inputs.build-linux }} ]; then
+            echo 'linux true'
+            MATRIX=$(echo $MATRIX | jq '. + [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
+          fi
+          if [ ${{ inputs.build-windows }} ]; then
+            echo 'windows true'
+            MATRIX=$(echo $MATRIX | jq '. + [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
+          fi
+          
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+      
   build-platform-specific-binary:
+    name: Build YDB CLI for ${{ matrix.os }}
+    needs: build-matrix
     strategy:
       matrix:
-        include:
-          - { os: linux, runner: ubuntu-latest, shell: bash }
-          - { os: darwin-amd, runner: macos-13, shell: bash }
-          - { os: darwin-arm, runner: macos-latest, shell: bash }
-          - { os: windows, runner: windows-latest, shell: pwsh }
-    name: Build YDB CLI for ${{ matrix.os }}
-    if: (${{ inputs.build-linux }} == 'true' && ${{ matrix.os }} == 'linux') || (${{ inputs.build-darwin-amd }} == 'true' && ${{ matrix.os }} == 'darwin-amd') || (${{ inputs.build-darwin-arm }} == 'true' && ${{ matrix.os }} == 'darwin-arm') || (${{ inputs.build-windows }} == 'true' && ${{ matrix.os }} == 'windows')
+        include: ${{ fromJSON(needs.compute-matrix.outputs.matrix) }}
+#          - { os: linux, runner: ubuntu-latest, shell: bash }
+#          - { os: darwin-amd, runner: macos-13, shell: bash }
+#          - { os: darwin-arm, runner: macos-latest, shell: bash }
+#          - { os: windows, runner: windows-latest, shell: pwsh }
+#    if: (${{ inputs.build-linux }} == 'true' && ${{ matrix.os }} == 'linux') || (${{ inputs.build-darwin-amd }} == 'true' && ${{ matrix.os }} == 'darwin-amd') || (${{ inputs.build-darwin-arm }} == 'true' && ${{ matrix.os }} == 'darwin-arm') || (${{ inputs.build-windows }} == 'true' && ${{ matrix.os }} == 'windows')
     runs-on: ${{ matrix.runner }}
     defaults:
       run:

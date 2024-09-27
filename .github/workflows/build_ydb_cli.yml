@@ -50,6 +50,7 @@ jobs:
       matrix: steps.matrix.outputs.matrix
     steps:
       - name: Create file with future platform list
+        id: matrix
         run: |
           set -ex
           MATRIX='[]'
@@ -78,9 +79,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Print matrix
-        run: echo ${{ needs.build-matrix.outputs.matrix }}
-      - name: Print matrif fromJson
-        run: echo ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+        run: echo '${{ needs.build-matrix.outputs.matrix }}'
+      - name: Print matrix fromJson
+        run: echo '${{ fromJSON(needs.build-matrix.outputs.matrix) }}'
       
   build-platform-specific-binary:
     name: Build YDB CLI for ${{ matrix.os }}

@@ -56,6 +56,20 @@ TString ReadWholeFile(const TString& path) {
     return file.ReadAll();
 }
 
+NQuery::TExecuteQueryResult  ExecuteQuery(NQuery::TSession& session, const TString& query) {
+    const auto result = session.ExecuteQuery(
+        query,
+        NQuery::TTxControl::NoTx()
+    ).ExtractValueSync();
+
+    UNIT_ASSERT_C(result.IsSuccess(),
+        "Failed to execute the following query:\n" << query << '\n'
+        << "The issues:\n" << result.GetIssues().ToString()
+    );
+
+    return result;
+}
+
 void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
     const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), "Failed to execute the following DDL script:\n"
@@ -110,14 +124,19 @@ void AssertFromCache(const TMaybe<TQueryStats>& stats, bool expectedValue) {
     UNIT_ASSERT_VALUES_EQUAL_C(*isFromCache, expectedValue, stats->ToString());
 }
 
-void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
-    const auto& firstResults = first.GetResultSets();
-    const auto& secondResults = second.GetResultSets();
-
+void CompareResults(const TVector<TResultSet>& firstResults, const TVector<TResultSet>& secondResults) {
     UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
     for (size_t i = 0; i < firstResults.size(); ++i) {
         CompareYson(FormatResultSetYson(firstResults[i]), FormatResultSetYson(secondResults[i]));
     }
+}
+
+void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
+}
+
+void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExecuteQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
 }
 
 void InitializeTablesAndSecondaryViews(TSession& session) {
@@ -401,6 +420,46 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         );
         const auto selectFromViewResults = ExecuteDataModificationQuery(session, std::format(R"(
                     SELECT * FROM `{}`;
+                )",
+                viewName
+            )
+        );
+        CompareResults(etalonResults, selectFromViewResults);
+    }
+
+    Y_UNIT_TEST(OneTableUsingRelativeName) {
+        TKikimrRunner kikimr;
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* viewName = "TheView";
+        constexpr const char* testTable = "Test";
+        const auto innerQuery = std::format(R"(
+                SELECT * FROM {}
+            )",
+            testTable
+        );
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
+            )",
+            viewName,
+            innerQuery
+        );
+        ExecuteQuery(session, creationQuery);
+
+        const auto etalonResults = ExecuteQuery(session, std::format(R"(
+                    SELECT * FROM ({});
+                )",
+                innerQuery
+            )
+        );
+        const auto selectFromViewResults = ExecuteQuery(session, std::format(R"(
+                    SELECT * FROM {};
                 )",
                 viewName
             )

@@ -257,7 +257,7 @@ private:
                 while (blockState.IsNotFull() && blockState.NextRow()) {
                     const auto key = MakeKeysTuple(blockState);
                     if constexpr (WithoutRight) {
-                        if (key && Dict_.Contains(key) == RightRequired) {
+                        if ((key && Dict_.Contains(key)) == RightRequired) {
                             blockState.CopyRow();
                         }
                     } else if constexpr (RightRequired) {

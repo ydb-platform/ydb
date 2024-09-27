@@ -22,10 +22,10 @@ NMetadata::NModifications::IObjectManager::TPtr GetObjectManagerVerified(const T
     return manager;
 }
 
-NMetadata::NModifications::ISchemeObjectOperationsManager::TPtr GetOperationsManagerVerified(const TString& typeId) {
+NMetadata::NModifications::TSchemeObjectOperationsManager::TPtr GetOperationsManagerVerified(const TString& typeId) {
     const auto abstractManager = GetBehaviourVerified(typeId)->GetOperationsManager();
     AFL_VERIFY(abstractManager)("type_id", typeId);
-    const auto schemeManager = std::dynamic_pointer_cast<NMetadata::NModifications::ISchemeObjectOperationsManager>(abstractManager);
+    const auto schemeManager = std::dynamic_pointer_cast<NMetadata::NModifications::TSchemeObjectOperationsManager>(abstractManager);
     AFL_VERIFY(schemeManager)("type_id", typeId);
     return schemeManager;
 }
@@ -41,7 +41,7 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
 
 bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TString& typeId) {
     const TString& abstractObjectsDir =
-        JoinPath({ parentPath.GetDomainPathString(), GetBehaviourVerified(typeId)->GetLocalStorageTableDirectory() });
+        JoinPath({ parentPath.GetDomainPathString(), GetBehaviourVerified(typeId)->GetLocalStorageDirectory() });
     if (parentPath.PathString() != abstractObjectsDir) {
         result->SetError(
             NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << typeId << " objects shoud be placed in " << abstractObjectsDir);

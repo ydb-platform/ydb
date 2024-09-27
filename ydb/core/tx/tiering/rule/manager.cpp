@@ -4,15 +4,8 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-void TTieringRulesManager::DoPrepareObjectsBeforeModification(std::vector<TTieringRule>&& objects,
-    NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
-    TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
-}
-
-NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
-    const NYql::TObjectSettingsImpl& settings,
-    TInternalModificationContext& /*context*/) const {
+TTieringRulesManager::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
+    const NYql::TObjectSettingsImpl& settings, NSchemeShard::TSchemeShard& /*context*/) const {
     if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
         return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
     }
@@ -40,4 +33,9 @@ NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuild
     return result;
 }
 
+void TTieringRulesManager::DoPreprocessSettings(
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IPreprocessingController::TPtr controller) const {
+    AFL_VERIFY(context.GetExternalData().GetActorSystem())("type_id", "TIERING_RULE");
+    context.GetExternalData().GetActorSystem()->Register(new TRulePreprocessingActor(settings, controller, context));
+}
 }

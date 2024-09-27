@@ -1,6 +1,8 @@
 #include "object.h"
 #include "behaviour.h"
 
+#include <ydb/services/metadata/manager/ydb_value_operator.h>
+
 #include <library/cpp/json/json_reader.h>
 
 

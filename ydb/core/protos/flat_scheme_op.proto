@@ -1854,7 +1854,7 @@ message TModifyScheme {
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
 
-    optional TAbstractObjectDescription ModifyAbstractObject = 74;
+    optional TModifyAbstractObject ModifyAbstractObject = 74;
 }
 
 message TCopySequence {
@@ -2067,6 +2067,7 @@ message TPathDescription {
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
+    optional TAbstractObjectDescription AbstractObjectDescription = 31;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2209,7 +2210,7 @@ message TResourcePoolDescription {
 }
 
 // NYql::TObjectSettingsImpl
-message TAbstractObjectDescription {
+message TModifyAbstractObject {
     optional string Type = 1;
     optional string Object = 2;
 
@@ -2219,4 +2220,12 @@ message TAbstractObjectDescription {
 
     map<string, Ydb.Value> Features = 6;
     repeated string ResetFeatures = 7;
+}
+
+message TAbstractObjectDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+
+    map<string, Ydb.Value> Features = 6;
 }

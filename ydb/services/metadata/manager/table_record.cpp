@@ -109,6 +109,21 @@ std::vector<Ydb::Column> TTableRecord::SelectOwnedColumns(const std::vector<Ydb:
     return result;
 }
 
+TTableRecord::TProto TTableRecord::SerializeToProto() const {
+    TProto serialized;
+    for (const auto& [key, value] : Values) {
+        serialized.emplace(key, value);
+    }
+    return serialized;
+}
+
+bool TTableRecord::DeserializeFromProto(const TProto& serialized) {
+    for (const auto& [key, value] : serialized) {
+        SetColumn(key, value);
+    }
+    return true;
+}
+
 ui32 TTableRecords::AddRecordImpl(const TTableRecord& record) {
     Y_ABORT_UNLESS(Columns.size());
     ui32 foundColumns = 0;

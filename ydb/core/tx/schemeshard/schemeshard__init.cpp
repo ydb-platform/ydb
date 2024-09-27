@@ -4881,9 +4881,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const auto objectManager = cBehaviour->GetObjectManager();
                 AFL_VERIFY(objectManager)("type_id", typeId);
 
-                Ydb::Value record;
-                AFL_VERIFY(record.ParseFromString(data))("type_id", typeId)("path_id", pathId)("data", data);
+                Ydb::ResultSet recordProto;
+                AFL_VERIFY(recordProto.ParseFromString(data))("type_id", typeId)("path_id", pathId);
+                NMetadata::NInternal::TTableRecord record;
+                AFL_VERIFY(record.DeserializeFromProto(recordProto))("type_id", typeId)("path_id", pathId)("proto", recordProto.DebugString());
                 const auto object = objectManager->DeserializeFromRecord(record);
+                AFL_VERIFY(object);
 
                 Self->AbstractObjects.emplace(pathId, new TAbstractObjectInfo(alterVersion, object));
 

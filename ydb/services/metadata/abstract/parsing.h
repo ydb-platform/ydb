@@ -59,6 +59,10 @@ public:
         return *FeaturesExtractor;
     }
 
+    const TString* ReadFeature(const TString& key) const {
+        return Features.FindPtr(key);
+    }
+
     template <class TKiObject>
     bool DeserializeFromKi(const TKiObject& data) {
         ObjectId = data.ObjectId();

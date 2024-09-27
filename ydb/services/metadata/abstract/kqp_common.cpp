@@ -6,7 +6,7 @@
 
 namespace NKikimr::NMetadata {
 
-TString IClassBehaviour::GetLocalStorageTableDirectory() const {
+TString IClassBehaviour::GetLocalStorageDirectory() const {
     // TODO: remove "StorageTablePath", leave StorageTableDirectory
     return TFsPath(GetInternalStorageTablePath()).Fix().Parent().GetPath();
 }

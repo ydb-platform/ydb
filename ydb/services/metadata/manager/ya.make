@@ -15,6 +15,7 @@ SRCS(
     modification_controller.cpp
     object.cpp
     fetch_database.cpp
+    scheme_manager.cpp
 )
 
 PEERDIR(

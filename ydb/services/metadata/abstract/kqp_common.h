@@ -12,6 +12,7 @@ namespace NModifications {
 class IOperationsManager;
 }
 
+// TODO: Think how to make this class less garbage
 class IClassBehaviour {
 public:
     using TFactory = NObjectFactory::TObjectFactory<IClassBehaviour, TString>;
@@ -24,7 +25,7 @@ protected:
     virtual TString GetInternalStorageHistoryTablePath() const;
 public:
     virtual ~IClassBehaviour() = default;
-    TString GetLocalStorageTableDirectory() const;
+    TString GetLocalStorageDirectory() const;
     TString GetStorageTablePath() const;
     TString GetStorageTableDirectory() const;
     TString GetStorageHistoryTablePath() const;
@@ -46,7 +47,10 @@ public:
         return manager;
     }
     virtual std::shared_ptr<NModifications::IObjectManager> GetObjectManager() const override final {
-        return std::make_shared<NModifications::TObjectManager<TObject>>();
+        if constexpr (NModifications::RecordSerializableObject<TObject>) {
+            return std::make_shared<NModifications::TObjectManager<TObject>>();
+        }
+        return nullptr;
     }
 };
 

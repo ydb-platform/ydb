@@ -365,10 +365,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterAbstractObject:
-            return *modifyScheme.MutableAlterAbstractObject()->MutableSrcTableName();
+            return *modifyScheme.MutableModifyAbstractObject()->MutableObject();
 
         case NKikimrSchemeOp::ESchemeOpCreateAbstractObject:
-            return *modifyScheme.MutableCreateAbstractObject()->MutableSrcTableName();
+            return *modifyScheme.MutableModifyAbstractObject()->MutableObject();
         }
     }
 

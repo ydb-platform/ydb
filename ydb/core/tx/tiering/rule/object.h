@@ -51,7 +51,7 @@ class TTieringRule: public NMetadata::NModifications::TObject<TTieringRule> {
 private:
     YDB_ACCESSOR_DEF(TString, TieringRuleId);
     YDB_ACCESSOR_DEF(TString, DefaultColumn);
-    YDB_ACCESSOR_DEF(TVector<TTieringInterval>, Intervals);
+    YDB_ACCESSOR_DEF(std::vector<TTieringInterval>, Intervals);
 protected:
     NJson::TJsonValue SerializeDescriptionToJson() const;
     bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);
@@ -79,6 +79,8 @@ public:
         static inline const TString TieringRuleId = "tieringRuleId";
         static inline const TString DefaultColumn = "defaultColumn";
         static inline const TString Description = "description";
+
+        static TConclusion<std::vector<TTieringInterval>> DeserializeIntervalsFromJson(const NJson::TJsonValue& jsonInfo);
 
         TDecoder(const Ydb::ResultSet& rawData) {
             TieringRuleIdIdx = GetFieldIndex(rawData, TieringRuleId);

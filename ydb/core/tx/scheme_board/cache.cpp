@@ -1598,6 +1598,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindResourcePool;
                 FillInfo(Kind, ResourcePoolInfo, std::move(*pathDesc.MutableResourcePoolDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeAbstractObject:
+                Kind = TNavigate::KindAbstractObject;
+                FillInfo(Kind, AbstractObjectInfo, std::move(*pathDesc.MutableAbstractObjectDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1670,6 +1674,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeResourcePool:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindResourcePool);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeAbstractObject:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindAbstractObject);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -2189,6 +2196,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // ResourcePool specific
         TIntrusivePtr<TNavigate::TResourcePoolInfo> ResourcePoolInfo;
+
+        // AbstractObject specific
+        TIntrusivePtr<TNavigate::TAbstractObjectInfo> AbstractObjectInfo;
 
     }; // TCacheItem
 

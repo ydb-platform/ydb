@@ -3,6 +3,7 @@
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 
 #include <ydb/services/metadata/abstract/decoder.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/object.h>
 
 

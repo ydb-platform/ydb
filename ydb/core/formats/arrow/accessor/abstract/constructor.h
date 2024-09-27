@@ -74,7 +74,7 @@ private:
 public:
     using TBase::TBase;
 
-    bool IsEqualTo(const TConstructorContainer& item) {
+    bool IsEqualTo(const TConstructorContainer& item) const {
         if (!GetObjectPtr() && !item.GetObjectPtr()) {
             return true;
         } else if (!!GetObjectPtr() && !!item.GetObjectPtr()) {

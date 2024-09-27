@@ -299,7 +299,7 @@ struct TTypeMapper<TString>: TTypeMapperBase {
 template <typename TNested>
 class TTypeMapper<std::optional<TNested>>: TTypeMapper<TNested> {
     using TBase = TTypeMapper<TNested>;
-    public:
+public:
     TTypeMapper(TProgramBuilder& pb): TBase(pb) {}
     auto GetType() { return TBase::Pb.NewOptionalType(TBase::GetType()); }
     auto GetValue(const std::optional<TNested>& value) {

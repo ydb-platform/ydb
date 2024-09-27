@@ -369,11 +369,11 @@ TVector<TString> GenerateValues(size_t level) {
 
 TSet<ui64> GenerateFibonacci(size_t count) {
     TSet<ui64> fibSet;
-    ui64 a = 0, b = 1, c;
+    ui64 a = 0, b = 1;
+    fibSet.insert(a);
     while (count--) {
-        fibSet.insert(c = a + b);
-        a = b;
-        b = c;
+        a = std::exchange(b, a + b);
+        fibSet.insert(b);
     }
     return fibSet;
 }

@@ -45,7 +45,7 @@ struct TKqpEvents {
         EvListProxyNodesRequest,
         EvListProxyNodesResponse,
         EvUpdateDatabaseInfo,
-        EvDelayedRequestError
+        EvDelayedRequestError,
         EvBufferWrite,
         EvBufferWriteResult,
     };

@@ -316,7 +316,7 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     TRuntimeNode::TList listItems;
     std::transform(vector.cbegin(), vector.cend(), std::back_inserter(listItems),
         [&](const auto value) {
-            return TTypeMapper<std::decay_t<decltype(value)>>{}(pb, itemType, value);
+            return TTypeMapper<Type>{}(pb, itemType, value);
         });
 
     return {pb.NewList(itemType, listItems)};

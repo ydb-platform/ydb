@@ -72,9 +72,19 @@ jobs:
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
       
+  test-matrix:
+    name: Test matrix
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print matrix
+        run: echo ${{ needs.build-matrix.outputs.matrix }}
+      - name: Print matrif fromJson
+        run: echo ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+      
   build-platform-specific-binary:
     name: Build YDB CLI for ${{ matrix.os }}
-    needs: build-matrix
+    needs: [ build-matrix, test-matrix ]
     strategy:
       matrix:
         include: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}

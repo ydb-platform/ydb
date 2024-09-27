@@ -86,6 +86,7 @@ CREATE TABLE t (
     Value String NOT NULL,
     PRIMARY KEY (Key))
 ```
+
 - Создание non-nullable колонки в колоночной таблице
 
 ```yql
@@ -96,7 +97,7 @@ CREATE TABLE t (
     )
 
     WITH (
-        STORE = COLUMN    
+        STORE = COLUMN
     )
 ```
 

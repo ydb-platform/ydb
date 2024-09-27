@@ -1861,6 +1861,7 @@ private:
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
+            auto scheduledTaskCount = ScheduleByCost(tx, ResourceSnapshot);
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -1908,8 +1909,10 @@ private:
                                 UnknownAffectedShardCount = true;
                             }
                             break;
-                        case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot);
+                        case NKqpProto::TKqpSource::kExternalSource: {
+                            auto it = scheduledTaskCount.find(stageIdx);
+                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                        }
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");

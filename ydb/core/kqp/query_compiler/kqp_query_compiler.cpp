@@ -21,7 +21,9 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -515,6 +517,33 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
+        auto overridePlanner = Config->OverridePlanner.Get();
+        if (overridePlanner) {
+            NJson::TJsonReaderConfig jsonConfig;
+            NJson::TJsonValue jsonNode;
+            if (NJson::ReadJsonTree(*overridePlanner, &jsonConfig, &jsonNode)) {
+                for (auto& stageOverride : jsonNode.GetArray()) {
+                    ui32 txId = 0;
+                    if (auto* txNode = stageOverride.GetValueByPath("tx")) {
+                        txId = txNode->GetIntegerSafe();
+                    }
+                    if (txId < static_cast<ui32>(queryProto.GetTransactions().size())) {
+                        auto& tx = *queryProto.MutableTransactions(txId);
+                        ui32 stageId = 0;
+                        if (auto* stageNode = stageOverride.GetValueByPath("stage")) {
+                            stageId = stageNode->GetIntegerSafe();
+                        }
+                        if (stageId < static_cast<ui32>(tx.GetStages().size())) {
+                            auto& stage = *tx.MutableStages(stageId);
+                            if (auto* tasksNode = stageOverride.GetValueByPath("tasks")) {
+                                stage.SetTaskCount(tasksNode->GetIntegerSafe());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -643,8 +672,11 @@ private:
             }
         }
 
+        double stageCost = 0.0;
         VisitExpr(stage.Program().Ptr(), [&](const TExprNode::TPtr& exprNode) {
+
             TExprBase node(exprNode);
+
             if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) {
                 auto readTable = maybeReadTable.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTable.Table().Path()).Metadata;
@@ -725,12 +757,15 @@ private:
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
+            } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
+                stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());
             }
             return true;
         });
 
+        stageProto.SetStageCost(stageCost);
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 

@@ -479,33 +479,49 @@ public:
             return PutTabletLogLatency;
         }
 
-        TString GetGroupName(EGroupFields groupBy) {
+        TString GetGroupName(EGroupFields groupBy) const {
+            TString groupName;
             switch (groupBy) {
                 case EGroupFields::GroupId:
-                    return ToString(GroupId);
+                    groupName = ToString(GroupId);
+                    break;
                 case EGroupFields::Erasure:
-                    return Erasure;
+                    groupName = Erasure;
+                    break;
                 case EGroupFields::Usage:
-                    return GetUsageForGroup();
+                    groupName = GetUsageForGroup();
+                    break;
                 case EGroupFields::DiskSpaceUsage:
-                    return GetDiskUsageForGroup();
+                    groupName = GetDiskUsageForGroup();
+                    break;
                 case EGroupFields::PoolName:
-                    return PoolName;
+                    groupName = PoolName;
+                    break;
                 case EGroupFields::Kind:
-                    return Kind;
+                    groupName = Kind;
+                    break;
                 case EGroupFields::Encryption:
-                    return GetEncryptionForGroup();
+                    groupName = GetEncryptionForGroup();
+                    break;
                 case EGroupFields::MediaType:
-                    return MediaType;
+                    groupName = MediaType;
+                    break;
                 case EGroupFields::MissingDisks:
-                    return GetMissingDisksForGroup();
+                    groupName = GetMissingDisksForGroup();
+                    break;
                 case EGroupFields::State:
-                    return State;
+                    groupName = State;
+                    break;
                 case EGroupFields::Latency:
-                    return GetLatencyForGroup();
+                    groupName = GetLatencyForGroup();
+                    break;
                 default:
-                    return {};
+                    break;
             }
+            if (groupName.empty()) {
+                groupName = "unknown";
+            }
+            return groupName;
         }
     };
 

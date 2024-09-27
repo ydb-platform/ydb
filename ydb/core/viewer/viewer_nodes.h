@@ -429,30 +429,45 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetGroupName(ENodeFields groupBy, TInstant now) const {
+            TString groupName;
             switch (groupBy) {
                 case ENodeFields::NodeId:
-                    return ToString(GetNodeId());
+                    groupName = ToString(GetNodeId());
+                    break;
                 case ENodeFields::HostName:
-                    return GetHostName();
+                    groupName = GetHostName();
+                    break;
                 case ENodeFields::NodeName:
-                    return GetNodeName();
+                    groupName = GetNodeName();
+                    break;
                 case ENodeFields::Database:
-                    return Database;
+                    groupName = Database;
+                    break;
                 case ENodeFields::DiskSpaceUsage:
-                    return GetDiskUsageForGroup();
+                    groupName = GetDiskUsageForGroup();
+                    break;
                 case ENodeFields::DC:
-                    return GetDataCenter();
+                    groupName = GetDataCenter();
+                    break;
                 case ENodeFields::Rack:
-                    return GetRack();
+                    groupName = GetRack();
+                    break;
                 case ENodeFields::Missing:
-                    return ToString(MissingDisks);
+                    groupName = ToString(MissingDisks);
+                    break;
                 case ENodeFields::Uptime:
-                    return GetUptimeForGroup(now);
+                    groupName = GetUptimeForGroup(now);
+                    break;
                 case ENodeFields::Version:
-                    return GetVersionForGroup();
+                    groupName = GetVersionForGroup();
+                    break;
                 default:
-                    return {};
+                    break;
             }
+            if (groupName.empty()) {
+                groupName = "unknown";
+            }
+            return groupName;
         }
 
         void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState) {

@@ -34,6 +34,12 @@ public:
         if (!Serializer.IsEqualTo(item.Serializer)) {
             return false;
         }
+        if (!AccessorConstructor->IsEqualTo(item.AccessorConstructor)) {
+            return false;
+        }
+        if (NArrow::ScalarCompareNullable(DefaultValue, item.DefaultValue)) {
+            return false;
+        }
         return true;
     }
 

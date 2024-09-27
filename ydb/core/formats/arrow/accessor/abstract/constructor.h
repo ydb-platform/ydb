@@ -25,9 +25,14 @@ private:
     virtual TString DoDebugString() const {
         return "";
     }
+    virtual bool DoIsEqualWithSameTypeTo(const IConstructor& item) const = 0;
 
 public:
     virtual ~IConstructor() = default;
+
+    bool IsEqualWithSameTypeTo(const IConstructor& item) const {
+        return DoIsEqualWithSameTypeTo(item);
+    }
 
     TString DebugString() const {
         return TStringBuilder() << GetClassName() << ":" << DoDebugString();
@@ -68,6 +73,19 @@ private:
 
 public:
     using TBase::TBase;
+
+    bool IsEqualTo(const TConstructorContainer& item) {
+        if (!GetObjectPtr() && !item.GetObjectPtr()) {
+            return true;
+        } else if (!!GetObjectPtr() && !!item.GetObjectPtr()) {
+            if (GetObjectPtr()->GetClassName() != item.GetObjectPtr()->GetClassName()) {
+                return false;
+            }
+            return GetObjectPtr()->IsEqualWithSameTypeTo(*item.GetObjectPtr());
+        } else {
+            return false;
+        }
+    }
 
     static TConstructorContainer GetDefaultConstructor();
 };

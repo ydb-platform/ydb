@@ -6,3 +6,5 @@ RUN_PROGRAM(
 )
 
 END()
+
+RECURSE(downloader)

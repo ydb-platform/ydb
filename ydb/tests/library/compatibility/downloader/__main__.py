@@ -8,7 +8,7 @@ from botocore.client import Config
 
 AWS_ENDPOINT = "https://storage.yandexcloud.net"
 AWS_BUCKET = "ydb-builds"
-    
+
 
 def main():
     s3_client = boto3.client(
@@ -16,7 +16,7 @@ def main():
         endpoint_url=AWS_ENDPOINT,
         config=Config(signature_version=UNSIGNED)
     )
-    
+
     s3_bucket = AWS_BUCKET
     remote_src = sys.argv[1]
     local_dst = sys.argv[2]

@@ -25,7 +25,7 @@ const std::optional<TDecimalType> TDecimalType::ParseTypeName(const TStringBuf& 
     if (strcasecmp(typeName.data(), "decimal") == 0) {
         return TDecimalType::Default();
     } else {
-        static const std::regex regex("decimal\\((\\d+),(\\d+)\\)", std::regex_constants::icase);
+        static const std::regex regex("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)", std::regex_constants::icase);
         std::smatch match;
         if (std::regex_search(typeName.data(), match, regex)) {
             ui32 precision = FromString<ui32>(match[1].str());

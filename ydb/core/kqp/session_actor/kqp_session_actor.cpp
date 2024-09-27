@@ -1978,6 +1978,9 @@ public:
     }
 
     void Reply() {
+        if (!QueryState) {
+            return;
+        }
         YQL_ENSURE(QueryState);
         YQL_ENSURE(Counters);
 

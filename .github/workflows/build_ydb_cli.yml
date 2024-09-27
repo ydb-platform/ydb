@@ -70,7 +70,9 @@ jobs:
             echo "Matrix after adding windows: $MATRIX"
           fi
 
-          echo "Final matrix: $MATRIX"
+          echo "Final matrix before escaping json: $MATRIX"
+          MATRIX=$(echo $MATRIX | jq -cR '.')
+          echo "Final matrix after escaping json: $MATRIX"
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
       

@@ -1,19 +1,43 @@
 name: Build-YDB-CLI
-run-name: Build YDB CLI ${{ inputs.version }}
+run-name: Build YDB CLI
 on:
   workflow_dispatch:
     inputs:
-      version:
-        type: string
-        default: ""
-        description: "YDB CLI version (optional)"
-      runner_label:
-        type: string
-        default: "auto-provisioned"
-        description: "runner label"
+      build-linux:
+        type: boolean
+        description: Build YDB CLI for Linux
+        default: true
+      build-darwin-amd:
+        type: boolean
+        description: Build YDB CLI for Darwin amd64
+        default: true
+      build-darwin-arm:
+        type: boolean
+        description: Build YDB CLI for Darwin arm64
+        default: true
+      build-windows:
+        type: boolean
+        description: Build YDB CLI for Windows
+        default: true
       commit_sha:
         type: string
         default: ""
+      s3_host:
+        type: string
+        default: "storage.yandexcloud.net"
+        description: "S3 endpoint. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+      s3_bucket:
+        type: string
+        default: "yandexcloud-ydb"
+        description: "S3 bucket. S3Uri (without hostname). Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+      s3_dns_host_bucket:
+        type: string
+        default: "%(bucket)s.storage.yandexcloud.net"
+        description: "S3 DNS-style bucket+hostname:port template for accessing a bucket. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
+      s3_region:
+        type: string
+        default: "ru-central1"
+        description: "S3 region. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
 defaults:
   run:
     shell: bash
@@ -23,11 +47,15 @@ jobs:
     strategy:
       matrix:
         include:
-#          - { os: windows, runner: windows-latest, shell: pwsh }
           - { os: linux, runner: ubuntu-latest, shell: bash }
-#          - { os: macos-amd, runner: macos-13, shell: bash }
-#          - { os: macos-arm, runner: macos-latest, shell: bash }
+          - { os: darwin-amd, runner: macos-13, shell: bash }
+          - { os: darwin-arm, runner: macos-latest, shell: bash }
+          - { os: windows, runner: windows-latest, shell: pwsh }
     name: Build YDB CLI for ${{ matrix.os }}
+    if: ${{ (inputs.build-linux == 'true' && matrix.os == 'linux')
+         || (inputs.build-darwin-amd == 'true' && matrix.os == 'darwin-amd')
+         || (inputs.build-darwin-arm == 'true' && matrix.os == 'darwin-arm')
+         || (inputs.build-windows == 'true' && matrix.os == 'windows') }}
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -54,13 +82,11 @@ jobs:
 #    - name: Print env vars
 #      run: gci env:* | sort-object name
 
-#    - name: Print uname
-#      run: uname -a
+    - name: Print uname
+      run: uname -a
     
-#    - name: Print YDB CLI version
-#      run: cat ydb/apps/ydb/version.txt
-
-
+    - name: Print YDB CLI version
+      run: cat ydb/apps/ydb/version.txt
     
     - name: Fake create file
       run: echo 'test' > ydb/apps/ydb/ydb
@@ -85,6 +111,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit_sha }}
+      - name: Get YDB CLI version from ydb/apps/ydb/version.txt
+        id: getver
+        run: echo "cli_version=$(cat ydb/apps/ydb/version.txt)-${GITHUB_SHA}" >> $GITHUB_OUTPUT
+      - name: Print YDB CLI version
+        run: echo ${{ steps.getver.outputs.cli_version }}
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
       - name: Unzip s3
@@ -94,52 +125,59 @@ jobs:
           cd s3cmd-2.4.0
           sudo python3 setup.py install
           cd ..
-#      - name: Set up S3cmd cli tool
-#        uses: s3-actions/s3cmd@v1.8.0
+
+#      - name: Prepare s3cmd
+#        uses: ./.github/actions/s3cmd
 #        with:
-#          provider: aws # default is linode
-#          region: 'ru-central1'
-#          access_key: ${{ secrets.CLI_S3_KEY_ID }}
-#          secret_key: ${{ secrets.CLI_S3_KEY_SECRET_ID }}
-      - name: Prepare s3cmd
-        uses: ./.github/actions/s3cmd
-        with:
-          s3_endpoint: ${{ vars.CLI_S3_ENDPOINT }}
-          s3_bucket: ${{ vars.CLI_S3_BUCKET }}
-          s3_key_id: ${{ secrets.CLI_S3_KEY_ID }}
-          s3_key_secret: ${{ secrets.CLI_S3_KEY_SECRET_ID }}
+#          s3_endpoint: ${{ vars.CLI_S3_ENDPOINT }}
+#          s3_bucket: ${{ vars.CLI_S3_BUCKET }}
+#          s3_key_id: ${{ secrets.CLI_S3_KEY_ID }}
+#          s3_key_secret: ${{ secrets.CLI_S3_KEY_SECRET_ID }}
 
-      - name: prepare directories
-        run: |
-          mkdir -p ${{ inputs.version }}/linux/amd64
-          mkdir -p ${{ inputs.version }}/darwin/amd64
-          mkdir -p ${{ inputs.version }}/windows/amd64
-          mkdir -p ${{ inputs.version }}/darwin/arm64
+      - name: Prepare directory for linux binary
+        if: ${{ inputs.build-linux == 'true' }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/amd64
 
-      - name: copy linux binary
+      - name: Prepare directory for Darwin amd binary
+        if: ${{ inputs.build-darwin-amd == 'true' }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
+
+      - name: Prepare directory for Darwin arm binary
+        if: ${{ inputs.build-darwin-arm == 'true' }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
+
+      - name: Prepare directory forWindows binary
+        if: ${{ inputs.build-windows == 'true' }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+
+      - name: Copy linux binary
+        if: ${{ inputs.build-linux == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: linux-binary
-          path: ${{ inputs.version }}/linux/amd64/
-#      - name: copy darwin amd64 binary
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: macos-amd-binary
-#          path: ${{ inputs.version }}/darwin/amd64/
-#      - name: copy darwin arm64 binary
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: macos-arm-binary
-#          path: ${{ inputs.version }}/darwin/arm64/
-#      - name: copy windows binary
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: windows-binary
-#          path: ${{ inputs.version }}/windows/amd64/
+          path: ${{ steps.getver.outputs.cli_version }}/linux/amd64/
+      - name: Copy darwin amd64 binary
+        if: ${{ inputs.build-darwin-amd == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-amd-binary
+          path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
+      - name: Copy darwin arm64 binary
+        if: ${{ inputs.build-darwin-arm == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm-binary
+          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
+      - name: Copy windows binary (unsigned)
+        if: ${{ inputs.build-windows == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
 
-      - name: Print result
-        run: ls -R ${{ inputs.version }}
+      - name: Print resulting file hierarchy
+        run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
 
-      - name: Print result
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} put --recursive ${{ inputs.version }} s3://${{ vars.CLI_S3_BUCKET }}/release/
+      - name: Upload to S3
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="%(bucket)s.${{ inputs.s3_host }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
       

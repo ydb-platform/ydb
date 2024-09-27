@@ -149,12 +149,13 @@ NYql::TAstParseResult ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<
         std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool isSql, bool sqlAutoCommit,
         TMaybe<ui16>& sqlVersion, bool& deprecatedSQL, TString cluster, TString kqpTablePathPrefix,
         ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources,
-        NYql::TExprContext& ctx, bool isEnablePgConstsToParams, bool isEnablePgSyntax) {
+        NYql::TExprContext& ctx, bool isEnablePgConstsToParams, bool isEnablePgSyntax,
+        NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
     if (isSql) {
         auto settings = GetTranslationSettings(queryType, usePgParser, sqlAutoCommit, queryText, queryParameters, sqlVersion, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams, isEnablePgSyntax);
         ui16 actualSyntaxVersion = 0;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion);
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion, effectiveSettings);
         deprecatedSQL = (actualSyntaxVersion == 0);
         sqlVersion = actualSyntaxVersion;
         return std::move(ast);
@@ -169,7 +170,8 @@ NYql::TAstParseResult ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<
 }
 
 TQueryAst ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::Syntax>& syntax, const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool isSql,
-        TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams, bool isEnablePgSyntax) {
+        TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams, bool isEnablePgSyntax,
+        NSQLTranslation::TTranslationSettings* effectiveSettings) {
     bool deprecatedSQL;
     TMaybe<ui16> sqlVersion;
     TMaybe<bool> usePgParser;
@@ -192,7 +194,7 @@ TQueryAst ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::
     } else {
         sqlAutoCommit = false;
     }
-    auto astRes = ParseQuery(queryType, usePgParser, queryText, queryParameters, isSql, sqlAutoCommit, sqlVersion, deprecatedSQL, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams, isEnablePgSyntax);
+    auto astRes = ParseQuery(queryType, usePgParser, queryText, queryParameters, isSql, sqlAutoCommit, sqlVersion, deprecatedSQL, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams, isEnablePgSyntax, effectiveSettings);
     return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL);
 }
 

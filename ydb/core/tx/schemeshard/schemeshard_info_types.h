@@ -27,6 +27,8 @@
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -3403,6 +3405,7 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
 
     ui64 AlterVersion = 0;
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

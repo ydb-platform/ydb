@@ -87,10 +87,10 @@ def kikimr_params(request: pytest.FixtureRequest):
 
 def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external_ydb_endpoint):
     return [
+        AddFormatSizeLimitExtension(),
         AddInflightExtension(),
         AddAllowConcurrentListingsExtension(),
         AddDataInflightExtension(),
-        AddFormatSizeLimitExtension(),
         DefaultConfigExtension(s3.s3_url),
         YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
         ComputeExtension(),

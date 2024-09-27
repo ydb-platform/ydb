@@ -3,7 +3,7 @@
 #include <thread>
 #include <functional>
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb-cpp-sdk/client/types/status/status.h>

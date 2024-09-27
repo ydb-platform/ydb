@@ -180,8 +180,8 @@ private:
         request.set_session_id(session.GetId());
         auto txControlProto = request.mutable_tx_control();
         txControlProto->set_commit_tx(txControl.CommitTx_);
-        if (txControl.TxId_) {
-            txControlProto->set_tx_id(*txControl.TxId_);
+        if (txControl.Tx_.Defined()) {
+            txControlProto->set_tx_id(txControl.Tx_->GetId());
         } else {
             SetTxSettings(txControl.BeginTx_, txControlProto->mutable_begin_tx());
         }

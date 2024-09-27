@@ -1988,7 +1988,7 @@ const TString& TSession::GetId() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TTxControl::TTxControl(const TTransaction& tx)
-    : TxId_(tx.GetId())
+    : Tx_(tx)
 {}
 
 TTxControl::TTxControl(const TTxSettings& begin)

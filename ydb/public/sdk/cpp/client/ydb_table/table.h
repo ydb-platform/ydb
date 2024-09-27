@@ -1274,30 +1274,7 @@ private:
     ETransactionMode Mode_;
 };
 
-class TTxControl {
-    friend class TTableClient;
-
-public:
-    using TSelf = TTxControl;
-
-    static TTxControl Tx(const TTransaction& tx) {
-        return TTxControl(tx);
-    }
-
-    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
-        return TTxControl(settings);
-    }
-
-    FLUENT_SETTING_FLAG(CommitTx);
-
-private:
-    TTxControl(const TTransaction& tx);
-    TTxControl(const TTxSettings& begin);
-
-private:
-    TMaybe<TString> TxId_;
-    TTxSettings BeginTx_;
-};
+class TTxControl;
 
 enum class EAutoPartitioningPolicy {
     Disabled = 1,
@@ -1847,6 +1824,33 @@ private:
     class TImpl;
 
     std::shared_ptr<TImpl> TransactionImpl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTxControl {
+    friend class TTableClient;
+
+public:
+    using TSelf = TTxControl;
+
+    static TTxControl Tx(const TTransaction& tx) {
+        return TTxControl(tx);
+    }
+
+    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
+        return TTxControl(settings);
+    }
+
+    FLUENT_SETTING_FLAG(CommitTx);
+
+private:
+    TTxControl(const TTransaction& tx);
+    TTxControl(const TTxSettings& begin);
+
+private:
+    TMaybe<TTransaction> Tx_;
+    TTxSettings BeginTx_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

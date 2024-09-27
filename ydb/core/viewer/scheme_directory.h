@@ -32,12 +32,29 @@ using TSchemeDirectoryDeleteRpc = TJsonLocalRpc<Ydb::Scheme::RemoveDirectoryRequ
 
 template<typename LocalRpcType>
 class TSchemeDirectoryRequest : public LocalRpcType {
-public:
+protected:
     using TBase = LocalRpcType;
+    using TRequestProtoType = TBase::TRequestProtoType;
+    using TBase::Database;
 
+public:
     TSchemeDirectoryRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
+
+    bool ValidateRequest(TRequestProtoType& request) override {
+        if (TBase::ValidateRequest(request)) {
+            if (Database && request.path()) {
+                TString path = request.path();
+                if (!path.empty() && path[0] != '/') {
+                    path = Database + "/" + path;
+                    request.set_path(path);
+                }
+            }
+            return true;
+        }
+        return false;
+    }
 };
 
 class TJsonSchemeDirectoryHandler : public TJsonHandler<TSchemeDirectory> {

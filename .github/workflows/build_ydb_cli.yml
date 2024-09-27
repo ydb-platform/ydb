@@ -50,7 +50,6 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Create file with future platform list
-        id: set-matrix
         run: |
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
@@ -75,8 +74,11 @@ jobs:
           echo "testmatrix={\"include\":[{\"project\":\"foo\",\"config\":\"Debug\"},{\"project\":\"bar\",\"config\":\"Release\"}]}"
           echo "testmatrix=$MATRIX"
           
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-      
+          echo "matrix=<<EOF" >> $GITHUB_OUTPUT
+          echo "$MATRIX" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+# https://github.com/github/docs/issues/21529
+
   build-platform-specific-binary:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}

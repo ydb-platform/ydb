@@ -132,8 +132,11 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     for (auto&& i : protoStatic.GetPathHashes()) {
         PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
     }
-    AFL_VERIFY(PathPortionHashes.size());
-    IsStaticSaved = true;
+    if (PathPortionHashes.empty()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty static cursor");
+    } else {
+        IsStaticSaved = true;
+    }
     return TConclusionStatus::Success();
 }
 
@@ -178,10 +181,14 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
         local.emplace(i.first, std::move(portionsMap));
     }
     std::swap(PortionsForSend, local);
-    if (!StartPathId) {
-        AFL_VERIFY(PortionsForSend.size());
-        AFL_VERIFY(PortionsForSend.begin()->second.size());
 
+    if (PortionsForSend.empty()) {
+        AFL_VERIFY(!StartPortionId);
+        NextPathId = std::nullopt;
+        NextPortionId = std::nullopt;
+        return true;
+    } else if (!StartPathId) {
+        AFL_VERIFY(PortionsForSend.begin()->second.size());
         NextPathId = PortionsForSend.begin()->first;
         NextPortionId = PortionsForSend.begin()->second.begin()->first;
         AFL_VERIFY(Next(storagesManager, index));

@@ -52,25 +52,25 @@ jobs:
       - name: Create file with future platform list
         id: matrix
         run: |
-          MATRIX='[]'
+          MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
-            echo 'Adding linux job to matrix'
-            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
+            echo "Matrix after adding linux: $MATRIX"
           fi
-          if [ "${{ inputs.darwin-amd }}" == "true" ]; then
-            echo 'Adding darwin-amd job to matrix'
-            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash"}]')
+          if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash"}]')
+            echo "Matrix after adding darwin-amd: $MATRIX"
           fi
-          if [ "${{ inputs.darwin-arm }}" == "true" ]; then
-            echo 'Adding darwin-arm job to matrix'
-            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "darwin-arm", "runner": "macos-latest", "shell": "bash"}]')
+          if [ "${{ inputs.build-darwin-arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-arm", "runner": "macos-latest", "shell": "bash"}]')
+            echo "Matrix after adding darwin-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-windows }}" == "true" ]; then
-            echo 'Adding windows job to matrix'
-            MATRIX=$(echo $MATRIX | jq -c '. + [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
+            echo "Matrix after adding windows: $MATRIX"
           fi
 
-          echo "$MATRIX"
+          echo "Final matrix: $MATRIX"
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
       
@@ -86,8 +86,7 @@ jobs:
     name: Build YDB CLI for ${{ matrix.os }}
     needs: [ build-matrix, test-matrix ]
     strategy:
-      matrix:
-        include: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
 #          - { os: linux, runner: ubuntu-latest, shell: bash }
 #          - { os: darwin-amd, runner: macos-13, shell: bash }
 #          - { os: darwin-arm, runner: macos-latest, shell: bash }

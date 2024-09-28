@@ -90,26 +90,10 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
     steps:
-    
-#    - name: MSVS content
-#      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio" | Get-Childitem
-    
-#    - name: MSVS 14 content
-#      run: Dir -Recurse "C:\Program Files (x86)\Microsoft Visual Studio 14.0" | Get-Childitem
-    
     - name: Checkout
       uses: actions/checkout@v4
       with:
         ref: ${{ inputs.commit_sha }}
-
-#    - name: Print env vars before installing Windows SDK
-#      run: gci env:* | sort-object name
-    
-#    - name: Install windows10 SDK
-#      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
-
-#    - name: Print env vars
-#      run: gci env:* | sort-object name
 
     - name: Print uname
       run: uname -a
@@ -117,11 +101,8 @@ jobs:
     - name: Print YDB CLI version
       run: cat ydb/apps/ydb/version.txt
     
-    - name: Fake create file
-      run: echo 'test' > ydb/apps/ydb/ydb
-    
-#    - name: Build binary with ya make
-#      run: python ya make ydb/apps/ydb -DUSE_CLANG_CL=yes --host-platform-flag USE_CLANG_CL=yes
+    - name: Build binary with ya make
+      run: ya make ydb/apps/ydb -r -DUSE_SSE4=no
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4

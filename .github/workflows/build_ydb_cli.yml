@@ -99,7 +99,7 @@ jobs:
       run: cat ydb/apps/ydb/version.txt
 
     - name: Prepare Microsoft Visual Studio environment for windows
-      if: ${{ matrix.os == "windows" }}
+      if: ${{ matrix.os == 'windows' }}
       shell: cmd 
       run: ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"' }}
     

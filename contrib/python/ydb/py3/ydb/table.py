@@ -290,6 +290,7 @@ class TableIndex(object):
         self._pb.name = name
         self.name = name
         self.index_columns = []
+        self.data_columns = []
         # output only.
         self.status = None
 
@@ -305,6 +306,12 @@ class TableIndex(object):
         for column in columns:
             self._pb.index_columns.append(column)
             self.index_columns.append(column)
+        return self
+
+    def with_data_columns(self, *columns):
+        for column in columns:
+            self._pb.data_columns.append(column)
+            self.data_columns.append(column)
         return self
 
     def to_pb(self):

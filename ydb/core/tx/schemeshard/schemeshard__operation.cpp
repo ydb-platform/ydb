@@ -1190,6 +1190,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterResourcePool:
         return CreateAlterResourcePool(NextPartId(), txState);
 
+    case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1441,6 +1444,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     // IncrementalBackup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
         return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     }
 
     Y_UNREACHABLE();

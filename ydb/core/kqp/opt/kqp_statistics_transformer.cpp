@@ -615,6 +615,8 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                     }
                 }
 
+                auto dataSourceStats = stats;
+
                 auto rowType = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 if (specific->FullRawRowAvgSize == 0.0) {
                     auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
@@ -658,6 +660,10 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                         stats->Cost = rowSize * stats->Nrows;
                         if (newSpecific->Compression) {
                             stats->Cost *= 1.5;
+                        }
+                        {
+                            auto specific = const_cast<TS3ProviderStatistics*>(dynamic_cast<const TS3ProviderStatistics*>((dataSourceStats->Specific.get())));
+                            specific->Costs[TStructExprType::MakeHash(rowType->GetItems())] = stats->Cost;
                         }
                     }
                     typeCtx->SetStats(input.Get(), stats);

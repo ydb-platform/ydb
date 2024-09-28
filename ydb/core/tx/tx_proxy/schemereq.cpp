@@ -360,6 +360,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
         }
     }
@@ -808,6 +809,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return false;
         }
         return true;

@@ -1164,7 +1164,29 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto pqTabletConfig = pqDescr.MutablePQTabletConfig();
         NPQ::Migrate(*pqTabletConfig);
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
-        auto splitMergeFeatureEnabled = appData->FeatureFlags.GetEnableTopicSplitMerge();
+
+        auto needHandleAutoPartitioning = false;
+        if (appData->FeatureFlags.GetEnableTopicSplitMerge()) {
+
+            auto reqHasAutoPartitioningStrategyChange = request.has_alter_partitioning_settings() &&
+                request.alter_partitioning_settings().has_alter_auto_partitioning_settings() &&
+                request.alter_partitioning_settings().alter_auto_partitioning_settings().has_set_strategy();
+
+            auto pqConfigHasAutoPartitioningStrategy = pqTabletConfig->HasPartitionStrategy() &&
+                pqTabletConfig->GetPartitionStrategy().HasPartitionStrategyType() &&
+                pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType();
+
+            if (pqConfigHasAutoPartitioningStrategy && pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                needHandleAutoPartitioning = true;
+            } else if (reqHasAutoPartitioningStrategyChange) {
+                auto strategy = request.alter_partitioning_settings().alter_auto_partitioning_settings().set_strategy();
+                needHandleAutoPartitioning = strategy == ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED ||
+                                            strategy == ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP ||
+                                            strategy == ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
+            }
+
+        }
+
 
         if (request.has_set_retention_storage_mb()) {
             CHECK_CDC;
@@ -1178,12 +1200,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (settings.has_set_min_active_partitions()) {
                 auto minParts = IfEqualThenDefault<i64>(settings.set_min_active_partitions(), 0L, 1L);
                 pqDescr.SetTotalGroupCount(minParts);
-                if (splitMergeFeatureEnabled) {
+                if (needHandleAutoPartitioning) {
                     pqTabletConfig->MutablePartitionStrategy()->SetMinPartitionCount(minParts);
                 }
             }
 
-            if (splitMergeFeatureEnabled) {
+            if (needHandleAutoPartitioning) {
                 if (settings.has_set_max_active_partitions()) {
                     pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
                 }
@@ -1219,7 +1241,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        if (splitMergeFeatureEnabled) {
+        if (needHandleAutoPartitioning) {
             auto code = ValidatePartitionStrategy(*pqTabletConfig, error);
             if (code) return code->YdbCode;
         }

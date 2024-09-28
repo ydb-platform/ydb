@@ -10,7 +10,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ITableReader
-    : public IRowBatchReader
+    : public virtual IRowBatchReader
 {
     //! Returns the starting row index within the table.
     virtual i64 GetStartRowIndex() const = 0;

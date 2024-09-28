@@ -2421,6 +2421,13 @@ class Cuda(object):
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
 
+        if self.cuda_version.value.startswith('10.'):
+            emit('NVCC_STD_VER', '17')
+        elif self.cuda_version.value.startswith('11.'):
+            emit('NVCC_STD_VER', '17')
+        else:
+            emit('NVCC_STD_VER', '20')
+
     def print_macros(self):
         mtime = ' '
         custom_pid = ' '
@@ -2449,7 +2456,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True

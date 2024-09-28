@@ -19,6 +19,7 @@ public:
 private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
     const ui32 TabletTxNo;
+    std::optional<NOlap::TSnapshot> CommitSnapshot;
 
     bool CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
     bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);

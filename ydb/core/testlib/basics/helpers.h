@@ -36,6 +36,8 @@ namespace NFake {
         TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
     TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
+    TActorId StartTestTablet(TTestActorRuntime &runtime, TTabletStorageInfo *info,
+        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
     NTabletPipe::TClientConfig GetPipeConfigWithRetries();
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,

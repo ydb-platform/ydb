@@ -113,16 +113,6 @@ jobs:
       shell: cmd
       run: ${{ 'dir "%ProgramFiles%\Microsoft SDKs"' }}
 
-    - name: Print windows kits
-      if: ${{ matrix.os == 'windows' }}
-      shell: cmd
-      run: ${{ 'dir "%ProgramFiles%\Windows kits"' }}
-
-    - name: Print windows kits
-      if: ${{ matrix.os == 'windows' }}
-      shell: cmd
-      run: ${{ 'dir "%ProgramFiles%\Windows kits\10"' }}
-
     - name: Print windows kits x86
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
@@ -147,16 +137,6 @@ jobs:
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
       run: ${{ 'dir "%ProgramFiles%\Microsoft SDKs"' }}
-
-    - name: Print windows kits
-      if: ${{ matrix.os == 'windows' }}
-      shell: cmd
-      run: ${{ 'dir "%ProgramFiles%\Windows kits"' }}
-
-    - name: Print windows kits
-      if: ${{ matrix.os == 'windows' }}
-      shell: cmd
-      run: ${{ 'dir "%ProgramFiles%\Windows kits\10"' }}
 
     - name: Print windows kits x86
       if: ${{ matrix.os == 'windows' }}

@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         for (ui32 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000 + i * 1000, i * 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000 + i * 1000, 10000);
         }
         csController->WaitIndexation(TDuration::Seconds(3));
         csController->WaitCompactions(TDuration::Seconds(3));

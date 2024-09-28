@@ -49,7 +49,14 @@ namespace {
             ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType()) : AS_TYPE(TDataType, type);
 
         // TODO: support pg types
-        auto typeInfo = NScheme::TTypeInfo(dataType->GetSchemeType());
+        NScheme::TTypeInfo typeInfo;
+        if (dataType->GetSchemeType() == NScheme::NTypeIds::Decimal) {
+            const TDataDecimalType* dataDecimalType = static_cast<const TDataDecimalType*>(dataType);
+            auto [precision, scale] = dataDecimalType->GetParams();
+            typeInfo = NScheme::TDecimalType(precision, scale);
+        } else {
+            typeInfo = dataType->GetSchemeType(); 
+        }        
         return MakeCell(typeInfo, value, env);
     }
 

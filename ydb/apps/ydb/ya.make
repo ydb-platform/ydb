@@ -1,6 +1,6 @@
 PROGRAM(ydb)
 
-IF(RELEASE)
+IF(BUILD_TYPE == RELEASE)
     STRIP()
 ENDIF()
 

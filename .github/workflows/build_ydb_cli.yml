@@ -145,6 +145,48 @@ jobs:
         run: echo "cli_version=$(cat ydb/apps/ydb/version.txt)" >> $GITHUB_OUTPUT
       - name: Print YDB CLI version ${{ steps.getver.outputs.cli_version }}
         run: echo ${{ steps.getver.outputs.cli_version }}
+
+      - name: Prepare directory for linux binary
+        if: ${{ inputs.build-linux }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/amd64
+      - name: Prepare directory for Darwin amd binary
+        if: ${{ inputs.build-darwin-amd }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
+      - name: Prepare directory for Darwin arm binary
+        if: ${{ inputs.build-darwin-arm }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
+      - name: Prepare directory forWindows binary
+        if: ${{ inputs.build-windows }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+
+      - name: Copy linux binary
+        if: ${{ inputs.build-linux }}
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: ${{ steps.getver.outputs.cli_version }}/linux/amd64/
+      - name: Copy darwin amd64 binary
+        if: ${{ inputs.build-darwin-amd }}
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-amd-binary
+          path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
+      - name: Copy darwin arm64 binary
+        if: ${{ inputs.build-darwin-arm }}
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm-binary
+          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
+      - name: Copy windows binary (unsigned)
+        if: ${{ inputs.build-windows }}
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+
+      - name: Print resulting file hierarchy
+        run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
       - name: Unzip s3
@@ -154,50 +196,6 @@ jobs:
           cd s3cmd-2.4.0
           sudo python3 setup.py install
           cd ..
-
-      - name: Prepare directory for linux binary
-        if: ${{ inputs.build-linux == 'true' }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/amd64
-
-      - name: Prepare directory for Darwin amd binary
-        if: ${{ inputs.build-darwin-amd == 'true' }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
-
-      - name: Prepare directory for Darwin arm binary
-        if: ${{ inputs.build-darwin-arm == 'true' }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
-
-      - name: Prepare directory forWindows binary
-        if: ${{ inputs.build-windows == 'true' }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
-
-      - name: Copy linux binary
-        if: ${{ inputs.build-linux == 'true' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-binary
-          path: ${{ steps.getver.outputs.cli_version }}/linux/amd64/
-      - name: Copy darwin amd64 binary
-        if: ${{ inputs.build-darwin-amd == 'true' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
-      - name: Copy darwin arm64 binary
-        if: ${{ inputs.build-darwin-arm == 'true' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-arm-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
-      - name: Copy windows binary (unsigned)
-        if: ${{ inputs.build-windows == 'true' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-binary
-          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
-
-      - name: Print resulting file hierarchy
-        run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
 
       - name: Upload to S3
         run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="%(bucket)s.${{ inputs.s3_host }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/

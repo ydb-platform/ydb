@@ -85,11 +85,6 @@ jobs:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
     name: Build YDB CLI for ${{ matrix.os }}
     needs: build-matrix
-#          - { os: linux, runner: ubuntu-latest, shell: bash }
-#          - { os: darwin-amd, runner: macos-13, shell: bash }
-#          - { os: darwin-arm, runner: macos-latest, shell: bash }
-#          - { os: windows, runner: windows-latest, shell: pwsh }
-#    if: (${{ inputs.build-linux }} == 'true' && ${{ matrix.os }} == 'linux') || (${{ inputs.build-darwin-amd }} == 'true' && ${{ matrix.os }} == 'darwin-amd') || (${{ inputs.build-darwin-arm }} == 'true' && ${{ matrix.os }} == 'darwin-arm') || (${{ inputs.build-windows }} == 'true' && ${{ matrix.os }} == 'windows')
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -159,14 +154,6 @@ jobs:
           cd s3cmd-2.4.0
           sudo python3 setup.py install
           cd ..
-
-#      - name: Prepare s3cmd
-#        uses: ./.github/actions/s3cmd
-#        with:
-#          s3_endpoint: ${{ vars.CLI_S3_ENDPOINT }}
-#          s3_bucket: ${{ vars.CLI_S3_BUCKET }}
-#          s3_key_id: ${{ secrets.CLI_S3_KEY_ID }}
-#          s3_key_secret: ${{ secrets.CLI_S3_KEY_SECRET_ID }}
 
       - name: Prepare directory for linux binary
         if: ${{ inputs.build-linux == 'true' }}

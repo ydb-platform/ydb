@@ -484,6 +484,7 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
+            i32 typmod = -1;
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
@@ -501,14 +502,6 @@ private:
 
             TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
-            if (typeInRequest != ci.PType) {
-                errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
-                return false;
-            }
-
-            i32 typmod = -1;
-
             if (typeInProto.has_type_id()) {
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
@@ -519,6 +512,12 @@ private:
                 }
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
                     ColumnsToConvertInplace[name] = ci.PType;
+                }
+            } else if (typeInProto.has_decimal_type()) {
+                if (typeInRequest != ci.PType) {
+                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
+                    return false;
                 }
             } else if (typeInProto.has_pg_type()) {
                 bool ok = SameDstType(typeInRequest, ci.PType, false);

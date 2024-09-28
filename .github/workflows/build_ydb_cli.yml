@@ -169,13 +169,13 @@ jobs:
         if: ${{ inputs.build-darwin-amd }}
         uses: actions/download-artifact@v4
         with:
-          name: macos-amd-binary
+          name: darwin-amd-binary
           path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
       - name: Copy darwin arm64 binary
         if: ${{ inputs.build-darwin-arm }}
         uses: actions/download-artifact@v4
         with:
-          name: macos-arm-binary
+          name: darwin-arm-binary
           path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
       - name: Copy windows binary (unsigned)
         if: ${{ inputs.build-windows }}

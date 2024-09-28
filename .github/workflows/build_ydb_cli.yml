@@ -107,6 +107,32 @@ jobs:
 #    - name: Setup Windows SDK
 #      if: ${{ matrix.os == 'windows' }}
 #      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
+
+    - name: Print win sdk
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%ProgramFiles%\Microsoft SDKs"' }}
+
+    - name: Print windows kits
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%ProgramFiles%\Windows kits"' }}
+
+    - name: Print windows kits
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%ProgramFiles%\Windows kits\10"' }}
+
+    - name: Print windows kits x86
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%PROGRAMFILES(x86)%\Windows kits"' }}
+
+    - name: Print windows kits x86
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%PROGRAMFILES(x86)%\Windows kits\10"' }}
+
     - name: Download Windows SDK
       if: ${{ matrix.os == 'windows' }}
       shell: pwsh
@@ -121,7 +147,27 @@ jobs:
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
       run: ${{ 'dir "%ProgramFiles%\Microsoft SDKs"' }}
-    
+
+    - name: Print windows kits
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%ProgramFiles%\Windows kits"' }}
+
+    - name: Print windows kits
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%ProgramFiles%\Windows kits\10"' }}
+
+    - name: Print windows kits x86
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%PROGRAMFILES(x86)%\Windows kits"' }}
+
+    - name: Print windows kits x86
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%PROGRAMFILES(x86)%\Windows kits\10"' }}
+      
     - name: Build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}
       shell: cmd

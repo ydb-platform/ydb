@@ -329,7 +329,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TFileStoreInfo> FileStoreInfo;
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
-        TIntrusiveConstPtr<TResourcePoolInfo> AbstractObjectInfo;
+        TIntrusiveConstPtr<TAbstractObjectInfo> AbstractObjectInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

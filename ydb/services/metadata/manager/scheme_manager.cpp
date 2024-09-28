@@ -15,6 +15,12 @@ private:
     TActorSystem* ActorSystem;
 
 private:
+    static IClassBehaviour::TPtr GetBehaviourVerified(const TString& typeId) {
+        NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
+        AFL_VERIFY(cBehaviour);
+        return cBehaviour;
+    }
+
     NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request) const {
         auto schemePromise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
         const bool failOnExist = request->Record.GetTransaction().GetModifyScheme().GetFailOnExist();
@@ -36,27 +42,24 @@ private:
             ev->Record.SetUserToken(Context.GetExternalData().GetUserToken()->GetSerializedToken());
         }
 
-        std::pair<TString, TString> dbLocalPathPair;
-        {
-            TString error;
-            if (!TrySplitPathByDb(settings.GetObjectId(), Context.GetExternalData().GetDatabase(), dbLocalPathPair, error)) {
-                return TConclusionStatus::Fail(error);
-            }
-        }
+        const TString storageDirectory = GetBehaviourVerified(settings.GetTypeId())->GetLocalStorageDirectory();
 
         auto& modifyScheme = *ev->Record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetWorkingDir(dbLocalPathPair.first);
+        modifyScheme.SetWorkingDir(JoinPath({ Context.GetExternalData().GetDatabase(), storageDirectory }));
         modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
         modifyScheme.SetSuccessOnNotExist(settings.GetExistingOk());
         switch (Context.GetActivityType()) {
             case IOperationsManager::EActivityType::Create:
+                *modifyScheme.MutableModifyAbstractObject() = settings.SerializeToProto();
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateAbstractObject);
                 break;
             case IOperationsManager::EActivityType::Alter:
-                modifyScheme.SetSuccessOnNotExist(NKikimrSchemeOp::ESchemeOpAlterAbstractObject);
+                *modifyScheme.MutableModifyAbstractObject() = settings.SerializeToProto();
+                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterAbstractObject);
                 break;
             case IOperationsManager::EActivityType::Drop:
-                modifyScheme.SetSuccessOnNotExist(NKikimrSchemeOp::ESchemeOpDropAbstractObject);
+                modifyScheme.MutableDrop()->SetName(settings.GetObjectId());
+                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropAbstractObject);
                 break;
             case IOperationsManager::EActivityType::Upsert:
                 return TConclusionStatus::Fail("Upsert operations are not supported for " + settings.GetTypeId() + " objects");
@@ -69,12 +72,13 @@ private:
 
 public:
     void OnPreprocessingFinished(NYql::TObjectSettingsImpl settings) override {
-        auto request = MakeRequest(settings);
-        if (request.IsFail()) {
-            Promise.SetValue(TYqlConclusionStatus::Fail(request.GetErrorMessage()));
+        auto makeRequestResult = MakeRequest(settings);
+        if (makeRequestResult.IsFail()) {
+            Promise.SetValue(TYqlConclusionStatus::Fail(makeRequestResult.GetErrorMessage()));
+            return;
         }
 
-        auto future = SendSchemeRequest(request.MutableResult().Release());
+        auto future = SendSchemeRequest(makeRequestResult.MutableResult().Release());
         future.Subscribe([promise = Promise](NThreading::TFuture<TYqlConclusionStatus> f) mutable {
             promise.SetValue(f.GetValueSync());
         });
@@ -99,7 +103,7 @@ NThreading::TFuture<TSchemeObjectOperationsManager::TYqlConclusionStatus> TSchem
     const NYql::TObjectSettingsImpl& settings, const ui32 /*nodeId*/, const IClassBehaviour::TPtr& /*manager*/,
     TInternalModificationContext& context) const {
     AFL_VERIFY(context.GetExternalData().GetActorSystem())("type_id", settings.GetTypeId());
-    NThreading::TPromise<TYqlConclusionStatus> promise;
+    NThreading::TPromise<TYqlConclusionStatus> promise = NThreading::NewPromise<TYqlConclusionStatus>();
     DoPreprocessSettings(
         settings, context, std::make_shared<TPreprocessingController>(promise, context, context.GetExternalData().GetActorSystem()));
     return promise.GetFuture();

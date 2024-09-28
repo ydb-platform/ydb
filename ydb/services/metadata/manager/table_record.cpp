@@ -72,6 +72,7 @@ Ydb::ResultSet TTableRecord::BuildRecordSet() const {
         Ydb::Column column;
         column.set_name(i.first);
 //        column.set_type(i.second.type());
+        *result.add_columns() = column;
     }
     *result.add_rows() = BuildRow();
     return result;

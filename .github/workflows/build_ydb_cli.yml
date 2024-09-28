@@ -136,7 +136,7 @@ jobs:
       - name: Prepare directory for Darwin arm binary
         if: ${{ inputs.build-darwin-arm }}
         run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
-      - name: Prepare directory forWindows binary
+      - name: Prepare directory for Windows binary
         if: ${{ inputs.build-windows }}
         run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
 

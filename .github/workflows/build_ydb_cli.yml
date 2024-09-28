@@ -76,6 +76,8 @@ jobs:
           echo "testmatrix=$MATRIX"
           
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          
+          echo "matrix=$MATRIX" >> "$GITHUB_STEP_SUMMARY"
 # https://github.com/github/docs/issues/21529
 
   build-platform-specific-binary:

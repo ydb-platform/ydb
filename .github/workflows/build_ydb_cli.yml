@@ -84,6 +84,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
     name: Build YDB CLI for ${{ matrix.os }}
+    needs: build-matrix
 #          - { os: linux, runner: ubuntu-latest, shell: bash }
 #          - { os: darwin-amd, runner: macos-13, shell: bash }
 #          - { os: darwin-arm, runner: macos-latest, shell: bash }

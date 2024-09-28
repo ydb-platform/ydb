@@ -1,7 +1,6 @@
 #include "loader.h"
 
 #include <ydb/library/formats/arrow/common/validation.h>
-#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -76,9 +75,6 @@ bool TColumnLoader::IsEqualTo(const TColumnLoader& item) const {
         return false;
     }
     if (!AccessorConstructor.IsEqualTo(item.AccessorConstructor)) {
-        return false;
-    }
-    if (NArrow::ScalarCompareNullable(DefaultValue, item.DefaultValue)) {
         return false;
     }
     return true;

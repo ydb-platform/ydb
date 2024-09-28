@@ -222,7 +222,7 @@ TExprNode::TPtr BuildSchemaFromMetadata(TPositionHandle pos, TExprContext& ctx, 
     for (const auto& [n, c] : columns) {
         Ydb::Type typeProto;
         NKikimr::NScheme::ProtoFromTypeInfo(c.TypeInfo, typeProto, c.NotNull);
-        NYdb::TTypeParser parser((NYdb::TType(typeProto)));
+        NYdb::TTypeParser parser(typeProto);
         auto type = NFq::MakeType(parser, ctx);
         typedColumns.emplace_back(n, type);
     }

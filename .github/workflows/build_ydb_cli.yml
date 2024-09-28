@@ -102,6 +102,11 @@ jobs:
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
       run: ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
+
+    - name: Print win sdk 
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ 'dir "%ProgramFiles%\Microsoft SDKs\Windows"' }}
     
     - name: Build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}

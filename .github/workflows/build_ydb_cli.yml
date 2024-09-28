@@ -6,15 +6,15 @@ on:
       build-linux:
         type: boolean
         description: Build YDB CLI for Linux
-        default: true
+        default: false
       build-darwin-amd:
         type: boolean
         description: Build YDB CLI for Darwin amd64
-        default: true
+        default: false
       build-darwin-arm:
         type: boolean
         description: Build YDB CLI for Darwin arm64
-        default: true
+        default: false
       build-windows:
         type: boolean
         description: Build YDB CLI for Windows
@@ -28,7 +28,7 @@ on:
         description: "S3 endpoint. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
       s3_bucket:
         type: string
-        default: "yandexcloud-ydb"
+        default: "cli-test" #"yandexcloud-ydb"
         description: "S3 bucket. S3Uri (without hostname). Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
       s3_dns_host_bucket:
         type: string
@@ -101,7 +101,7 @@ jobs:
     - name: Prepare Microsoft Visual Studio environment for windows
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
-      run: ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"' }}
+      run: ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
     
     - name: Build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}

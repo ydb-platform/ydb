@@ -102,7 +102,7 @@ jobs:
       run: cat ydb/apps/ydb/version.txt
     
     - name: Build binary with ya make
-      run: ya make ydb/apps/ydb -r -DUSE_SSE4=no
+      run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4

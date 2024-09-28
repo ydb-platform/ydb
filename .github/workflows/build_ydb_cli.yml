@@ -104,13 +104,18 @@ jobs:
       run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
 
 
-    - name: Setup Windows SDK
+#    - name: Setup Windows SDK
+#      if: ${{ matrix.os == 'windows' }}
+#      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
+    - name: Download Windows SDK
       if: ${{ matrix.os == 'windows' }}
-      uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
+      shell: cmd
+      run: ${{ 'wget https://download.microsoft.com/download/e/b/3/eb320eb1-b21e-4e6e-899e-d6aec552ecb0/KIT_BUNDLE_WINDOWSSDK_MEDIACREATION/winsdksetup.exe' }}
+
     - name: Print win sdk
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
-      run: ${{ 'dir "%ProgramFiles%"' }}
+      run: ${{ 'dir "%ProgramFiles%\Microsoft SDKs"' }}
     
     - name: Build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}

@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         const TString StoreName;
         ui32 MultiColumnRepCount = 100;
         static const ui32 SKIP_GROUPS = 7;
-        const TVector<TString> FIELD_NAMES{"utf", "int", "uint", "float", "double"};
+        const TVector<TString> FIELD_NAMES{ "utf", "int", "uint", "float", "double" };
     public:
         TSparsedDataTest(const TString& storeName)
             : Kikimr(Settings)
@@ -302,6 +302,45 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         TSparsedDataTest test("");
         test.Execute();
     }
+
+    Y_UNIT_TEST(AccessorActualization) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        csController->WaitIndexation(TDuration::Seconds(5));
+
+        {
+            auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=uid, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        csController->WaitActualization(TDuration::Seconds(10));
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT uid FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            Cerr << StreamResultToYson(it) << Endl;
+        }
+    }
+
 }
 
 } // namespace

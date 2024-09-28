@@ -97,6 +97,11 @@ jobs:
     
     - name: Print YDB CLI version
       run: cat ydb/apps/ydb/version.txt
+
+    - name: Prepare Microsoft Visual Studio environment for windows
+      if: ${{ matrix.os == "windows" }
+      shell: cmd 
+      run: ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"' }}
     
     - name: Build binary with ya make
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no

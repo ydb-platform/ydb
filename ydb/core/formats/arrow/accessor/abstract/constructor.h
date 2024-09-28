@@ -26,9 +26,17 @@ private:
         return "";
     }
     virtual bool DoIsEqualWithSameTypeTo(const IConstructor& item) const = 0;
+    virtual std::shared_ptr<arrow::RecordBatch> DoConstruct(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const = 0;
 
 public:
     virtual ~IConstructor() = default;
+
+    std::shared_ptr<arrow::RecordBatch> Construct(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+        AFL_VERIFY(columnData);
+        return DoConstruct(columnData, externalInfo);
+    }
 
     bool IsEqualWithSameTypeTo(const IConstructor& item) const {
         return DoIsEqualWithSameTypeTo(item);
@@ -70,7 +78,6 @@ public:
 class TConstructorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IConstructor> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IConstructor>;
-
 public:
     using TBase::TBase;
 
@@ -85,6 +92,11 @@ public:
         } else {
             return false;
         }
+    }
+
+    std::shared_ptr<arrow::RecordBatch> Construct(const std::shared_ptr<IChunkedArray>& batch, const TChunkConstructionData& externalInfo) const {
+        AFL_VERIFY(!!GetObjectPtr());
+        return GetObjectPtr()->Construct(batch, externalInfo);
     }
 
     static TConstructorContainer GetDefaultConstructor();

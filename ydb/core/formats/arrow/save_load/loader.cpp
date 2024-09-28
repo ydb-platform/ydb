@@ -51,9 +51,13 @@ std::shared_ptr<arrow::RecordBatch> TColumnLoader::ApplyRawVerified(const TStrin
     return TStatusValidator::GetValid(Apply(data));
 }
 
+TChunkConstructionData TColumnLoader::BuildAccessorContext(const ui32 recordsCount) const {
+    return TChunkConstructionData(recordsCount, DefaultValue, ResultField->type());
+}
+
 std::shared_ptr<IChunkedArray> TColumnLoader::ApplyVerified(const TString& dataStr, const ui32 recordsCount) const {
     auto data = TStatusValidator::GetValid(Apply(dataStr));
-    return BuildAccessor(data, TChunkConstructionData(recordsCount, DefaultValue, ResultField->type()));
+    return BuildAccessor(data, BuildAccessorContext(recordsCount));
 }
 
 std::shared_ptr<IChunkedArray> TColumnLoader::BuildAccessor(

@@ -16,6 +16,8 @@ private:
     virtual bool DoIsEqualWithSameTypeTo(const IConstructor& /*item*/) const override {
         return true;
     }
+    virtual std::shared_ptr<arrow::RecordBatch> DoConstruct(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const override;
 
     virtual TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DoConstruct(
         const std::shared_ptr<arrow::RecordBatch>& originalData, const TChunkConstructionData& externalInfo) const override;

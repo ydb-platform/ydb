@@ -39,6 +39,7 @@ public:
 
     const std::shared_ptr<arrow::Field>& GetField() const;
 
+    TChunkConstructionData BuildAccessorContext(const ui32 recordsCount) const;
     std::shared_ptr<IChunkedArray> ApplyVerified(const TString& data, const ui32 expectedRecordsCount) const;
     std::shared_ptr<arrow::RecordBatch> ApplyRawVerified(const TString& data) const;
 };

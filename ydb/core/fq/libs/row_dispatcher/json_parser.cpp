@@ -258,14 +258,29 @@ public:
 
 private:
     TString GenerateSql(const TVector<TString>& columns) {
-        TStringStream str;
-        str << "$json = SELECT CAST(data AS Json) as `Json`, " << OffsetFieldName << " FROM Input;"; 
-        str << "\nSELECT " << OffsetFieldName << ", ";
+        TStringStream structType;
+        structType << "Struct<";
         for (auto it = columns.begin(); it != columns.end(); ++it) {
-            str << R"(CAST(Unwrap(JSON_VALUE(`Json`, "$.)" << *it << "\")) as String) as "
-                << *it << ((it != columns.end() - 1) ? "," : "");
+            structType << *it << ": String" << ((it != columns.end() - 1) ? ", " : ">");
         }
-        str << " FROM $json;";
+
+        TStringStream str;
+        str << R"(
+            $parse_json_each_row = YQL::Udf(
+                AsAtom("ClickHouseClient.ParseFormat"),
+                Void(),
+                TupleType(
+                    TupleType(String, Uint64),
+                    Struct<>,
+                    TupleType()" << structType.Str() << R"(, Uint64)
+                ),
+                AsAtom("json_each_row")
+            );
+
+            $parsed_tuples = SELECT YQL::Collect($parse_json_each_row(YQL::ToStream([(data, )" << OffsetFieldName << R"()]))) AS parsed_value FROM Input;
+            $parsed_structs = SELECT AddMember(parsed_value.0, ")" << OffsetFieldName << R"(", parsed_value.1) FROM $parsed_tuples FLATTEN LIST BY parsed_value;
+            SELECT * FROM $parsed_structs FLATTEN COLUMNS;
+        )";
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
     }

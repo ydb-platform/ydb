@@ -6,6 +6,9 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
+
+#include <ydb/library/yql/public/purecalc/common/interface.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace {
@@ -32,9 +35,13 @@ public:
     }
 
     void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
-        Parser = NFq::NewJsonParser(
-            columns,
-            callback);
+        try {
+            Parser = NFq::NewJsonParser(
+                columns,
+                callback);
+        } catch (NYql::NPureCalc::TCompileError compileError) {
+            UNIT_ASSERT_C(false, TStringBuilder() << "Failed to create json parser: " << compileError.what() << "\nQuery text:\n" << compileError.GetYql() << "Reason:\n" << compileError.GetIssues());
+        }
     }
 
     TActorSystemStub actorSystemStub;
@@ -102,7 +109,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
 
         MakeParser({"a2", "a1"}, [&](ui64, TList<TString>&&){ });
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, " Failed to unwrap empty optional");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, " DB::ParsingException: Cannot parse input: expected '{' before: 'ydb': (at row 1)");
     }
 }
 

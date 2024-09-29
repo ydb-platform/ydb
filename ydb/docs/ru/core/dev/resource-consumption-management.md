@@ -233,6 +233,10 @@ ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 
 Информацию о метриках пулов ресурсов можно найти в [справке по метрикам](../reference/observability/metrics/index.md#resource_pools).
 
+### Системные таблицы
+
+Информация о системных таблицах связанных с пулами ресурсов и классификаторами пулов ресурсов можно найти на странице [{#T}](system-views.md#resource_pools).
+
 ## См. также
 
 * [{#T}](../yql/reference/syntax/create-resource-pool.md)

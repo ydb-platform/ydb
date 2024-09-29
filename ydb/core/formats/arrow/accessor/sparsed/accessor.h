@@ -153,6 +153,11 @@ public:
         return chunk.GetScalar(index - chunk.GetStartPosition());
     }
 
+    std::shared_ptr<arrow::RecordBatch> GetRecordBatchVerified() const {
+        AFL_VERIFY(Records.size() == 1)("size", Records.size());
+        return Records.front().GetRecords();
+    }
+
     const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {
         const auto pred = [](const ui64 position, const TSparsedArrayChunk& item) {
             return position < item.GetStartPosition();

@@ -83,7 +83,7 @@ struct IConnection
     TFuture<void> Abort() override = 0;
 
     // SubscribePeerDisconnect is best effort and is not guaranteed to fire.
-    virtual void SubscribePeerDisconnect(TCallback<void()> cb) = 0;
+    virtual void SubscribePeerDisconnect(TCallback<void()> callback) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IConnection)

@@ -2,8 +2,11 @@
 #include "constructor.h"
 
 #include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
 namespace NKikimr::NArrow::NAccessor::NPlain {
 
@@ -28,6 +31,14 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
 
 std::shared_ptr<arrow::Schema> TConstructor::DoGetExpectedSchema(const std::shared_ptr<arrow::Field>& resultColumn) const {
     return std::make_shared<arrow::Schema>(arrow::FieldVector({ resultColumn }));
+}
+
+std::shared_ptr<arrow::RecordBatch> TConstructor::DoConstruct(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+    auto chunked = columnData->GetChunkedArray();
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
+    auto table = arrow::Table::Make(schema, { chunked }, columnData->GetRecordsCount());
+    return NArrow::ToBatch(table, true);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NPlain

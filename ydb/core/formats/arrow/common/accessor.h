@@ -21,11 +21,22 @@ public:
     private:
         YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
         YDB_READONLY(ui64, StartPosition, 0);
+        YDB_READONLY(ui64, FinishPosition, 0);
         YDB_READONLY(ui64, ChunkIndex, 0);
     public:
+        TString DebugString(const ui64 position) const;
+
         ui64 GetLength() const {
             return Array->length();
         }
+
+        bool Contains(const ui64 position) const {
+            return position >= StartPosition && position < FinishPosition;
+        }
+
+        std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
+
+        std::partial_ordering Compare(const ui64 position, const TCurrentChunkAddress& item, const ui64 itemPosition) const;
 
         TCurrentChunkAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 pos, const ui32 chunkIdx)
             : Array(arr)
@@ -34,6 +45,7 @@ public:
         {
             AFL_VERIFY(arr);
             AFL_VERIFY(arr->length());
+            FinishPosition = StartPosition + arr->length();
         }
 
         TString DebugString() const {
@@ -141,7 +153,6 @@ public:
         static std::partial_ordering CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition);
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
-        std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
         TString DebugString(const ui32 position) const;
     };
 
@@ -149,6 +160,12 @@ public:
         return DoGetChunkedArray();
     }
     virtual ~IChunkedArray() = default;
+
+    std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
+
+    TCurrentChunkAddress GetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
+        return DoGetChunk(chunkCurrent, position);
+    }
 
     IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow::DataType>& dataType)
         : DataType(dataType)

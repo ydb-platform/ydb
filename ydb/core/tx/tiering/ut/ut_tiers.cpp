@@ -8,6 +8,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
@@ -864,6 +865,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             .SetEnableBackgroundTasks(true)
             .SetForceColumnTablesCompositeMarks(true);
         ;
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
+        csControllerGuard->SetCompactionsLimit(5);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
@@ -930,6 +933,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SetEventFilter(captureEvents);
 
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
+        Cerr << "Data loading FINISHED" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(200));
 
         {
             TVector<THashMap<TString, NYdb::TValue>> result;

@@ -6,9 +6,33 @@
 #include "engines/changes/abstract/abstract.h"
 #include "engines/writer/compacted_blob_constructor.h"
 
+#include <ydb/core/tx/limiter/usage/abstract.h>
+#include <ydb/core/tx/limiter/usage/service.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NColumnShard {
+
+class TDiskResourcesRequest: public NLimiter::IResourceRequest {
+private:
+    using TBase = NLimiter::IResourceRequest;
+    std::shared_ptr<NOlap::TCompactedWriteController> WriteController;
+    const ui64 TabletId;
+
+private:
+    virtual void DoOnResourceAllocated() override {
+        NActors::TActivationContext::AsActorContext().Register(CreateWriteActor(TabletId, WriteController, TInstant::Max()));
+    }
+
+public:
+    TDiskResourcesRequest(const std::shared_ptr<NOlap::TCompactedWriteController>& writeController, const ui64 tabletId)
+        : TBase(writeController->GetWriteVolume())
+        , WriteController(writeController)
+        , TabletId(tabletId)
+    {
+
+    }
+};
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
     auto putStatus = ev->Get()->GetPutStatus();
@@ -32,7 +56,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             if (*needDraftTransaction) {
                 Execute(new TTxWriteDraft(this, writeController));
             } else {
-                ctx.Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));
+                NLimiter::TCompDiskOperator::AskResource(std::make_shared<TDiskResourcesRequest>(writeController, TabletID()));
             }
         }
     } else {

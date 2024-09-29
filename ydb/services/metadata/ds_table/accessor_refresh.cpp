@@ -18,7 +18,7 @@ void TDSAccessorRefresher::OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snaps
 
 void TDSAccessorRefresher::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot) {
     *ProposedProto.mutable_result_sets() = std::move(*qResult.mutable_result_sets());
-    if (CurrentSelection.SerializeAsString() != ProposedProto.SerializeAsString()) {
+    if (!CurrentSnapshot || CurrentSelection.SerializeAsString() != ProposedProto.SerializeAsString()) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << ProposedProto.DebugString();
         SnapshotConstructor->EnrichSnapshotData(snapshot, InternalController);
     } else {

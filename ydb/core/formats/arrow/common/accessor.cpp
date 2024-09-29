@@ -17,25 +17,27 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
     return NArrow::CopyRecords(address.GetArray(), {address.GetPosition()});
 }
 
-std::shared_ptr<arrow::ChunkedArray> IChunkedArray::TReader::Slice(const ui32 offset, const ui32 count) const {
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
     AFL_VERIFY(offset + count <= (ui64)GetRecordsCount())("offset", offset)("count", count)("length", GetRecordsCount());
     ui32 currentOffset = offset;
     ui32 countLeast = count;
     std::vector<std::shared_ptr<arrow::Array>> chunks;
+    auto address = GetChunk({}, offset);
     while (countLeast) {
-        auto address = GetReadChunk(currentOffset);
-        if (address.GetPosition() + countLeast <= (ui64)address.GetArray()->length()) {
-            chunks.emplace_back(address.GetArray()->Slice(address.GetPosition(), countLeast));
+        address = GetChunk(address, currentOffset);
+        const ui64 internalPos = currentOffset - address.GetStartPosition();
+        if (internalPos + countLeast <= (ui64)address.GetArray()->length()) {
+            chunks.emplace_back(address.GetArray()->Slice(internalPos, countLeast));
             break;
         } else {
-            const ui32 deltaCount = address.GetArray()->length() - address.GetPosition();
-            chunks.emplace_back(address.GetArray()->Slice(address.GetPosition(), deltaCount));
+            const ui32 deltaCount = address.GetArray()->length() - internalPos;
+            chunks.emplace_back(address.GetArray()->Slice(internalPos, deltaCount));
             AFL_VERIFY(countLeast >= deltaCount);
             countLeast -= deltaCount;
             currentOffset += deltaCount;
         }
     }
-    return std::make_shared<arrow::ChunkedArray>(chunks, ChunkedArray->DataType);
+    return std::make_shared<arrow::ChunkedArray>(chunks, DataType);
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {
@@ -89,6 +91,27 @@ public:
         return ChunkedArray->chunk(idx);
     }
 };
+
+}
+
+std::partial_ordering IChunkedArray::TCurrentChunkAddress::Compare(const ui64 position, const TCurrentChunkAddress& item, const ui64 itemPosition) const {
+    AFL_VERIFY(StartPosition <= position);
+    AFL_VERIFY(position < FinishPosition);
+    AFL_VERIFY(item.StartPosition <= itemPosition);
+    AFL_VERIFY(itemPosition < item.FinishPosition);
+    return TComparator::TypedCompare<true>(*Array, position - StartPosition, *item.Array, itemPosition - item.StartPosition);
+}
+
+std::shared_ptr<arrow::Array> IChunkedArray::TCurrentChunkAddress::CopyRecord(const ui64 recordIndex) const {
+    AFL_VERIFY(StartPosition <= recordIndex);
+    AFL_VERIFY(recordIndex < FinishPosition);
+    return NArrow::CopyRecords(Array, { recordIndex - StartPosition });
+}
+
+TString IChunkedArray::TCurrentChunkAddress::DebugString(const ui64 position) const {
+    AFL_VERIFY(position < FinishPosition);
+    AFL_VERIFY(StartPosition <= position);
+    return NArrow::DebugString(Array, position - StartPosition);
 }
 
 IChunkedArray::TCurrentChunkAddress TTrivialChunkedArray::DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {

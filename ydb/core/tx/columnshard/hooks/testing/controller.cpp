@@ -10,43 +10,13 @@
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (batch) {
-        FilteredRecordsCount.Add(batch->num_rows());
-    }
-    return true;
-}
-
 bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
-    if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-        TTLFinishedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertFinishedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
-        CompactionFinishedCounter.Inc();
-    }
     TGuard<TMutex> g(Mutex);
     if (SharingIds.empty()) {
         TCheckContext context;
         CheckInvariants(shard, context);
     }
-    return true;
-}
-
-bool TController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
-    if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-        TTLStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
-        CompactionStartedCounter.Inc();
-    }
-    return true;
+    return TBase::DoOnWriteIndexComplete(change, shard);
 }
 
 void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {

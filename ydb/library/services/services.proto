@@ -376,6 +376,7 @@ enum EServiceKikimr {
 
     EXT_INDEX = 1900;
     TX_CONVEYOR = 2000;
+    TX_LIMITER=2001;
     ARROW_HELPER = 2100;
 
     KAFKA_PROXY = 2200;

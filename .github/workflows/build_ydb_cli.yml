@@ -6,15 +6,15 @@ on:
       build-linux:
         type: boolean
         description: Build YDB CLI for Linux
-        default: false
+        default: true
       build-darwin-amd:
         type: boolean
         description: Build YDB CLI for Darwin amd64
-        default: false
+        default: true
       build-darwin-arm:
         type: boolean
         description: Build YDB CLI for Darwin arm64
-        default: false
+        default: true
       build-windows:
         type: boolean
         description: Build YDB CLI for Windows

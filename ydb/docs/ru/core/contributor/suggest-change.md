@@ -312,48 +312,49 @@ git push
 
 #### Найдите ваши отключенные(muted) тесты
 
- >Не все muted тесты имеют issue в проекте github, мы работаем над этим
+ >Не все muted тесты имеют issue в проекте GitHub, мы работаем над этим
 
-* Откройте проект [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D)
-* кликните по метке с именем вашей команды, например [link to qp](https://github.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp) отключенные тесты (cgi `?filterQuery=owner%3Aqp`)
-* Откройте issue `Отключить {имя теста}`
+* Откройте проект [Mute and Un-mute](https://GitHub.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D)
+* кликните по метке с именем вашей команды, например [link to qp](https://GitHub.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp) отключенные тесты (cgi `?filterQuery=owner%3Aqp`)
+* Откройте issue `Mute {имя теста}`
 * Выполните [Как включить(un-mute) тест](#how-to-unmute)
 
 ### Нестабильные тесты (Flaky)
 
 #### Кто и когда следит за нестабильными тестами
 
-Дежурный инженер CI (в разработке) проверяет нестабильные тесты один раз в день (только в рабочие дни). 
+Дежурный инженер CI (в разработке) проверяет нестабильные тесты один раз в день (только в рабочие дни) 
 
-- Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr).
-- Выполните разделы **[Отключить Нестабильный Тест](#mute-flaky)** и **[Тест Часто Нестабилен - Нужно Включить](#unmute-flaky)** один раз в день или по требованию
+* Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr)
+
+* Выполните разделы **[Отключить Нестабильный Тест](#mute-flaky)** и **[Тест Часто Нестабилен - Нужно Включить](#unmute-flaky)** один раз в день или по требованию
 
 #### Отключить(mute) нестабильные тесты <a id="mute-flaky"></a>
 
 Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr).
 
-- Выберите сегодняшнюю дату.
-- Посмотрите на тесты в таблице "Кандидаты для Отключения".
+* Выберите сегодняшнюю дату.
+* Посмотрите на тесты в таблице "Кандидаты для Отключения".
 
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
-- Выберите сегодняшнюю дату в `date_window`.
-- Выберите `days_ago_window = 1` (сколько дней назад от выбранного дня для расчета статистики).
+* Выберите сегодняшнюю дату в `date_window`.
+* Выберите `days_ago_window = 1` (сколько дней назад от выбранного дня для расчета статистики).
   * Если вы хотите понять, как давно и как часто тест начал падать, вы можете кликнуть по ссылке `history` в таблице (загрузка может занять время) или выбрать `days_ago_window = 1`.
-- Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
-- Выполните шаги из [Как отключить(mute) тест](#how-to-mute)
-- Вы молодец!
+* Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
+* Выполните шаги из [Как отключить(mute) тест](#how-to-mute)
+* Отличная работа!
 
 ### Тест больше не Flaky - включаем <a id="unmute-flaky"></a>
 
-- Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr).
-- Посмотрите на тесты в таблице "Unmuted candidate".
+* Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr).
+* Посмотрите на тесты в таблице "Unmuted candidate".
 
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/unmute.png)
 
-- Если в столбце `summary:` показано `mute <= 3` и `success rate >= 98%` - **пора включить тест**.
-- Выполните шаги из [Как включить(un-mute) тест ](#how-to-unmute)
-- Вы молодец!
+* Если в столбце `summary:` показано `mute <= 3` и `success rate >= 98%` - **пора включить тест**.
+* Выполните шаги из [Как включить(un-mute) тест ](#how-to-unmute)
+* Отличная работа!
 
 ### История тестов {#test_history}
 
@@ -371,14 +372,20 @@ git push
   
     - Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
-##### Как читать
+##### Как читать дашборд
 
 ![Пример](https://storage.yandexcloud.net/ydb-public-images/history_example.png)
+
 * `Summary in 1 day window (Poscommit + Night Runs)` Показывает историю изменения статусов теста (Passed/Flaky/Muted stable/Muted flaky) в окне 1 дня
+
   * Можно определить как давно тест в таком состоянии
+
 * `Test summary` - считает `succes rate` теста для всех типов workflow и build_type в которых участвовал
+
   * по нажатию на кнопку `Mute` можно замьютить тест
-* `Test history` - показывает перечень всех запусков с ссылкой на github action
+
+* `Test history` - показывает перечень всех запусков с ссылкой на GitHub action
+
   * можно найти в каких PR тест падал
 
 ### Review и merge {#review}

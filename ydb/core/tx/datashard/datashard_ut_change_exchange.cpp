@@ -844,7 +844,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableTablePgTypes(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)
-                .SetEnablePQConfigTransactionsAtSchemeShard(true);
+                .SetEnablePQConfigTransactionsAtSchemeShard(true)
+                .SetEnableTopicAutopartitioningForCDC(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -2845,6 +2846,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .SetEnableChangefeedInitialScan(true)
             .SetEnablePQConfigTransactionsAtSchemeShard(withTopicSchemeTx)
             .SetEnableTopicSplitMerge(topicAutoPartitioning)
+            .SetEnableTopicAutopartitioningForCDC(true)
         );
 
         auto& runtime = *server->GetRuntime();

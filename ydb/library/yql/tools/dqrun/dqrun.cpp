@@ -1150,9 +1150,8 @@ int RunMain(int argc, const char* argv[])
     } else if (progFile == TStringBuf("-")) {
         program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {
-        program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
+        program = progFactory.Create(TFile(progFile, RdOnly), opId + std::to_string(i), qContext);
         program->SetQueryName(progFile);
-        opId.push_back('_');
     }
 
     if (paramsFile) {

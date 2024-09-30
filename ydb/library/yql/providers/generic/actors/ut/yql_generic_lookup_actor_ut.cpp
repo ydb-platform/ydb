@@ -35,16 +35,17 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
     public:
         TCallLookupActor(
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            NYql::NDq::IDqAsyncLookupSource* lookupSource,
+            const NActors::TActorId& lookupActor,
             std::shared_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> request)
             : Alloc(alloc)
-            , LookupSource(lookupSource)
+            , LookupActor(lookupActor)
             , Request(request)
         {
         }
 
         void Bootstrap() {
-            LookupSource->AsyncLookup(Request);
+            auto ev = new NYql::NDq::IDqAsyncLookupSource::TEvLookupRequest(Request);
+            TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(LookupActor, SelfId(), ev));
         }
 
         void PassAway() override {
@@ -61,7 +62,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
     private:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        NYql::NDq::IDqAsyncLookupSource* LookupSource;
+        const NActors::TActorId LookupActor;
         std::shared_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
     };
 
@@ -182,7 +183,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             typeEnv,
             holderFactory,
             1'000'000);
-        runtime.Register(actor);
+        auto lookupActor = runtime.Register(actor);
 
         auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
         for (size_t i = 0; i != 3; ++i) {
@@ -195,7 +196,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         guard.Release(); // let actors use alloc
 
-        auto callLookupActor = new TCallLookupActor(alloc, lookupSource, request);
+        auto callLookupActor = new TCallLookupActor(alloc, lookupActor, request);
         runtime.Register(callLookupActor);
 
         auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);

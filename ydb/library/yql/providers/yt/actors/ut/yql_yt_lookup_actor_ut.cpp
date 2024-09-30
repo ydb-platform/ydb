@@ -147,7 +147,7 @@ Y_UNIT_TEST(Lookup) {
         typeEnv,
         holderFactory,
         1'000'000);
-    runtime.Register(lookupActor);
+    auto lookupActorId = runtime.Register(lookupActor);
 
     auto request = std::make_shared<NDq::IDqAsyncLookupSource::TUnboxedValueMap>(4, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
     request->emplace(CreateStructValue(holderFactory, {"host1", "vpc1"}), NUdf::TUnboxedValue{});
@@ -157,7 +157,7 @@ Y_UNIT_TEST(Lookup) {
 
     guard.Release(); //let actors use alloc
 
-    auto callLookupActor = new TCallLookupActor(alloc, lookupActor->SelfId(), request);
+    auto callLookupActor = new TCallLookupActor(alloc, lookupActorId, request);
     runtime.Register(callLookupActor);
 
     auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);

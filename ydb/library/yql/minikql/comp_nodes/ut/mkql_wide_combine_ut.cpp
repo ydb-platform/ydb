@@ -1183,8 +1183,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedInput) {
-        // Test is broken. Remove this if after YQL-18808.
-        if (SPILLING) return;
 
         // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
         if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;

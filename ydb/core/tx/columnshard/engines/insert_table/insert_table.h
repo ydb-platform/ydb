@@ -64,7 +64,7 @@ public:
             AddBlobLink(data.GetBlobRange().BlobId);
         }
         const ui64 pathId = data.GetPathId();
-        return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
+        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load);
     }
     bool HasPathIdData(const ui64 pathId) const {
         return Summary.HasPathIdData(pathId);

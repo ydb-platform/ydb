@@ -11,10 +11,6 @@ on:
         type: boolean
         description: Build YDB CLI for Darwin amd64
         default: true
-      build-darwin-arm:
-        type: boolean
-        description: Build YDB CLI for Darwin arm64
-        default: true
       build-windows:
         type: boolean
         description: Build YDB CLI for Windows
@@ -56,10 +52,6 @@ jobs:
           if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
             MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash"}]')
             echo "Matrix after adding darwin-amd: $MATRIX"
-          fi
-          if [ "${{ inputs.build-darwin-arm }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-arm", "runner": "macos-latest", "shell": "bash"}]')
-            echo "Matrix after adding darwin-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-windows }}" == "true" ]; then
             MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
@@ -132,9 +124,6 @@ jobs:
       - name: Prepare directory for Darwin amd binary
         if: ${{ inputs.build-darwin-amd }}
         run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
-      - name: Prepare directory for Darwin arm binary
-        if: ${{ inputs.build-darwin-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
       - name: Prepare directory for Windows binary
         if: ${{ inputs.build-windows }}
         run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
@@ -151,12 +140,6 @@ jobs:
         with:
           name: darwin-amd-binary
           path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
-      - name: Copy darwin arm64 binary
-        if: ${{ inputs.build-darwin-arm }}
-        uses: actions/download-artifact@v4
-        with:
-          name: darwin-arm-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
       - name: Copy windows binary (unsigned)
         if: ${{ inputs.build-windows }}
         uses: actions/download-artifact@v4

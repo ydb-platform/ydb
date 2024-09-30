@@ -327,10 +327,11 @@ int TCommandDropTable::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-void TCommandQueryBase::CheckQueryOptions() const {
+void TCommandQueryBase::CheckQueryOptions(TClientCommand::TConfig& config) const {
     if (!Query && !QueryFile) {
-        throw TMisuseException() << "Neither \"Text of query\" (\"--query\", \"-q\") "
-            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        Cerr << "Neither \"Text of query\" (\"--query\", \"-q\") "
+            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
     }
     if (Query && QueryFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
@@ -403,7 +404,7 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
             || BatchMode != EBatchMode::Default) && QueryType == "scheme") {
         throw TMisuseException() << "Scheme queries does not support parameter options.";
     }
-    CheckQueryOptions();
+    CheckQueryOptions(config);
     CheckQueryFile();
     ParseParameters(config);
 }
@@ -847,7 +848,7 @@ void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
 void TCommandExplain::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseOutputFormats();
-    CheckQueryOptions();
+    CheckQueryOptions(config);
 }
 
 int TCommandExplain::Run(TConfig& config) {

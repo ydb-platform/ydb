@@ -553,7 +553,6 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&progFile);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
-        .NoArgument()
         .SetFlag(&runOptions.Sql);
     opts.AddLongOption("pg", "Program has PG syntax").NoArgument().SetFlag(&runOptions.Pg);
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);

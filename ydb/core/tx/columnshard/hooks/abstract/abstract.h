@@ -272,10 +272,8 @@ public:
         return nullptr;
     }
 
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result =
-            std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
-        return result;
+    virtual std::optional<NColumnShard::NTiers::TConfigsSnapshot> GetFallbackTiersSnapshot() const {
+        return std::nullopt;
     }
 
     virtual void OnSwitchToWork(const ui64 tabletId) {

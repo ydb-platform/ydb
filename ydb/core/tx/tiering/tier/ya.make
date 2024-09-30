@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     manager.cpp
     object.cpp
-    initializer.cpp
     checker.cpp
     GLOBAL behaviour.cpp
 )

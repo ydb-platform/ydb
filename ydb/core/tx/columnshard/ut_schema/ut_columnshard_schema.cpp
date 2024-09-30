@@ -1049,7 +1049,7 @@ void TestDropWriteRace() {
 void TestCompaction(std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
-    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -1085,7 +1085,9 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
 
     SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
                             NOlap::TSnapshot(++planStep, ++txId));
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+    if (spec.HasTiers()) {
+        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+    }
 
     // Writes
 

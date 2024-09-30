@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     common.cpp
     manager.cpp
-    GLOBAL external_data.cpp
     snapshot.cpp
 )
 

@@ -1,7 +1,6 @@
 #include "object.h"
 #include "behaviour.h"
 
-#include <ydb/core/tx/tiering/rule/checker.h>
 #include <ydb/core/tx/tiering/snapshot.h>
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
@@ -25,7 +24,7 @@ NJson::TJsonValue TTieringRule::SerializeDescriptionToJson() const {
     return result;
 }
 
-TConclusion<std::vector<TTieringInterval>> TTieringRule::TDecoder::DeserializeIntervalsFromJson(const NJson::TJsonValue& jsonInfo) {
+TConclusion<std::vector<TTieringInterval>> TTieringRule::DeserializeIntervalsFromJson(const NJson::TJsonValue& jsonInfo) {
     const NJson::TJsonValue::TArray* rules;
     if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
         return TConclusionStatus::Fail("Missing rules");
@@ -46,7 +45,7 @@ TConclusion<std::vector<TTieringInterval>> TTieringRule::TDecoder::DeserializeIn
 }
 
 bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo) {
-    auto result = TDecoder::DeserializeIntervalsFromJson(jsonInfo);
+    auto result = DeserializeIntervalsFromJson(jsonInfo);
     if (result.IsFail()) {
         return false;
     }

@@ -1,3 +1,4 @@
+// TODO: remove everything related to ss-fetching
 #pragma once
 #include "object.h"
 

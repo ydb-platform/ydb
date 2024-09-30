@@ -1,6 +1,4 @@
 #include "manager.h"
-#include "initializer.h"
-#include "checker.h"
 
 namespace NKikimr::NColumnShard::NTiers {
 
@@ -36,6 +34,6 @@ TTieringRulesManager::TOperationParsingResult TTieringRulesManager::DoBuildPatch
 void TTieringRulesManager::DoPreprocessSettings(
     const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IPreprocessingController::TPtr controller) const {
     AFL_VERIFY(context.GetExternalData().GetActorSystem())("type_id", "TIERING_RULE");
-    context.GetExternalData().GetActorSystem()->Register(new TRulePreprocessingActor(settings, controller, context));
+    controller->OnPreprocessingFinished(settings);
 }
 }

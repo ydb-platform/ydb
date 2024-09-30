@@ -63,6 +63,13 @@ public:
         return Features.FindPtr(key);
     }
 
+    void UpdateFeatures(TFeatures values) {
+        for (auto&& [key, value] : values) {
+            Features[key] = std::move(value);
+        }
+        InitFeaturesExtractor();
+    }
+
     template <class TKiObject>
     bool DeserializeFromKi(const TKiObject& data) {
         ObjectId = data.ObjectId();

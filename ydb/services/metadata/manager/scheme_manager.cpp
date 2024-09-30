@@ -42,10 +42,8 @@ private:
             ev->Record.SetUserToken(Context.GetExternalData().GetUserToken()->GetSerializedToken());
         }
 
-        const TString storageDirectory = GetBehaviourVerified(settings.GetTypeId())->GetLocalStorageDirectory();
-
         auto& modifyScheme = *ev->Record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme.SetWorkingDir(JoinPath({ Context.GetExternalData().GetDatabase(), storageDirectory }));
+        modifyScheme.SetWorkingDir(GetBehaviourVerified(settings.GetTypeId())->GetStorageTablePath());
         modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
         modifyScheme.SetSuccessOnNotExist(settings.GetExistingOk());
         switch (Context.GetActivityType()) {

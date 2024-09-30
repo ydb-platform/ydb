@@ -45,8 +45,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.UpdateCurrentTime(TInstant::Now());
 }
 
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot) {
-    auto event = std::make_unique<NMetadata::NProvider::TEvRefreshSubscriberData>(snapshot);
+void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
+    auto event = std::make_unique<TEvPrivate::TEvTieringModified>();
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 }
@@ -369,10 +369,10 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
-NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
-    std::unique_ptr<NColumnShard::NTiers::TConfigsSnapshot> cs(new NColumnShard::NTiers::TConfigsSnapshot(Now()));
+NColumnShard::NTiers::TConfigsSnapshot TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
+    NColumnShard::NTiers::TConfigsSnapshot snapshot;
     if (specials.Tiers.empty()) {
-        return cs;
+        return snapshot;
     }
     NColumnShard::NTiers::TTieringRule tRule;
     tRule.SetTieringRuleId("Tiering1");
@@ -392,12 +392,12 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
                 cProto.MutableCompression()->SetLevel(*tier.CompressionLevel);
             }
             NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
-            cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
+            snapshot.MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
         }
         tRule.AddInterval(tier.Name, TDuration::Seconds((*tier.EvictAfter).Seconds()));
     }
-    cs->MutableTableTierings().emplace(tRule.GetTieringRuleId(), tRule);
-    return cs;
+    snapshot.MutableTableTierings().emplace(tRule.GetTieringRuleId(), tRule);
+    return snapshot;
 }
 
 void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,

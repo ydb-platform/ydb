@@ -7,37 +7,39 @@
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
-#include <ydb/services/metadata/manager/preparation_controller.h>
+#include <ydb/services/metadata/manager/scheme_manager.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TTierPreparationActor: public NActors::TActorBootstrapped<TTierPreparationActor> {
+class TTierPreprocessingActor: public NActors::TActorBootstrapped<TTierPreprocessingActor> {
 private:
-    std::vector<TTierConfig> Objects;
-    NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr Controller;
+    using IController = NMetadata::NModifications::IPreprocessingController;
+
+    NYql::TObjectSettingsImpl Settings;
+    NMetadata::NModifications::IPreprocessingController::TPtr Controller;
     NMetadata::NModifications::IOperationsManager::TInternalModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
-    std::shared_ptr<TConfigsSnapshot> Tierings;
-    std::shared_ptr<TFetcherCheckUserTieringPermissions> SSFetcher;
-    std::optional<TFetcherCheckUserTieringPermissions::TResult> SSCheckResult;
+
+private:
     void StartChecker();
-protected:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
+
+    TConclusionStatus PreprocessObjectStorage(NKikimrSchemeOp::TS3Settings& config) const;
+    TConclusionStatus CheckSecretAccess(const TString& secretOrValue) const;
+    TConclusionStatus CheckSecretAccess(const NKikimrSchemeOp::TSecretableVariable& secretOrValue) const;
+
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
             default:
                 break;
         }
     }
     void Bootstrap();
 
-    TTierPreparationActor(std::vector<TTierConfig>&& objects,
-        NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
+    TTierPreprocessingActor(NYql::TObjectSettingsImpl settings, IController::TPtr controller,
         const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context);
 };
 

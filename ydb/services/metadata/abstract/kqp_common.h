@@ -12,7 +12,6 @@ namespace NModifications {
 class IOperationsManager;
 }
 
-// TODO: Think how to make this class less garbage
 class IClassBehaviour {
 public:
     using TFactory = NObjectFactory::TObjectFactory<IClassBehaviour, TString>;
@@ -25,7 +24,6 @@ protected:
     virtual TString GetInternalStorageHistoryTablePath() const;
 public:
     virtual ~IClassBehaviour() = default;
-    TString GetLocalStorageDirectory() const;
     TString GetStorageTablePath() const;
     TString GetStorageTableDirectory() const;
     TString GetStorageHistoryTablePath() const;

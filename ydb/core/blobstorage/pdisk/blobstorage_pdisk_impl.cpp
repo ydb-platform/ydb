@@ -2281,7 +2281,7 @@ void TPDisk::ProcessChunkReadQueue() {
             // Don't add code before the warning!
             //
             Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
-            P_LOG(PRI_NOTICE, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
+            P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
         }
     }
     LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());

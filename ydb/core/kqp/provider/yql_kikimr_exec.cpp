@@ -2461,15 +2461,23 @@ public:
             TCreateBackupCollectionSettings settings;
             settings.Name = TString(createBackupCollection.BackupCollection());
 
-            // FIXME
-            // for (auto target : createBackupCollection.Entries()) {
-            //     settings.Entries.emplace_back(
-            //         target.RemotePath().Cast<TCoAtom>().StringValue(),
-            //         target.LocalPath().Cast<TCoAtom>().StringValue()
-            //     );
-            // }
+            TVector<TCreateBackupCollectionSettings::TTable> tables;
 
-            // FIXME
+            for (auto entry: createBackupCollection.Entries()) {
+                auto type = entry.Type().Cast<TCoAtom>().StringValue();
+                if (type == "database") {
+                    ctx.AddError(TIssue(ctx.GetPosition(entry.Type().Pos()),
+                                        TStringBuilder() << "DATABASE is not implemented yet"));
+                    return SyncError();
+                } else if (type == "table") {
+                    YQL_ENSURE(entry.Path());
+                    auto path = entry.Path().Cast().StringValue();
+                    tables.emplace_back(TCreateBackupCollectionSettings::TTable{path});
+                }
+            }
+
+            settings.Entries = tables;
+
             if (!ParseBackupCollectionSettings(settings.Settings, createBackupCollection.BackupCollectionSettings(), ctx, createBackupCollection.Pos())) {
                 return SyncError();
             }

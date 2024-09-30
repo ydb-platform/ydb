@@ -10,6 +10,8 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NThreading;
@@ -2239,32 +2241,23 @@ public:
             if (settings.Settings.IncrementalBackupEnabled) {
                 properties.MutableIncrementalBackupConfig();
             }
-            // auto& params = *config.MutableSrcConnectionParams();
-            // if (const auto& connectionString = settings.Settings.ConnectionString) {
-            //     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
-            //     params.SetEndpoint(parseResult.Endpoint);
-            //     params.SetDatabase(parseResult.Database);
-            //     params.SetEnableSsl(parseResult.EnableSsl);
-            // }
-            // if (const auto& endpoint = settings.Settings.Endpoint) {
-            //     params.SetEndpoint(*endpoint);
-            // }
-            // if (const auto& database = settings.Settings.Database) {
-            //     params.SetDatabase(*database);
-            // }
-            // if (const auto& oauth = settings.Settings.OAuthToken) {
-            //     oauth->Serialize(*params.MutableOAuthToken());
-            // }
-            // if (const auto& staticCreds = settings.Settings.StaticCredentials) {
-            //     staticCreds->Serialize(*params.MutableStaticCredentials());
-            // }
 
-            // auto& targets = *config.MutableSpecific();
-            // for (const auto& [src, dst] : settings.Targets) {
-            //     auto& target = *targets.AddTargets();
-            //     target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
-            //     target.SetDstPath(AdjustPath(dst, GetDatabase()));
-            // }
+            std::visit(
+                TOverloaded {
+                    [](const TCreateBackupCollectionSettings::TDatabase&) {
+                        Y_ABORT("unimplemented");
+                    },
+                    [&](const TVector<TCreateBackupCollectionSettings::TTable>& tables) {
+                        auto& dstTables = *properties.MutableExplicitEntryList();
+                        for (const auto& table : tables) {
+                            auto entry = *dstTables.AddEntries();
+                            entry.SetType(NKikimrSchemeOp::TBackupCollectionProperties::TBackupEntry::ETypeTable);
+                            entry.SetPath(table.Path);
+                        }
+                    },
+            }, settings.Entries);
+
+            properties.SetCluster(::google::protobuf::NULL_VALUE);
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

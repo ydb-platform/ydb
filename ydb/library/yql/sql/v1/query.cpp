@@ -3267,16 +3267,18 @@ class TBaseBackupCollectionNode
 public:
     TBaseBackupCollectionNode(
         TPosition pos,
+        const TString& prefix,
         const TString& objectId,
         const TObjectOperatorContext& context)
             : TBase(pos)
             , TObjectOperatorContext(context)
+            , Prefix(prefix)
             , Id(objectId)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) final {
         auto keys = Y("Key");
-        keys = L(keys, Q(Y(Q("backupCollection"), Y("String", BuildQuotedAtom(Pos, Id)))));
+        keys = L(keys, Q(Y(Q("backupCollection"), Y("String", BuildQuotedAtom(Pos, Id)), Y("String", BuildQuotedAtom(Pos, Prefix)))));
         auto options = this->FillOptions(ctx, Y());
 
         Add("block", Q(Y(
@@ -3291,6 +3293,7 @@ public:
     virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const = 0;
 
 protected:
+    TString Prefix;
     TString Id;
 };
 
@@ -3301,10 +3304,11 @@ class TCreateBackupCollectionNode
 public:
     TCreateBackupCollectionNode(
         TPosition pos,
+        const TString& prefix,
         const TString& objectId,
         const TCreateBackupCollectionParameters& params,
         const TObjectOperatorContext& context)
-            : TBase(pos, objectId, context)
+            : TBase(pos, prefix, objectId, context)
             , Params(params)
     {}
 
@@ -3313,7 +3317,7 @@ public:
 
         auto settings = Y();
         for (auto& [key, value] : Params.Settings) {
-            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), value.Build())));
+            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), Y("String", value.Build()))));
         }
         options->Add(Q(Y(Q("settings"), Q(settings))));
 
@@ -3331,7 +3335,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TCreateBackupCollectionNode(GetPos(), Id, Params, *this);
+        return new TCreateBackupCollectionNode(GetPos(), Prefix, Id, Params, *this);
     }
 
 private:
@@ -3345,10 +3349,11 @@ class TAlterBackupCollectionNode
 public:
     TAlterBackupCollectionNode(
         TPosition pos,
+        const TString& prefix,
         const TString& objectId,
         const TAlterBackupCollectionParameters& params,
         const TObjectOperatorContext& context)
-            : TBase(pos, objectId, context)
+            : TBase(pos, prefix, objectId, context)
             , Params(params)
     {}
 
@@ -3357,7 +3362,7 @@ public:
 
         auto settings = Y();
         for (auto& [key, value] : Params.Settings) {
-            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), value.Build())));
+            settings->Add(Q(Y(BuildQuotedAtom(Pos, key), Y("String", value.Build()))));
         }
         options->Add(Q(Y(Q("settings"), Q(settings))));
 
@@ -3385,7 +3390,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TAlterBackupCollectionNode(GetPos(), Id, Params, *this);
+        return new TAlterBackupCollectionNode(GetPos(), Prefix, Id, Params, *this);
     }
 
 private:
@@ -3399,10 +3404,11 @@ class TDropBackupCollectionNode
 public:
     TDropBackupCollectionNode(
         TPosition pos,
+        const TString& prefix,
         const TString& objectId,
         const TDropBackupCollectionParameters&,
         const TObjectOperatorContext& context)
-            : TBase(pos, objectId, context)
+            : TBase(pos, prefix, objectId, context)
     {}
 
     virtual INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
@@ -3413,29 +3419,38 @@ public:
 
     TPtr DoClone() const final {
         TDropBackupCollectionParameters params;
-        return new TDropBackupCollectionNode(GetPos(), Id, params, *this);
+        return new TDropBackupCollectionNode(GetPos(), Prefix, Id, params, *this);
     }
 };
 
-TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+TNodePtr BuildCreateBackupCollection(
+    TPosition pos,
+    const TString& prefix,
+    const TString& id,
     const TCreateBackupCollectionParameters& params,
     const TObjectOperatorContext& context)
 {
-    return new TCreateBackupCollectionNode(pos, id, params, context);
+    return new TCreateBackupCollectionNode(pos, prefix, id, params, context);
 }
 
-TNodePtr BuildAlterBackupCollection(TPosition pos, const TString& id,
+TNodePtr BuildAlterBackupCollection(
+    TPosition pos,
+    const TString& prefix,
+    const TString& id,
     const TAlterBackupCollectionParameters& params,
     const TObjectOperatorContext& context)
 {
-    return new TAlterBackupCollectionNode(pos, id, params, context);
+    return new TAlterBackupCollectionNode(pos, prefix, id, params, context);
 }
 
-TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
+TNodePtr BuildDropBackupCollection(
+    TPosition pos,
+    const TString& prefix,
+    const TString& id,
     const TDropBackupCollectionParameters& params,
     const TObjectOperatorContext& context)
 {
-    return new TDropBackupCollectionNode(pos, id, params, context);
+    return new TDropBackupCollectionNode(pos, prefix, id, params, context);
 }
 
 class TBackupNode final

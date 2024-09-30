@@ -1758,7 +1758,35 @@ message TAlterShards {
 }
 
 message TBackupCollectionProperties {
+    message TBackupEntry {
+        enum EType {
+            ETypeInvalid = 0;
+            ETypeTable = 1;
+        }
 
+        optional EType Type = 1;
+        optional string Path = 2;
+    }
+
+    message TExplicitEntryList {
+        repeated TBackupEntry Entries = 1;
+    }
+
+    message TIncrementalBackupConfig {
+
+    }
+
+    oneof Entries {
+        google.protobuf.NullValue Database = 1;
+        TExplicitEntryList ExplicitEntryList = 2;
+    }
+
+    // non-empty enables data-collection
+    optional TIncrementalBackupConfig IncrementalBackupConfig = 3;
+
+    oneof Storage {
+        google.protobuf.NullValue Cluster = 4;
+    }
 }
 
 message TBackupCollection {

@@ -1406,6 +1406,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildCreateBackupCollection(Ctx.Pos(),
+                                                             TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
                                                              objectId,
                                                              TCreateBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
@@ -1468,6 +1469,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildAlterBackupCollection(Ctx.Pos(),
+                                                            TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
                                                             objectId,
                                                             TAlterBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
@@ -1496,6 +1498,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildDropBackupCollection(Ctx.Pos(),
+                                                           TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
                                                            objectId,
                                                            TDropBackupCollectionParameters {
                                                                .MissingOk = false,

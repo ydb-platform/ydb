@@ -1527,13 +1527,22 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                             TScopedStatePtr scoped);
 
-    TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+    TNodePtr BuildCreateBackupCollection(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TCreateBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
-    TNodePtr BuildAlterBackupCollection(TPosition pos, const TString& id,
+    TNodePtr BuildAlterBackupCollection(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TAlterBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
-    TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
+    TNodePtr BuildDropBackupCollection(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TDropBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
 

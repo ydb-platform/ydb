@@ -270,7 +270,9 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
+        if (Viewer) {
+            Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
+        }git 
 
         if (CacheResult) {
             if (CacheResult->IsOk()) {

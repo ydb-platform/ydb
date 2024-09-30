@@ -351,45 +351,6 @@ class TCdcChangeSenderMain
     , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    struct TPQPartitionInfo {
-        ui32 PartitionId;
-        ui64 ShardId;
-        TPartitionKeyRange KeyRange;
-
-        struct TLess {
-            TConstArrayRef<NScheme::TTypeInfo> Schema;
-
-            TLess(const TVector<NScheme::TTypeInfo>& schema)
-                : Schema(schema)
-            {
-            }
-
-            bool operator()(const TPQPartitionInfo& lhs, const TPQPartitionInfo& rhs) const {
-                Y_ABORT_UNLESS(lhs.KeyRange.ToBound || rhs.KeyRange.ToBound);
-
-                if (!lhs.KeyRange.ToBound) {
-                    return false;
-                }
-
-                if (!rhs.KeyRange.ToBound) {
-                    return true;
-                }
-
-                Y_ABORT_UNLESS(lhs.KeyRange.ToBound && rhs.KeyRange.ToBound);
-
-                const int compares = CompareTypedCellVectors(
-                    lhs.KeyRange.ToBound->GetCells().data(),
-                    rhs.KeyRange.ToBound->GetCells().data(),
-                    Schema.data(), Schema.size()
-                );
-
-                return (compares < 0);
-            }
-
-        }; // TLess
-
-    }; // TPQPartitionInfo
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -615,21 +576,18 @@ class TCdcChangeSenderMain
         const auto& pqDesc = entry.PQGroupInfo->Description;
         const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-        TVector<NScheme::TTypeInfo> schema;
-        PartitionToShard.clear();
-
-        schema.reserve(pqConfig.PartitionKeySchemaSize());
+        TVector<NScheme::TTypeInfo> schema(::Reserve(pqConfig.PartitionKeySchemaSize()));
         for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
             if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
-                schema.push_back(NScheme::TTypeInfo(
-                    NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
+                schema.push_back(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
             } else {
                 schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
             }
         }
 
-        TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);
+        PartitionToShard.clear();
 
+        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning(::Reserve(pqDesc.PartitionsSize()));
         for (const auto& partition : pqDesc.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             const auto shardId = partition.GetTabletId();
@@ -640,42 +598,38 @@ class TCdcChangeSenderMain
             Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
             Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
 
-            partitions.insert({partitionId, shardId, std::move(keyRange)});
-        }
-
-        // used to validate
-        bool isFirst = true;
-        const TPQPartitionInfo* prev = nullptr;
-
-        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning;
-        partitioning.reserve(partitions.size());
-        for (const auto& cur : partitions) {
-            if (isFirst) {
-                isFirst = false;
-                Y_ABORT_UNLESS(!cur.KeyRange.FromBound.Defined());
-            } else {
-                Y_ABORT_UNLESS(cur.KeyRange.FromBound.Defined());
-                Y_ABORT_UNLESS(prev);
-                Y_ABORT_UNLESS(prev->KeyRange.ToBound.Defined());
-                // TODO: compare cells
-            }
-
-            auto& part = partitioning.emplace_back(cur.PartitionId); // TODO: double-check that it is right partitioning
-
-            if (cur.KeyRange.ToBound) {
-                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
-                    .EndKeyPrefix = *cur.KeyRange.ToBound,
+            auto& info = partitioning.emplace_back(partitionId);
+            if (keyRange.ToBound) {
+                info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
+                    .EndKeyPrefix = *keyRange.ToBound,
                 };
             } else {
-                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+                info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+            }
+        }
+
+        Sort(partitioning.begin(), partitioning.end(), [schema](const auto& lhs, const auto& rhs) {
+            Y_ABORT_UNLESS(lhs.Range && rhs.Range);
+            Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
+
+            if (!lhs.Range->EndKeyPrefix) {
+                return false;
             }
 
-            prev = &cur;
-        }
+            if (!rhs.Range->EndKeyPrefix) {
+                return true;
+            }
 
-        if (prev) {
-            Y_ABORT_UNLESS(!prev->KeyRange.ToBound.Defined());
-        }
+            Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix && rhs.Range->EndKeyPrefix);
+
+            const int compares = CompareTypedCellVectors(
+                lhs.Range->EndKeyPrefix.GetCells().data(),
+                rhs.Range->EndKeyPrefix.GetCells().data(),
+                schema.data(), schema.size()
+            );
+
+            return (compares < 0);
+        });
 
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;

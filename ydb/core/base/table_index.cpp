@@ -154,9 +154,9 @@ bool IsImplTable(std::string_view tableName) {
     return Contains(ImplTables, tableName);
 }
 
-bool IsTmpImplTable(std::string_view tableName) {
-    // all impl tables that ends with "tmp" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with("tmp");
+bool IsBuildImplTable(std::string_view tableName) {
+    // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
+    return tableName.ends_with("build");
 }
 
 }

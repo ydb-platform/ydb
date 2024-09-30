@@ -1630,59 +1630,6 @@ struct TCatalog : public IExtensionSqlBuilder {
             );
         }
 
-        if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
-            // grafana migration_log
-            State->AllStaticTables.push_back(
-                {{"public", "migration_log"}, ERelKind::Relation, 100001}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "migration_log", "id", "int"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "migration_log", "migration_id", "character varying(255)"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "migration_log", "sql", "text"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "migration_log", "success", "boolean"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "migration_log", "error", "text"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "migration_log", "timestamp", "timestamp without time zone"}
-            );
-
-            // zabbix config
-            State->AllStaticTables.push_back(
-                {{"public", "config"}, ERelKind::Relation, 100001}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "config", "configid", "bigint"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "config", "server_check_interval", "integer"}
-            );
-
-            State->AllStaticColumns.push_back(
-                {"public", "config", "dbversion_status", "text"}
-            );
-
-            // zabbix dbversion
-            State->AllStaticTables.push_back(
-                {{"public", "dbversion"}, ERelKind::Relation, 100002}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "dbversion", "dbversionid", "bigint"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "dbversion", "mandatory", "integer"}
-            );
-            State->AllStaticColumns.push_back(
-                {"public", "dbversion", "mandatory", "optional"}
-            );
-        }
         THashSet<ui32> usedTableOids;
         for (const auto& t : State->AllStaticTables) {
             State->StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));

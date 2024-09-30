@@ -262,11 +262,8 @@ git push
 - Через отчет PR
   - Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
   - В контекстном меню теста выберите `Create mute issue`
-
- - Через дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
-  
+- Через дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
     - Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
-
    - Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
 
 
@@ -287,7 +284,9 @@ git push
 * Ты молодец!
 
 #### Как включить(un-mute) тест <a id="how-to-unmute"></a>
+
 --Under construction--
+
 * Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
 * Нажмите "Edit" и удалите строку теста
 * Сохраните изменения (Отредактируйте ветку для слияния, например, замените `{username}-patch-1` на `mute/{username}`)
@@ -302,14 +301,19 @@ git push
 * Ты молодец!
 
 ### Как управлять отключенными(muted) тестами в команде <a id="how-to-manage"></a>
+
 --Under construction--
+
 #### Изучите стабильность ваших тестов
+
  >Если вы хотите получить больше информации о стабильности вашего теста, посетите [dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=8JQ) (заполните поле `owner`=`{your_team_name}`)
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_1.png)
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_2.png)
 
 #### Найдите ваши отключенные(muted) тесты
+
  >Не все muted тесты имеют issue в проекте github, мы работаем над этим
+
 * Откройте проект [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D)
 * кликните по метке с именем вашей команды, например [link to qp](https://github.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp) отключенные тесты (cgi `?filterQuery=owner%3Aqp`)
 * Откройте issue `Отключить {имя теста}`
@@ -356,7 +360,9 @@ git push
 Каждый раз, когда тесты запускаются {{ ydb-short-name }} CI, их результаты загружаются в [приложение Test History](https://nebius.testmo.net/projects/view/1). В комментарии к результатам тестирования есть ссылка "Test history", ведущая на страницу с соответствующим прогоном в этом приложении.
 
 В "Test history" члены команды {{ ydb-short-name }} могут просматривать тестовые прогоны, выполнять поиск тестов, просматривать логи и сравнивать их между различными тестовыми прогонами. Если какой-либо тест завершается сбоем на некоторой прекоммитной проверке, в его истории можно увидеть, был ли этот сбой вызван данным изменением, или тест был сломан ранее.
+
 #### История тестов без авторизаций в testmo
+
 - Через отчет PR
   - Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
   - В контекстном меню теста выберите `Open test history`
@@ -364,7 +370,9 @@ git push
  - Через дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
   
     - Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+
 ###### Как читать
+
 ![Пример](https://storage.yandexcloud.net/ydb-public-images/history_example.png)
 * `Summary in 1 day window (Poscommit + Night Runs)` Показывает историю изменения статусов теста (Passed/Flaky/Muted stable/Muted flaky) в окне 1 дня
   * Можно определить как давно тест в таком состоянии
@@ -372,8 +380,6 @@ git push
   * по нажатию на кнопку `Mute` можно замьютить тест
 * `Test history` - показывает перечень всех запусков с ссылкой на github action
   * можно найти в каких PR тест падал
-
-
 
 ### Review и merge {#review}
 

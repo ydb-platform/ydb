@@ -111,5 +111,11 @@ public:
     const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
+
+    void RemoveVersion(ui64 version);
+
+    ui64 GetLastSchemaVersion() const {
+        return LastSchemaVersion;
+    }
 };
 }   // namespace NKikimr::NOlap

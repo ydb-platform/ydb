@@ -6,6 +6,15 @@
 
 namespace NKikimr::NOlap {
 
+void TVersionedIndex::RemoveVersion(ui64 version) {
+    auto itVersion = SnapshotByVersion.find(version);
+    AFL_VERIFY(itVersion != SnapshotByVersion.end());
+    auto itSnap = Snapshots.find(itVersion->second->GetSnapshot());
+    AFL_VERIFY(itSnap != Snapshots.end());
+    SnapshotByVersion.erase(itVersion);
+    Snapshots.erase(itSnap);
+}
+
 const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     if (Snapshots.empty()) {
         PrimaryKey = indexInfo.GetPrimaryKey();

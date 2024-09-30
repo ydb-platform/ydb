@@ -69,6 +69,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TBase::Become(&TMessageBusServerRequest::StateWork);
 
+        return HandleError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::EStatus::NotImplemented, ctx);
+
         ProposalStatus.Reset(new NKikimrTxUserProxy::TEvProposeTransactionStatus());
         Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
         NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;

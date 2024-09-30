@@ -485,7 +485,7 @@ Only connections with matching [producer and message group](../../concepts/topic
      topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
      topicwriter.Message{Data: strings.NewReader("3")},
    )
-   if err == nil {
+   if err != nil {
      return err
    }
    ```
@@ -621,7 +621,7 @@ Only connections with matching [producer and message group](../../concepts/topic
     topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
     topicwriter.Message{Data: strings.NewReader("3")},
   )
-  if err == nil {
+  if err != nil {
     return err
   }
   ```

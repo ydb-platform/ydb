@@ -371,18 +371,25 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
-            for (const auto& [k, _] : *Request) {
+            auto addClause = [&disjunction, KeyType=this->KeyType](ui32 columns, auto&& getter) {
                 NConnector::NApi::TPredicate_TConjunction conjunction;
-                for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
+                for (ui32 c = 0; c != columns; ++c) {
                     NConnector::NApi::TPredicate_TComparison eq;
                     eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
                     eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
                     auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
                     ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
-                    ExportValueToProto(KeyType->GetMemberType(c), k.GetElement(c), *rightTypedValue->mutable_value());
+                    ExportValueToProto(KeyType->GetMemberType(c), getter(c), *rightTypedValue->mutable_value());
                     *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
                 }
                 *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
+            };
+            for (const auto& [k, _] : *Request) {
+                addClause(KeyType->GetMembersCount(), [&k=k](auto c) { return k.GetElement(c); });
+            }
+            // Pad query with dummy clauses to improve caching
+            for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests); ++nRequests) {
+                addClause(KeyType->GetMembersCount(), [](auto) { return NUdf::TUnboxedValue(); });
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return {};

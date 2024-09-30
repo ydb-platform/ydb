@@ -277,7 +277,7 @@ private:
             (
             (let $string_type (DataType 'String))
 
-            (let $input_type (TupleType (DataType 'String) (DataType 'Uint64)))
+            (let $input_type (TupleType $string_type (DataType 'Uint64)))
             (let $output_type (TupleType (StructType )" << udfOutputType.Str() << R"() (DataType 'Uint64)))
             (let $udf_argument_type (TupleType $input_type (StructType) $output_type))
             (let $udf_callable_type (CallableType '('1) '((StreamType $output_type)) '((StreamType $input_type)) '((OptionalType (DataType 'Utf8)))))

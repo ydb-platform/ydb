@@ -58,11 +58,11 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) { 
         TList<TString> result;
         ui64 resultOffset;
-        MakeParser({"a1", "a2"}, [&](ui64 offset, TList<TString>&& value){
+        MakeParser({"a1", "a2"}, {"String", "Int32"}, [&](ui64 offset, TList<TString>&& value){
                 resultOffset = offset;
                 result = std::move(value);
             });
-        Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
+        Parser->Push(5, R"({"a1": "hello1", "a2": 101,  "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
 
         MakeParser({"a2", "a1"}, [&](ui64, TList<TString>&&){ });
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, " DB::ParsingException: Cannot parse input: expected '{' before: 'ydb': (at row 1)");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, "DB::ParsingException: Cannot parse input: expected '{' before: 'ydb': (at row 1)");
     }
 }
 

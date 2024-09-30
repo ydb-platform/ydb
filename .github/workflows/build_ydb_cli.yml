@@ -63,7 +63,6 @@ jobs:
           MATRIX=$(echo $MATRIX | jq '.')
           echo "Final pretty printed matrix: $MATRIX"
           echo "Platform matrix: $MATRIX" >> "$GITHUB_STEP_SUMMARY"
-# https://github.com/github/docs/issues/21529
 
   build-platform-specific-binary:
     strategy:

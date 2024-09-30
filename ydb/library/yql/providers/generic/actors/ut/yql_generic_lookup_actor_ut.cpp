@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         auto ev = runtime.GrabEdgeEventRethrow<NYql::NDq::IDqAsyncLookupSource::TEvLookupResult>(edge);
         auto guard2 = Guard(*alloc.get());
-        auto lookupResult = std::move(ev->Get()->Result.lock());
+        auto lookupResult = ev->Get()->Result.lock();
         UNIT_ASSERT(lookupResult);
 
         UNIT_ASSERT_EQUAL(3, lookupResult->size());

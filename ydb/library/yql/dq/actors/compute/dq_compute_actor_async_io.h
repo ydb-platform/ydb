@@ -214,7 +214,7 @@ struct IDqAsyncLookupSource {
     >;
     struct TEvLookupRequest: NActors::TEventLocal<TEvLookupRequest, TDqComputeEvents::EvLookupRequest> {
         TEvLookupRequest(std::weak_ptr<TUnboxedValueMap> request)
-            : Request(request)
+            : Request(std::move(request))
         {
         }
         std::weak_ptr<TUnboxedValueMap> Request;
@@ -222,7 +222,7 @@ struct IDqAsyncLookupSource {
 
     struct TEvLookupResult: NActors::TEventLocal<TEvLookupResult, TDqComputeEvents::EvLookupResult> {
         TEvLookupResult(std::weak_ptr<TUnboxedValueMap> result)
-            : Result(result)
+            : Result(std::move(result))
         {
         }
         std::weak_ptr<TUnboxedValueMap> Result;

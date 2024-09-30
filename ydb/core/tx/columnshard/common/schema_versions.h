@@ -36,14 +36,14 @@ private:
 public:
     void VersionAddRef(ui64 version) {
         ui32 count = ++VersionCounts[version];
-        LOG_S_DEBUG("VersionAddRef, version " <<  version << " ref_count " << count);
+        Y_UNUSED(count);
+//        LOG_S_DEBUG("VersionAddRef, version " <<  version << " ref_count " << count);
     }
 
     ui32 VersionRemoveRef(ui64 version) {
         ui32& count = VersionCounts[version];
-        LOG_S_DEBUG("VersionRemoveRef, version " <<  version << " ref_count " << count - 1);
+//        LOG_S_DEBUG("VersionRemoveRef, version " <<  version << " ref_count " << count - 1);
         if (--count == 0) {
-            ACFL_DEBUG("event", "VersionsToErase")("version", version);
             VersionsToErase.insert(version);
         }
         return count;

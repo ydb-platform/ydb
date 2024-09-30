@@ -371,7 +371,7 @@ git push
   
     - Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
-###### Как читать
+##### Как читать
 
 ![Пример](https://storage.yandexcloud.net/ydb-public-images/history_example.png)
 * `Summary in 1 day window (Poscommit + Night Runs)` Показывает историю изменения статусов теста (Passed/Flaky/Muted stable/Muted flaky) в окне 1 дня

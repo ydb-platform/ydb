@@ -2214,10 +2214,6 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString error;
-
-            auto prefix = JoinPath({SessionCtx->GetDatabase(), ".backups/collections"});
-
             TString path;
 
             if (!settings.Name.StartsWith(SessionCtx->GetDatabase())) {
@@ -2226,8 +2222,8 @@ public:
                 path = settings.Name;
             }
 
+            TString error;
             std::pair<TString, TString> pathPair;
-
             if (!NSchemeHelpers::SplitTablePath(path, GetDatabase(), pathPair, error, true)) {
                 return MakeFuture(ResultFromError<TGenericResult>(error));
             }
@@ -2239,7 +2235,10 @@ public:
             auto& op = *tx.MutableCreateBackupCollection();
             op.SetName(pathPair.second);
 
-            // auto& config = *op.MutableConfig();
+            auto& properties = *op.MutableProperties();
+            if (settings.Settings.IncrementalBackupEnabled) {
+                properties.MutableIncrementalBackupConfig();
+            }
             // auto& params = *config.MutableSrcConnectionParams();
             // if (const auto& connectionString = settings.Settings.ConnectionString) {
             //     const auto parseResult = NYdb::ParseConnectionString(*connectionString);

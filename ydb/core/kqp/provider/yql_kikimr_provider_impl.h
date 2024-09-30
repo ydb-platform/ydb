@@ -101,6 +101,11 @@ public:
         bool PrimaryFlag = false;
     };
 
+    struct TBackupCollectionDescription {
+        TString Prefix;
+        TString Name;
+    };
+
 public:
     TKikimrKey(TExprContext& ctx)
         : Ctx(ctx) {}
@@ -176,10 +181,14 @@ public:
         return *ObjectType;
     }
 
-    const TString& GetBackupCollectionPath() const {
+    TBackupCollectionDescription GetBackupCollectionPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::BackupCollection);
-        return Target;
+        Y_DEBUG_ABORT_UNLESS(ExplicitPrefix.Defined());
+        return TBackupCollectionDescription {
+                .Prefix = *ExplicitPrefix,
+                .Name = Target,
+            };
     }
 
     bool Extract(const TExprNode& key);
@@ -190,6 +199,7 @@ private:
     TString Target;
     TMaybe<TString> ObjectType;
     TMaybe<TViewDescription> View;
+    TMaybe<TString> ExplicitPrefix;
 };
 
 struct TKiDataQueryBlockSettings {

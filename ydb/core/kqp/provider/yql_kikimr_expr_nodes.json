@@ -519,9 +519,10 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Entries", "Type": "TCoBackupCollectionEntryList"},
-                {"Index": 4, "Name": "BackupCollectionSettings", "Type": "TCoNameValueTupleList"},
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Entries", "Type": "TCoBackupCollectionEntryList"},
+                {"Index": 5, "Name": "BackupCollectionSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

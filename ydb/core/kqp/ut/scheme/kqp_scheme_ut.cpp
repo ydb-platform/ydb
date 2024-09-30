@@ -7542,7 +7542,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 CREATE BACKUP COLLECTION `/Root/.metadata/my_collection` WITH(
                     STORAGE = 'cluster',
-                    COLLECT_CHANGES = 'true'
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
                 )
                     TABLE `/Root/table`;
             )";
@@ -7558,7 +7558,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 CREATE BACKUP COLLECTION `my_collection` WITH(
                     STORAGE = 'cluster',
-                    COLLECT_CHANGES = 'true'
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
                 )
                     TABLE `/Root/table`;
             )";

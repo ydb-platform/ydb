@@ -834,12 +834,18 @@ struct TAnalyzeSettings {
 };
 
 struct TBackupCollectionSettings {
-    TMaybe<TString> Database;
+    bool IncrementalBackupEnabled;
 };
 
 struct TCreateBackupCollectionSettings {
+    struct TDatabase {};
+
+    struct TTable {
+        TString Path;
+    };
+
     TString Name;
-    TVector<std::pair<TString, TString>> Entries;
+    std::variant<TDatabase, TVector<TTable>> Entries;
     TBackupCollectionSettings Settings;
 };
 

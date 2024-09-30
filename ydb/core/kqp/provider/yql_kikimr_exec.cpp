@@ -729,6 +729,34 @@ namespace {
 
         return true;
     }
+
+    bool ParseBackupCollectionSettings(
+        TBackupCollectionSettings& dstSettings,
+        const TCoNameValueTupleList& srcSettings,
+        TExprContext& ctx,
+        TPositionHandle pos)
+    {
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "incremental_backup_enabled") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (!TryFromString(value, dstSettings.IncrementalBackupEnabled)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "INCREMENTAL_BACKUP_ENABLED must be true or false"));
+                    return false;
+                }
+            } else if (name == "storage") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) != "cluster") {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "Only cluster STORAGE are currently supported"));
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -2442,9 +2470,9 @@ public:
             // }
 
             // FIXME
-            // if (!ParseAsyncBackupCollectionSettings(settings.Settings, createBackupCollection.BackupCollectionSettings(), ctx, createBackupCollection.Pos())) {
-            //     return SyncError();
-            // }
+            if (!ParseBackupCollectionSettings(settings.Settings, createBackupCollection.BackupCollectionSettings(), ctx, createBackupCollection.Pos())) {
+                return SyncError();
+            }
 
             auto cluster = TString(createBackupCollection.DataSink().Cluster());
             auto future = Gateway->CreateBackupCollection(cluster, settings);

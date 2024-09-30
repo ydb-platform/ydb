@@ -1900,7 +1900,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
         const THashSet<TString> supportedSettings = {
-            "collect_changes",
+            "incremental_backup_enabled",
             "storage",
         };
 

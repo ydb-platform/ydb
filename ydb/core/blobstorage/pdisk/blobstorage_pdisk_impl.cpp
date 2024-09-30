@@ -60,11 +60,9 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             0, 64 * 1024 * 1024);
     ForsetiMaxLogBatchNs = TControlWrapper((PDiskCategory.IsSolidState() ? 50'000ll : 500'000ll), 0, 100'000'000ll);
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
-    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
+    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, 512 * 1024);
+    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, 512 * 1024);
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
-
-    
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -2224,25 +2222,20 @@ void TPDisk::ProcessChunkWriteQueue() {
         TRequestBase *req = (*it);
         req->SpanStack.PopOk();
         req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkWritePiece:
-            {
-                TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
-                P_LOG(PRI_NOTICE, BPD01, "ChunkWritePiece",
-                    (ChunkIdx, piece->ChunkWrite->ChunkIdx),
-                    (Offset, piece->PieceShift),
-                    (Size, piece->PieceSize)
-                );
-                bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
-                if (lastPart) {
-                    Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
-                }
-                delete piece;
-                break;
-            }
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
+
+        Y_VERIFY_S(req->GetType() == ERequestType::RequestChunkWritePiece, "Unexpected request type# " << ui64(req->GetType())
+            << " TypeName# " << TypeName(*req) << " in JointChunkWrites");
+        TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
+        P_LOG(PRI_DEBUG, BPD01, "ChunkWritePiece",
+            (ChunkIdx, piece->ChunkWrite->ChunkIdx),
+            (Offset, piece->PieceShift),
+            (Size, piece->PieceSize)
+        );
+        bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
+        if (lastPart) {
+            Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(now));
         }
+        delete piece;
     }
     LWTRACK(PDiskProcessChunkWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkWrites.size());
     JointChunkWrites.clear();
@@ -2251,7 +2244,10 @@ void TPDisk::ProcessChunkWriteQueue() {
 void TPDisk::ProcessChunkReadQueue() {
     NHPTimer::STime now = HPNow();
     // Size (bytes) of elementary sectors block, it is useless to read/write less than that blockSize
-    ui64 bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
+    ui64 bufferSize;
+    with_lock(StateMutex) {
+        bufferSize = BufferPool->GetBufferSize() / Format.SectorSize * Format.SectorSize;
+    }
 
     for (auto& req : JointChunkReads) {
         req->SpanStack.PopOk();
@@ -2266,7 +2262,7 @@ void TPDisk::ProcessChunkReadQueue() {
         ui8 priorityClass = read->PriorityClass;
         NHPTimer::STime creationTime = read->CreationTime;
         Y_VERIFY(!read->IsReplied);
-        P_LOG(PRI_NOTICE, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
+        P_LOG(PRI_DEBUG, BPD36, "Performing TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx),
             (PieceCurrentSector, piece->PieceCurrentSector),
             (PieceSizeLimit, piece->PieceSizeLimit),
             (IsTheLastPiece, piece->IsTheLastPiece),
@@ -2896,7 +2892,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                  }
             }
             TChunkState &state = ChunkState[ev.ChunkIdx];
-            if (state.OwnerId == OwnerSystem) {
+            if (state.OwnerId != ev.Owner) {
+                err << "Can't write chunkIdx# " << ev.ChunkIdx
+                    << " chunk is owner by another owner."
+                    << " chunk's owner# " << state.OwnerId
+                    << " request's owner# " << ev.Owner;
+                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                delete request;
+                return false;
+            }
+            if (!IsOwnerUser(state.OwnerId)) {
                 err << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk is owned by the system! ownerId# " << ev.Owner;
                 SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
@@ -3421,12 +3426,12 @@ void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
     LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
 
-    ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-    ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
-    ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
-    ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
     {
         TGuard<TMutex> guard(StateMutex);
+        ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
+        ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
+        ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
+        ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
         // Switch the scheduler when possible
         ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);
 

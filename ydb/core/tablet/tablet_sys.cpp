@@ -817,6 +817,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
             return PromoteToCandidate(0);
         }
     case NKikimrProto::ERROR:
+    case NKikimrProto::NODATA:
     case NKikimrProto::RACE:
     case NKikimrProto::TIMEOUT:
         return LockedInitializationPath();
@@ -848,6 +849,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
         }
         return;
     case NKikimrProto::ERROR:
+    case NKikimrProto::NODATA:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
     case NKikimrProto::TIMEOUT:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSTimeout);
@@ -884,6 +886,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
             return TabletBlockBlobStorage();
         }
     case NKikimrProto::ERROR:
+    case NKikimrProto::NODATA:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
     case NKikimrProto::TIMEOUT:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSTimeout);

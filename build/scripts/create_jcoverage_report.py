@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import tarfile
 import zipfile
@@ -77,12 +78,12 @@ def main(
                 else:
                     continue
 
-                entry.filename = entry.filename.encode('utf-8')
+                entry.filename = entry.filename
                 jf.extract(entry, dest)
     timer.step("Jar files extracted")
 
     if not agent_disposition:
-        print >> sys.stderr, 'Can\'t find jacoco agent. Will not generate html report for java coverage.'
+        print('Can\'t find jacoco agent. Will not generate html report for java coverage.', file=sys.stderr)
 
     if tar_output:
         report_dir = 'java.report.temp'

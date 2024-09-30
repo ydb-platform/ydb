@@ -1524,7 +1524,7 @@ message TEvLocalKMeansRequest {
 
     // id of parent cluster
     optional uint32 Parent = 15;
-    // [Child ... Child + K] ids reserved for our clusters
+    // [Child ... Child + K) ids reserved for this kmeans clusters
     optional uint32 Child = 16;
 
     optional string LevelName = 17;
@@ -1534,7 +1534,7 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 }
 
-message TEvLocalKMeansProgressResponse {
+message TEvLocalKMeansResponse {
     optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
@@ -1552,6 +1552,53 @@ message TEvLocalKMeansProgressResponse {
 
     // optional TEvLocalKMeansRequest.EState State = 10;
     // optional uint32 DoneRounds = 11;
+}
+
+message TEvReshuffleKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+
+    optional uint64 SeqNoGeneration = 6;
+    optional uint64 SeqNoRound = 7;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 8;
+
+    optional TEvLocalKMeansRequest.EState Upload = 9;
+
+    // id of parent cluster
+    optional uint32 Parent = 10;
+    // [Child ... Child + ClustersSize) ids of this kmeans clusters
+    optional uint32 Child = 11;
+    // centroids of clusters
+    repeated string Clusters = 12;
+
+    optional string PostingName = 13;
+
+    optional string EmbeddingColumn = 14;
+    repeated string DataColumns = 15;
+}
+
+message TEvReshuffleKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    // TODO(mbkkt) implement slow-path (reliable-path)
+    // optional uint64 RowsDelta = 8;
+    // optional uint64 BytesDelta = 9;
+    // optional last written primary key
 }
 
 message TEvCdcStreamScanRequest {

@@ -46,9 +46,9 @@ private:
     }
 
     void JoinAlgo() {        
-        Keyword({"("});
-
         i32 beginPos = Pos + 1;
+        
+        Keyword({"("});
 
         i32 labelsBeginPos = Pos + 1;
         TVector<TString> labels = CollectLabels();
@@ -65,7 +65,7 @@ private:
 
         for (const auto& [joinAlgo, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
             if (reqJoinAlgoStr == joinAlgoStr) {
-                Hints.JoinAlgoHints->PushBack(std::move(labels), joinAlgo, "JoinOrder" + Text.substr(beginPos, Pos - beginPos + 1));
+                Hints.JoinAlgoHints->PushBack(std::move(labels), joinAlgo, "JoinAlgo" + Text.substr(beginPos, Pos - beginPos + 1));
                 return;
             }
         }

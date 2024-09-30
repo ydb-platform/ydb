@@ -1853,6 +1853,46 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckDonePermission("user", permission2.GetPermissions(0).GetId());
     }
 
+    Y_UNIT_TEST(DisabledEvictVDisks)
+    {
+        auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
+        // Make transition faster for tests purposes
+        auto cmsConfig = env.GetCmsConfig();
+        cmsConfig.MutableSentinelConfig()->SetDefaultStateLimit(1);
+        env.SetCmsConfig(cmsConfig);
+
+        // Evict VDisks
+        auto request = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP // ok, waiting for move VDisks
+        );
+     
+        // Check that FAULTY BSC request is sent
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+
+        // Disable VDisks eviction
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(cmsConfig);
+
+        // Check that ACTIVE BSC request is sent
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::ACTIVE);
+
+        // Check that CMS returns ERROR when VDisks eviction is disabled
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::ERROR, 0);
+
+        // Enable VDisks eviction again
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(cmsConfig);
+
+        // Check that FAULTY BSC request is sent again
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+    }
+
     Y_UNIT_TEST(EmergencyDuringRollingRestart)
     {
         TCmsTestEnv env(8);

@@ -393,6 +393,13 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
             return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
         case NScheme::NTypeIds::Decimal:
             return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair);
+        case NScheme::NTypeIds::Pg:
+            if (auto result = NPg::PgNativeBinaryFromNativeText(value.GetStringSafe(), typeInfo.GetPgTypeDesc()); result.Error) {
+                err = *result.Error;
+                return false;
+            } else {
+                return TCellMaker<NPg::TConvertResult, TStringBuf>::MakeDirect(cell, result, pool, err, &PgToStringBuf);
+            }
         case NScheme::NTypeIds::Uuid:
             return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &UuidToStringBuf);
         default:

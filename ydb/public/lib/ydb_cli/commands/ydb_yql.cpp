@@ -44,24 +44,13 @@ void TCommandYql::Config(TConfig& config) {
     });
 
     AddParametersOption(config);
+    AddLegacyParametersFileOption(config);
 
-    AddInputFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64
-    });
+    AddDefaultParamFormats(config);
+    AddLegacyStdinFormats(config);
 
-    AddStdinFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64,
-        EDataFormat::Raw,
-        EDataFormat::Csv,
-        EDataFormat::Tsv
-    }, {
-        EDataFormat::NoFraming,
-        EDataFormat::NewlineDelimited
-    });
-
-    AddParametersStdinOption(config, "script");
+    AddBatchParametersOptions(config, "script");
+    AddLegacyBatchParametersOptions(config);
 
     CheckExamples(config);
 
@@ -70,7 +59,8 @@ void TCommandYql::Config(TConfig& config) {
 
 void TCommandYql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseInputFormats();
+    ParseOutputFormats();
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
@@ -104,11 +94,9 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
 
     SetInterruptHandlers();
 
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-            ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+    if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
+        while (!IsInterrupted() && GetNextParams(driver, Script, paramBuilder)) {
             auto asyncResult = client.StreamExecuteYqlScript(
                     script,
                     paramBuilder->Build(),
@@ -145,11 +133,8 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
 
         while (!IsInterrupted()) {
             auto streamPart = result.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (streamPart.EOS()) {
-                    break;
-                }
-                ThrowOnError(streamPart);
+            if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                break;
             }
 
             if (streamPart.HasPartialResult()) {

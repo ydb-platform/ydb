@@ -23,13 +23,13 @@ TEST_F(TProxyUrlTest, ParseProxyUrlAliasingRules)
 TEST_F(TProxyUrlTest, ApplyProxyUrlAliasingRules)
 {
     {
-        TString url = "markov";
+        std::string url = "markov";
         ApplyProxyUrlAliasingRules(url, THashMap<std::string, std::string>({{"primary", "localhost:12345"}}));
         ASSERT_EQ(url, "markov");
     }
     // See ENV in ya.make
     {
-        TString url = "primary";
+        std::string url = "primary";
         ApplyProxyUrlAliasingRules(url, THashMap<std::string, std::string>({{"primary", "localhost:12345"}}));
         ASSERT_EQ(url, "localhost:12345");
     }

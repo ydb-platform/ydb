@@ -243,7 +243,6 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
         std::make_shared<TPqGatewayConfig>(),
         nullptr
     );
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(pqServices));
     RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(std::move(pqServices)));
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);

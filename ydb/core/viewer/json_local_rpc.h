@@ -30,6 +30,7 @@ class TJsonLocalRpc : public TViewerPipeClient {
 
 protected:
     using TBase::ReplyAndPassAway;
+    using TRequestProtoType = TProtoRequest;
     std::vector<HTTP_METHOD> AllowedMethods = {};
     TAutoPtr<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>> Result;
     NThreading::TFuture<TProtoResponse> RpcFuture;
@@ -40,10 +41,10 @@ public:
     }
 
     TJsonLocalRpc(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(viewer, ev, TProtoRequest::descriptor()->name())
+        : TBase(viewer, ev, TRequestProtoType::descriptor()->name())
     {}
 
-    void Params2Proto(const TCgiParameters& params, TProtoRequest& request) {
+    void Params2Proto(const TCgiParameters& params, TRequestProtoType& request) {
         using google::protobuf::Descriptor;
         using google::protobuf::Reflection;
         using google::protobuf::FieldDescriptor;
@@ -95,12 +96,12 @@ public:
         }
     }
 
-    bool ValidateProto(TProtoRequest& request) {
+    virtual bool ValidateRequest(TRequestProtoType& request) {
         using google::protobuf::Descriptor;
         using google::protobuf::Reflection;
         using google::protobuf::FieldDescriptor;
-        const Descriptor& descriptor = *TProtoRequest::GetDescriptor();
-        const Reflection& reflection = *TProtoRequest::GetReflection();
+        const Descriptor& descriptor = *TRequestProtoType::GetDescriptor();
+        const Reflection& reflection = *TRequestProtoType::GetReflection();
         for (int idx = 0; idx < descriptor.field_count(); ++idx) {
             const FieldDescriptor* field = descriptor.field(idx);
             const auto& options(field->options());
@@ -116,7 +117,7 @@ public:
         return true;
     }
 
-    bool Params2Proto(TProtoRequest& request) {
+    bool Params2Proto(TRequestProtoType& request) {
         auto postData = Event->Get()->Request.GetPostContent();
         if (!postData.empty()) {
             try {
@@ -130,13 +131,13 @@ public:
             const auto& params(Event->Get()->Request.GetParams());
             Params2Proto(params, request);
         }
-        if (!ValidateProto(request)) {
+        if (!ValidateRequest(request)) {
             return false;
         }
         return true;
     }
 
-    void SendGrpcRequest(TProtoRequest&& request) {
+    void SendGrpcRequest(TRequestProtoType&& request) {
         // TODO(xenoxeno): pass trace id
         RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database, Event->Get()->UserToken, TlsActivationContext->ActorSystem());
         RpcFuture.Subscribe([actorId = TBase::SelfId(), actorSystem = TlsActivationContext->ActorSystem()]
@@ -173,7 +174,7 @@ public:
         if (TBase::NeedToRedirect()) {
             return;
         }
-        TProtoRequest request;
+        TRequestProtoType request;
         if (!Params2Proto(request)) {
             return;
         }

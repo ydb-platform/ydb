@@ -35,7 +35,7 @@ public:
         const std::optional<std::string>& host = {},
         const std::optional<std::string>& rack = {},
         const std::optional<std::string>& dc = {},
-        const std::vector<TString>& tags = {},
+        const std::vector<std::string>& tags = {},
         std::optional<TInstant> lastSeenTime = {});
 
     TNodeDescriptor& operator=(const TNodeDescriptor& other) = default;
@@ -55,7 +55,7 @@ public:
     const std::optional<std::string>& GetRack() const;
     const std::optional<std::string>& GetDataCenter() const;
 
-    const std::vector<TString>& GetTags() const;
+    const std::vector<std::string>& GetTags() const;
 
     //! GetLastSeenTime returns last instant when node was seen online on some master.
     /*!
@@ -76,7 +76,7 @@ private:
     std::optional<std::string> Host_;
     std::optional<std::string> Rack_;
     std::optional<std::string> DataCenter_;
-    std::vector<TString> Tags_;
+    std::vector<std::string> Tags_;
 
     // Not persisted.
     mutable TCopyableAtomic<TCpuInstant> LastSeenTime_;

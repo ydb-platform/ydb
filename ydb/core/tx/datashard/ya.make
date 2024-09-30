@@ -168,6 +168,7 @@ SRCS(
     key_conflicts.cpp
     key_conflicts.h
     key_validator.cpp
+    kmeans_helper.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
@@ -198,6 +199,7 @@ SRCS(
     remove_lock_change_records.cpp
     remove_locks.cpp
     remove_schema_snapshots.cpp
+    reshuffle_kmeans.cpp
     restore_unit.cpp
     sample_k.cpp
     scan_common.cpp

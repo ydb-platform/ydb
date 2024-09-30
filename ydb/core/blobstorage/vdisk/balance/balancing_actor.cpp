@@ -73,6 +73,7 @@ namespace NBalancing {
         TLogoBlobsSnapshot::TForwardIterator It;
         TQueueActorMapPtr QueueActorMapPtr;
         THashSet<TVDiskID> ConnectedVDisks;
+        THashSet<TVDiskID> GoodStatusVDisks;
 
         TBatchedQueue<TPartInfo> SendOnMainParts;
         TBatchedQueue<TLogoBlobID> TryDeleteParts;
@@ -83,46 +84,46 @@ namespace NBalancing {
         TInstant StartTime;
 
         ///////////////////////////////////////////////////////////////////////////////////////////
-        //  Main logic
+        //  Init logic
         ///////////////////////////////////////////////////////////////////////////////////////////
 
-        void ContinueBalancing() {
-            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
-            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
+        void SendCheckVDisksStatusRequests() {
+            for (ui32 i = 0; i < GInfo->GetTotalVDisksNum(); ++i) {
+                const auto vdiskId = GInfo->GetVDiskId(i);
+                const auto actorId = GInfo->GetActorId(i);
+                if (TVDiskIdShort(vdiskId) != Ctx->VCtx->ShortSelfVDisk) {
+                    Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId));
+                }
+            }
+        }
 
-            if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
-                // no more parts to send or delete
-                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
-                PassAway();
+        void Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
+            auto msg = ev->Get();
+            auto vdiskId = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
+            auto status = msg->Record.GetStatus();
+            bool replicated = msg->Record.GetReplicated();
+            bool isReadOnly = msg->Record.GetIsReadOnly();
+
+            if (status != NKikimrProto::EReplyStatus::OK || !replicated || isReadOnly) {
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "VDisk is not ready. Stop balancing"),
+                    (VDiskId, vdiskId), (Status, NKikimrProto::EReplyStatus_Name(status)), (Replicated, replicated), (ReadOnly, isReadOnly));
+                Stop(TDuration::Seconds(10));
                 return;
             }
 
-            // ask for repl token to continue balancing
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
-            Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
+            GoodStatusVDisks.insert(vdiskId);
         }
 
-        void ScheduleJobQuant() {
-            Ctx->MonGroup.ReplTokenAquired()++;
-
-            // once repl token received, start balancing - waking up sender and deleter
-            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
-                (SendPartsLeft, SendOnMainParts.Size()), (DeletePartsLeft, TryDeleteParts.Size()),
-                (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
-
-            // register sender and deleter actors
-            BatchManager = TBatchManager(
-                CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx),
-                CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx)
-            );
+        bool ReadyToBalance() const {
+            return (GoodStatusVDisks.size() + 1 == GInfo->GetTotalVDisksNum()) && (ConnectedVDisks.size() + 1 == GInfo->GetTotalVDisksNum());
         }
 
         void CollectKeys() {
-            if (ConnectedVDisks.size() + 1 != GInfo->GetTotalVDisksNum()) {
+            if (!ReadyToBalance()) {
                 // not all vdisks are connected
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Not all vdisks are connected, balancing should work only for full groups"),
-                    (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisksInGroup, GInfo->GetTotalVDisksNum()));
-                PassAway();
+                    (ConnectedVDisks, ConnectedVDisks.size()), (GoodStatusVDisks, GoodStatusVDisks.size()), (TotalVDisksInGroup, GInfo->GetTotalVDisksNum()));
+                Stop(TDuration::Seconds(10));
                 return;
             }
 
@@ -197,6 +198,42 @@ namespace NBalancing {
             ContinueBalancing();
         }
 
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        //  Main logic
+        ///////////////////////////////////////////////////////////////////////////////////////////
+
+        void ContinueBalancing() {
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.Data.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.Data.size();
+
+            if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
+                // no more parts to send or delete
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB03, VDISKP(Ctx->VCtx, "Balancing completed"));
+                bool hasSomeWorkForNextEpoch = SendOnMainParts.Data.size() >= Ctx->Cfg.MaxToSendPerEpoch || TryDeleteParts.Data.size() >= Ctx->Cfg.MaxToDeletePerEpoch;
+                Stop(hasSomeWorkForNextEpoch ? TDuration::Seconds(0) : Ctx->Cfg.TimeToSleepIfNothingToDo);
+                return;
+            }
+
+            // ask for repl token to continue balancing
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB01, VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"), (SelfId, SelfId()), (PDiskId, Ctx->VDiskCfg->BaseInfo.PDiskId));
+            Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
+        }
+
+        void ScheduleJobQuant() {
+            Ctx->MonGroup.ReplTokenAquired()++;
+
+            // once repl token received, start balancing - waking up sender and deleter
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB02, VDISKP(Ctx->VCtx, "Schedule job quant"),
+                (SendPartsLeft, SendOnMainParts.Size()), (DeletePartsLeft, TryDeleteParts.Size()),
+                (ConnectedVDisks, ConnectedVDisks.size()), (TotalVDisks, GInfo->GetTotalVDisksNum()));
+
+            // register sender and deleter actors
+            BatchManager = TBatchManager(
+                CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx),
+                CreateDeleterActor(SelfId(), TryDeleteParts.GetNextBatch(), QueueActorMapPtr, Ctx)
+            );
+        }
+
         void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "TEvCompleted"), (Type, ev->Type));
             BatchManager.Handle(ev);
@@ -205,7 +242,7 @@ namespace NBalancing {
                 Ctx->MonGroup.EpochTimeouts()++;
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
-                PassAway();
+                Stop(TDuration::Seconds(0));
                 return;
             }
 
@@ -280,19 +317,24 @@ namespace NBalancing {
             Send(BatchManager.DeleterId, msg->Clone());
         }
 
-        void PassAway() override {
+        void Stop(TDuration timeoutBeforeNextLaunch) {
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Stop balancing"), (SendOnMainParts, SendOnMainParts.Data.size()), (TryDeleteParts, TryDeleteParts.Data.size()), (SecondsBeforeNextLaunch, timeoutBeforeNextLaunch.Seconds()));
+
             Send(BatchManager.SenderId, new NActors::TEvents::TEvPoison);
             Send(BatchManager.DeleterId, new NActors::TEvents::TEvPoison);
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
-            Send(Ctx->SkeletonId, new TEvStartBalancing());
-            TActorBootstrapped::PassAway();
+            TlsActivationContext->Schedule(timeoutBeforeNextLaunch, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
+            PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
-            // Logic events
+            // Init events
             cFunc(NActors::TEvents::TEvWakeup::EventType, CollectKeys)
+            hFunc(TEvBlobStorage::TEvVStatusResult, Handle)
+
+            // Main logic events
             cFunc(TEvReplToken::EventType, ScheduleJobQuant)
             hFunc(NActors::TEvents::TEvCompleted, Handle)
             hFunc(TEvBalancingSendPartsOnMain, Handle)
@@ -323,6 +365,7 @@ namespace NBalancing {
             CreateVDisksQueues();
             It.SeekToFirst();
             ++Ctx->MonGroup.BalancingIterations();
+            SendCheckVDisksStatusRequests();
             Schedule(TDuration::Seconds(10), new NActors::TEvents::TEvWakeup());
         }
     };

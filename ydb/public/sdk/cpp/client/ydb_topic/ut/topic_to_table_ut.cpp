@@ -2156,6 +2156,25 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
     CommitTx(tx, EStatus::SESSION_EXPIRED);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
+    }
+
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID); // gracefully close
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
 {
     // The recording stream will run into a quota. Before the commit, the client will receive confirmations

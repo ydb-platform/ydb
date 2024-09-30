@@ -1,0 +1,102 @@
+/*******************************************************************************
+ * tlx/main.dox
+ *
+ * Root page of TLX doxygen tree. All doc pages must be linked here.
+ *
+ * Part of tlx - http://panthema.net/tlx
+ *
+ * Copyright (C) 2017-2018 Timo Bingmann <tb@panthema.net>
+ *
+ * All rights reserved. Published under the Boost Software License, Version 1.0
+ ******************************************************************************/
+
+namespace tlx {
+
+/******************************************************************************/
+/*!
+
+\if TLX_MAINPAGE
+  \mainpage tlx - Collection of C++ Data Structures, Algorithms, and Miscellaneous Helpers
+\else
+  \page tlx tlx - Collection of C++ Data Structures, Algorithms, and Miscellaneous Helpers
+\endif
+
+tlx is a collection of C++ helpers and extensions universally needed, but not
+found in the STL.
+
+The most important design goals and conventions are:
+- high modularity with as little dependencies between modules as possible.
+- attempt to never break existing interfaces.
+- compile on all platforms with C++ -- smartphones, supercomputers, windows, etc.
+- zero external dependencies: no additional libraries are required.
+- warning and bug-freeness on all compilers.
+- keep overhead down -- small overall size such that is can be included without bloating applications.
+
+List of the most commonly used components:
+
+- \subpage tlx_counting_ptr
+- \subpage tlx_die : \ref die(), \ref die_unless(), \ref die_if(), \ref die_unequal().
+- \ref logger.hpp : \ref LOG, \ref LOG1, \ref LOGC, \ref sLOG, \ref wrap_unprintable().
+- Miscellaneous: \ref timestamp, \ref unused, \ref vector_free.
+- \ref tlx_algorithm : \ref merge_combine(), \ref exclusive_scan(), \ref multiway_merge(), \ref parallel_multiway_merge(), \ref multisequence_selection(), \ref multisequence_partition().
+- \ref tlx_container : \ref RingBuffer, \ref SimpleVector, \ref StringView, \ref tlx_container_btree, \ref tlx_container_loser_tree, \ref RadixHeap, \ref DAryHeap, \ref DAryAddressableIntHeap
+- \ref tlx_define : \ref TLX_LIKELY, \ref TLX_UNLIKELY, \ref TLX_ATTRIBUTE_PACKED, \ref TLX_ATTRIBUTE_ALWAYS_INLINE, \ref TLX_ATTRIBUTE_FORMAT_PRINTF, \ref TLX_DEPRECATED_FUNC_DEF.
+- \ref tlx_digest : \ref MD5, \ref md5_hex(), \ref SHA1, \ref sha1_hex(), \ref SHA256, \ref sha256_hex(), \ref SHA512, \ref sha512_hex().
+- \ref tlx_math : \ref integer_log2_floor(), \ref is_power_of_two(), \ref round_up_to_power_of_two(), \ref round_down_to_power_of_two(), \ref ffs(), \ref clz(), \ref ctz(), \ref abs_diff(), \ref bswap32(), \ref bswap64(), \ref popcount(), \ref Aggregate, \ref PolynomialRegression.
+- \ref tlx_string : \ref starts_with(), \ref ends_with(), \ref contains(), \ref contains_word(), \ref trim(), \ref replace_all(), \ref erase_all(), \ref join(), \ref split(), \ref split_view(), \ref split_words(), \ref union_words(), \ref split_quoted(), \ref join_quoted(), \ref to_lower(), \ref hexdump(), \ref bitdump_le8(), \ref word_wrap(), \ref escape_html(), \ref parse_uri(), \ref parse_uri_form_data(), \ref parse_si_iec_units(), \ref format_iec_units(), \ref ssprintf(), \ref expand_environment_variables(), \ref levenshtein(), \ref hash_djb2(), \ref hash_sdbm()
+- \ref tlx_meta : \ref call_foreach(), \ref apply_tuple(), \ref vmap_foreach(), \ref Log2Floor, \ref FunctionChain, \ref FunctionStack, \ref is_std_pair, \ref is_std_tuple, \ref is_std_vector, \ref is_std_array, \ref TLX_MAKE_HAS_MEMBER.
+- \ref tlx_sort : \ref parallel_mergesort() (experimental parallel merge sort from MCSTL), \ref sort_strings() (using radix sort and multikey quicksort), \ref sort_strings_parallel() (using parallel super scalar string sample sort), \ref sort_networks "Sorting networks" for up to sixteen elements.
+- \ref backtrace.hpp "Backtrace Printing" : \ref print_cxx_backtrace().
+- \ref cmdline_parser.hpp "Command Line Parsing" : \ref CmdlineParser.
+- \ref multi_timer.hpp "Multi-Phase Timer" : \ref MultiTimer, \ref ScopedMultiTimerSwitch, \ref ScopedMultiTimer.
+- \ref delegate.hpp "Fast Delegates" : \ref Delegate - a better std::function<> replacement.
+- \ref siphash.hpp "SipHash" : simple string hashing
+- \ref stack_allocator.hpp "StackAllocator" : stack-local allocations
+- Threading : \ref ThreadPool, \ref Semaphore, \ref ThreadBarrierMutex, \ref ThreadBarrierSpin
+
+## Bugs
+
+Please report bugs via the [github issue tracking system](https://github.com/tlx/tlx/issues).
+
+## License
+
+tlx is licensed under the [Boost Software License - Version 1.0](https://github.com/tlx/tlx/blob/master/LICENSE).
+
+If you use tlx in an academic context or publication, please cite it as
+
+```
+@Misc{TLX,
+  title =        {{TLX}: Collection of Sophisticated {C++} Data Structures, Algorithms, and Miscellaneous Helpers},
+  author =       {Timo Bingmann},
+  year =         2018,
+  note =         {\url{https://panthema.net/tlx}, retrieved {Oct.} 7, 2020},
+}
+```
+
+\author Timo Bingmann (2018)
+
+*/
+
+/******************************************************************************/
+/*!
+
+\defgroup tlx tlx - C++ Extensions and Utilities
+\{
+
+\defgroup tlx_algorithm Algorithms
+\defgroup tlx_container Containers and Data Structures
+\defgroup tlx_define Defines and Macros
+\defgroup tlx_digest Message Digests
+\defgroup tlx_math Math Functions
+\defgroup tlx_meta Meta-Template Programming
+\defgroup tlx_port Helpers for Portable Code
+\defgroup tlx_sort Sorting Algorithms
+\defgroup tlx_string String Algorithms
+
+\}
+
+*/
+
+} // namespace tlx
+
+/******************************************************************************/

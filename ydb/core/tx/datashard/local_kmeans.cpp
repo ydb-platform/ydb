@@ -106,7 +106,8 @@ protected:
     TAutoPtr<TEvDataShard::TEvLocalKMeansResponse> Response;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    {
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
@@ -143,7 +144,8 @@ public:
         NextTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
+    {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_T("Prepare " << Debug());
 
@@ -151,7 +153,8 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
+    {
         LOG_T("Finish " << Debug());
 
         if (Uploader) {
@@ -175,11 +178,13 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final {
+    void Describe(IOutputStream& out) const noexcept final
+    {
         out << Debug();
     }
 
-    TString Debug() const {
+    TString Debug() const
+    {
         auto builder = TStringBuilder() << " TLocalKMeansScan";
         if (Response) {
             auto& r = Response->Record;
@@ -189,7 +194,8 @@ public:
                        << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
-    EScan PageFault() noexcept final {
+    EScan PageFault() noexcept final
+    {
         LOG_T("PageFault " << Debug());
 
         if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
@@ -201,7 +207,8 @@ public:
     }
 
 protected:
-    STFUNC(StateWork) {
+    STFUNC(StateWork)
+    {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
@@ -211,7 +218,8 @@ protected:
         }
     }
 
-    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
+    void HandleWakeup(const NActors::TActorContext& /*ctx*/)
+    {
         LOG_T("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
@@ -219,7 +227,8 @@ protected:
         }
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
+    {
         LOG_T("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
                                               << " ev->Sender: " << ev->Sender.ToString());
 
@@ -256,7 +265,8 @@ protected:
         Driver->Touch(EScan::Final);
     }
 
-    EScan FeedUpload() {
+    EScan FeedUpload()
+    {
         if (!ReadBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
         }
@@ -268,11 +278,13 @@ protected:
         return EScan::Feed;
     }
 
-    ui64 GetProbability() {
+    ui64 GetProbability()
+    {
         return Rng.GenRand64();
     }
 
-    void Upload(bool isRetry) {
+    void Upload(bool isRetry)
+    {
         if (isRetry) {
             ++RetryCount;
         } else {
@@ -290,7 +302,8 @@ protected:
         Uploader = this->Register(actor);
     }
 
-    void UploadSample() {
+    void UploadSample()
+    {
         Y_ASSERT(ReadBuf.IsEmpty());
         Y_ASSERT(WriteBuf.IsEmpty());
         std::array<TCell, 2> pk;
@@ -320,12 +333,13 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
 public:
     TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                      const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
-        : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)} 
+        : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final {
+    EScan Seek(TLead& lead, ui64 seq) noexcept final
+    {
         LOG_T("Seek " << Debug());
         if (State == UploadState) {
             if (!WriteBuf.IsEmpty()) {
@@ -374,28 +388,30 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    {
         LOG_T("Feed " << Debug());
         switch (State) {
             case EState::SAMPLE:
                 return FeedSample(row);
             case EState::KMEANS:
                 return FeedKMeans(row);
-            case EState::UPLOAD_MAIN_TO_TMP:
-                return FeedUploadMain2Tmp(key, row);
+            case EState::UPLOAD_MAIN_TO_BUILD:
+                return FeedUploadMain2Build(key, row);
             case EState::UPLOAD_MAIN_TO_POSTING:
                 return FeedUploadMain2Posting(key, row);
-            case EState::UPLOAD_TMP_TO_TMP:
-                return FeedUploadTmp2Tmp(key, row);
-            case EState::UPLOAD_TMP_TO_POSTING:
-                return FeedUploadTmp2Posting(key, row);
+            case EState::UPLOAD_BUILD_TO_BUILD:
+                return FeedUploadBuild2Build(key, row);
+            case EState::UPLOAD_BUILD_TO_POSTING:
+                return FeedUploadBuild2Posting(key, row);
             default:
                 return EScan::Final;
         }
     }
 
 private:
-    bool InitAggregatedClusters() {
+    bool InitAggregatedClusters()
+    {
         if (Clusters.size() == 0) {
             return false;
         }
@@ -413,7 +429,8 @@ private:
         return true;
     }
 
-    void AggregateToCluster(ui32 pos, const char* embedding) {
+    void AggregateToCluster(ui32 pos, const char* embedding)
+    {
         if (pos >= K) {
             return;
         }
@@ -425,7 +442,8 @@ private:
         ++aggregate.Count;
     }
 
-    void RecomputeClusters(bool last) {
+    void RecomputeClusters(bool last)
+    {
         auto r = Clusters.begin();
         auto w = r;
         for (auto& aggregate : AggregatedClusters) {
@@ -445,7 +463,8 @@ private:
         Clusters.erase(w, Clusters.end());
     }
 
-    EScan FeedSample(const TRow& row) noexcept {
+    EScan FeedSample(const TRow& row) noexcept
+    {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
         ReadStats.Rows += 1;
@@ -473,23 +492,26 @@ private:
         return MaxProbability != 0 ? EScan::Feed : EScan::Reset;
     }
 
-    EScan FeedKMeans(const TRow& row) noexcept {
+    EScan FeedKMeans(const TRow& row) noexcept
+    {
         Y_ASSERT(row.Size() == 1);
         const ui32 pos = FeedEmbedding(*this, Clusters, row, 0, ReadStats);
         AggregateToCluster(pos, row.Get(0).Data());
         return EScan::Feed;
     }
 
-    EScan FeedUploadMain2Tmp(TArrayRef<const TCell> key, const TRow& row) noexcept {
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowMain2Tmp(ReadBuf, Child + pos, key, row);
+        AddRowMain2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept {
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
@@ -498,21 +520,23 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadTmp2Tmp(TArrayRef<const TCell> key, const TRow& row) noexcept {
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowTmp2Tmp(ReadBuf, Child + pos, key, row);
+        AddRowBuild2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadTmp2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept {
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowTmp2Posting(ReadBuf, Child + pos, key, row, DataPos);
+        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 };
@@ -521,27 +545,31 @@ class TDataShard::TTxHandleSafeLocalKMeansScan final: public NTabletFlatExecutor
 public:
     TTxHandleSafeLocalKMeansScan(TDataShard* self, TEvDataShard::TEvLocalKMeansRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev)) 
+        , Ev(std::move(ev))
     {
     }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) final {
+    bool Execute(TTransactionContext&, const TActorContext& ctx) final
+    {
         Self->HandleSafe(Ev, ctx);
         return true;
     }
 
-    void Complete(const TActorContext&) final {
+    void Complete(const TActorContext&) final
+    {
     }
 
 private:
     TEvDataShard::TEvLocalKMeansRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext&)
+{
     Execute(new TTxHandleSafeLocalKMeansScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
+{
     auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
 

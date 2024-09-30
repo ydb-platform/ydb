@@ -1503,7 +1503,7 @@ public:
             item.SetFlags(shardInfo.AffectedFlags);
         }
 
-        //TODO: NDataIntegrity & Volatile
+        //TODO: NDataIntegrity
         CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator << " volitale=" << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0));
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
     }
@@ -1854,7 +1854,6 @@ public:
             Y_ABORT_UNLESS(GetTotalMemory() == 0);
             return;
         }
-        //Process();
     }
 
     void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {

@@ -396,6 +396,7 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
     node.Version = info.GetVersion();
 
     node.Services = TServices();
+    TryFromNodeId(nodeId, node.Services);
     for (const auto& role : info.GetRoles()) {
         EService value;
         if (TryFromWhiteBoardRole(role, value)) {
@@ -674,7 +675,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
                     if (!nodeGroup->IsNodeLocked(vdisk->NodeId)) {
                         nodeGroup->LockNode(vdisk->NodeId);
                     }
-                } 
+                }
             }
         }
         break;
@@ -1034,7 +1035,7 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
                     if (!nodeGroup->IsNodeLocked(node->NodeId)) {
                         AddNodeLockOperation(node->NodeId, nodeGroup);
                     }
-                }     
+                }
             }
         }
         break;
@@ -1046,14 +1047,14 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
                     if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
                         AddNodeLockOperation(pdisk->NodeId, nodeGroup);
                     }
-                }       
+                }
             } else if (clusterState->HasVDisk(device)) {
                 auto vdisk = &clusterState->VDisk(device);
                 for (auto &nodeGroup: clusterState->NodeRef(vdisk->NodeId).NodeGroups) {
                     if (!nodeGroup->IsNodeLocked(vdisk->NodeId)) {
                         AddNodeLockOperation(vdisk->NodeId, nodeGroup);
                     }
-                }     
+                }
             }
         }
         break;

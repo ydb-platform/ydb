@@ -6,10 +6,8 @@
 
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -576,67 +574,19 @@ class TCdcChangeSenderMain
         const auto& pqDesc = entry.PQGroupInfo->Description;
         const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-        TVector<NScheme::TTypeInfo> schema(::Reserve(pqConfig.PartitionKeySchemaSize()));
-        for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-            if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
-                schema.push_back(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
-            } else {
-                schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
-            }
-        }
-
         PartitionToShard.clear();
-
-        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning(::Reserve(pqDesc.PartitionsSize()));
         for (const auto& partition : pqDesc.GetPartitions()) {
-            const auto partitionId = partition.GetPartitionId();
-            const auto shardId = partition.GetTabletId();
-
-            PartitionToShard.emplace(partitionId, shardId);
-
-            auto keyRange = TPartitionKeyRange::Parse(partition.GetKeyRange());
-            Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
-            Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
-
-            auto& info = partitioning.emplace_back(partitionId);
-            if (keyRange.ToBound) {
-                info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
-                    .EndKeyPrefix = *keyRange.ToBound,
-                };
-            } else {
-                info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
-            }
+            PartitionToShard.emplace(partition.GetPartitionId(), partition.GetTabletId());
         }
-
-        Sort(partitioning.begin(), partitioning.end(), [schema](const auto& lhs, const auto& rhs) {
-            Y_ABORT_UNLESS(lhs.Range && rhs.Range);
-            Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
-
-            if (!lhs.Range->EndKeyPrefix) {
-                return false;
-            }
-
-            if (!rhs.Range->EndKeyPrefix) {
-                return true;
-            }
-
-            Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix && rhs.Range->EndKeyPrefix);
-
-            const int compares = CompareTypedCellVectors(
-                lhs.Range->EndKeyPrefix.GetCells().data(),
-                rhs.Range->EndKeyPrefix.GetCells().data(),
-                schema.data(), schema.size()
-            );
-
-            return (compares < 0);
-        });
 
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
         TopicVersion = topicVersion;
 
-        KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(schema);
-        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(std::move(partitioning));
+        Y_ABORT_UNLESS(entry.PQGroupInfo->Schema);
+        KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
+        Y_ABORT_UNLESS(entry.PQGroupInfo->Partitioning);
+        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
         if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
             SetPartitionResolver(new TBoundaryPartitionResolver(pqDesc));

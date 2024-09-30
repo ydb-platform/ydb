@@ -30,10 +30,6 @@ on:
         type: string
         default: "yandexcloud-ydb"
         description: "S3 bucket. S3Uri (without hostname). Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
-      s3_dns_host_bucket:
-        type: string
-        default: "%(bucket)s.storage.yandexcloud.net"
-        description: "S3 DNS-style bucket+hostname:port template for accessing a bucket. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
       s3_region:
         type: string
         default: "ru-central1"
@@ -182,5 +178,5 @@ jobs:
           cd ..
 
       - name: Upload to S3
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="%(bucket)s.${{ inputs.s3_host }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
       

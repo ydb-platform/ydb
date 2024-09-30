@@ -230,8 +230,9 @@ class TJsonParser::TImpl {
 public:
     TImpl(
         const TVector<TString>& columns,
+        const TVector<TString>& types,
         TCallback callback)
-        : Sql(GenerateSql(columns)) {
+        : Sql(GenerateSql(columns, types)) {
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
         auto factory = NYql::NPureCalc::MakeProgramFactory(options);
 
@@ -240,7 +241,7 @@ public:
             TParserInputSpec(),
             TParserOutputSpec(MakeOutputSchema(columns)),
             Sql,
-            NYql::NPureCalc::ETranslationMode::SQL
+            NYql::NPureCalc::ETranslationMode::SExpr
         );
         LOG_ROW_DISPATCHER_DEBUG("Program created");
         InputConsumer = Program->Apply(MakeHolder<TParserOutputConsumer>(callback));
@@ -257,29 +258,38 @@ public:
     }
 
 private:
-    TString GenerateSql(const TVector<TString>& columns) {
-        TStringStream structType;
-        structType << "Struct<";
-        for (auto it = columns.begin(); it != columns.end(); ++it) {
-            structType << *it << ": String" << ((it != columns.end() - 1) ? ", " : ">");
+    TString GenerateSql(const TVector<TString>& columnNames, const TVector<TString>& columnTypes) {
+        Y_ABORT_UNLESS(columnNames.size() == columnTypes.size(), "Unexpected column types size");
+
+        TStringStream udfOutputType;
+        TStringStream resultType;
+        for (size_t i = 0; i < columnNames.size(); ++i) {
+            const TString& lastSymbol = i + 1 == columnNames.size() ? "" : " ";
+            const TString& column = columnNames[i];
+            const TString& type = columnTypes[i];
+
+            udfOutputType << "'('" << column << " (DataType '" << type << "))" << lastSymbol;
+            resultType << "'('" << column << " (SafeCast (Member $parsed '" << column << ") $string_type))" << lastSymbol;
         }
 
         TStringStream str;
         str << R"(
-            $parse_json_each_row = YQL::Udf(
-                AsAtom("ClickHouseClient.ParseFormat"),
-                Void(),
-                TupleType(
-                    TupleType(String, Uint64),
-                    Struct<>,
-                    TupleType()" << structType.Str() << R"(, Uint64)
-                ),
-                AsAtom("json_each_row")
-            );
+            (
+            (let $string_type (DataType 'String))
 
-            $parsed_tuples = SELECT YQL::Collect($parse_json_each_row(YQL::ToStream([(data, )" << OffsetFieldName << R"()]))) AS parsed_value FROM Input;
-            $parsed_structs = SELECT AddMember(parsed_value.0, ")" << OffsetFieldName << R"(", parsed_value.1) FROM $parsed_tuples FLATTEN LIST BY parsed_value;
-            SELECT * FROM $parsed_structs FLATTEN COLUMNS;
+            (let $input_type (TupleType (DataType 'String) (DataType 'Uint64)))
+            (let $output_type (TupleType (StructType )" << udfOutputType.Str() << R"() (DataType 'Uint64)))
+            (let $udf_argument_type (TupleType $input_type (StructType) $output_type))
+            (let $udf_callable_type (CallableType '('1) '((StreamType $output_type)) '((StreamType $input_type)) '((OptionalType (DataType 'Utf8)))))
+            (let $udf (Udf 'ClickHouseClient.ParseFormat (Void) $udf_argument_type 'json_each_row $udf_callable_type (VoidType) '"" '()))
+
+            (return (Map (Apply $udf (Map (Self '0) (lambda '($input) (block '(
+                (return '((Member $input 'data) (Member $input ')" << OffsetFieldName << R"()))
+            ))))) (lambda '($output) (block '(
+                (let $parsed (Nth $output '0))
+                (return (AsStruct '(')" << OffsetFieldName << R"( (Nth $output '1)) )" << resultType.Str() << R"())
+            )))))
+            )
         )";
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
@@ -293,8 +303,9 @@ private:
 
 TJsonParser::TJsonParser(
     const TVector<TString>& columns,
+    const TVector<TString>& types,
     TCallback callback)
-    : Impl(std::make_unique<TJsonParser::TImpl>(columns, callback)) { 
+    : Impl(std::make_unique<TJsonParser::TImpl>(columns, types, callback)) { 
 }
 
 TJsonParser::~TJsonParser() {
@@ -310,8 +321,9 @@ TString TJsonParser::GetSql() {
 
 std::unique_ptr<TJsonParser> NewJsonParser(
     const TVector<TString>& columns,
+    const TVector<TString>& types,
     TCallback callback) {
-    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, callback));
+    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, types, callback));
 }
 
 } // namespace NFq

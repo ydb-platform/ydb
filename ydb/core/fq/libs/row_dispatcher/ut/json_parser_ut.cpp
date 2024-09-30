@@ -34,14 +34,19 @@ public:
         }
     }
 
-    void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
+    void MakeParser(TVector<TString> columns, TVector<TString> types, NFq::TJsonParser::TCallback callback) {
         try {
             Parser = NFq::NewJsonParser(
                 columns,
+                types,
                 callback);
         } catch (NYql::NPureCalc::TCompileError compileError) {
             UNIT_ASSERT_C(false, TStringBuilder() << "Failed to create json parser: " << compileError.what() << "\nQuery text:\n" << compileError.GetYql() << "Reason:\n" << compileError.GetIssues());
         }
+    }
+
+    void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
+        MakeParser(columns, TVector<TString>(columns.size(), "String"), callback);
     }
 
     TActorSystemStub actorSystemStub;

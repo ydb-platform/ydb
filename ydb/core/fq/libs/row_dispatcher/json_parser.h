@@ -13,6 +13,7 @@ public:
 public:
     TJsonParser(
         const TVector<TString>& columns,
+        const TVector<TString>& types,
         TCallback callback);
     ~TJsonParser();
     void Push(ui64 offset, const TString& value);
@@ -25,6 +26,7 @@ private:
 
 std::unique_ptr<TJsonParser> NewJsonParser(
     const TVector<TString>& columns,
+    const TVector<TString>& types,
     TJsonParser::TCallback callback);
 
 } // namespace NFq

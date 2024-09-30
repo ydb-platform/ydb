@@ -255,6 +255,9 @@ private:
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        
+
         auto args = ctx.Func->arg_begin();
 
         ctx.Ctx = &*args;
@@ -293,7 +296,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             state = Stream->GetValue(ctx);
         }
 
@@ -479,6 +482,9 @@ private:
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        
 
         auto args = ctx.Func->arg_begin();
 

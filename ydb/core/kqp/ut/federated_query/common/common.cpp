@@ -27,6 +27,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);
+        featureFlags.SetEnableExternalSourceSchemaInference(true);
         if (!appConfig) {
             appConfig.emplace();
         }
@@ -63,4 +64,4 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return std::make_shared<TKikimrRunner>(settings);
     }
 
-}
+} // namespace NKikimr::NKqp::NFederatedQueryTest

@@ -178,8 +178,15 @@ public:
 
         TablePathsToCheck.clear();
         for (const auto& result : results) {
-            const TString& path = CanonizePath(result.Path);
-            LOG_D("Describe table " << path << " status " << result.Status);
+            const TString& fullPath = CanonizePath(result.Path);
+            LOG_D("Describe table " << fullPath << " status " << result.Status);
+
+            std::pair<TString, TString> pathPair;
+            if (TString error; !TrySplitPathByDb(fullPath, AppData()->TenantName, pathPair, error)) {
+                TablesExists = false;
+                AddError(TStringBuilder() << "Failed to describe table path " << fullPath << ", " << error);
+                continue;
+            }
 
             switch (result.Status) {
                 case EStatus::Unknown:
@@ -188,10 +195,10 @@ public:
                 case EStatus::AccessDenied:
                 case EStatus::RedirectLookupError:
                     TablesExists = false;
-                    AddError(TStringBuilder() << "Failed to describe table path " << path << ", " << result.Status);
+                    AddError(TStringBuilder() << "Failed to describe table path " << fullPath << ", " << result.Status);
                     break;
                 case EStatus::LookupError:
-                    RetryPathCheck(result.Path, result.Status);
+                    RetryPathCheck(pathPair.second, result.Status);
                     break;
                 case EStatus::RootUnknown:
                 case EStatus::PathErrorUnknown:
@@ -199,9 +206,9 @@ public:
                     TablesExists = false;
                     break;
                 case EStatus::Ok:
-                    LOG_D("Start cleanup for table " << path);
+                    LOG_D("Start cleanup for table " << fullPath);
                     CleanupQueriesInFlight++;
-                    Register(new TCleanupTablesRetryQuery(SelfId(), path));
+                    Register(new TCleanupTablesRetryQuery(SelfId(), fullPath));
                     break;
             }
         }
@@ -251,14 +258,14 @@ protected:
     }
 
 private:
-    void RetryPathCheck(const TVector<TString>& path, EStatus status) {
-        if (TablePathsToCheck.empty() && !ScheduleRetry(TStringBuilder() << "Retry " << status << " for table " << CanonizePath(path))) {
+    void RetryPathCheck(const TString& path, EStatus status) {
+        if (TablePathsToCheck.empty() && !ScheduleRetry(TStringBuilder() << "Retry " << status << " for table " << path)) {
             TablesExists = false;
-            AddError(TStringBuilder() << "Retry limit exceeded for table " << CanonizePath(path) << ", " << status);
+            AddError(TStringBuilder() << "Retry limit exceeded for table " << path << ", " << status);
             return;
         }
 
-        TablePathsToCheck.emplace_back(path);
+        TablePathsToCheck.emplace_back(SplitPath(path));
     }
 
     template <typename TMessage>

@@ -117,7 +117,8 @@ class InsertContext(BaseQueryContext):
                 sample = [data[j][i] for j in range(0, self.row_count, sample_freq)]
                 d_size = d_type.data_size(sample)
             row_size += d_size
-        return 1 << (21 - int(log(row_size, 2)))
+        shift_size = (21 - int(log(row_size, 2)))
+        return 1 if shift_size < 0 else 1 << (21 - int(log(row_size, 2)))
 
     def next_block(self) -> Generator[InsertBlock, None, None]:
         while True:

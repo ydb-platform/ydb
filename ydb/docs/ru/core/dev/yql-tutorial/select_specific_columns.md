@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     series_id,             -- Имена колонок (series_id, release_date, title)
                            -- перечисляются через запятую.

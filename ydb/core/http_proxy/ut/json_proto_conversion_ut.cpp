@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "json_proto_conversion.h"
+#include <ydb/public/api/protos/draft/ymq.pb.h>
 
 Y_UNIT_TEST_SUITE(JsonProtoConversion) {
 
@@ -163,5 +164,61 @@ Y_UNIT_TEST(NlohmannJsonToProtoArray) {
     UNIT_ASSERT_VALUES_EQUAL(message.records(0).partition_key(), "part0");
   }
 
+}
+
+Y_UNIT_TEST(JsonToProtoMap) {
+  {
+    Ydb::Ymq::V1::CreateQueueRequest message;
+
+    NJson::TJsonValue jsonObject;
+    jsonObject["QueueName"] = "SampleQueueName";
+
+    NJson::TJsonMap attributes;
+    attributes["DelaySeconds"] = "900";
+    attributes["MaximumMessageSize"] = "1024";
+
+    jsonObject["Attributes"] = attributes;
+
+    NKikimr::NHttpProxy::JsonToProto(jsonObject, &message);
+
+    UNIT_ASSERT_VALUES_EQUAL(message.queue_name(), "SampleQueueName");
+    UNIT_ASSERT_VALUES_EQUAL(message.attributes().find("DelaySeconds")->second, "900");
+    UNIT_ASSERT_VALUES_EQUAL(message.attributes().find("MaximumMessageSize")->second, "1024");
+  }
+}
+
+Y_UNIT_TEST(ProtoMapToJson) {
+  {
+    Ydb::Ymq::V1::GetQueueAttributesResult message;
+    message.mutable_attributes()->insert({google::protobuf::MapPair<TString, TString>("DelaySeconds", "900")});
+    message.mutable_attributes()->insert({google::protobuf::MapPair<TString, TString>("MaximumMessageSize", "1024")});
+
+    NJson::TJsonValue jsonObject;
+    NKikimr::NHttpProxy::ProtoToJson(message, jsonObject, false);
+
+    UNIT_ASSERT_VALUES_EQUAL(jsonObject.GetMap().find("Attributes")->second.GetMap().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(jsonObject.GetMap().find("Attributes")->second.GetMap().find("DelaySeconds")->second.GetString(), "900");
+    UNIT_ASSERT_VALUES_EQUAL(jsonObject.GetMap().find("Attributes")->second.GetMap().find("MaximumMessageSize")->second.GetString(), "1024");
+  }
+}
+
+Y_UNIT_TEST(NlohmannJsonToProtoMap) {
+  {
+    nlohmann::json jsonObject;
+    jsonObject["QueueName"] = "SampleQueueName";
+
+    nlohmann::json attributes;
+    attributes["DelaySeconds"] = "900";
+    attributes["MaximumMessageSize"] = "1024";
+    jsonObject["Attributes"] = attributes;
+    nlohmann::json record;
+
+    Ydb::Ymq::V1::CreateQueueRequest message;
+    NKikimr::NHttpProxy::NlohmannJsonToProto(jsonObject, &message);
+
+    UNIT_ASSERT_VALUES_EQUAL(message.queue_name(), "SampleQueueName");
+    UNIT_ASSERT_VALUES_EQUAL(message.attributes().find("DelaySeconds")->second, "900");
+    UNIT_ASSERT_VALUES_EQUAL(message.attributes().find("MaximumMessageSize")->second, "1024");
+  }
 }
 } // Y_UNIT_TEST_SUITE(JsonProtoConversion)

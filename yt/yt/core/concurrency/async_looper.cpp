@@ -12,12 +12,11 @@ TAsyncLooper::TAsyncLooper(
     IInvokerPtr invoker,
     TCallback<TFuture<void>(bool)> asyncStart,
     TCallback<void(bool)> syncFinish,
-    TString name,
     const NLogging::TLogger& logger)
     : Invoker_(std::move(invoker))
     , AsyncStart_(std::move(asyncStart))
     , SyncFinish_(std::move(syncFinish))
-    , Logger(logger.WithTag("Looper: %v", name))
+    , Logger(logger)
 {
     YT_VERIFY(Invoker_);
     YT_VERIFY(Invoker_ != GetSyncInvoker());
@@ -29,7 +28,7 @@ void TAsyncLooper::Start()
 {
     auto traceContext = NTracing::GetOrCreateTraceContext("LooperStart");
     auto traceGuard = NTracing::TCurrentTraceContextGuard(traceContext);
-    YT_LOG_DEBUG("Requesting AsyncLooper to start");
+    YT_LOG_DEBUG("Requesting looper to start");
 
     Invoker_->Invoke(
         BIND(&TAsyncLooper::DoStart, MakeStrong(this)));
@@ -73,7 +72,7 @@ void TAsyncLooper::DoStart()
             // will bail out due to epoch mismatch -> we are free to
             // ignore this case on our side.
             State_ = EState::Running;
-            YT_LOG_DEBUG("Starting the looper");
+            YT_LOG_DEBUG("Starting looper");
             StartLoop(/*cleanStart*/ true, guard);
             break;
 
@@ -108,6 +107,9 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
         // We got canceled -- this is normal.
         throw;
     } catch (const std::exception& ex) {
+        if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {
+            throw;
+        }
         YT_LOG_FATAL(ex, "Unexpected error encountered during the async step");
     } catch (...) {
         YT_LOG_FATAL("Unexpected error encountered during the async step");
@@ -220,6 +222,9 @@ void TAsyncLooper::DoStep(bool cleanStart, bool wasRestarted)
         // We got canceled -- this is normal.
         throw;
     } catch (const std::exception& ex) {
+        if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {
+            throw;
+        }
         YT_LOG_FATAL(ex, "Unexpected error encountered during the sync step");
     } catch (...) {
         YT_LOG_FATAL("Unexpected error encountered during the sync step");
@@ -271,40 +276,45 @@ void TAsyncLooper::FinishStep(bool wasRestarted)
 
 void TAsyncLooper::Stop()
 {
-    auto guard = Guard(StateLock_);
+    TFuture<void> future;
 
-    if (State_ == EState::NotRunning) {
-        // Already stopping
-        // -> bail out.
-        YT_LOG_DEBUG("Trying to stop looper that is already stopped");
-        return;
+    {
+        auto guard = Guard(StateLock_);
+
+        if (State_ == EState::NotRunning) {
+            // Already stopping
+            // -> bail out.
+            YT_LOG_DEBUG("Trying to stop looper that is already stopped");
+            return;
+        }
+
+        State_ = EState::NotRunning;
+        ++EpochNumber_;
+        YT_LOG_DEBUG("Stopping the looper");
+
+        // We could be in one of three possible situations (for each stage):
+        // 1. EStage::AsyncBusy -- |StartLoop| caller will observe
+        // state |NotRunning| eventually and will cancel the future for us
+        // (or there will be a restart which is also handled by caller above).
+        // 2. EStage::Idle -- intermission between async and sync parts
+        // -- if there is not restart, sync part will just bail out
+        // if there is a restart, sync part will observe a different epoch
+        // and bail out as well.
+        // 3. EStage::Busy -- sync part is running and will simply not
+        // continue the chain once it observes NotRunning state.
+
+        if (!Future_) {
+            // If there was a null future produced for async part
+            // or simply while Stage_ == EStage::AsyncBusy.
+            return;
+        }
+
+        future = std::exchange(Future_, TFuture<void>());
     }
 
-    State_ = EState::NotRunning;
-    ++EpochNumber_;
-    YT_LOG_DEBUG("Stopping the looper");
-
-    // We could be in one of three possible situations (for each stage):
-    // 1. EStage::AsyncBusy -- |StartLoop| caller will observe
-    // state |NotRunning| eventually and will cancel the future for us
-    // (or there will be a restart which is also handled by caller above).
-    // 2. EStage::Idle -- intermission between async and sync parts
-    // -- if there is not restart, sync part will just bail out
-    // if there is a restart, sync part will observe a different epoch
-    // and bail out as well.
-    // 3. EStage::Busy -- sync part is running and will simply not
-    // continue the chain once it observes NotRunning state.
-
-    if (!Future_) {
-        // If there was a null future produced for async part
-        // or simply while Stage_ == EStage::AsyncBusy.
-        return;
-    }
-
-    Future_.Cancel(TError("Looper stopped"));
-    Future_.Reset();
+    future.Cancel(TError("Looper stopped"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // NYT::NConcurrency
+} // namespace NYT::NConcurrency

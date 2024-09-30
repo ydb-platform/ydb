@@ -114,7 +114,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, size_t) override {
+                                    TString& sourceType, size_t, TExprContext&) override {
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -305,10 +305,10 @@ namespace NYql {
             const TGenericState::TPtr State_;
         };
 
-    }
+    } // namespace
 
     THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state) {
         return MakeHolder<TGenericDqIntegration>(state);
     }
 
-}
+} // namespace NYql

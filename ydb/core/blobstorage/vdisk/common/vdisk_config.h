@@ -218,6 +218,23 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        TControlWrapper DefaultHugeGarbagePerMille;
+        bool UseActorSystemTimeInBSQueue = false;
+
+        ///////////// BALANCING SETTINGS ////////////////////
+        bool BalancingEnableSend;
+        bool BalancingEnableDelete;
+        TDuration BalancingJobGranularity;
+        bool BalancingBalanceOnlyHugeBlobs;
+        ui64 BalancingBatchSize;
+        ui64 BalancingMaxToSendPerEpoch;
+        ui64 BalancingMaxToDeletePerEpoch;
+        TDuration BalancingReadBatchTimeout;
+        TDuration BalancingSendBatchTimeout;
+        TDuration BalancingRequestBlobsOnMainTimeout;
+        TDuration BalancingDeleteBatchTimeout;
+        TDuration BalancingEpochTimeout;
+        TDuration BalancingTimeToSleepIfNothingToDo;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

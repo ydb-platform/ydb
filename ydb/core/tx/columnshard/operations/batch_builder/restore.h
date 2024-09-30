@@ -1,6 +1,7 @@
 #pragma once
 #include "merger.h"
 
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
@@ -22,10 +23,13 @@ private:
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
     virtual TConclusionStatus DoOnFinished() override;
+    virtual void DoOnError(const TString& errorMessage) override;
+    void SendErrorMessage(const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
+
 public:
-    TModificationRestoreTask(const ui64 tabletId, const NActors::TActorId parentActorId,
-        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-        const std::shared_ptr<ISnapshotSchema>& actualSchema, const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData);
+    TModificationRestoreTask(const ui64 tabletId, const NActors::TActorId parentActorId, const NActors::TActorId bufferActorId,
+        NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+        const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData);
 };
 
-}
+}   // namespace NKikimr::NOlap

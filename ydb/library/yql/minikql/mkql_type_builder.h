@@ -30,7 +30,8 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
     return MaxBlockSizeInBytes / std::max<size_t>(maxBlockItemSize, 1);
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type);
+using TArrowConvertFailedCallback = std::function<void(TType*)>;
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
 template<NUdf::EDataSlot slot>
@@ -324,6 +325,7 @@ protected:
     bool UseNullType = true;
 };
 
+void RebuildTypeIndex();
 
 } // namespace NMiniKQL
 } // namespace Nkikimr

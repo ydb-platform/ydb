@@ -304,14 +304,15 @@ namespace NKikimr::NStorage {
         if (record.GetRejected()) {
             AbortBinding("binding rejected by peer", false);
         } else {
-            const bool configUpdate = record.HasCommittedStorageConfig() && ApplyStorageConfig(record.GetCommittedStorageConfig());
+            const bool configUpdate = record.HasCommittedStorageConfig() && (
+                ApplyStorageConfig(record.GetCommittedStorageConfig()) || record.GetRecurseConfigUpdate());
             const ui32 prevRootNodeId = std::exchange(Binding->RootNodeId, record.GetRootNodeId());
             if (Binding->RootNodeId == SelfId().NodeId()) {
                 AbortBinding("binding cycle");
             } else if (prevRootNodeId != GetRootNodeId() || configUpdate) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
                     (ConfigUpdate, configUpdate));
-                FanOutReversePush(configUpdate ? &StorageConfig.value() : nullptr);
+                FanOutReversePush(configUpdate ? &StorageConfig.value() : nullptr, record.GetRecurseConfigUpdate());
             }
         }
     }
@@ -415,7 +416,7 @@ namespace NKikimr::NStorage {
         TBoundNode& info = it->second;
         if (inserted) {
             SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                StorageConfig ? &StorageConfig.value() : nullptr));
+                StorageConfig ? &StorageConfig.value() : nullptr, false));
             for (auto& [cookie, task] : ScatterTasks) {
                 IssueScatterTaskForNode(senderNodeId, info, cookie, task);
             }
@@ -503,6 +504,8 @@ namespace NKikimr::NStorage {
             DirectBoundNodes.erase(it);
 
             UnsubscribeQueue.insert(nodeId);
+
+            CheckRootNodeStatus();
         }
     }
 
@@ -511,7 +514,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::PartOfNodeQuorum() const {
-        return Scepter || GetRootNodeId() != SelfId().NodeId();
+        return Scepter || (Binding && GetRootNodeId() != SelfId().NodeId());
     }
 
 } // NKikimr::NStorage

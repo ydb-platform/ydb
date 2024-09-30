@@ -10,13 +10,25 @@
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
+    struct TPushdownSettings: public NPushdown::TSettings {
+        TPushdownSettings()
+            : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
+        {
+            using EFlag = NPushdown::TSettings::EFeatureFlag;
+            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator);
+        }
+    };
 
 std::unordered_set<TString> GetUsedMetadataFields(const TCoExtractMembers& extract) {
     std::unordered_set<TString> usedMetadataFields;
@@ -123,6 +135,7 @@ public:
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TPqLogicalOptProposalTransformer::name)
       //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource));
         #undef HNDL
     }
 
@@ -198,6 +211,71 @@ public:
         return Build<TCoExtractMembers>(ctx, node.Pos())
             .InitFrom(extract)
             .Input(ctx.ReplaceNode(input.Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
+            .Done();
+    }
+        
+    bool IsEmptyFilterPredicate(const TCoLambda& lambda) const {
+        auto maybeBool = lambda.Body().Maybe<TCoBool>();
+        if (!maybeBool) {
+            return false;
+        }
+        return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
+    }
+
+    TMaybeNode<TExprBase> PushFilterToPqTopicSource(TExprBase node, TExprContext& ctx) const {
+        auto flatmap = node.Cast<TCoFlatMap>();
+        auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
+
+        auto maybeDqSourceWrap = 
+            maybeExtractMembers
+            ? maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>()
+            : flatmap.Input().Maybe<TDqSourceWrap>();
+        ;
+        if (!maybeDqSourceWrap) {
+            return node;
+        }
+        TDqSourceWrap dqSourceWrap = maybeDqSourceWrap.Cast();
+        auto maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
+        if (!maybeDqPqTopicSource) {
+            return node;
+        }
+        TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+        if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+        
+        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        if (!newFilterLambda) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "No predicate to pushdown"));
+            return node;
+        }
+        YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
+
+        if (maybeExtractMembers) {
+            return Build<TCoFlatMap>(ctx, flatmap.Pos())
+                .InitFrom(flatmap)
+                .Input<TCoExtractMembers>()
+                    .InitFrom(maybeExtractMembers.Cast())
+                    .Input<TDqSourceWrap>()
+                        .InitFrom(dqSourceWrap)
+                        .Input<TDqPqTopicSource>()
+                            .InitFrom(dqPqTopicSource)
+                            .FilterPredicate(newFilterLambda.Cast())
+                            .Build()
+                        .Build()
+                    .Build()
+                .Done();
+        }
+        return Build<TCoFlatMap>(ctx, flatmap.Pos())
+            .InitFrom(flatmap)
+            .Input<TDqSourceWrap>()
+                .InitFrom(dqSourceWrap)
+                .Input<TDqPqTopicSource>()
+                    .InitFrom(dqPqTopicSource)
+                    .FilterPredicate(newFilterLambda.Cast())
+                    .Build()
+                .Build()
             .Done();
     }
 

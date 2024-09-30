@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | Два или три строковых аргумента — алиас, URL и опциональное имя токена | — | Статическая |
 
-Приложить файл к запросу по URL. Использовать приложенные файлы можно с помощью встроенных функций [FilePath и FileContent](../../../builtins/basic.md#filecontent). Данная `PRAGMA` является универсальной альтернативой прикладыванию файлов с использованием встроенных механизмов [веб-](../../../interfaces/web.md#attach) или [консольного](../../../interfaces/cli.md#attach) клиентов.
+Приложить файл к запросу по URL. Использовать приложенные файлы можно с помощью встроенных функций [FilePath и FileContent](../../../builtins/basic.md#filecontent).{% if oss != true %} Данная `PRAGMA` является универсальной альтернативой прикладыванию файлов с использованием встроенных механизмов [веб-](../../../interfaces/web.md#attach) или [консольного](../../../interfaces/cli.md#attach) клиентов.{% endif %}
 
 Сервис YQL оставляет за собой право кешировать находящиеся за URL файлы на неопределенный срок, по-этому при значимом изменении находящегося за ней содержимого настоятельно рекомендуется модифицировать URL за счет добавления/изменения незначащих параметров.
 
@@ -17,7 +17,7 @@
 
 ### FileOption
 
-| Тип значения                                    | По умолчанию | Статическая /<br> динамическая |
+| Тип значения                                    | По умолчанию | Статическая /<br/> динамическая |
 |-------------------------------------------------|--------------|--------------------------------|
 | Три строковых аргумента — алиас, ключ, значение | —            | Статическая                    |
 
@@ -48,7 +48,7 @@
 
 Пример с приложенным файлом к запросу:
 
-``` yql
+```yql
 PRAGMA library("a.sql");
 IMPORT a SYMBOLS $x;
 SELECT $x;
@@ -56,7 +56,7 @@ SELECT $x;
 
 В случае указания URL библиотека скачивается с него, а не с предварительного приложенного файла, как в следующем примере:
 
-``` yql
+```yql
 PRAGMA library("a.sql","{{ corporate-paste }}/5618566/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
@@ -64,7 +64,7 @@ SELECT $x;
 
 При этом можно использовать подстановку текстовых параметров в URL:
 
-``` yql
+```yql
 DECLARE $_ver AS STRING; -- "5618566"
 PRAGMA library("a.sql","{{ corporate-paste }}/{$_ver}/text");
 IMPORT a SYMBOLS $x;
@@ -81,9 +81,9 @@ SELECT $x;
 
 Имя пакета ожидается в формате ``project_name.package_name``; из библиотек пакета в дальнейшнем можно делать [IMPORT](../../export_import.md) с именем модуля вида ``pkg.project_name.package_name.maybe.nested.module.name``.
 
-Пример для пакета с плоской иерархией, состоящего из двух библиотек - foo.sql и bar.sql: 
+Пример для пакета с плоской иерархией, состоящего из двух библиотек - foo.sql и bar.sql:
 
-``` yql
+```yql
 PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
 IMPORT pkg.project.package.foo SYMBOLS $foo;
 IMPORT pkg.project.package.bar SYMBOLS $bar;
@@ -92,7 +92,7 @@ SELECT $foo, $bar;
 
 При этом можно использовать подстановку текстовых параметров в URL:
 
-``` yql
+```yql
 DECLARE $_path AS STRING; -- "path"
 PRAGMA package("project.package","{{ corporate-yt }}/{{ corporate-yt-cluster }}/{$_path}/to/package");
 IMPORT pkg.project.package.foo SYMBOLS $foo;
@@ -112,7 +112,7 @@ SELECT $foo, $bar;
 
 Пример:
 
-``` yql
+```yql
 PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
 PRAGMA override_library("project/package/maybe/nested/module/name.sql");
 

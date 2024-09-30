@@ -9,8 +9,14 @@ private:
     bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
     bool ReverseFlag = false;
+
 public:
     TPKRangesFilter(const bool reverse);
+
+    [[nodiscard]] TConclusionStatus Add(
+        std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema);
+    std::shared_ptr<arrow::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
     bool IsEmpty() const {
         return SortedRanges.empty() || FakeRanges;
@@ -37,12 +43,11 @@ public:
         return SortedRanges.end();
     }
 
-    bool IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const;
-    bool IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const;
+    bool IsPortionInUsage(const TPortionInfo& info) const;
+    TPKRangeFilter::EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
-
-    [[nodiscard]] bool Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const TIndexInfo* indexInfo);
 
     std::set<std::string> GetColumnNames() const {
         std::set<std::string> result;
@@ -57,6 +62,30 @@ public:
     TString DebugString() const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
+
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse);
+
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
+    static std::shared_ptr<TPKRangesFilter> BuildFromString(
+        const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
+
+    template <class TProto>
+    static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const bool reverse, const std::vector<TNameTypeInfo>& ydbPk) {
+        TPKRangesFilter result(reverse);
+        for (auto& protoRange : proto.GetRanges()) {
+            TSerializedTableRange range(protoRange);
+            auto fromPredicate = std::make_shared<TPredicate>();
+            auto toPredicate = std::make_shared<TPredicate>();
+            TSerializedTableRange serializedRange(protoRange);
+            std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(serializedRange, ydbPk);
+            auto status = result.Add(fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk)));
+            if (status.IsFail()) {
+                return status;
+            }
+        }
+        return result;
+    }
 };
 
 }

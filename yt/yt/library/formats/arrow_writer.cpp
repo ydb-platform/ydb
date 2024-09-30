@@ -275,7 +275,7 @@ struct TRecordBatchSerializationContext final
 template <class T>
 TMutableRange<T> GetTypedValues(TMutableRef ref)
 {
-    return MakeMutableRange(
+    return TMutableRange(
         reinterpret_cast<T*>(ref.Begin()),
         reinterpret_cast<T*>(ref.End()));
 }
@@ -921,7 +921,7 @@ auto SerializeRecordBatch(
             YT_VERIFY(current == dstRef.End());
         });
 }
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TArrowWriter
     : public TSchemalessFormatWriterBase
@@ -1355,7 +1355,7 @@ private:
         auto [recordBatchOffset, bodySize, bodyWriter] = SerializeRecordBatch(
             &flatbufBuilder,
             typedColumn.Column->ValueCount,
-            MakeRange({typedColumn}));
+            TRange({typedColumn}));
 
         auto dictionaryBatchOffset = org::apache::arrow::flatbuf::CreateDictionaryBatch(
             flatbufBuilder,

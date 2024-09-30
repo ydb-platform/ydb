@@ -11,6 +11,7 @@ struct TTableSchemaCompatibilityOptions
     bool IgnoreSortOrder = false;
     bool ForbidExtraComputedColumns = true;
     bool IgnoreStableNamesDifference = false;
+    bool AllowTimestampColumns = false;
 };
 
 // Validates that values from table with inputSchema also match outputSchema.

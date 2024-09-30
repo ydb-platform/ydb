@@ -8,8 +8,8 @@
 
 namespace NMVP {
 
-TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile) {
-    return new TMvpTokenator(tokensConfig, httpProxy, authProfile);
+TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy) {
+    return new TMvpTokenator(tokensConfig, httpProxy);
 }
 
 TString TMvpTokenator::GetToken(const TString& name) {
@@ -24,9 +24,8 @@ TString TMvpTokenator::GetToken(const TString& name) {
     return token;
 }
 
-TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile)
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy)
     : HttpProxy(httpProxy)
-    , AuthProfile(authProfile)
 {
     if (tokensConfig.HasStaffApiUserTokenInfo()) {
         UpdateStaffApiUserToken(&tokensConfig.staffapiusertokeninfo());
@@ -43,6 +42,7 @@ TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TA
     for (const NMvp::TStaticCredentialsInfo& staticCredentialsInfo : tokensConfig.staticcredentialsinfo()) {
         TokenConfigs.StaticCredentialsConfigs[staticCredentialsInfo.name()] = staticCredentialsInfo;
     }
+    TokenConfigs.AccessServiceType = tokensConfig.accessservicetype();
 }
 
 void TMvpTokenator::Bootstrap() {
@@ -246,8 +246,8 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     std::set<std::string> audience;
     audience.insert(jwtInfo->audience());
 
-    switch (AuthProfile) {
-        case NMVP::EAuthProfile::Yandex: {
+    switch (TokenConfigs.AccessServiceType) {
+        case NMvp::yandex_v2: {
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -265,7 +265,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
 
             break;
         }
-        case NMVP::EAuthProfile::Nebius: {
+        case NMvp::nebius_v1: {
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)

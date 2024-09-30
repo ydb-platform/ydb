@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         return result;
     }
 
-    //Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
+    // Simple actor to call IDqAsyncLookupSource::AsyncLookup from an actor system's thread
     class TCallLookupActor: public TActorBootstrapped<TCallLookupActor> {
     public:
         TCallLookupActor(
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         dsi.Setdatabase("some_db");
         dsi.Setuse_tls(true);
         dsi.set_protocol(::NYql::NConnector::NApi::EProtocol::NATIVE);
-        auto token = dsi.mutable_credentials() -> mutable_token();
+        auto token = dsi.mutable_credentials()->mutable_token();
         token->Settype("IAM");
         token->Setvalue("TEST_TOKEN");
 
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                 .AddResponse(
                     MakeRecordBatch(
                         MakeArray<arrow::UInt64Builder, uint64_t>("id", {0, 1, 2}, arrow::uint64()),
-                        MakeArray<arrow::UInt64Builder, uint64_t>("optional_id", {100, 101, 103}, arrow::uint64()), //the last value is intentially wrong
+                        MakeArray<arrow::UInt64Builder, uint64_t>("optional_id", {100, 101, 103}, arrow::uint64()), // the last value is intentially wrong
                         MakeArray<arrow::StringBuilder, std::string>("string_value", {"a", "b", "c"}, arrow::utf8())
                     ),
                     NewSuccess()
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             request.emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
         }
 
-        guard.Release(); //let actors use alloc
+        guard.Release(); // let actors use alloc
 
         auto callLookupActor = new TCallLookupActor(alloc, lookupSource, std::move(request));
         runtime.Register(callLookupActor);
@@ -213,4 +213,4 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         }
     }
 
-} //Y_UNIT_TEST_SUITE(GenericProviderLookupActor)
+} // Y_UNIT_TEST_SUITE(GenericProviderLookupActor)

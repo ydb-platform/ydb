@@ -416,7 +416,8 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE table1 (
-                    id int4 primary key
+                    id int4 primary key,
+                    value int4
                 );
                 CREATE TABLE table2 (
                     id varchar primary key
@@ -485,6 +486,32 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             CompareYson(R"([
                 ["table1"];["table2"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //https://github.com/ydb-platform/ydb/issues/7286
+            auto result = db.ExecuteQuery(R"(
+                select tablename from pg_catalog.pg_tables where tablename='pg_proc'
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["pg_proc"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //https://github.com/ydb-platform/ydb/issues/7287
+            auto result = db.ExecuteQuery(R"(
+                drop table table1;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = db.ExecuteQuery(R"(
+                create table table1(id serial primary key);
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                select tablename from pg_tables where hasindexes='pg_proc';
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type boolean: \"pg_proc\""));
         }
     }
 }

@@ -266,6 +266,11 @@ message DescribeResourceResult {
 //
 
 message AcquireResourceRequest {
+    // If cancel_after is set greater than zero and less than operation_timeout
+    // and resource is not ready after cancel_after time,
+    // the result code of this operation will be CANCELLED and resource will not be spent.
+    // It is recommended to specify both operation_timeout and cancel_after.
+    // cancel_after should be less than operation_timeout and non zero.
     Ydb.Operations.OperationParams operation_params = 1;
 
     // Path of a coordination node.

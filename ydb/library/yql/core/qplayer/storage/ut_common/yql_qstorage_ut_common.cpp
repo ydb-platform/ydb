@@ -76,7 +76,7 @@ void QStorageTestManyKeys_Impl(const NYql::IQStoragePtr& storage) {
     }
 }
 
-void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage) {
+void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage, bool commit) {
     auto reader = storage->MakeReader("foo", {});
     auto value = reader->Get({"comp", "label"}).GetValueSync();
     UNIT_ASSERT(!value.Defined());
@@ -87,10 +87,10 @@ void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage) {
     writer->Put({"comp", "label"}, "value").GetValueSync();
     reader = storage->MakeReader("foo", {});
     value = reader->Get({"comp", "label"}).GetValueSync();
-    UNIT_ASSERT(!value.Defined());
+    UNIT_ASSERT(!value.Defined() == !commit);
     auto iterator2 = storage->MakeIterator("foo", {});
     value = iterator2->Next().GetValueSync();
-    UNIT_ASSERT(!value.Defined());
+    UNIT_ASSERT(!value.Defined() == !commit);
     writer->Commit().GetValueSync();
     reader = storage->MakeReader("foo", {});
     value = reader->Get({"comp", "label"}).GetValueSync();

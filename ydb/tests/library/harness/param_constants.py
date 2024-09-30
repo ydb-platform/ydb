@@ -46,4 +46,4 @@ def kikimr_driver_path():
 
 
 def kikimr_configure_binary_path():
-    return yatest_common.binary_path("kikimr/tools/cfg/bin/kikimr_configure")
+    return yatest_common.binary_path("ydb/tools/cfg/bin/ydb_configure")

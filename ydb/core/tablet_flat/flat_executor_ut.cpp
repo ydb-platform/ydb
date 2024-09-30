@@ -5086,10 +5086,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
     };
 
     void ZeroSharedCache(TMyEnvBase &env) {
-        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
-        env->DispatchEvents(options);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
     Y_UNIT_TEST(CalculateReadSize_FlatIndex) {
@@ -5788,10 +5785,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
     };
     
     void ZeroSharedCache(TMyEnvBase &env) {
-        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
-        env->DispatchEvents(options);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
     Y_UNIT_TEST(TestNonSticky_FlatIndex) {

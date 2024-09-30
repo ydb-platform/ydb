@@ -3,6 +3,7 @@
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
 
+#include <library/cpp/regex/pcre/pcre.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/split.h>
@@ -41,6 +42,7 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.Mode = mode;
     settings.Arena = &arena;
     settings.AnsiLexer = ansiLexer;
+    settings.Antlr4Parser = false;
     settings.SyntaxVersion = 1;
     auto res = SqlToYql(query, settings);
     if (debug == EDebugOutput::ToCerr) {
@@ -53,7 +55,8 @@ inline NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 1
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
-inline NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+inline NYql::TAstParseResult 
+SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
 }
 
@@ -62,6 +65,13 @@ inline void ExpectFailWithError(const TString& query, const TString& error) {
 
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
+}
+
+inline void ExpectFailWithFuzzyError(const TString& query, const TString& errorRegex) {
+    NYql::TAstParseResult res = SqlToYql(query);
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(NPcre::TPcre<char>(errorRegex.c_str()).Matches(Err2Str(res)));
 }
 
 inline NYql::TAstParseResult SqlToYqlWithAnsiLexer(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {

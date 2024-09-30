@@ -188,21 +188,21 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // base table column should not contains reserved name '-parent'
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        // base table column should not contains reserved name ParentIdColumn
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "vectors"
               Columns { Name: "id" Type: "Uint64" }
-              Columns { Name: "-parent" Type: "String" }
+              Columns { Name: "%s" Type: "String" }
               KeyColumnNames: ["id"]
             }
             IndexDescription {
               Name: "idx_vector"
-              KeyColumnNames: ["-parent"]
+              KeyColumnNames: ["%s"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn), {NKikimrScheme::StatusInvalidParameter});
 
         // pk should not be covered
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

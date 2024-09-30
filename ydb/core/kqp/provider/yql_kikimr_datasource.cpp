@@ -3,6 +3,7 @@
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 
@@ -472,12 +473,14 @@ public:
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
-        bool isInternalCall)
+        bool isInternalCall,
+        TGUCSettings::TPtr gucSettings)
         : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
         , ExternalSourceFactory(externalSourceFactory)
+        , GUCSettings(gucSettings)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
@@ -760,6 +763,7 @@ public:
                 }
 
                 ctx.Step
+                    .Repeat(TExprStep::ExpandApplyForLambdas)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)
@@ -767,8 +771,17 @@ public:
                     .Repeat(TExprStep::LoadTablesMetadata)
                     .Repeat(TExprStep::RewriteIO);
 
-                const auto& query = tableDesc.Metadata->ViewPersistedData.QueryText;
-                return RewriteReadFromView(node, ctx, query, cluster);
+                const auto& viewData = tableDesc.Metadata->ViewPersistedData;
+
+                NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
+                    SessionCtx->Query().Type,
+                    SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
+                    cluster,
+                    viewData.QueryText,
+                    SessionCtx->Config().BindingsMode,
+                    GUCSettings
+                );
+                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }
 
@@ -881,6 +894,7 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+    TGUCSettings::TPtr GUCSettings;
 
     TAutoPtr<IGraphTransformer> ConfigurationTransformer;
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
@@ -920,9 +934,10 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
-    bool isInternalCall)
+    bool isInternalCall,
+    TGUCSettings::TPtr gucSettings)
 {
-    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, externalSourceFactory, isInternalCall);
+    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, externalSourceFactory, isInternalCall, gucSettings);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,

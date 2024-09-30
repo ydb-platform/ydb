@@ -2,6 +2,7 @@
 #include "logical_type.h"
 #include "schema.h"
 #include "comparator.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/complex_types/check_type_compatibility.h>
 
@@ -27,6 +28,14 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
 
         for (const auto& inputColumn : inputSchema.Columns()) {
             if (!outputSchema.FindColumn(inputColumn.Name())) {
+                if (options.AllowTimestampColumns) {
+                    if (auto originalColumnName = GetTimestampColumnOriginalNameOrNull(inputColumn.Name())) {
+                        if (outputSchema.FindColumn(*originalColumnName)) {
+                            continue;
+                        }
+                    }
+                }
+
                 return {
                     ESchemaCompatibility::Incompatible,
                     TError("Column %v is found in input schema but is missing in output schema",
@@ -85,6 +94,15 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                         inputColumn->GetDiagnosticNameString()),
                 };
             }
+
+            if (outputColumn.Materialized().value_or(true) != inputColumn->Materialized().value_or(true)) {
+                return {
+                    ESchemaCompatibility::Incompatible,
+                    TError("Column %v materialization mismatch",
+                        inputColumn->GetDiagnosticNameString()),
+                };
+            }
+
             if (outputColumn.Aggregate() && inputColumn->Aggregate() != outputColumn.Aggregate()) {
                 return {
                     ESchemaCompatibility::Incompatible,

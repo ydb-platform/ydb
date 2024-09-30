@@ -47,7 +47,6 @@ public:
         bool KeepTables = false;
         THashMap<std::pair<TString, ui32>, std::tuple<TString, NYT::TTransactionId, ui64>> Snapshots; // {tablepath, epoch} -> {table_id, transaction_id, revision}
         NYT::TNode TransactionSpec;
-        THashMap<TString, NYT::TTableColumnarStatistics> StatisticsCache;
         THashMap<TString, TString> BinarySnapshots; // remote path -> snapshot path
         NYT::ITransactionPtr BinarySnapshotTx;
         THashMap<TString, NYT::ITransactionPtr> CheckpointTxs;
@@ -114,8 +113,10 @@ public:
         void CompleteWriteTx(const NYT::TTransactionId& id, bool abort);
 
         TMaybe<ui64> GetColumnarStat(NYT::TRichYPath ytPath) const;
+        TMaybe<NYT::TTableColumnarStatistics> GetExtendedColumnarStat(NYT::TRichYPath ytPath) const;
+
         void UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size);
-        void UpdateColumnarStat(NYT::TRichYPath ytPath, const NYT::TTableColumnarStatistics& columnStat);
+        void UpdateColumnarStat(NYT::TRichYPath ytPath, const NYT::TTableColumnarStatistics& columnStat, bool extended = false);
 
         std::pair<TString, NYT::TTransactionId> GetBinarySnapshot(TString remoteTmpFolder, const TString& md5, const TString& localPath, TDuration expirationInterval);
 
@@ -124,6 +125,13 @@ public:
         using TPtr = TIntrusivePtr<TEntry>;
 
     private:
+        struct TStatisticsCacheEntry {
+            std::unordered_set<TString> ExtendedStatColumns;
+            NYT::TTableColumnarStatistics ColumnarStat;
+        };
+
+        THashMap<TString, TStatisticsCacheEntry> StatisticsCache;
+
         void DeleteAtFinalizeUnlocked(const TString& table, bool isInternal);
         bool CancelDeleteAtFinalizeUnlocked(const TString& table, bool isInternal);
         void DoRemove(const TString& table);

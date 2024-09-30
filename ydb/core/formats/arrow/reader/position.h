@@ -1,10 +1,9 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/switch/compare.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -97,8 +96,8 @@ public:
         return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
-    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 position) const {
-        return std::make_shared<TSortableScanData>(position, RecordsCount, Columns, Fields);
+    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 /*position*/) const {
+        return std::make_shared<TSortableScanData>(*this);
     }
 
     TCursor BuildCursor(const ui64 position) const {
@@ -209,6 +208,17 @@ protected:
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
+
+    TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting,
+        const std::shared_ptr<TSortableScanData>& data)
+        : Position(position)
+        , RecordsCount(recordsCount)
+        , ReverseSort(reverseSort)
+        , Sorting(sorting)
+        , Data(data) {
+        AFL_VERIFY(IsAvailablePosition(Position));
+    }
+
 public:
     TSortableBatchPosition() = default;
 
@@ -220,7 +230,7 @@ public:
         return RecordsCount;
     }
 
-    std::shared_ptr<TSortableScanData> GetSorting() const {
+    const std::shared_ptr<TSortableScanData>& GetSorting() const {
         return Sorting;
     }
 
@@ -239,15 +249,6 @@ public:
         return Sorting->GetFields();
     }
 
-    TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting, const std::shared_ptr<TSortableScanData>& data)
-        : Position(position)
-        , RecordsCount(recordsCount)
-        , ReverseSort(reverseSort)
-        , Sorting(sorting)
-        , Data(data) {
-        AFL_VERIFY(IsAvailablePosition(Position));
-    }
-
     TSortableBatchPosition(const TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition&& source) = delete;
@@ -256,7 +257,7 @@ public:
     TSortableBatchPosition operator= (TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition operator= (TRWSortableBatchPosition&& source) = delete;
 
-    TRWSortableBatchPosition BuildRWPosition() const;
+    TRWSortableBatchPosition BuildRWPosition(const bool needData, const bool deepCopy) const;
 
     std::shared_ptr<arrow::Table> SliceData(const ui64 offset, const ui64 count) const {
         AFL_VERIFY(Data);

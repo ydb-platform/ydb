@@ -1,6 +1,7 @@
 #include "lexer.h"
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/parser/proto_ast/antlr3/proto_ast_antlr3.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.h>
 
@@ -32,7 +33,7 @@ public:
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
         NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
-        NProtoAST::TLexerTokensCollector<NALP::SQLLexer> tokensCollector(query, (const char**)NALP::SQLParserTokenNames, queryName);
+        NProtoAST::TLexerTokensCollector3<NALP::SQLLexer> tokensCollector(query, (const char**)NALP::SQLParserTokenNames, queryName);
         tokensCollector.CollectTokens(collector, onNextToken);
         issues.AddIssues(newIssues);
         return !AnyOf(newIssues.begin(), newIssues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });

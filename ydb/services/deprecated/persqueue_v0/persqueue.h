@@ -22,6 +22,10 @@ class TGRpcPersQueueService
 public:
     TGRpcPersQueueService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache);
 
+    void InitService(
+        const std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs,
+        NYdbGrpc::TLoggerPtr logger,
+        size_t index) override;
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
     void StopService() noexcept override;
@@ -35,6 +39,7 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
     NActors::TActorSystem* ActorSystem;
+    std::vector<grpc::ServerCompletionQueue*> CQS;
     grpc::ServerCompletionQueue* CQ = nullptr;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;

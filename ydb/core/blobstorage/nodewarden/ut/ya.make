@@ -2,6 +2,10 @@ UNITTEST_FOR(ydb/core/blobstorage/nodewarden)
 
 FORK_SUBTESTS()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:14)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(1200)
     SIZE(LARGE)
@@ -21,7 +25,5 @@ SRCS(
 )
 
 YQL_LAST_ABI_VERSION()
-
-REQUIREMENTS(ram:14)
 
 END()

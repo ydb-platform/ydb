@@ -306,7 +306,7 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config, bool recurseConfigUpdate = false);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -323,6 +323,8 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void CheckRootNodeStatus();
+        void BecomeRoot();
+        void UnbecomeRoot();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
@@ -363,7 +365,7 @@ namespace NKikimr::NStorage {
         void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
         void CompleteScatterTask(TScatterTask& task);
         void AbortScatterTask(ui64 cookie, ui32 nodeId);
-        void AbortAllScatterTasks(const TBinding& binding);
+        void AbortAllScatterTasks(const std::optional<TBinding>& binding);
         void Handle(TEvNodeConfigScatter::TPtr ev);
         void Handle(TEvNodeConfigGather::TPtr ev);
 
@@ -549,7 +551,11 @@ namespace NKikimr::NStorage {
         }
 
         // process responses
+        std::set<TNodeIdentifier> seen;
         generateSuccessful([&](const TNodeIdentifier& node) {
+            const auto& [_, inserted] = seen.insert(node);
+            Y_ABORT_UNLESS(inserted);
+
             const auto it = nodeMap.find(node.NodeId());
             if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
                 return;

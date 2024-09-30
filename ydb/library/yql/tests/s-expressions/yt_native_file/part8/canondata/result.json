@@ -1,9 +1,9 @@
 {
     "test.test[Aggregation-AggregateReadDistinctWithParents-Debug]": [
         {
-            "checksum": "57ca46772da66ca9de1503df126b173e",
-            "size": 7220,
-            "uri": "https://{canondata_backend}/1942415/f234f21cfa3727bd45ca24033205e9d1e6648bb2/resource.tar.gz#test.test_Aggregation-AggregateReadDistinctWithParents-Debug_/opt.yql"
+            "checksum": "fa392e0c4fc03ae1e32dc90e4cd72493",
+            "size": 7061,
+            "uri": "https://{canondata_backend}/1784826/dca3cf8fae1956a6e5fcaaeb72d2920de185b169/resource.tar.gz#test.test_Aggregation-AggregateReadDistinctWithParents-Debug_/opt.yql"
         },
         {
             "checksum": "634aa112471495d4ec566e632f40e697",
@@ -78,9 +78,9 @@
     ],
     "test.test[Aggregation-AggregateReadDistinctWithParents-Plan]": [
         {
-            "checksum": "21176bc652294b92b0cdae7df8f8e5b9",
-            "size": 10766,
-            "uri": "https://{canondata_backend}/1597364/062bc209467c6051e5fc757fead64ce5bcdaab5b/resource.tar.gz#test.test_Aggregation-AggregateReadDistinctWithParents-Plan_/plan.txt"
+            "checksum": "5ec53e7c7c3587da2507bfd3d2c94769",
+            "size": 10598,
+            "uri": "https://{canondata_backend}/1784826/dca3cf8fae1956a6e5fcaaeb72d2920de185b169/resource.tar.gz#test.test_Aggregation-AggregateReadDistinctWithParents-Plan_/plan.txt"
         }
     ],
     "test.test[Aggregation-AggregateReadDistinctWithParents-Results]": [
@@ -4089,9 +4089,9 @@
     ],
     "test.test[Scheme-IgnoreWeakSchemaInfer-Debug]": [
         {
-            "checksum": "e63c356651c75dc70c65541367229ebc",
-            "size": 1042,
-            "uri": "https://{canondata_backend}/1942278/4c15a9cfa410297d35d23e1a39d5d898babd2365/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaInfer-Debug_/opt.yql"
+            "checksum": "5bab2767b3e0d088d51100c7aeed0d67",
+            "size": 1081,
+            "uri": "https://{canondata_backend}/212715/69d6d07c474bcd145a6dcc79b47a46750f970a4b/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaInfer-Debug_/opt.yql"
         }
     ],
     "test.test[Scheme-IgnoreWeakSchemaInfer-Plan]": [
@@ -4103,9 +4103,9 @@
     ],
     "test.test[Scheme-IgnoreWeakSchemaInfer-Results]": [
         {
-            "checksum": "9dbc94fa72f7c2539bc56046802d1e65",
-            "size": 4950,
-            "uri": "https://{canondata_backend}/1881367/dc31ea12cef2a161dc30af1f36c0f4693d88cfbf/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaInfer-Results_/results.txt"
+            "checksum": "82ba27b9c664d3a5bdc1c30d35012dad",
+            "size": 5018,
+            "uri": "https://{canondata_backend}/212715/69d6d07c474bcd145a6dcc79b47a46750f970a4b/resource.tar.gz#test.test_Scheme-IgnoreWeakSchemaInfer-Results_/results.txt"
         }
     ],
     "test.test[Scheme-IgnoreWeakSchemaOnWeak-Debug]": [],

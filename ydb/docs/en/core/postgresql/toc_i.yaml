@@ -6,4 +6,4 @@ items:
 - name: PostgreSQL functions
   href: functions.md
 - name: Data dump from PostgreSQL
-  href: pg-dump.md
+  href: import.md

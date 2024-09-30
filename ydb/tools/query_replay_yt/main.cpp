@@ -57,6 +57,7 @@ class TQueryReplayMapper
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
+    bool EnableAntlr4Parser;
 
 public:
     static TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
@@ -93,13 +94,14 @@ public:
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, YqlLogPriority);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableAntlr4Parser, YqlLogPriority);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount,
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableAntlr4Parser,
         NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
         , YqlLogPriority(yqlLogPriority)
+        , EnableAntlr4Parser(enableAntlr4Parser)
     {}
 
     void Start(NYT::TTableWriter<NYT::TNode>*) override {
@@ -147,12 +149,12 @@ public:
             return nullptr;
         }
 
-        auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway));
+        auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser));
 
         auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
             compileActorId,
             THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
-            TDuration::Seconds(100));
+            TDuration::Seconds(600));
 
         return future.ExtractValueSync();
     }
@@ -236,7 +238,7 @@ int main(int argc, const char** argv) {
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
     if (config.QueryFile) {
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.YqlLogLevel);
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
             fakeMapper.Finish(nullptr);
@@ -277,8 +279,11 @@ int main(int argc, const char** argv) {
     }
 
     spec.MapperSpec(userJobSpec);
+    if (!config.CoreTablePath.empty()) {
+        spec.CoreTablePath(config.CoreTablePath);
+    }
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.YqlLogLevel));
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
 
     return EXIT_SUCCESS;
 }

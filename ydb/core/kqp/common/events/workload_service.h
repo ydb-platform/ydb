@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -11,6 +12,16 @@
 
 
 namespace NKikimr::NKqp::NWorkload {
+
+struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoolChanges, TKqpWorkloadServiceEvents::EvSubscribeOnPoolChanges> {
+    TEvSubscribeOnPoolChanges(const TString& database, const TString& poolId)
+        : Database(database)
+        , PoolId(poolId)
+    {}
+
+    const TString Database;
+    const TString PoolId;
+};
 
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool> {
     TEvPlaceRequestIntoPool(const TString& database, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
@@ -63,6 +74,36 @@ struct TEvCleanupResponse : public NActors::TEventLocal<TEvCleanupResponse, TKqp
     {}
 
     const Ydb::StatusIds::StatusCode Status;
+    const NYql::TIssues Issues;
+};
+
+struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TKqpWorkloadServiceEvents::EvUpdatePoolInfo> {
+    TEvUpdatePoolInfo(const TString& database, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject)
+        : Database(database)
+        , PoolId(poolId)
+        , Config(config)
+        , SecurityObject(securityObject)
+    {}
+
+    const TString Database;
+    const TString PoolId;
+    const std::optional<NResourcePool::TPoolSettings> Config;
+    const std::optional<NACLib::TSecurityObject> SecurityObject;
+};
+
+struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, TKqpWorkloadServiceEvents::EvFetchDatabaseResponse> {
+    TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, TPathId pathId, NYql::TIssues issues)
+        : Status(status)
+        , Database(database)
+        , Serverless(serverless)
+        , PathId(pathId)
+        , Issues(std::move(issues))
+    {}
+
+    const Ydb::StatusIds::StatusCode Status;
+    const TString Database;
+    const bool Serverless;
+    const TPathId PathId;
     const NYql::TIssues Issues;
 };
 

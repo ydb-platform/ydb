@@ -383,6 +383,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
     struct TRunResult : public NCommon::TOperationResult {
@@ -404,6 +405,7 @@ public:
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD_DEFAULT(TSet<TString>, SecurityTags, {})
     };
 
     //////////////////////////////////////////////////////////////
@@ -513,10 +515,16 @@ public:
         OPTION_FIELD(TString, Cluster)
         OPTION_FIELD(TVector<TPathStatReq>, Paths)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD_DEFAULT(bool, Extended, false)
     };
 
     struct TPathStatResult: public NCommon::TOperationResult {
+        struct TExtendedResult {
+            THashMap<TString, i64> DataWeight;
+            THashMap<TString, ui64> EstimatedUniqueCounts;
+        };
         TVector<ui64> DataSize;
+        TVector<TMaybe<TExtendedResult>> Extended;
     };
 
     struct TFullResultTableOptions : public TCommonOptions {

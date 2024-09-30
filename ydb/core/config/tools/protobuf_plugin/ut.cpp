@@ -322,6 +322,16 @@ Y_UNIT_TEST_SUITE(ValidationTests) {
         UNIT_ASSERT_VALUES_EQUAL(thirdSink.GetRenamedComplexField1().GetStringField(), source.GetComplexMessage2().GetStringField());
         UNIT_ASSERT(!thirdSink.GetRenamedComplexField1().HasIntField());
     }
+
+    Y_UNIT_TEST(HasReservedPaths) {
+        NKikimrConfig::ActualConfigMessage msg;
+
+        const auto& reserved = msg.GetReservedChildrenPaths();
+
+        UNIT_ASSERT(reserved.contains("/field1/another_reserved_field"));
+        UNIT_ASSERT(reserved.contains("/field21/another_reserved_field"));
+        UNIT_ASSERT(reserved.contains("/root_reserved_field"));
+    }
 }
 
 template <>

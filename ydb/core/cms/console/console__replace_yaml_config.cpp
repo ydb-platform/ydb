@@ -1,5 +1,6 @@
 #include "console_configs_manager.h"
 #include "console_configs_provider.h"
+#include "console_audit.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/aclib/aclib.h>
@@ -16,6 +17,7 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
                          bool force)
         : TBase(self)
         , Config(ev->Get()->Record.GetRequest().config())
+        , Peer(ev->Get()->Record.GetPeerName())
         , Sender(ev->Sender)
         , UserSID(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID())
         , Force(force)
@@ -37,7 +39,7 @@ public:
     {
     }
 
-    void DoAudit(TTransactionContext &txc, const TActorContext &ctx)
+    void DoInternalAudit(TTransactionContext &txc, const TActorContext &ctx)
     {
         auto logData = NKikimrConsole::TLogRecordData{};
 
@@ -76,6 +78,11 @@ public:
                     .Cluster = Cluster,
                 });
 
+            bool hasForbiddenUnknown = false;
+
+            TMap<TString, std::pair<TString, TString>> deprecatedFields;
+            TMap<TString, std::pair<TString, TString>> unknownFields;
+
             if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
                 Modify = true;
 
@@ -90,20 +97,30 @@ public:
                     ythrow yexception() << "Version mismatch";
                 }
 
-                if (AllowUnknownFields) {
-                    UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
-                }
+                UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
                 for (auto& [_, config] : resolved.Configs) {
                     auto cfg = NYamlConfig::YamlToProto(
                         config.second,
-                        AllowUnknownFields,
+                        true,
                         true,
                         UnknownFieldsCollector);
                 }
 
-                if (!DryRun) {
-                    DoAudit(txc, ctx);
+                const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+
+                for (const auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
+                    if (deprecatedPaths.contains(path)) {
+                        deprecatedFields[path] = info;
+                    } else {
+                        unknownFields[path] = info;
+                    }
+                }
+
+                hasForbiddenUnknown = !unknownFields.empty() && !AllowUnknownFields;
+
+                if (!DryRun && !hasForbiddenUnknown) {
+                    DoInternalAudit(txc, ctx);
 
                     db.Table<Schema::YamlConfig>().Key(Version + 1)
                         .Update<Schema::YamlConfig::Config>(UpdatedConfig)
@@ -118,25 +135,35 @@ public:
                 }
             }
 
-            auto fillResponse = [&](auto& ev){
-                if (UnknownFieldsCollector) {
-                    for (auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
-                        auto *issue = ev->Record.AddIssues();
-                            issue->set_severity(NYql::TSeverityIds::S_WARNING);
-                            issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                    }
+            auto fillResponse = [&](auto& ev, auto errorLevel){
+                for (auto& [path, info] : unknownFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(errorLevel);
+                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                for (auto& [path, info] : deprecatedFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
                 }
 
                 Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
             };
 
 
-            if (!Force) {
+            if (hasForbiddenUnknown) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                ErrorReason = "Unknown keys in config.";
+                fillResponse(ev, NYql::TSeverityIds::S_ERROR);
+            } else if (!Force) {
                 auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
-                fillResponse(ev);
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             } else {
                 auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
-                fillResponse(ev);
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             }
         } catch (const yexception& ex) {
             Error = true;
@@ -146,6 +173,7 @@ public:
             auto *issue = ev->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message(ex.what());
+            ErrorReason = ex.what();
             Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
         }
 
@@ -159,6 +187,14 @@ public:
         ctx.Send(Response.Release());
 
         if (!Error && Modify && !DryRun) {
+            AuditLogReplaceConfigTransaction(
+                /* peer = */ Peer,
+                /* userSID = */ UserSID,
+                /* oldConfig = */ Self->YamlConfig,
+                /* newConfig = */ Config,
+                /* reason = */ {},
+                /* success = */ true);
+
             Self->YamlVersion = Version + 1;
             Self->YamlConfig = UpdatedConfig;
             Self->YamlDropped = false;
@@ -167,6 +203,14 @@ public:
 
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig);
             ctx.Send(Self->ConfigsProvider, resp.Release());
+        } else if (Error && !DryRun) {
+            AuditLogReplaceConfigTransaction(
+                /* peer = */ Peer,
+                /* userSID = */ UserSID,
+                /* oldConfig = */ Self->YamlConfig,
+                /* newConfig = */ Config,
+                /* reason = */ ErrorReason,
+                /* success = */ false);
         }
 
         Self->TxProcessor->TxCompleted(this, ctx);
@@ -174,6 +218,7 @@ public:
 
 private:
     const TString Config;
+    const TString Peer;
     const TActorId Sender;
     const TString UserSID;
     const bool Force = false;
@@ -181,6 +226,7 @@ private:
     const bool DryRun = false;
     THolder<NActors::IEventHandle> Response;
     bool Error = false;
+    TString ErrorReason;
     bool Modify = false;
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     ui32 Version;

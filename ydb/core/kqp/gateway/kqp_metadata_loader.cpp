@@ -126,8 +126,8 @@ TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
     if (typeInfoMod.TypeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
         YQL_ENSURE(NScheme::TryGetTypeName(typeInfoMod.TypeInfo.GetTypeId(), typeName));
     } else {
-        YQL_ENSURE(typeInfoMod.TypeInfo.GetTypeDesc(), "no pg type descriptor");
-        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetTypeDesc(), typeInfoMod.TypeMod);
+        YQL_ENSURE(typeInfoMod.TypeInfo.GetPgTypeDesc(), "no pg type descriptor");
+        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc(), typeInfoMod.TypeMod);
     }
     return typeName;
 }
@@ -281,7 +281,6 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
     tableMeta->ExternalSource.Properties = description.GetProperties();
     tableMeta->ExternalSource.DataSourcePath = tableName;
-    tableMeta->ExternalSource.TableLocation = JoinPath(entry.Path);
     return result;
 }
 
@@ -303,7 +302,7 @@ TTableMetadataResult GetViewMetadataResult(
   metadata->SchemaVersion = description.GetVersion();
   metadata->Kind = NYql::EKikimrTableKind::View;
   metadata->Attributes = schemeEntry.Attributes;
-  metadata->ViewPersistedData = {description.GetQueryText()};
+  metadata->ViewPersistedData = {description.GetQueryText(), description.GetCapturedContext()};
 
   return builtResult;
 }
@@ -831,18 +830,23 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
-                        if (externalPath) {
-                            entry.Path = SplitPath(*externalPath);
-                        }
                         auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
                         if (!externalDataSourceMetadata.Success() || !settings.RequestAuthInfo_) {
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }
+                        if (externalPath) {
+                            externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
+                        }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
                             .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
+                            if (!externalDataSourceMetadata.Success()) {
+                                promise.SetValue(externalDataSourceMetadata);
+                                return;
+                            }
+
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
                                 externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);

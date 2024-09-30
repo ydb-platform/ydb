@@ -131,7 +131,7 @@ TErrorOr<TSharedRef> TTestNodeMemoryTracker::TryTrack(
     TSharedRef reference,
     bool keepHolder)
 {
-    return Track(reference, keepHolder);
+    return Track(std::move(reference), keepHolder);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

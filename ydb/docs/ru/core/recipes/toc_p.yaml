@@ -3,6 +3,11 @@ items:
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml
+- name: YDB CLI
+  href: ydb-cli/index.md
+  include:
+    mode: link
+    path: ydb-cli/toc_p.yaml
 - name: YQL
   include:
     mode: link

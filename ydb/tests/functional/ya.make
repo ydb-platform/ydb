@@ -7,6 +7,7 @@ RECURSE(
     canonical
     clickbench
     cms
+    compatibility
     dynumber
     encryption
     hive
@@ -30,5 +31,6 @@ RECURSE(
     suite_tests
     tenants
     ttl
+    wardens
     ydb_cli
 )

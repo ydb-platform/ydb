@@ -10,7 +10,7 @@ public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
-//    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
+    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     YDB_READONLY(ui64, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);
     YDB_READONLY(ui32, ProcessIndex, 0);

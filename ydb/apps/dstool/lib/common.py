@@ -818,20 +818,23 @@ def fetch_json_info(entity, nodes=None, enums=1):
     elif entity == 'vdiskinfo':
         section, keycols = 'VDiskStateInfo', ['NodeId', 'PDiskId', 'VDiskSlotId']
 
-        def merge(x, y):
+        def merge_fn(x, y):
             return max([x, y], key=lambda x: x.get('GroupGeneration', 0))
+        merge = merge_fn
     elif entity == 'tabletinfo':
         section, keycols = 'TabletStateInfo', ['TabletId']
 
-        def merge(x, y):
+        def merge_fn(x, y):
             return max([x, y], key=lambda x: x.get('Generation', 0))
+        merge = merge_fn
     elif entity == 'bsgroupinfo':
         section, keycols = 'BSGroupStateInfo', ['GroupID']
 
-        def merge(x, y):
+        def merge_fn(x, y):
             return x if x.get('GroupGeneration', 0) > y.get('GroupGeneration', 0) else \
                 y if y.get('GroupGeneration', 0) > x.get('GroupGeneration', 0) else \
                 x if x.get('VDiskIds', []) else y
+        merge = merge_fn
     else:
         assert False
     res = {}

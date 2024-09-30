@@ -230,7 +230,7 @@ public:
                                             break;
                                         }
                                         case NScheme::NTypeIds::Pg: {
-                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetTypeDesc());
+                                            str << "(Pg) " << NPg::PgTypeNameFromTypeDesc(tuple.Types[i].GetPgTypeDesc());
                                             break;
                                         }
                                         default:

@@ -22,6 +22,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+inline constexpr TStringBuf SYSTEM_COLUMN_PREFIX = "__ydb_";
+
 inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Json:
@@ -31,18 +33,23 @@ inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::JsonDocument:
             return false;
         case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
+            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
         default:
             return true;
     }
 }
 
-inline bool IsValidColumnName(const TString& name) {
+inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
+    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
+        return false;
+    }
+
     for (auto c: name) {
         if (!std::isalnum(c) && c != '_' && c != '-') {
             return false;
         }
     }
+
     return true;
 }
 

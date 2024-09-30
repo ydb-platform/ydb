@@ -53,9 +53,15 @@ public:
             }
         }
 
-        return static_cast<TDerived*>(this)->MakeBlockItem(
-            *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
-        );
+        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+            auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
+            return static_cast<TDerived*>(this)->MakeBlockItem(value);
+        } else {
+            return static_cast<TDerived*>(this)->MakeBlockItem(
+                *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
+            );
+        }
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -96,7 +102,13 @@ public:
             out.PushChar(1);
         }
 
-        out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+            auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
+            out.PushNumber(value);
+        } else {
+            out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        }
     }
 };
 
@@ -541,6 +553,11 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
     }
 }
 
+template<typename TTraits>
+concept CanInstantiateBlockReaderForDecimal = requires {
+    typename TTraits::template TFixedSize<NYql::NDecimal::TInt128, true>;
+};
+
 template <typename TTraits>
 std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder) {
     const TType* unpacked = type;
@@ -660,8 +677,14 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return TTraits::template MakeTzDate<TTzDatetime64>(isOptional);
         case NUdf::EDataSlot::TzTimestamp64:
             return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional);
+        case NUdf::EDataSlot::Decimal: {
+            if constexpr (CanInstantiateBlockReaderForDecimal<TTraits>) {
+                return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional);
+            } else {
+                Y_ENSURE(false, "Unsupported data slot");
+            }
+        }
         case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");
         }
@@ -721,7 +744,9 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
         auto typeId = typeData.GetTypeId();
         auto slot = GetDataSlot(typeId);
         auto& dataTypeInfo = GetDataTypeInfo(slot);
-        if (dataTypeInfo.Features & StringType) {
+        if (dataTypeInfo.Features & DecimalType) {
+            *props.MaxSize += 16;
+        } else if (dataTypeInfo.Features & StringType) {
             props.MaxSize = {};
             props.IsFixed = false;
         } else if (dataTypeInfo.Features & TzDateType) {

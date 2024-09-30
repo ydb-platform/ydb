@@ -7,14 +7,14 @@ class TSerializedChunkAccessor {
 private:
     const std::vector<TDeserializeChunkedArray::TChunk>& Chunks;
     const std::shared_ptr<TColumnLoader>& Loader;
-    TDeserializeChunkedArray::TChunkCacheInfo* CachedDataOwner;
+    std::optional<IChunkedArray::TLocalChunkedArrayAddress>& Result;
 
 public:
     TSerializedChunkAccessor(const std::vector<TDeserializeChunkedArray::TChunk>& chunks, const std::shared_ptr<TColumnLoader>& loader,
-        TDeserializeChunkedArray::TChunkCacheInfo* cachedDataOwner)
+        std::optional<IChunkedArray::TLocalChunkedArrayAddress>& result)
         : Chunks(chunks)
         , Loader(loader)
-        , CachedDataOwner(cachedDataOwner) {
+        , Result(result) {
     }
     ui64 GetChunksCount() const {
         return Chunks.size();
@@ -23,11 +23,7 @@ public:
         return Chunks[idx].GetRecordsCount();
     }
     void OnArray(const ui32 chunkIdx, const ui32 startPosition) const {
-        if (!CachedDataOwner->GetChunk() || CachedDataOwner->GetIndex() != chunkIdx) {
-            CachedDataOwner->SetChunk(Chunks[chunkIdx].GetArrayVerified(Loader));
-            CachedDataOwner->SetIndex(chunkIdx);
-            CachedDataOwner->SetStartPosition(startPosition);
-        }
+        Result = IChunkedArray::TLocalChunkedArrayAddress(Chunks[chunkIdx].GetArrayVerified(Loader), startPosition, chunkIdx);
     }
 };
 }   // namespace
@@ -40,10 +36,11 @@ IChunkedArray::TLocalDataAddress TDeserializeChunkedArray::DoGetLocalData(
 
 IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChunkedArray(
     const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
-    TSerializedChunkAccessor accessor(Chunks, Loader, CurrentChunkCache.get());
+    std::optional<IChunkedArray::TLocalChunkedArrayAddress> result;
+    TSerializedChunkAccessor accessor(Chunks, Loader, result);
     SelectChunk(chunkCurrent, position, accessor);
-    return IChunkedArray::TLocalChunkedArrayAddress(
-        CurrentChunkCache->GetChunk(), CurrentChunkCache->GetStartPosition(), CurrentChunkCache->GetIndex());
+    AFL_VERIFY(result);
+    return *result;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

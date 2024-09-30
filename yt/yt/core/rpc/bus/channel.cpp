@@ -64,7 +64,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return Client_->GetEndpointDescription();
     }
@@ -150,7 +150,7 @@ public:
         return requestCount;
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
         return MemoryUsageTracker_;
     }
@@ -377,10 +377,11 @@ private:
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v)",
+                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                     requestControl->GetRequestId(),
                     requestControl->GetService(),
-                    requestControl->GetMethod());
+                    requestControl->GetMethod(),
+                    Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [
@@ -557,9 +558,9 @@ private:
                 requestControl,
                 responseHandler,
                 TStringBuf("Request timed out"),
-                TError(NYT::EErrorCode::Timeout, aborted
+                TError(NYT::EErrorCode::Timeout, TRuntimeFormat(aborted
                     ? "Request timed out or timer was aborted"
-                    : "Request timed out"));
+                    : "Request timed out")));
         }
 
         void HandleAcknowledgementTimeout(const TClientRequestControlPtr& requestControl, bool aborted)
@@ -1102,9 +1103,9 @@ private:
                     << TErrorAttribute("timeout", *requestControl->GetTimeout());
             }
 
-            if (!detailedError.HasTracingAttributes()) {
+            if (!HasTracingAttributes(detailedError)) {
                 if (auto tracingAttributes = requestControl->GetTracingAttributes()) {
-                    detailedError.SetTracingAttributes(*tracingAttributes);
+                    SetTracingAttributes(&detailedError, *tracingAttributes);
                 }
             }
 
@@ -1307,7 +1308,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
@@ -1349,7 +1350,7 @@ public:
         YT_VERIFY(MemoryUsageTracker_);
     }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);

@@ -126,13 +126,13 @@ public:
                     NKikimrProto::OK);
             PDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
 
-            PDiskActor = PDisk->PDiskActor;
+            PDiskActor = PDisk->PCtx->PDiskActor;
         }
         return PDisk;
     }
     
     void GracefulPDiskRestart(bool waitForRestart = true) {
-        ui32 pdiskId = GetPDisk()->PDiskId;
+        ui32 pdiskId = GetPDisk()->PCtx->PDiskId;
 
         Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, MainKey, true, nullptr));
 

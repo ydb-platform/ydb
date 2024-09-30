@@ -69,7 +69,7 @@ NKikimrSubDomains::TProcessingParams NKikimr::ExtractProcessingParams(const NKik
 }
 
 NKikimr::TTimeCastBuckets::TTimeCastBuckets()
-    : TimecastBucketsPerMediator(TDomainsInfo::TDomain::TimecastBucketsPerMediator)
+    : TimecastBucketsPerMediator(TDomainsInfo::TDomain::DefaultTimecastBucketsPerMediator)
 {}
 
 NKikimr::TTimeCastBuckets::TTimeCastBuckets(ui32 timecastBuckets)

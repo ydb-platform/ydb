@@ -1,9 +1,12 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
-#include "openid_connect.h"
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include "oidc_settings.h"
 
 namespace NMVP {
+namespace NOIDC {
 
 class TProtectedPageHandler : public NActors::TActor<TProtectedPageHandler> {
     using TBase = NActors::TActor<TProtectedPageHandler>;
@@ -22,4 +25,5 @@ public:
     }
 };
 
+}  // NOIDC
 }  // NMVP

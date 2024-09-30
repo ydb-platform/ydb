@@ -9,11 +9,13 @@
 #include "mkql_block_agg.h"
 #include "mkql_block_coalesce.h"
 #include "mkql_block_container.h"
+#include "mkql_block_decimal.h"
 #include "mkql_block_exists.h"
 #include "mkql_block_getelem.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
+#include "mkql_block_map_join.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"
@@ -308,7 +310,11 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockCombineHashed", &WrapBlockCombineHashed},
         {"BlockMergeFinalizeHashed", &WrapBlockMergeFinalizeHashed},
         {"BlockMergeManyFinalizeHashed", &WrapBlockMergeManyFinalizeHashed},
+        {"BlockDecimalMul", &WrapBlockDecimalMul},
+        {"BlockDecimalDiv", &WrapBlockDecimalDiv},
+        {"BlockDecimalMod", &WrapBlockDecimalMod},
         {"ScalarApply", &WrapScalarApply},
+        {"BlockMapJoinCore", &WrapBlockMapJoinCore},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},

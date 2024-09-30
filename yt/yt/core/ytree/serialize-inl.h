@@ -91,7 +91,7 @@ struct TMapKeyHelper<T, true>
         consumer->OnKeyedItem(FormatEnum(value));
     }
 
-    static void Deserialize(T& value, const TString& key)
+    static void Deserialize(T& value, const std::string& key)
     {
         value = ParseEnum<T>(key);
     }
@@ -105,7 +105,7 @@ struct TMapKeyHelper<T, false>
         consumer->OnKeyedItem(ToString(value));
     }
 
-    static void Deserialize(T& value, const TString& key)
+    static void Deserialize(T& value, const std::string& key)
     {
         value = FromString<T>(key);
     }
@@ -114,12 +114,12 @@ struct TMapKeyHelper<T, false>
 template <>
 struct TMapKeyHelper<TGuid, false>
 {
-    static void Serialize(const TGuid& value, NYson::IYsonConsumer* consumer)
+    static void Serialize(TGuid value, NYson::IYsonConsumer* consumer)
     {
         consumer->OnKeyedItem(ToString(value));
     }
 
-    static void Deserialize(TGuid& value, const TString& key)
+    static void Deserialize(TGuid& value, const std::string& key)
     {
         value = TGuid::FromString(key);
     }
@@ -154,6 +154,9 @@ void DeserializeSet(T& value, INodePtr node)
     auto listNode = node->AsList();
     auto size = listNode->GetChildCount();
     value.clear();
+    if constexpr (requires {value.reserve(size);}) {
+        value.reserve(size);
+    }
     for (int i = 0; i < size; ++i) {
         typename T::value_type item;
         Deserialize(item, listNode->GetChildOrThrow(i));
@@ -166,6 +169,9 @@ void DeserializeMap(T& value, INodePtr node)
 {
     auto mapNode = node->AsMap();
     value.clear();
+    if constexpr (requires {value.reserve(mapNode->GetChildCount());}) {
+        value.reserve(mapNode->GetChildCount());
+    }
     for (const auto& [serializedKey, serializedItem] : mapNode->GetChildren()) {
         typename T::key_type key;
         TMapKeyHelper<typename T::key_type>::Deserialize(key, serializedKey);
@@ -625,24 +631,15 @@ void DeserializeProtobufMessage(
     const NYson::TProtobufWriterOptions& options = {});
 
 template <class T>
+    requires std::derived_from<T, google::protobuf::Message>
 void Deserialize(
     T& message,
-    const INodePtr& node,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type*)
+    const INodePtr& node)
 {
     NYson::TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = NYson::TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
         NYson::EUnknownYsonFieldsMode::Keep);
     DeserializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), node, options);
-}
-
-template <class T>
-void Deserialize(
-    T& message,
-    NYson::TYsonPullParserCursor* cursor,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type*)
-{
-    Deserialize(message, NYson::ExtractTo<NYTree::INodePtr>(cursor));
 }
 
 template <class T, class TTag>

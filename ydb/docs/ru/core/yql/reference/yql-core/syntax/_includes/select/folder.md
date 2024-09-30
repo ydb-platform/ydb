@@ -26,9 +26,9 @@
 
 {% endnote %}
 
-**Примеры:**
+## Примеры
 
-``` yql
+```yql
 USE hahn;
 
 $table_paths = (

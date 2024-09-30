@@ -1,11 +1,11 @@
-{%- if dir_includes is defined %}
-{%     for dir_include in dir_includes -%}
+{%- if dir_includes|length -%}
+{%-    for dir_include in dir_includes %}
 include({{ dir_include }})
-{%     endfor -%}
-{%- endif -%}
+{%     endfor %}
+{%  endif -%}
 
-{%- if subdirs|length %}
-{%      for subdir in subdirs -%}
+{%- if subdirs|length -%}
+{%-     for subdir in subdirs %}
 add_subdirectory({{ subdir }})
-{%      endfor -%}
-{%- endif -%}
+{%-     endfor %}
+{%  endif -%}

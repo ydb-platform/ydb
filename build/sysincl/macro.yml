@@ -877,7 +877,7 @@
   includes:
     - LT_CONFIG_H: $U/config.h
 
-- source_filter: "^contrib/libs/xpdf-3.04/splash"
+- source_filter: "^contrib/deprecated/xpdf"
   includes:
     - FT_CFF_DRIVER_H: contrib/libs/freetype/include/freetype/ftdriver.h
 
@@ -1225,7 +1225,6 @@
 
 - source_filter: "^contrib/libs/openthread"
   includes:
-    - MBEDTLS_CONFIG_FILE: contrib/libs/openthread/third_party/mbedtls/openthread-mbedtls-config.h
     - OPENTHREAD_CONFIG_FILE
 
 - source_filter: "^smart_devices/platforms/yandexmidi/zigbee/firmware/ncp"

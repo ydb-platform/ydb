@@ -13,6 +13,7 @@ from typing import (
     Any,
     ByteString,
     Dict,
+    Final,
     Iterable,
     Optional,
     TextIO,
@@ -26,14 +27,14 @@ from multidict import CIMultiDict
 from . import hdrs
 from .abc import AbstractStreamWriter
 from .helpers import (
-    PY_36,
+    _SENTINEL,
     content_disposition_header,
     guess_filename,
     parse_mimetype,
     sentinel,
 )
 from .streams import StreamReader
-from .typedefs import Final, JSONEncoder, _CIMultiDict
+from .typedefs import JSONEncoder, _CIMultiDict
 
 __all__ = (
     "PAYLOAD_REGISTRY",
@@ -51,9 +52,9 @@ __all__ = (
     "AsyncIterablePayload",
 )
 
-TOO_LARGE_BYTES_BODY: Final[int] = 2 ** 20  # 1 MB
+TOO_LARGE_BYTES_BODY: Final[int] = 2**20  # 1 MB
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from typing import List
 
 
@@ -98,9 +99,9 @@ class PayloadRegistry:
     """
 
     def __init__(self) -> None:
-        self._first = []  # type: List[_PayloadRegistryItem]
-        self._normal = []  # type: List[_PayloadRegistryItem]
-        self._last = []  # type: List[_PayloadRegistryItem]
+        self._first: List[_PayloadRegistryItem] = []
+        self._normal: List[_PayloadRegistryItem] = []
+        self._last: List[_PayloadRegistryItem] = []
 
     def get(
         self,
@@ -132,8 +133,8 @@ class PayloadRegistry:
 
 class Payload(ABC):
 
-    _default_content_type = "application/octet-stream"  # type: str
-    _size = None  # type: Optional[int]
+    _default_content_type: str = "application/octet-stream"
+    _size: Optional[int] = None
 
     def __init__(
         self,
@@ -141,14 +142,14 @@ class Payload(ABC):
         headers: Optional[
             Union[_CIMultiDict, Dict[str, str], Iterable[Tuple[str, str]]]
         ] = None,
-        content_type: Optional[str] = sentinel,
+        content_type: Union[str, None, _SENTINEL] = sentinel,
         filename: Optional[str] = None,
         encoding: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         self._encoding = encoding
         self._filename = filename
-        self._headers = CIMultiDict()  # type: _CIMultiDict
+        self._headers: _CIMultiDict = CIMultiDict()
         self._value = value
         if content_type is not sentinel and content_type is not None:
             self._headers[hdrs.CONTENT_TYPE] = content_type
@@ -231,10 +232,7 @@ class BytesPayload(Payload):
             self._size = len(value)
 
         if self._size > TOO_LARGE_BYTES_BODY:
-            if PY_36:
-                kwargs = {"source": self}
-            else:
-                kwargs = {}
+            kwargs = {"source": self}
             warnings.warn(
                 "Sending a large body directly with raw bytes might"
                 " lock the event loop. You should probably pass an "
@@ -301,10 +299,10 @@ class IOBasePayload(Payload):
     async def write(self, writer: AbstractStreamWriter) -> None:
         loop = asyncio.get_event_loop()
         try:
-            chunk = await loop.run_in_executor(None, self._value.read, 2 ** 16)
+            chunk = await loop.run_in_executor(None, self._value.read, 2**16)
             while chunk:
                 await writer.write(chunk)
-                chunk = await loop.run_in_executor(None, self._value.read, 2 ** 16)
+                chunk = await loop.run_in_executor(None, self._value.read, 2**16)
         finally:
             await loop.run_in_executor(None, self._value.close)
 
@@ -350,7 +348,7 @@ class TextIOPayload(IOBasePayload):
     async def write(self, writer: AbstractStreamWriter) -> None:
         loop = asyncio.get_event_loop()
         try:
-            chunk = await loop.run_in_executor(None, self._value.read, 2 ** 16)
+            chunk = await loop.run_in_executor(None, self._value.read, 2**16)
             while chunk:
                 data = (
                     chunk.encode(encoding=self._encoding)
@@ -358,7 +356,7 @@ class TextIOPayload(IOBasePayload):
                     else chunk.encode()
                 )
                 await writer.write(data)
-                chunk = await loop.run_in_executor(None, self._value.read, 2 ** 16)
+                chunk = await loop.run_in_executor(None, self._value.read, 2**16)
         finally:
             await loop.run_in_executor(None, self._value.close)
 
@@ -403,7 +401,7 @@ class JsonPayload(BytesPayload):
         )
 
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from typing import AsyncIterable, AsyncIterator
 
     _AsyncIterator = AsyncIterator[bytes]
@@ -417,13 +415,13 @@ else:
 
 class AsyncIterablePayload(Payload):
 
-    _iter = None  # type: Optional[_AsyncIterator]
+    _iter: Optional[_AsyncIterator] = None
 
     def __init__(self, value: _AsyncIterable, *args: Any, **kwargs: Any) -> None:
         if not isinstance(value, AsyncIterable):
             raise TypeError(
                 "value argument must support "
-                "collections.abc.AsyncIterablebe interface, "
+                "collections.abc.AsyncIterable interface, "
                 "got {!r}".format(type(value))
             )
 

@@ -9,6 +9,7 @@ struct TStatServiceSettings {
     TDuration AggregateKeepAlivePeriod;
     TDuration AggregateKeepAliveTimeout;
     TDuration AggregateKeepAliveAckTimeout;
+    TDuration StatisticsRequestTimeout;
     size_t MaxInFlightTabletRequests;
     size_t FanOutFactor;
 
@@ -26,6 +27,11 @@ struct TStatServiceSettings {
 
     TStatServiceSettings& SetAggregateKeepAliveAckTimeout(const TDuration& val) {
         AggregateKeepAliveAckTimeout = val;
+        return *this;
+    }
+
+    TStatServiceSettings& SetStatisticsRequestTimeout(const TDuration& val) {
+        StatisticsRequestTimeout = val;
         return *this;
     }
 

@@ -475,6 +475,7 @@ namespace NActors {
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
             )
+            UpdateUtilization();
         }
 
         void Handle(TEvUpdateFromInputSession::TPtr& ev);
@@ -650,6 +651,48 @@ namespace NActors {
         ui64 EqualizeCounter = 0;
 
         ui64 StarvingInRow = 0;
+
+        enum class EState {
+            Utilized = 0,
+            WaitingCpu = 1,
+            Idle = 2,
+        } State = EState::Idle;
+
+        double UtilizedPart = 0;
+        double WaitingCpuPart = 0;
+        double IdlePart = 0;
+        double Total = 0;
+        double Utilized = 0;
+        double Starving = 0;
+        NHPTimer::STime PartUpdateTimestamp = 0;
+
+        void UpdateState(std::optional<EState> newState = std::nullopt) {
+            if (!newState || *newState != State) {
+                const NHPTimer::STime timestamp = GetCycleCountFast();
+                const TDuration passed = CyclesToDuration(timestamp - std::exchange(PartUpdateTimestamp, timestamp));
+                const double seconds = passed.SecondsFloat();
+                const double factor = pow(0.8, seconds); // in 20 seconds we will get approx 1% of initial value
+                const double shift = 4 * (1 - factor);
+                UtilizedPart *= factor;
+                WaitingCpuPart *= factor;
+                IdlePart *= factor;
+                switch (State) {
+                    case EState::Utilized:   UtilizedPart   += shift; break;
+                    case EState::WaitingCpu: WaitingCpuPart += shift; break;
+                    case EState::Idle:       IdlePart       += shift; break;
+                }
+                Total = UtilizedPart + WaitingCpuPart + IdlePart;
+                if (Total) {
+                    Utilized = (Utilized + WaitingCpuPart) / Total;
+                    Starving = WaitingCpuPart / Total;
+                }
+                if (newState) {
+                    State = *newState;
+                }
+            }
+        }
+
+        void UpdateUtilization();
     };
 
     class TInterconnectSessionKiller

@@ -24,6 +24,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/openssl
     library/cpp/colorizer
     library/cpp/containers/sorted_vector
     library/cpp/containers/stack_vector

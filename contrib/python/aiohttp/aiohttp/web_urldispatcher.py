@@ -1,7 +1,9 @@
 import abc
 import asyncio
 import base64
+import functools
 import hashlib
+import html
 import inspect
 import keyword
 import os
@@ -18,17 +20,20 @@ from typing import (
     Callable,
     Container,
     Dict,
+    Final,
     Generator,
     Iterable,
     Iterator,
     List,
     Mapping,
+    NoReturn,
     Optional,
     Pattern,
     Set,
     Sized,
     Tuple,
     Type,
+    TypedDict,
     Union,
     cast,
 )
@@ -39,7 +44,7 @@ from . import hdrs
 from .abc import AbstractMatchInfo, AbstractRouter, AbstractView
 from .helpers import DEBUG
 from .http import HttpVersion11
-from .typedefs import Final, Handler, PathLike, TypedDict
+from .typedefs import Handler, PathLike
 from .web_exceptions import (
     HTTPException,
     HTTPExpectationFailed,
@@ -66,7 +71,7 @@ __all__ = (
 )
 
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .web_app import Application
 
     BaseDict = Dict[str, str]
@@ -84,8 +89,10 @@ ROUTE_RE: Final[Pattern[str]] = re.compile(
 PATH_SEP: Final[str] = re.escape("/")
 
 
-_ExpectHandler = Callable[[Request], Awaitable[None]]
+_ExpectHandler = Callable[[Request], Awaitable[Optional[StreamResponse]]]
 _Resolve = Tuple[Optional["UrlMappingMatchInfo"], Set[str]]
+
+html_escape = functools.partial(html.escape, quote=True)
 
 
 class _InfoDict(TypedDict, total=False):
@@ -194,8 +201,9 @@ class AbstractRoute(abc.ABC):
             async def handler_wrapper(request: Request) -> StreamResponse:
                 result = old_handler(request)
                 if asyncio.iscoroutine(result):
-                    return await result
-                return result  # type: ignore[return-value]
+                    result = await result
+                assert isinstance(result, StreamResponse)
+                return result
 
             old_handler = handler
             handler = handler_wrapper
@@ -230,16 +238,16 @@ class AbstractRoute(abc.ABC):
     def url_for(self, *args: str, **kwargs: str) -> URL:
         """Construct url for route with additional params."""
 
-    async def handle_expect_header(self, request: Request) -> None:
-        await self._expect_handler(request)
+    async def handle_expect_header(self, request: Request) -> Optional[StreamResponse]:
+        return await self._expect_handler(request)
 
 
 class UrlMappingMatchInfo(BaseDict, AbstractMatchInfo):
     def __init__(self, match_dict: Dict[str, str], route: AbstractRoute):
         super().__init__(match_dict)
         self._route = route
-        self._apps = []  # type: List[Application]
-        self._current_app = None  # type: Optional[Application]
+        self._apps: List[Application] = []
+        self._current_app: Optional[Application] = None
         self._frozen = False
 
     @property
@@ -333,7 +341,7 @@ async def _default_expect_handler(request: Request) -> None:
 class Resource(AbstractResource):
     def __init__(self, *, name: Optional[str] = None) -> None:
         super().__init__(name=name)
-        self._routes = []  # type: List[ResourceRoute]
+        self._routes: List[ResourceRoute] = []
 
     def add_route(
         self,
@@ -362,7 +370,7 @@ class Resource(AbstractResource):
         self._routes.append(route)
 
     async def resolve(self, request: Request) -> _Resolve:
-        allowed_methods = set()  # type: Set[str]
+        allowed_methods: Set[str] = set()
 
         match_dict = self._match(request.rel_url.raw_path)
         if match_dict is None:
@@ -384,7 +392,7 @@ class Resource(AbstractResource):
     def __len__(self) -> int:
         return len(self._routes)
 
-    def __iter__(self) -> Iterator[AbstractRoute]:
+    def __iter__(self) -> Iterator["ResourceRoute"]:
         return iter(self._routes)
 
     # TODO: implement all abstract methods
@@ -576,14 +584,12 @@ class StaticResource(PrefixResource):
     def url_for(  # type: ignore[override]
         self,
         *,
-        filename: Union[str, Path],
+        filename: PathLike,
         append_version: Optional[bool] = None,
     ) -> URL:
         if append_version is None:
             append_version = self._append_version
-        if isinstance(filename, Path):
-            filename = str(filename)
-        filename = filename.lstrip("/")
+        filename = str(filename).lstrip("/")
 
         url = URL.build(path=self._prefix, encoded=True)
         # filename is not encoded
@@ -593,9 +599,14 @@ class StaticResource(PrefixResource):
             url = url / filename
 
         if append_version:
+            unresolved_path = self._directory.joinpath(filename)
             try:
-                filepath = self._directory.joinpath(filename).resolve()
-                if not self._follow_symlinks:
+                if self._follow_symlinks:
+                    normalized_path = Path(os.path.normpath(unresolved_path))
+                    normalized_path.relative_to(self._directory)
+                    filepath = normalized_path.resolve()
+                else:
+                    filepath = unresolved_path.resolve()
                     filepath.relative_to(self._directory)
             except (ValueError, FileNotFoundError):
                 # ValueError for case when path point to symlink
@@ -660,8 +671,13 @@ class StaticResource(PrefixResource):
                 # /static/\\machine_name\c$ or /static/D:\path
                 # where the static dir is totally different
                 raise HTTPForbidden()
-            filepath = self._directory.joinpath(filename).resolve()
-            if not self._follow_symlinks:
+            unresolved_path = self._directory.joinpath(filename)
+            if self._follow_symlinks:
+                normalized_path = Path(os.path.normpath(unresolved_path))
+                normalized_path.relative_to(self._directory)
+                filepath = normalized_path.resolve()
+            else:
+                filepath = unresolved_path.resolve()
                 filepath.relative_to(self._directory)
         except (ValueError, FileNotFoundError) as error:
             # relatively safe
@@ -696,7 +712,7 @@ class StaticResource(PrefixResource):
         assert filepath.is_dir()
 
         relative_path_to_dir = filepath.relative_to(self._directory).as_posix()
-        index_of = f"Index of /{relative_path_to_dir}"
+        index_of = f"Index of /{html_escape(relative_path_to_dir)}"
         h1 = f"<h1>{index_of}</h1>"
 
         index_list = []
@@ -704,7 +720,7 @@ class StaticResource(PrefixResource):
         for _file in sorted(dir_index):
             # show file url as relative to static path
             rel_path = _file.relative_to(self._directory).as_posix()
-            file_url = self._prefix + "/" + rel_path
+            quoted_file_url = _quote_path(f"{self._prefix}/{rel_path}")
 
             # if file is a directory, add '/' to the end of the name
             if _file.is_dir():
@@ -713,9 +729,7 @@ class StaticResource(PrefixResource):
                 file_name = _file.name
 
             index_list.append(
-                '<li><a href="{url}">{name}</a></li>'.format(
-                    url=file_url, name=file_name
-                )
+                f'<li><a href="{quoted_file_url}">{html_escape(file_name)}</a></li>'
             )
         ul = "<ul>\n{}\n</ul>".format("\n".join(index_list))
         body = f"<body>\n{h1}\n{ul}\n</body>"
@@ -946,18 +960,18 @@ class View(AbstractView):
     async def _iter(self) -> StreamResponse:
         if self.request.method not in hdrs.METH_ALL:
             self._raise_allowed_methods()
-        method: Callable[[], Awaitable[StreamResponse]] = getattr(
-            self, self.request.method.lower(), None
-        )
+        method: Optional[Callable[[], Awaitable[StreamResponse]]]
+        method = getattr(self, self.request.method.lower(), None)
         if method is None:
             self._raise_allowed_methods()
-        resp = await method()
-        return resp
+        ret = await method()
+        assert isinstance(ret, StreamResponse)
+        return ret
 
     def __await__(self) -> Generator[Any, None, StreamResponse]:
         return self._iter().__await__()
 
-    def _raise_allowed_methods(self) -> None:
+    def _raise_allowed_methods(self) -> NoReturn:
         allowed_methods = {m for m in hdrs.METH_ALL if hasattr(self, m.lower())}
         raise HTTPMethodNotAllowed(self.request.method, allowed_methods)
 
@@ -978,7 +992,7 @@ class ResourcesView(Sized, Iterable[AbstractResource], Container[AbstractResourc
 
 class RoutesView(Sized, Iterable[AbstractRoute], Container[AbstractRoute]):
     def __init__(self, resources: List[AbstractResource]):
-        self._routes = []  # type: List[AbstractRoute]
+        self._routes: List[AbstractRoute] = []
         for resource in resources:
             for route in resource:
                 self._routes.append(route)
@@ -999,12 +1013,12 @@ class UrlDispatcher(AbstractRouter, Mapping[str, AbstractResource]):
 
     def __init__(self) -> None:
         super().__init__()
-        self._resources = []  # type: List[AbstractResource]
-        self._named_resources = {}  # type: Dict[str, AbstractResource]
+        self._resources: List[AbstractResource] = []
+        self._named_resources: Dict[str, AbstractResource] = {}
 
     async def resolve(self, request: Request) -> UrlMappingMatchInfo:
         method = request.method
-        allowed_methods = set()  # type: Set[str]
+        allowed_methods: Set[str] = set()
 
         for resource in self._resources:
             match_dict, allowed = await resource.resolve(request)

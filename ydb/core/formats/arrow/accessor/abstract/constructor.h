@@ -1,9 +1,8 @@
 #pragma once
-#include "accessor.h"
 
-#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
-#include <ydb/core/formats/arrow/protos/accessor.pb.h>
-
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <library/cpp/object_factory/object_factory.h>
@@ -26,9 +25,22 @@ private:
     virtual TString DoDebugString() const {
         return "";
     }
+    virtual bool DoIsEqualWithSameTypeTo(const IConstructor& item) const = 0;
+    virtual std::shared_ptr<arrow::RecordBatch> DoConstruct(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const = 0;
 
 public:
     virtual ~IConstructor() = default;
+
+    std::shared_ptr<arrow::RecordBatch> Construct(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+        AFL_VERIFY(columnData);
+        return DoConstruct(columnData, externalInfo);
+    }
+
+    bool IsEqualWithSameTypeTo(const IConstructor& item) const {
+        return DoIsEqualWithSameTypeTo(item);
+    }
 
     TString DebugString() const {
         return TStringBuilder() << GetClassName() << ":" << DoDebugString();
@@ -66,9 +78,26 @@ public:
 class TConstructorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IConstructor> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IConstructor>;
-
 public:
     using TBase::TBase;
+
+    bool IsEqualTo(const TConstructorContainer& item) const {
+        if (!GetObjectPtr() && !item.GetObjectPtr()) {
+            return true;
+        } else if (!!GetObjectPtr() && !!item.GetObjectPtr()) {
+            if (GetObjectPtr()->GetClassName() != item.GetObjectPtr()->GetClassName()) {
+                return false;
+            }
+            return GetObjectPtr()->IsEqualWithSameTypeTo(*item.GetObjectPtr());
+        } else {
+            return false;
+        }
+    }
+
+    std::shared_ptr<arrow::RecordBatch> Construct(const std::shared_ptr<IChunkedArray>& batch, const TChunkConstructionData& externalInfo) const {
+        AFL_VERIFY(!!GetObjectPtr());
+        return GetObjectPtr()->Construct(batch, externalInfo);
+    }
 
     static TConstructorContainer GetDefaultConstructor();
 };

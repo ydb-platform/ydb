@@ -189,6 +189,14 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
         Y_ABORT_UNLESS(CheckFingerprint(BaseConfig));
         Y_ABORT_UNLESS(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
+
+        if (Scepter) {
+            Y_ABORT_UNLESS(HasQuorum());
+            Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
+            Y_ABORT_UNLESS(!Binding);
+        } else {
+            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT);
+        }
     }
 #endif
 

@@ -3,9 +3,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <library/cpp/yson/writer.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -14,18 +13,7 @@ using namespace NYdb::NTable;
 
 namespace {
 
-TString ReformatYson(const TString& yson) {
-    TStringStream ysonInput(yson);
-    TStringStream output;
-    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text);
-    return output.Str();
-}
-
-void CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_NO_DIFF(ReformatYson(expected), ReformatYson(actual));
-}
-
-ui64 DoRead(TSession& s, const TString& table, ui64 expectedRows, const TString& expectedContent) {
+std::pair<ui64, Ydb::ResultSet> DoRead(TSession& s, const TString& table) {
     auto res = s.ExecuteDataQuery(
         Sprintf("SELECT * FROM `/local/%s`; SELECT COUNT(*) AS __count FROM `/local/%s`;",
             table.data(), table.data()), TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -34,23 +22,17 @@ ui64 DoRead(TSession& s, const TString& table, ui64 expectedRows, const TString&
     UNIT_ASSERT(rs.TryNextRow());
     auto count = rs.ColumnParser("__count").GetUint64();
 
-    if (count == expectedRows) {
-        auto yson = NYdb::FormatResultSetYson(res.GetResultSet(0));
-
-        CompareYson(expectedContent, yson);
-    }
-
-    return count;
+    const auto proto = NYdb::TProtoAccessor::GetProto(res.GetResultSet(0));
+    return {count, proto};
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(Replication)
 {
-    Y_UNIT_TEST(UuidValue)
+    Y_UNIT_TEST(Types)
     {
         TString connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
-        Cerr << connectionString << Endl;
         auto config = TDriverConfig(connectionString);
         auto driver = TDriver(config);
         auto tableClient = TTableClient(driver);
@@ -60,9 +42,11 @@ Y_UNIT_TEST_SUITE(Replication)
             auto res = session.ExecuteSchemeQuery(R"(
                 CREATE TABLE `/local/ProducerUuidValue` (
                     Key Uint32,
-                    Value1 Uuid,
-                    Value2 Uuid NOT NULL,
-                    PRIMARY KEY (Key)
+                    Key2 Uuid,
+                    v01 Uuid,
+                    v02 Uuid NOT NULL,
+                    v03 Double,
+                    PRIMARY KEY (Key, Key2)
                 );
             )").GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -74,11 +58,13 @@ Y_UNIT_TEST_SUITE(Replication)
             auto s = sessionResult.GetSession();
 
             {
-                const TString query = "UPSERT INTO ProducerUuidValue (Key, Value1, Value2) VALUES"
+                const TString query = "UPSERT INTO ProducerUuidValue (Key,Key2,v01,v02,v03) VALUES"
                     "(1, "
+                      "CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea00\" as Uuid), "
                       "CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea01\" as Uuid), "
-                      "UNWRAP(CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02\" as Uuid)"
-                    "));";
+                      "UNWRAP(CAST(\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02\" as Uuid)), "
+                      "CAST(\"311111111113.222222223\" as Double) "
+                    ");";
                 auto res = s.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
@@ -104,9 +90,25 @@ Y_UNIT_TEST_SUITE(Replication)
         UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
 
         auto s = sessionResult.GetSession();
-        const TString expected = R"([[[1u];["5b99a330-04ef-4f1a-9b64-ba6d5f44ea01"];"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02"]])";
+        TUuidValue expectedKey2("5b99a330-04ef-4f1a-9b64-ba6d5f44ea00");
+        TUuidValue expectedV1("5b99a330-04ef-4f1a-9b64-ba6d5f44ea01");
+        TUuidValue expectedV2("5b99a330-04ef-4f1a-9b64-ba6d5f44ea02");
+        double expectedV3 = 311111111113.222222223;
         ui32 attempt = 10;
-        while (1 != DoRead(s, "ConsumerUuidValue", 1, expected) && --attempt) {
+        while (--attempt) {
+            auto res = DoRead(s, "ConsumerUuidValue");
+            if (res.first == 1) {
+                const Ydb::ResultSet& proto = res.second;
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(0).uint32_value(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(1).low_128(), expectedKey2.Buf_.Halfs[0]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(1).high_128(), expectedKey2.Buf_.Halfs[1]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(2).low_128(), expectedV1.Buf_.Halfs[0]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(2).high_128(), expectedV1.Buf_.Halfs[1]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(3).low_128(), expectedV2.Buf_.Halfs[0]);
+                UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(3).high_128(), expectedV2.Buf_.Halfs[1]);
+                UNIT_ASSERT_DOUBLES_EQUAL(proto.rows(0).items(4).double_value(), expectedV3, 0.0001);
+                break;
+            }
             Sleep(TDuration::Seconds(1));
         }
         

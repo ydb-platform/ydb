@@ -861,7 +861,8 @@ public:
         return this->ConstRef();
     }
 
-    operator TStringType&() {
+    template <typename T, typename = std::enable_if_t<std::is_same_v<T, TStringType>>>
+    operator T&() & {
         return this->MutRef();
     }
 
@@ -1252,7 +1253,7 @@ namespace std {
             return NHashPrivate::ComputeStringHash(s.data(), s.size());
         }
     };
-}
+} // namespace std
 
 #undef Y_NOEXCEPT
 

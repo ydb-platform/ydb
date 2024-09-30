@@ -82,10 +82,15 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_STRICT_UDF(TCityHash, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TCityHash, ui64(TAutoMap<char*>, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
-        ui64 hash = CityHash64(inputRef.Data(), inputRef.Size());
+        ui64 hash;
+        if (args[1]) {
+            hash = CityHash64WithSeed(inputRef.Data(), inputRef.Size(), args[1].Get<ui64>());
+        } else {
+            hash = CityHash64(inputRef.Data(), inputRef.Size());
+        }
         return TUnboxedValuePod(hash);
     }
 

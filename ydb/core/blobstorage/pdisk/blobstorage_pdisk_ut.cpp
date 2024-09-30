@@ -19,7 +19,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
-        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(cfg, counters);
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>();
+        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
 
@@ -925,6 +926,50 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
     }
 
+    Y_UNIT_TEST(TestChunkWriteCrossOwner) {
+        TActorTestContext testCtx({ false });
+
+        TVDiskMock vdisk1(&testCtx);
+        TVDiskMock vdisk2(&testCtx);
+
+        vdisk1.InitFull();
+        vdisk2.InitFull();
+
+        vdisk1.ReserveChunk();
+        vdisk2.ReserveChunk();
+
+        vdisk1.CommitReservedChunks();
+        vdisk2.CommitReservedChunks();
+
+        UNIT_ASSERT(vdisk1.Chunks[EChunkState::COMMITTED].size() == 1);
+        UNIT_ASSERT(vdisk2.Chunks[EChunkState::COMMITTED].size() == 1);
+
+        auto chunk1 = *vdisk1.Chunks[EChunkState::COMMITTED].begin();
+        auto chunk2 = *vdisk2.Chunks[EChunkState::COMMITTED].begin();
+
+        TString data(123, '0');
+        auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TStrokaBackedUpParts>(data);
+
+        // write to own chunk is OK
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
+            vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound,
+            chunk1, 0, parts, nullptr, false, 0),
+            NKikimrProto::OK);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
+            vdisk2.PDiskParams->Owner, vdisk2.PDiskParams->OwnerRound,
+            chunk2, 0, parts, nullptr, false, 0),
+            NKikimrProto::OK);
+
+        // write to neighbour's chunk is ERROR
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
+            vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound,
+            chunk2, 0, parts, nullptr, false, 0),
+            NKikimrProto::ERROR);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
+            vdisk2.PDiskParams->Owner, vdisk2.PDiskParams->OwnerRound,
+            chunk1, 0, parts, nullptr, false, 0),
+            NKikimrProto::ERROR);
+    }
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
@@ -948,7 +993,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+        auto pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
 
         const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &newInfo);
         if (isCompatible) {
@@ -960,7 +1005,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
 
     void TestMajorVerionMigration(TCurrent oldInfo, TCurrent intermediateInfo, TCurrent newInfo) {
         TCompatibilityInfoTest::Reset(&oldInfo);
-    
+
         TActorTestContext testCtx({
             .IsBad = false,
             .SuppressCompatibilityCheck = false,
@@ -969,7 +1014,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+        auto pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
 
         {
             const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &intermediateInfo);

@@ -4,7 +4,7 @@ Checking that the `SELECT` result is sorted by the value in the specified column
 
 As in case of `ORDER BY`, it supports setting the sort order using the keywords `ASC` (ascending order) and `DESC` (descending order). Expressions are not supported in `ASSUME ORDER BY`.
 
-**Examples:**
+## Examples
 
 ```yql
 SELECT key || "suffix" as key, -CAST(subkey as Int32) as subkey

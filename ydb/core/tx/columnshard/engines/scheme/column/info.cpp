@@ -32,6 +32,7 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     if (columnInfo.HasDataAccessorConstructor()) {
         AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }
+    IsNullable = columnInfo.HasNotNull() ? !columnInfo.GetNotNull() : true;
     AFL_VERIFY(Serializer);
     if (columnInfo.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());
@@ -42,14 +43,16 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     return TConclusionStatus::Success();
 }
 
-TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-    const bool needMinMax, const bool isSorted,
-    const std::shared_ptr<arrow::Scalar>& defaultValue)
+TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
+    const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
+    const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex)
     : ColumnId(columnId)
+    , PKColumnIndex(pkColumnIndex)
     , ArrowField(arrowField)
     , Serializer(serializer)
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
+    , IsNullable(isNullable)
     , DefaultValue(defaultValue)
 {
     ColumnName = ArrowField->name();
@@ -88,7 +91,13 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& s : source) {
-        auto data = sourceColumnFeatures.Loader->ApplyRawVerified(s->GetData());
+        std::shared_ptr<arrow::RecordBatch> data;
+        if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor)) {
+            auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified());
+            data = DataAccessorConstructor.Construct(chunkedArray, Loader->BuildAccessorContext(s->GetRecordsCountVerified()));
+        } else {
+            data = sourceColumnFeatures.Loader->ApplyRawVerified(s->GetData());
+        }
         result.emplace_back(s->CopyWithAnotherBlob(GetColumnSaver().Apply(data), *this));
     }
     return result;

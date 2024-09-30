@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
@@ -61,6 +62,12 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
 {
     if (optLLVM != "OFF") {
         *UsedMem_ = 128_MB;
+    }
+
+    for (const auto& f: ExecCtx_.UserFiles_->GetFiles()) {
+        if (f.second.IsPgExt || f.second.IsPgCatalog) {
+            AddFile(f.second.IsPgCatalog ? TString(NCommon::PgCatalogFileName) : "", f.second);
+        }
     }
 }
 
@@ -320,6 +327,10 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                     callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
                     !ExecCtx_.FunctionRegistry_->IsLoadedUdfModule(moduleName) ||
                     moduleName == TStringBuf("Geo");
+
+                if (moduleName.StartsWith("SystemPython")) {
+                    *RemoteExecutionFlag_ = true;
+                }
 
                 const auto udfPath = FindUdfPath(moduleName);
                 if (!udfPath.StartsWith(NMiniKQL::StaticModulePrefix)) {

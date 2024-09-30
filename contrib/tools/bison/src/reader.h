@@ -1,6 +1,6 @@
 /* Input parser for Bison
 
-   Copyright (C) 2000-2003, 2005-2007, 2009-2015, 2018-2019 Free
+   Copyright (C) 2000-2003, 2005-2007, 2009-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef READER_H_
 # define READER_H_
@@ -31,16 +31,13 @@ typedef struct merger_list
 {
   struct merger_list* next;
   uniqstr name;
-  uniqstr type;
-  location type_declaration_location;
+  /* One symbol whose type is the one used by all the symbols on which
+     this merging function is used.  */
+  symbol *sym;
+  /* Where SYM was bound to this merging function.  */
+  location type_declaration_loc;
 } merger_list;
 
-/* From the parser.  */
-extern int gram_debug;
-int gram_parse (void);
-
-
-/* From reader.c. */
 void grammar_start_symbol_set (symbol *sym, location loc);
 void grammar_current_rule_begin (symbol *lhs, location loc,
                                  named_ref *lhs_named_ref);
@@ -60,7 +57,7 @@ void grammar_current_rule_action_append (const char *action, location loc,
                                          named_ref *nref, uniqstr tag);
 /* Attach a PREDICATE to the current rule.  */
 void grammar_current_rule_predicate_append (const char *predicate, location loc);
-void reader (void);
+void reader (const char *gram);
 void free_merger_functions (void);
 
 extern merger_list *merge_functions;

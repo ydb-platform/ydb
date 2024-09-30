@@ -172,6 +172,12 @@ TEST(TSensorsOwnerTest, Copy)
     ASSERT_EQ(&owner.Get<TChild>(), &owner2.Get<TChild>()); // The same owner.
 }
 
+TEST(TSensorsOwnerTest, WithGlobal)
+{
+    auto owner = TSensorsOwner(TProfiler("", "bigrt.test"));
+    owner.WithGlobal().GetCounter("counter").Increment(1); // Expect no fail here.
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

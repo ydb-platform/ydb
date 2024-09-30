@@ -1,6 +1,6 @@
 # {{ process_command }}
 
-Преобразовать входную таблицу с помощью UDF на [C++](../../udf/cpp.md){% if yt %}, [Python](../../udf/python.md) или [JavaScript](../../udf/javascript.md){% endif %} или [лямбда функции](../../syntax/expressions.md#lambda), которая применяется последовательно к каждой строке входа и имеет возможность для каждой строки входа создать ноль, одну или несколько строк результата (аналог Map в терминах MapReduce).
+Преобразовать входную таблицу с помощью {% if oss != true %}UDF на [C++](../../udf/cpp.md){% if yt %}, [Python](../../udf/python.md) или [JavaScript](../../udf/javascript.md){% endif %} или {% endif %}[лямбда функции](../../syntax/expressions.md#lambda), которая применяется последовательно к каждой строке входа и имеет возможность для каждой строки входа создать ноль, одну или несколько строк результата (аналог Map в терминах MapReduce).
 
 {% if feature_mapreduce %}Таблица по имени ищется в базе данных, заданной оператором [USE](../use.md).{% endif %}
 
@@ -26,28 +26,29 @@
 
 {% note info "Примечание" %}
 
-После выполнения `{{ process_command }}` в рамках того же запроса по результирующей таблице (или таблицам) можно выполнить {% if select_command != "SELECT STREAM" %}[SELECT](../select.md), [REDUCE](../reduce.md){% else %}[SELECT STREAM](../select_stream.md){% endif %}, [INSERT INTO](../insert_into.md), ещё один `{{ process_command }}` и так далее в зависимости от необходимого результата.
+После выполнения `{{ process_command }}` в рамках того же запроса по результирующей таблице (или таблицам) можно выполнить {% if select_command != "SELECT STREAM" %}[SELECT](../select/index.md), [REDUCE](../reduce.md){% else %}[SELECT STREAM](../select_stream.md){% endif %}, [INSERT INTO](../insert_into.md), ещё один `{{ process_command }}` и так далее в зависимости от необходимого результата.
 
 {% endnote %}
 
 Ключевое слово `USING` и указание функции необязательны: если они не указаны, то возвращается исходная таблица. {% if feature_subquery %}Это может быть удобно для применения [шаблона подзапроса](subquery.md).{% endif %}
 
-В `{{ process_command }}` можно передать несколько входов (под входом здесь подразумевается таблица,{% if select_command != "PROCESS STREAM" %} [диапазон таблиц](../select.md#range){% endif %}, подзапрос, [именованное выражение](../expressions.md#named-nodes)), разделенных запятой. В функцию из `USING` в этом случае можно передать только специальные именованные выражения `TableRow()` или  `TableRows()`, которые будут иметь следующий тип:
+В `{{ process_command }}` можно передать несколько входов (под входом здесь подразумевается таблица,{% if select_command != "PROCESS STREAM" %} {% if feature_bulk_tables %}[диапазон таблиц](../select/concat.md){% else %}диапазон таблиц{% endif %}{% endif %}, подзапрос, [именованное выражение](../expressions.md#named-nodes)), разделенных запятой. В функцию из `USING` в этом случае можно передать только специальные именованные выражения `TableRow()` или  `TableRows()`, которые будут иметь следующий тип:
 
 * `TableRow()` — альтернатива (`Variant`), где каждый элемент имеет тип структуры записи из соответствущего входа. Для каждой входной строки в альтернативе заполнен элемент, соответствущий номеру входа этой строки
 * `TableRows()` — ленивый итератор по альтернативам, с точки зрения типов — `Stream<Variant<...>>`. Альтернатива имеет такую же семантику, что и для `TableRow()`
 
 После `USING` в `{{ process_command }}` можно опционально указать `ASSUME ORDER BY` со списком столбцов. Результат такого `{{ process_command }}` будет считаться сортированным, но без выполнения фактической сортировки. Проверка сортированности осуществляется на этапе исполнения запроса. Поддерживается задание порядка сортировки с помощью ключевых слов `ASC` (по возрастанию) и `DESC` (по убыванию). Выражения в `ASSUME ORDER BY` не поддерживается.
 
-**Примеры:**
+## Примеры
 
 {% if process_command != "PROCESS STREAM" %}
-``` yql
+
+```yql
 PROCESS my_table
 USING MyUdf::MyProcessor(value)
 ```
 
-``` yql
+```yql
 $udfScript = @@
 def MyFunc(my_list):
     return [(int(x.key) % 2, x) for x in my_list]
@@ -65,7 +66,7 @@ SELECT * FROM $i;
 SELECT * FROM $j;
 ```
 
-``` yql
+```yql
 $udfScript = @@
 def MyFunc(stream):
     for r in stream:
@@ -81,6 +82,7 @@ PROCESS my_table1, my_table2 USING $udf(TableRows());
 ```
 
 {% else %}
+
 ```yql
 
 -- лямбда функция принимает примитивный тип и возвращает структуру с тремя одинаковыми полями
@@ -93,7 +95,7 @@ PROCESS STREAM Input USING $f(value) WHERE cast(subkey as int) > 3;
 
 ```
 
-``` yql
+```yql
 -- лямбда функция принимает тип `Struct<key:String, subkey:String, value:String>`
 -- и возвращает аналогичную структуру, добавив некий суффикс к каждому полю
 
@@ -104,7 +106,7 @@ $f = ($r) -> {
 PROCESS STREAM Input USING $f(TableRow());
 ```
 
-``` yql
+```yql
 -- лямбда функция принимает запись типа `Struct<...>`
 -- и возвращает список из двух одинаковых элементов
 $f1 = ($x) -> {
@@ -120,6 +122,6 @@ $f2 = ($x) -> {
 $p = (PROCESS STREAM Input USING $f2(TableRows()));
 
 SELECT STREAM * FROM $p;
-
 ```
+
 {% endif %}

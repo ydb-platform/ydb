@@ -1,6 +1,7 @@
 #include "kqp_write_actor.h"
 
 #include "kqp_write_table.h"
+#include "kqp_write_actor_settings.h"
 
 #include <util/generic/singleton.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -23,32 +24,14 @@
 
 
 namespace {
-    constexpr i64 kInFlightMemoryLimitPerActor = 64_MB;
-    constexpr i64 kMemoryLimitPerMessage = 64_MB;
-    constexpr i64 kMaxBatchesPerMessage = 8;
-
-    struct TWriteActorBackoffSettings {
-        TDuration StartRetryDelay = TDuration::MilliSeconds(250);
-        TDuration MaxRetryDelay = TDuration::Seconds(5);
-        double UnsertaintyRatio = 0.5;
-        double Multiplier = 2.0;
-
-        ui64 MaxWriteAttempts = 32;
-        ui64 MaxResolveAttempts = 5;
-    };
-
-    const TWriteActorBackoffSettings* BackoffSettings() {
-        return Singleton<TWriteActorBackoffSettings>();
-    }
-
-    TDuration CalculateNextAttemptDelay(ui64 attempt) {
-        auto delay = BackoffSettings()->StartRetryDelay;
+    TDuration CalculateNextAttemptDelay(const NKikimr::NKqp::TWriteActorSettings& settings, ui64 attempt) {
+        auto delay = settings.StartRetryDelay;
         for (ui64 index = 0; index < attempt; ++index) {
-            delay *= BackoffSettings()->Multiplier;
+            delay *= settings.Multiplier;
         }
 
-        delay *= 1 + BackoffSettings()->UnsertaintyRatio * (1 - 2 * RandomNumber<double>());
-        delay = Min(delay, BackoffSettings()->MaxRetryDelay);
+        delay *= 1 + settings.UnsertaintyRatio * (1 - 2 * RandomNumber<double>());
+        delay = Min(delay, settings.MaxRetryDelay);
 
         return delay;
     }
@@ -133,6 +116,7 @@ public:
         TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
+        , MessageSettings(GetWriteActorSettings())
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
@@ -149,6 +133,7 @@ public:
             Settings.GetImmediateTx())
         , InconsistentTx(
             Settings.GetInconsistentTx())
+        , MemoryLimit(MessageSettings.InFlightMemoryLimitPerActorBytes)
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         YQL_ENSURE(!ImmediateTx);
@@ -228,6 +213,7 @@ private:
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 IgnoreFunc(TEvTxUserProxy::TEvAllocateTxIdResult);
                 hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
+                hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             }
@@ -247,21 +233,26 @@ private:
     }
 
     void PlanResolveTable() {
+        CA_LOG_D("Plan resolve with delay " << CalculateNextAttemptDelay(MessageSettings, ResolveAttempts));
         TlsActivationContext->Schedule(
-            CalculateNextAttemptDelay(ResolveAttempts),
+            CalculateNextAttemptDelay(MessageSettings, ResolveAttempts),
             new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvResolveRequestPlanned{}, 0, 0));   
+    }
+
+    void Handle(TEvPrivate::TEvResolveRequestPlanned::TPtr&) {
+        ResolveTable();
     }
 
     void ResolveTable() {
         SchemeEntry.reset();
         SchemeRequest.reset();
 
-        if (ResolveAttempts++ >= BackoffSettings()->MaxResolveAttempts) {
-            const auto error = TStringBuilder()
-                << "Too many table resolve attempts for Sink=" << this->SelfId() << ".";
-            CA_LOG_E(error);
+        if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
+            CA_LOG_E(TStringBuilder()
+                << "Too many table resolve attempts for table " << TableId << ".");
             RuntimeError(
-                error,
+                TStringBuilder()
+                << "Too many table resolve attempts for table `" << Settings.GetTable().GetPath() << "`.",
                 NYql::NDqProto::StatusIds::SCHEME_ERROR);
             return;
         }
@@ -273,6 +264,7 @@ private:
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.SyncVersion = false;
+        entry.ShowPrivatePath = true;
         request->ResultSet.emplace_back(entry);
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
@@ -280,14 +272,16 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        auto& resultSet = ev->Get()->Request->ResultSet;
+        YQL_ENSURE(resultSet.size() == 1);
+
         if (ev->Get()->Request->ErrorCount > 0) {
             CA_LOG_E(TStringBuilder() << "Failed to get table: "
-                << TableId << "'");
+                << TableId << "'. Entry: " << resultSet[0].ToString());
             PlanResolveTable();
             return;
         }
-        auto& resultSet = ev->Get()->Request->ResultSet;
-        YQL_ENSURE(resultSet.size() == 1);
+
         SchemeEntry = resultSet[0];
 
         CA_LOG_D("Resolved TableId=" << TableId << " ("
@@ -362,6 +356,18 @@ private:
             return issues;
         };
 
+        CA_LOG_D("Recv EvWriteResult from ShardID=" << ev->Get()->Record.GetOrigin()
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Cookie=" << ev->Cookie);
+
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
             CA_LOG_E("Got UNSPECIFIED for table `"
@@ -370,8 +376,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got UNSPECIFIED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Unspecified error for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
                 getIssues());
             return;
@@ -390,8 +397,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got ABORTED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Aborted for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
             return;
@@ -409,13 +417,29 @@ private:
                 RetryResolveTable();
             } else {
                 RuntimeError(
-                    TStringBuilder() << "Got INTERNAL ERROR for table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    TStringBuilder() << "Internal error for table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                     getIssues());
             }
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
+            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            
+        RuntimeError(
+            TStringBuilder() << "Disk space exhausted for table `"
+                << SchemeEntry->TableId.PathId.ToString() << "`. "
+                << getIssues().ToOneLineString(),
+            NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+            getIssues());
+            return;
+        }        
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << SchemeEntry->TableId.PathId.ToString() << "`."
@@ -424,6 +448,14 @@ private:
                 << " Ignored this error."
                 << getIssues().ToOneLineString());
             // TODO: support waiting
+            if (!InconsistentTx)  {
+                RuntimeError(
+                    TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << getIssues().ToOneLineString(),
+                    NYql::NDqProto::StatusIds::OVERLOADED,
+                    getIssues());
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
@@ -433,8 +465,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got CANCELLED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Cancelled request to table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::CANCELLED,
                 getIssues());
             return;
@@ -446,8 +479,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got BAD REQUEST for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Bad request. Table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 getIssues());
             return;
@@ -463,8 +497,9 @@ private:
                 RetryResolveTable();
             } else {
                 RuntimeError(
-                    TStringBuilder() << "Got SCHEME CHANGED for table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    TStringBuilder() << "Scheme changed. Table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::SCHEME_ERROR,
                     getIssues());
             }
@@ -477,8 +512,9 @@ private:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             RuntimeError(
-                TStringBuilder() << "Got LOCKS BROKEN for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                TStringBuilder() << "Transaction locks invalidated. Table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
             return;
@@ -490,12 +526,24 @@ private:
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
-            << ", LocksCount=" << ev->Get()->Record.GetTxLocks().size());
+            << ", Locks=" << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), ev->Cookie);
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            LocksInfo[ev->Get()->Record.GetOrigin()].AddAndCheckLock(lock);
+            if (!LocksInfo[ev->Get()->Record.GetOrigin()].AddAndCheckLock(lock)) {
+                RuntimeError(
+                    TStringBuilder() << "Transaction locks invalidated. Table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssues{});
+            }
         }
 
         ProcessBatches();
@@ -533,7 +581,7 @@ private:
     void SendDataToShard(const ui64 shardId) {
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
-        if (metadata->SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
+        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
             CA_LOG_E("ShardId=" << shardId
                     << " for table '" << Settings.GetTable().GetPath()
                     << "': retry limit exceeded."
@@ -580,10 +628,18 @@ private:
                 ShardedWriteController->GetDataFormat());
         }
 
-        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
+        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << evWrite->Record.GetTxId()
+            << ", TxMode=" << evWrite->Record.GetTxMode()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
-            << ", Operations=" << metadata->OperationsCount << ", IsFinal=" << metadata->IsFinal
+            << ", OperationsCount=" << metadata->OperationsCount << ", IsFinal=" << metadata->IsFinal
             << ", Attempts=" << metadata->SendAttempts);
         Send(
             PipeCacheId,
@@ -595,7 +651,7 @@ private:
 
         if (InconsistentTx) {
             TlsActivationContext->Schedule(
-                CalculateNextAttemptDelay(metadata->SendAttempts),
+                CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts),
                 new IEventHandle(
                     SelfId(),
                     SelfId(),
@@ -651,7 +707,9 @@ private:
             RetryShard(ev->Get()->TabletId, std::nullopt);
         } else {
             RuntimeError(
-                TStringBuilder() << "Error while delivering message to tablet " << ev->Get()->TabletId,
+                TStringBuilder()
+                    << "Error writing to table `" << SchemeEntry->TableId.PathId.ToString() << "`"
+                    << ": can't deliver message to tablet " << ev->Get()->TabletId << ".",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
     }
@@ -687,11 +745,11 @@ private:
             try {
                 ShardedWriteController = CreateShardedWriteController(
                     TShardedWriteControllerSettings {
-                        .MemoryLimitTotal = kInFlightMemoryLimitPerActor,
-                        .MemoryLimitPerMessage = kMemoryLimitPerMessage,
+                        .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                        .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
                         .MaxBatchesPerMessage = (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
                             ? 1
-                            : kMaxBatchesPerMessage),
+                            : MessageSettings.MaxBatchesPerMessage),
                     },
                     std::move(columnsMetadata),
                     TypeEnv,
@@ -727,6 +785,7 @@ private:
 
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
+    TWriteActorSettings MessageSettings;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
@@ -747,7 +806,7 @@ private:
     THashMap<ui64, TLockInfo> LocksInfo;
     bool Finished = false;
 
-    const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
+    const i64 MemoryLimit;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };

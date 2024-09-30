@@ -14,6 +14,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -45,13 +46,16 @@ private:
     struct TTxInit;
     struct TTxConfigure;
     struct TTxSchemeShardStats;
-    struct TTxScanTable;
+    struct TTxAnalyze;
+    struct TTxAnalyzeTableRequest;
+    struct TTxAnalyzeTableResponse;
+    struct TTxAnalyzeTableDeliveryProblem;
+    struct TTxAnalyzeDeadline;
     struct TTxNavigate;
     struct TTxResolve;
-    struct TTxStatisticsScanResponse;
-    struct TTxSaveQueryResponse;
-    struct TTxScheduleScan;
-    struct TTxDeleteQueryResponse;
+    struct TTxDatashardScanResponse;
+    struct TTxFinishTraversal;
+    struct TTxScheduleTrasersal;
     struct TTxAggregateStatisticsResponse;
     struct TTxResponseTabletDistribution;
     struct TTxAckTimeout;
@@ -62,10 +66,13 @@ private:
             EvFastPropagateCheck,
             EvProcessUrgent,
             EvPropagateTimeout,
-            EvScheduleScan,
+            EvScheduleTraversal,
             EvRequestDistribution,
             EvResolve,
             EvAckTimeout,
+            EvSendAnalyze,
+            EvAnalyzeDeliveryProblem,
+            EvAnalyzeDeadline,
 
             EvEnd
         };
@@ -74,9 +81,12 @@ private:
         struct TEvFastPropagateCheck : public TEventLocal<TEvFastPropagateCheck, EvFastPropagateCheck> {};
         struct TEvProcessUrgent : public TEventLocal<TEvProcessUrgent, EvProcessUrgent> {};
         struct TEvPropagateTimeout : public TEventLocal<TEvPropagateTimeout, EvPropagateTimeout> {};
-        struct TEvScheduleScan : public TEventLocal<TEvScheduleScan, EvScheduleScan> {};
+        struct TEvScheduleTraversal : public TEventLocal<TEvScheduleTraversal, EvScheduleTraversal> {};
         struct TEvRequestDistribution : public TEventLocal<TEvRequestDistribution, EvRequestDistribution> {};
         struct TEvResolve : public TEventLocal<TEvResolve, EvResolve> {};
+        struct TEvSendAnalyze : public TEventLocal<TEvSendAnalyze, EvSendAnalyze> {};
+        struct TEvAnalyzeDeliveryProblem : public TEventLocal<TEvAnalyzeDeliveryProblem, EvAnalyzeDeliveryProblem> {};
+        struct TEvAnalyzeDeadline : public TEventLocal<TEvAnalyzeDeadline, EvAnalyzeDeadline> {};
 
         struct TEvAckTimeout : public TEventLocal<TEvAckTimeout, EvAckTimeout> {
             size_t SeqNo = 0;
@@ -84,6 +94,7 @@ private:
                 SeqNo = seqNo;
             }
         };
+
     };
 
 private:
@@ -110,6 +121,7 @@ private:
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
     void Handle(TEvPrivate::TEvFastPropagateCheck::TPtr& ev);
     void Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeTableResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessUrgent::TPtr& ev);
     void Handle(TEvPrivate::TEvPropagateTimeout::TPtr& ev);
 
@@ -128,7 +140,7 @@ private:
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
-    void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
+    void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
     void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev);
@@ -136,24 +148,31 @@ private:
     void Handle(TEvPrivate::TEvRequestDistribution::TPtr& ev);
     void Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev);
     void Handle(TEvPrivate::TEvAckTimeout::TPtr& ev);
+    void Handle(TEvPrivate::TEvSendAnalyze::TPtr& ev);
+    void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
+    void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
 
     void InitializeStatisticsTable();
     void Navigate();
     void Resolve();
-    void NextRange();
+    void ScanNextDatashardRange();
     void SaveStatisticsToTable();
     void DeleteStatisticsFromTable();
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
-    void PersistCurrentScan(NIceDb::TNiceDb& db);
+    void PersistTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
-    void PersistLastScanOperationId(NIceDb::TNiceDb& db);
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
-    void ResetScanState(NIceDb::TNiceDb& db);
-    void ScheduleNextScan(NIceDb::TNiceDb& db);
-    void StartScan(NIceDb::TNiceDb& db, TPathId pathId, bool isColumnTable);
-    void FinishScan(NIceDb::TNiceDb& db);
+    void ResetTraversalState(NIceDb::TNiceDb& db);
+    void ScheduleNextAnalyze(NIceDb::TNiceDb& db);
+    void ScheduleNextTraversal(NIceDb::TNiceDb& db);
+    void StartTraversal(NIceDb::TNiceDb& db);
+    void FinishTraversal(NIceDb::TNiceDb& db);
+
+    std::optional<bool> IsColumnTable(const TPathId& pathId) const;
+
+    TString LastTraversalWasForceString() const;
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -173,6 +192,7 @@ private:
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             hFunc(TEvPrivate::TEvFastPropagateCheck, Handle);
             hFunc(TEvStatistics::TEvPropagateStatisticsResponse, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeTableResponse, Handle);
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
 
@@ -184,7 +204,7 @@ private:
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
-            hFunc(TEvPrivate::TEvScheduleScan, Handle);
+            hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
             hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
@@ -192,6 +212,9 @@ private:
             hFunc(TEvPrivate::TEvRequestDistribution, Handle);
             hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
             hFunc(TEvPrivate::TEvAckTimeout, Handle);
+            hFunc(TEvPrivate::TEvSendAnalyze, Handle);
+            hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
+            hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -206,6 +229,11 @@ private:
 
     std::mt19937_64 RandomGenerator;
 
+    TTabletCountersBase* TabletCounters;
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+
+    TInstant AggregationRequestBeginTime;
+
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
 
@@ -216,7 +244,7 @@ private:
     TDuration PropagateTimeout;
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 
-    std::unordered_map<TSSId, TString> BaseStats; // schemeshard id -> serialized stats for all paths
+    std::unordered_map<TSSId, TString> BaseStatistics; // schemeshard id -> serialized stats for all paths
 
     std::unordered_map<TSSId, size_t> SchemeShards; // all connected schemeshards
     std::unordered_map<TActorId, TSSId> SchemeShardPipes; // schemeshard pipe servers
@@ -239,12 +267,6 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    //
-
-    TTableId ScanTableId; // stored in local db
-    bool IsColumnTable = false; // stored in local db
-    std::unordered_set<TActorId> ReplyToActorIds;
-
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
     bool PendingDeleteStatistics = false;
@@ -257,16 +279,14 @@ private:
         TSerializedCellVec EndKey;
         ui64 DataShardId = 0;
     };
-    std::deque<TRange> ShardRanges;
+    std::deque<TRange> DatashardRanges;
 
-    TSerializedCellVec StartKey; // stored in local db
+    // period for both force and schedule traversals
+    static constexpr TDuration TraversalPeriod = TDuration::Seconds(1);
+    // if table traverse time is older, than traserse it on schedule
+    static constexpr TDuration ScheduleTraversalPeriod = TDuration::Hours(24);
 
-    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches; // stored in local db
-
-    static constexpr TDuration ScanIntervalTime = TDuration::Hours(24);
-    static constexpr TDuration ScheduleScanIntervalTime = TDuration::Seconds(1);
-
-    struct TScanTable {
+    struct TScheduleTraversal {
         TPathId PathId;
         ui64 SchemeShardId = 0;
         TInstant LastUpdateTime;
@@ -275,36 +295,17 @@ private:
         size_t HeapIndexByTime = -1;
 
         struct THeapIndexByTime {
-            size_t& operator()(TScanTable& value) const {
+            size_t& operator()(TScheduleTraversal& value) const {
                 return value.HeapIndexByTime;
             }
         };
 
         struct TLessByTime {
-            bool operator()(const TScanTable& l, const TScanTable& r) const {
+            bool operator()(const TScheduleTraversal& l, const TScheduleTraversal& r) const {
                 return l.LastUpdateTime < r.LastUpdateTime;
             }
         };
     };
-    std::unordered_map<TPathId, TScanTable> ScanTables; // stored in local db
-
-    std::unordered_map<ui64, std::unordered_set<TPathId>> ScanTablesBySchemeShard;
-
-    typedef TIntrusiveHeap<TScanTable, TScanTable::THeapIndexByTime, TScanTable::TLessByTime>
-        TScanTableQueueByTime;
-    TScanTableQueueByTime ScanTablesByTime;
-
-    struct TScanOperation : public TIntrusiveListItem<TScanOperation> {
-        ui64 OperationId = 0;
-        TPathId PathId;
-        std::unordered_set<TActorId> ReplyToActorIds;
-    };
-    TIntrusiveList<TScanOperation> ScanOperations; // stored in local db
-    std::unordered_map<TPathId, TScanOperation> ScanOperationsByPathId;
-
-    ui64 LastScanOperationId = 0; // stored in local db
-
-    TInstant ScanStartTime;
 
     size_t ResolveRound = 0;
     static constexpr size_t MaxResolveRoundCount = 5;
@@ -319,10 +320,94 @@ private:
 
     size_t TraversalRound = 0;
     static constexpr size_t MaxTraversalRoundCount = 5;
-    size_t GlobalTraversalRound = 1; // stored in local db
 
     size_t KeepAliveSeqNo = 0;
     static constexpr TDuration KeepAliveTimeout = TDuration::Seconds(3);
+
+    static constexpr size_t SendAnalyzeCount = 100;
+    static constexpr TDuration SendAnalyzePeriod = TDuration::Seconds(1);
+    static constexpr TDuration AnalyzeDeliveryProblemPeriod = TDuration::Seconds(1);
+    static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
+    static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);
+
+    enum ENavigateType {
+        Analyze,
+        Traversal
+    };
+    ENavigateType NavigateType = Analyze;
+    TString GetNavigateTypeString() const;
+
+    TString NavigateAnalyzeOperationId;
+    TPathId NavigatePathId;
+
+    // alternate between forced and scheduled traversals
+    bool LastTraversalWasForce = false;
+
+private: // stored in local db
+    
+    TString ForceTraversalOperationId;
+
+    TPathId TraversalPathId;
+    bool TraversalIsColumnTable = false;
+    TSerializedCellVec TraversalStartKey;
+    TInstant TraversalStartTime;
+
+    size_t GlobalTraversalRound = 1; 
+
+    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches;   
+
+    std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals; 
+    std::unordered_map<ui64, std::unordered_set<TPathId>> ScheduleTraversalsBySchemeShard;
+    typedef TIntrusiveHeap<TScheduleTraversal, TScheduleTraversal::THeapIndexByTime, TScheduleTraversal::TLessByTime>
+        TTraversalsByTime;
+    TTraversalsByTime ScheduleTraversalsByTime;
+
+
+    struct TAnalyzedShard {
+        ui64 ShardTabletId;
+
+        enum class EStatus : ui8 {
+            None,
+            DeliveryProblem,
+            AnalyzeStarted,
+            AnalyzeFinished,
+        };
+        EStatus Status = EStatus::None;
+    };
+
+    struct TForceTraversalTable {
+        TPathId PathId;
+        TString ColumnTags;
+        std::vector<TAnalyzedShard> AnalyzedShards;
+
+        enum class EStatus : ui8 {
+            None,
+            AnalyzeStarted,
+            AnalyzeFinished,
+            TraversalStarted,
+            TraversalFinished,
+        };
+        EStatus Status = EStatus::None;
+
+        TString GetStatusString() const;
+    };
+    struct TForceTraversalOperation {
+        TString OperationId;
+        std::vector<TForceTraversalTable> Tables;
+        TString Types;
+        TActorId ReplyToActorId;
+        TInstant CreatedAt;
+    };
+    std::list<TForceTraversalOperation> ForceTraversals;
+
+private:
+    TForceTraversalOperation* CurrentForceTraversalOperation();
+    TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
+    void DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db);
+
+    TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
+    TForceTraversalTable* CurrentForceTraversalTable();
+    void UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db);
 };
 
 } // NKikimr::NStat

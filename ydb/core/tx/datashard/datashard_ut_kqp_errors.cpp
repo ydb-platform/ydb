@@ -34,13 +34,15 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 class TLocalFixture {
 public:
-    TLocalFixture() {
+    TLocalFixture(bool enableResourcePools = true) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
+        app.MutableFeatureFlags()->SetEnableResourcePools(enableResourcePools);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
+            .SetEnableResourcePools(enableResourcePools)
             .SetAppConfig(app);
 
         Server = new TServer(serverSettings);
@@ -82,7 +84,8 @@ public:
 Y_UNIT_TEST_SUITE(KqpErrors) {
 
 Y_UNIT_TEST(ResolveTableError) {
-    TLocalFixture fixture;
+    // Disable resource pool, because workload manager also got TEvNavigateKeySetResult for default pool creation
+    TLocalFixture fixture(false);
     auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
             auto event = ev.Get()->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();

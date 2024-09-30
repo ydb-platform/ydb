@@ -3,6 +3,7 @@
 #include "oidc_session_create_yandex.h"
 
 namespace NMVP {
+namespace NOIDC {
 
 TSessionCreateHandler::TSessionCreateHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
     : TBase(&TSessionCreateHandler::StateWork)
@@ -13,11 +14,11 @@ TSessionCreateHandler::TSessionCreateHandler(const NActors::TActorId& httpProxyI
 void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
     if (request->Method == "GET") {
-        switch (Settings.AuthProfile) {
-            case NMVP::EAuthProfile::Yandex:
+        switch (Settings.AccessServiceType) {
+            case NMvp::yandex_v2:
                 ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
                 return;
-            case NMVP::EAuthProfile::Nebius:
+            case NMvp::nebius_v1:
                 ctx.Register(new THandlerSessionCreateNebius(event->Sender, request, HttpProxyId, Settings));
                 return;
         }
@@ -26,4 +27,5 @@ void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
 }
 
+}  // NOIDC
 }  // NMVP

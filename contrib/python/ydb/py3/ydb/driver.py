@@ -54,6 +54,13 @@ def credentials_from_env_variables(tracer=None):
             ctx.trace({"credentials.access_token": True})
             return credentials_impl.AuthTokenCredentials(access_token)
 
+        oauth2_key_file = os.getenv("YDB_OAUTH2_KEY_FILE")
+        if oauth2_key_file:
+            ctx.trace({"credentials.oauth2_key_file": True})
+            import ydb.oauth2_token_exchange
+
+            return ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(oauth2_key_file)
+
         ctx.trace(
             {
                 "credentials.env_default": True,

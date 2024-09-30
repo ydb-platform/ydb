@@ -53,11 +53,14 @@ namespace NSQLTranslation {
         , EnableGenericUdfs(true)
         , SyntaxVersion(1)
         , AnsiLexer(false)
+        , Antlr4Parser(false)
         , PgParser(false)
         , InferSyntaxVersion(false)
         , V0Behavior(EV0Behavior::Disable)
         , V0ForceDisable(InTestEnvironment())
+        , PGDisable(false)
         , WarnOnV0(true)
+        , TestAntlr4(false)
         , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , DqDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , BlockDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
@@ -69,6 +72,10 @@ namespace NSQLTranslation {
         if (!NYql::IsUtf8(query)) {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, "Invalid UTF8 input"));
             return false;
+        }
+
+        if (settings.Flags.contains("Antlr4")) {
+            settings.Antlr4Parser = true;
         }
 
         TSplitDelimiters lineDelimiters("\n\r");
@@ -121,6 +128,10 @@ namespace NSQLTranslation {
                 settings.SyntaxVersion = 1;
             } else if (value == "ansi_lexer") {
                 settings.AnsiLexer = true;
+            } else if (value == "antlr4_parser") {
+                settings.Antlr4Parser = true;
+            } else if (value == "antlr3_parser") {
+                settings.Antlr4Parser = false;
             } else if (value == "syntax_pg") {
                 settings.PgParser = true;
             } else {

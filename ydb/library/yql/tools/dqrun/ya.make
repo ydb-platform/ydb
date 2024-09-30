@@ -53,6 +53,7 @@ ENDIF()
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/provider/exec
         ydb/library/yql/providers/pq/async_io
+        ydb/library/yql/providers/pq/gateway/dummy
         ydb/library/yql/providers/pq/gateway/native
         ydb/library/yql/providers/pq/provider
         ydb/library/yql/providers/s3/actors
@@ -72,6 +73,7 @@ ENDIF()
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
+        ydb/library/yql/core/pg_ext
         ydb/library/yql/providers/yt/actors
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
@@ -88,6 +90,7 @@ ENDIF()
         ydb/library/yql/parser/pg_wrapper
         ydb/library/yql/utils/log/proto
         ydb/library/yql/core/qplayer/storage/file
+        ydb/library/yql/public/result_format
 
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors

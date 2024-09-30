@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-class TBackupTransactionOperator: public IProposeTxOperator {
+class TBackupTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TBackupTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
 
@@ -23,6 +23,9 @@ private:
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
     }
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+    }
+    virtual TString DoGetOpType() const override {
+        return "Backup";
     }
     virtual bool DoIsAsync() const override {
         return true;

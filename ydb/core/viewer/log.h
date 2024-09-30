@@ -1,16 +1,13 @@
 #pragma once
-
-#include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 inline TString GetLogPrefix() {
     return {};
 }
 
-}
 }
 
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() << stream)

@@ -221,7 +221,7 @@ struct TRuntimeTypeLoader {
     }
 
     TMaybe<TType> LoadPgType(const TString& pgType, ui32 /*level*/) {
-        auto typeId = NYql::NPg::LookupType(pgType).TypeId;
+        auto typeId = NYql::NPg::HasType(pgType) ? NYql::NPg::LookupType(pgType).TypeId : Max<ui32>();
         return Builder.NewPgType(typeId);
     }
 

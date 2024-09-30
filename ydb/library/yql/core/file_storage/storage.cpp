@@ -17,8 +17,9 @@
 #include <util/system/fs.h>
 #include <util/system/maxlen.h>
 #include <util/system/mutex.h>
-#include <util/system/utime.h>
+#include <util/system/spinlock.h>
 #include <util/system/thread.h>
+#include <util/system/utime.h>
 
 #include <functional>
 #include <atomic>
@@ -434,6 +435,7 @@ private:
     }
 
     void ResetAtFork() {
+        RndLock.Release();
         with_lock(RndLock) {
             Rnd.ResetSeed();
         }
@@ -452,7 +454,7 @@ private:
     std::atomic<i64> CurrentFiles = 0;
     std::atomic<i64> CurrentSize = 0;
     std::atomic_bool Dirty;
-    TMutex RndLock;
+    TSpinLock RndLock;
     TRandGuid Rnd;
 };
 

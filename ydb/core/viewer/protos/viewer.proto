@@ -461,6 +461,16 @@ message TStorageGroupInfo {
 message TStorageGroupGroup {
     string GroupName = 1;
     uint64 GroupCount = 2;
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
 }
 
 message TStoragePoolInfo {

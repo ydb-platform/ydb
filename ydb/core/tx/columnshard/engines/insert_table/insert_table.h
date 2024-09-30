@@ -25,6 +25,10 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TPathInfo& RegisterPathInfo(const ui64 pathId) {
+        return Summary.RegisterPathInfo(pathId);
+    }
+
     void ErasePath(const ui64 pathId) {
         Summary.ErasePath(pathId);
     }

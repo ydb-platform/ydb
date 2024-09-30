@@ -98,11 +98,11 @@ class YdbCliHelper:
                     result.svg = f.read()
             return result
 
-        def _get_nodes_info() -> dict[str:dict[str:int]]:
+        def _get_nodes_info() -> dict[str, dict[str, int]]:
             nodes, _ = YdbCluster.get_cluster_nodes()
             return {
-                n.get('SystemState', {}).get('Host', ''): {
-                    'start_time': int(n.get('SystemState', {}).get('StartTime', int(time()) * 1000)) / 1000
+                n['SystemState']['Host']: {
+                    'start_time': int(n['SystemState'].get('StartTime', int(time()) * 1000)) / 1000
                 }
                 for n in nodes
             }

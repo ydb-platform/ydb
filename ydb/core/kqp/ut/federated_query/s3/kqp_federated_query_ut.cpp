@@ -1894,7 +1894,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableExternalSourceSchemaInference(true);
-        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

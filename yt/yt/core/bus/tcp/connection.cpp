@@ -621,18 +621,18 @@ void TTcpConnection::ConnectSocket(const TNetworkAddress& address)
     DialerSession_->Dial();
 }
 
-void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
+void TTcpConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
 {
     YT_LOG_DEBUG("Dialer finished");
 
     DialerSession_.Reset();
 
-    if (!socketOrError.IsOK()) {
+    if (!fdOrError.IsOK()) {
         Abort(TError(
             NBus::EErrorCode::TransportError,
             "Error connecting to %v",
             EndpointDescription_)
-            << socketOrError);
+            << fdOrError);
         return;
     }
 
@@ -643,7 +643,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
             return;
         }
 
-        Socket_ = socketOrError.Value();
+        Socket_ = fdOrError.Value();
 
         auto tosLevel = TosLevel_.load();
         if (tosLevel != DefaultTosLevel) {

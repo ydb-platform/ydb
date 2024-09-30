@@ -25,6 +25,8 @@ namespace NKikimr {
         TDuration RequestBlobsOnMainTimeout;
         TDuration DeleteBatchTimeout;
         TDuration EpochTimeout;
+
+        TDuration TimeToSleepIfNothingToDo;
     };
 
     struct TBalancingCtx {

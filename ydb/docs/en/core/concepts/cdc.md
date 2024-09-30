@@ -56,6 +56,12 @@ The record with the source row value is labeled as an [update](#restrictions) re
 
 During the scanning process, depending on the table update frequency, you might see too many `OVERLOADED` errors. This is because, besides the update records, you also need to deliver records with the source row values. When the scan is complete, the changefeed switches to normal operation.
 
+{% note warning %}
+
+[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table during the initial scan.
+
+{% endnote %}
+
 ## Record structure {#record-structure}
 
 Depending on the [changefeed parameters](../yql/reference/syntax/alter_table/changefeed.md), the structure of a record may differ.

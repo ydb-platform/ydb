@@ -6,6 +6,7 @@ TEST_SRCS(
     test_ydb_scripting.py
     test_ydb_impex.py
     test_ydb_flame_graph.py
+    test_ydb_sql.py
 )
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")

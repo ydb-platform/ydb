@@ -33,7 +33,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
         Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK,
-            VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()), true, true, 1));
+            VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()), true, true, false, 1));
     }
 
     STRICT_STFUNC(StateFunc,

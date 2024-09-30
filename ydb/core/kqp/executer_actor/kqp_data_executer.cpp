@@ -139,7 +139,6 @@ public:
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
@@ -147,7 +146,7 @@ public:
     {
         Target = creator;
 
-        YQL_ENSURE(UseEvWriteForOltp || !TxManager);
+        YQL_ENSURE(!TxManager || tableServiceConfig.GetEnableOltpSink());
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
@@ -160,6 +159,7 @@ public:
     bool CheckExecutionComplete() {
         ui32 notFinished = 0;
         for (const auto& x : ShardStates) {
+            YQL_ENSURE(!TxManager);
             if (x.second.State != TShardState::EState::Finished) {
                 notFinished++;
                 LOG_D("ActorState: " << CurrentStateFuncName()
@@ -256,7 +256,9 @@ public:
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                     if (TxManager) {
                         YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-                        // TODO:
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                        TxManager->AddLock(lock.GetDataShard(), lock);
                     }
                 }
             }
@@ -277,16 +279,8 @@ public:
             }
         }
 
-        ResponseEv->Snapshot = GetSnapshot();
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
-        }
-
-        if (!Locks.empty() || (TxManager && !TxManager->IsEmpty())) {
-            if (LockHandle) {
-                ResponseEv->LockHandle = std::move(LockHandle);
-            }
-            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
@@ -334,6 +328,15 @@ public:
     }
 
     void MakeResponseAndPassAway() {
+        ResponseEv->Snapshot = GetSnapshot();
+
+        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
+            if (LockHandle) {
+                ResponseEv->LockHandle = std::move(LockHandle);
+            }
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+        }
+
         auto resultSize = ResponseEv->GetByteSize();
         if (resultSize > (int)ReplySizeLimit) {
             TString message;
@@ -985,6 +988,7 @@ private:
     }
 
     void CheckPrepareCompleted() {
+        YQL_ENSURE(!TxManager);
         for (const auto& [_, state] : ShardStates) {
             if (state.State != TShardState::EState::Prepared) {
                 LOG_D("Not all shards are prepared, waiting...");
@@ -1000,6 +1004,7 @@ private:
     }
 
     void ExecutePlanned() {
+        YQL_ENSURE(!TxManager);
         YQL_ENSURE(!LocksBroken);
         YQL_ENSURE(TxCoordinator);
         auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
@@ -1538,7 +1543,7 @@ private:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
-            YQL_ENSURE(!UseEvWriteForOltp);
+            YQL_ENSURE(!TxManager);
             auto it  = shardTasks.find(shardId);
             if (it != shardTasks.end()) {
                 return TasksGraph.GetTask(it->second);
@@ -1678,7 +1683,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
-        YQL_ENSURE(!UseEvWriteForOltp);
+        YQL_ENSURE(!TxManager);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -1773,6 +1778,7 @@ private:
     }
 
     void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
+        YQL_ENSURE(!TxManager);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -2083,7 +2089,7 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
-        if (!UseEvWriteForOltp) {
+        if (!TxManager) {
             BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         }
 
@@ -2322,7 +2328,7 @@ private:
             YQL_ENSURE(!locksList.empty(), "unexpected empty locks list in DataShardLocks");
             NKikimrDataEvents::TKqpLocks* locks = nullptr;
 
-            if (UseEvWriteForOltp || ShardIdToTableInfo->Get(shardId).IsOlap) {
+            if (TxManager || ShardIdToTableInfo->Get(shardId).IsOlap) {
                 if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
                     locks = it->second->MutableLocks();
                 } else {
@@ -2725,7 +2731,9 @@ private:
             ExecuteEvWriteTransaction(shardId, *shardTx);
         }
 
-        ExecuteTopicTabletTransactions(TopicTxs);
+        if (!TopicTxs.empty()) {
+            ExecuteTopicTabletTransactions(TopicTxs);
+        }
 
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx
@@ -2746,11 +2754,10 @@ private:
                 CollectTaskChannelsUpdates(task, updates);
         }
         PropagateChannelsUpdates(updates);
-
-        //CheckExecutionComplete();
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {
+        YQL_ENSURE(!TxManager);
         TMaybe<ui64> writeId;
         if (Request.TopicOperations.HasWriteId()) {
             writeId = Request.TopicOperations.GetWriteId();
@@ -2927,7 +2934,6 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const bool UseEvWriteForOltp = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;

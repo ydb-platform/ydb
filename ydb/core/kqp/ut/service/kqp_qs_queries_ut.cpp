@@ -3623,7 +3623,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TableSink_ReplaceColumnShard) {
+    Y_UNIT_TEST(TableSink_Olap_Replace) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
@@ -4152,7 +4152,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShard, UseSink) {
+    Y_UNIT_TEST_TWIN(TableSink_Oltp_Replace, UseSink) {
+        //UseSink = true;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -4252,7 +4253,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-     Y_UNIT_TEST(TableSink_ReplaceDataShard_INTERACTIVE) {
+     Y_UNIT_TEST(TableSink_OltpInteractive) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
@@ -4340,13 +4341,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
         }
 
-        //{
-        //    auto prepareResult = client.ExecuteQuery(R"(
-        //        REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
-        //    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
-        //    UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        //}
-
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(ReadDatashardAndColumnshard) {

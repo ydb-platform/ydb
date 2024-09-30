@@ -347,10 +347,10 @@ public:
             return true;
         }
 
-        /*if (HasTxSinkInTx(tx)) {
-            // Sink results can't be committed with changes
+        if (TxCtx->HasOlapTable) {
+            // Olap sink results can't be committed with changes
             return false;
-        }*/
+        }
 
         if (TxCtx->HasOlapTable) {
             // HTAP/OLAP transactions always use separate commit.
@@ -372,12 +372,13 @@ public:
     }
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
+        Y_UNUSED(tx);
         if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
             return false;
         }
 
         // Inconsistent writes (CTAS) don't require locks.
-        if (IsSplitted() && !HasTxSinkInTx(tx)) {
+        if (IsSplitted()) {
             return false;
         }
 
@@ -418,7 +419,7 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // At current time sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() /*&& !HasTxSinkInTx(tx)*/) {
+            while (tx && tx->GetHasEffects() && TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
@@ -435,7 +436,7 @@ public:
         return tx;
     }
 
-    bool HasTxSinkInStage(const ::NKqpProto::TKqpPhyStage& stage) const {
+    /*bool HasOnlyInonsistentSinkInStage(const ::NKqpProto::TKqpPhyStage& stage) const {
         for (const auto& sink : stage.GetSinks()) {
             if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                 NKikimrKqp::TKqpTableSinkSettings settings;
@@ -467,7 +468,7 @@ public:
             }
         }
         return false;
-    }
+    }*/
 
     bool HasTxControl() const {
         return RequestEv->HasTxControl();

@@ -12,7 +12,7 @@ struct TKqpLock {
     TKey GetKey() const { return std::make_tuple(Proto.GetLockId(), Proto.GetDataShard(), Proto.GetSchemeShard(), Proto.GetPathId()); }
 
     bool Invalidated(const TKqpLock& newLock) const {
-        YQL_ENSURE(GetKey() == newLock.GetKey());
+        AFL_ENSURE(GetKey() == newLock.GetKey());
         return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
     }
 
@@ -91,7 +91,7 @@ public:
                 TStringBuilder message;
                 message << "Transaction locks invalidated. Tables: ";
                 bool first = true;
-                // TODO: add error by lock key (pathid)
+                // TODO: add error by pathid
                 for (const auto& path : shardInfo.Pathes) {
                     if (!first) {
                         message << ", ";
@@ -102,7 +102,7 @@ public:
                 LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
                 return false;
             }
-            YQL_ENSURE(false);
+            AFL_ENSURE(false);
         }
 
         return true;
@@ -173,6 +173,15 @@ public:
         return GetShardsCount() == 0;
     }
 
+    bool HasLocks() const override { 
+        for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (!shardInfo.Locks.empty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool IsVolatile() const override {
         return true;
     }
@@ -202,7 +211,7 @@ public:
     }
 
     void StartPrepare() override {
-        YQL_ENSURE(!CollectOnly);
+        AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(!IsReadOnly());
 
@@ -223,8 +232,7 @@ public:
 
         Y_ABORT_UNLESS(!ReceivingShards.empty());
 
-        //ui64 arbiter = 0;
-        const size_t minArbiterMeshSize = 5; // TODO: make configurable?
+        constexpr size_t minArbiterMeshSize = 5;
         if ((IsVolatile() &&
             ReceivingShards.size() >= minArbiterMeshSize))
         {
@@ -243,7 +251,7 @@ public:
             }
         }
 
-        ShardsToWait = ShardsIds;
+        ShardsToWaitPrepare = ShardsIds;
 
         MinStep = std::numeric_limits<ui64>::min();
         MaxStep = std::numeric_limits<ui64>::max();
@@ -270,7 +278,7 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::PREPARING);
         shardInfo.State = EShardState::PREPARED;
 
-        ShardsToWait.erase(result.ShardId);
+        ShardsToWaitPrepare.erase(result.ShardId);
 
         MinStep = std::max(MinStep, result.MinStep);
         MaxStep = std::min(MaxStep, result.MaxStep);
@@ -281,11 +289,11 @@ public:
 
         AFL_ENSURE(Coordinator && Coordinator == result.Coordinator)("prev_coordinator", Coordinator)("new_coordinator", result.Coordinator);
 
-        return ShardsToWait.empty();
+        return ShardsToWaitPrepare.empty();
     }
 
     void StartExecute() override {
-        YQL_ENSURE(!CollectOnly);
+        AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::PREPARING
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
@@ -299,7 +307,7 @@ public:
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        ShardsToWait = ReceivingShards;
+        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -326,11 +334,9 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
         shardInfo.State = EShardState::FINISHED;
 
-        Y_ABORT_UNLESS(ShardsToWait.empty() || !IsSingleShard());
-
         // Either all shards committed or all shards failed,
-        // so we need to wait only for one answer.
-        return ShardsToWait.contains(shardId) || ShardsToWait.empty();
+        // so we need to wait only for one answer from ReceivingShards.
+        return ReceivingShards.contains(shardId) || IsSingleShard();
     }
 
 private:
@@ -365,7 +371,7 @@ private:
     THashSet<ui64> ReceivingShards;
     std::optional<ui64> Arbiter;
 
-    THashSet<ui64> ShardsToWait;
+    THashSet<ui64> ShardsToWaitPrepare;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

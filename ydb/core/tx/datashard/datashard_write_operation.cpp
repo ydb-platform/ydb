@@ -382,13 +382,6 @@ TString TWriteOperation::GetTxBody() const {
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
-    if (WriteRequest) {
-        LOG_E("TWriteOperation ERROR:: " << NKikimrDataEvents::TEvWrite_ETxMode_Name(WriteRequest->Record.GetTxMode()) << " "
-            << NKikimrDataEvents::TKqpLocks_ELocksOp_Name(WriteRequest->Record.GetLocks().GetOp()) << " " << WriteRequest->Record.GetLocks().LocksSize() << " " << WriteRequest->Record.GetOperations().size()
-            << " ");
-    }
-    Y_ABORT_UNLESS(!WriteRequest);
-
     NKikimrTxDataShard::TSerializedEvent proto;
     const bool success = proto.ParseFromString(txBody);
     Y_ABORT_UNLESS(success);

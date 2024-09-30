@@ -960,7 +960,6 @@ public:
     }
 
     void Bootstrap() {
-        Y_ABORT_UNLESS(false);
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
 
         WriteTableActor = new TKqpTableWriteActor(

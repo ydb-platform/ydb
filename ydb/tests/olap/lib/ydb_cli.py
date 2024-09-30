@@ -102,7 +102,7 @@ class YdbCliHelper:
             nodes, _ = YdbCluster.get_cluster_nodes()
             return {
                 n['SystemState']['Host']: {
-                    'start_time': int(n['SystemState'].get('StartTime', int(time()) * 1000)) / 1000
+                    'start_time': int(n['SystemState'].get('StartTime', int(time()) * 1000) / 1000)
                 }
                 for n in nodes
             }

@@ -176,7 +176,7 @@ private:
         const TTxControl& txControl, TParamsType params,
         const TExecDataQuerySettings& settings, bool fromCache
     ) {
-        if (!txControl.Tx_.Defined()) {
+        if (!txControl.Tx_.Defined() || !txControl.CommitTx_) {
             return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
         }
 

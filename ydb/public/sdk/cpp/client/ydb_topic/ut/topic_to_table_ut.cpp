@@ -2189,6 +2189,29 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx));
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+
+    ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx).CommitTx(true));
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+}
+
 }
 
 }

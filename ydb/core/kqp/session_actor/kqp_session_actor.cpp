@@ -1223,9 +1223,9 @@ public:
             }
 
             if (Settings.TableService.GetEnableOltpSink()) {
-                //if (txCtx.TxHasEffects()) {
+                if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
                     request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
-                //}
+                }
 
                 if (hasLocks) {
                     if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {

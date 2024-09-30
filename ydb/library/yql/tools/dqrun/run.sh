@@ -22,6 +22,7 @@ printf "python pid = %d\n" $PYTHON_PID
 
 > log.txt
 ./dqrun \
+    --verbosity=8 \
     --sql \
     --program=data/query/ \
     --gateways-cfg=examples/gateways.conf \

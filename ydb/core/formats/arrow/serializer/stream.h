@@ -9,6 +9,23 @@
 
 namespace NKikimr::NArrow::NSerialization {
 
+class TStringInputStream final : public arrow::io::InputStream {
+public:
+    explicit TStringInputStream(const TString& str);
+
+    arrow::Result<int64_t> Read(int64_t nbytes, void* out) override;
+    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
+
+    arrow::Status Close() override;
+    arrow::Result<int64_t> Tell() const override;
+    bool closed() const override;
+
+private:
+    const TString& Str_;
+    size_t Pos_ = 0;
+    bool Closed_ = false;
+};
+
 // Arrow internally keeps references to Buffer objects with the data
 // This helper class implements arrow::Buffer over TString that owns
 // the actual memory

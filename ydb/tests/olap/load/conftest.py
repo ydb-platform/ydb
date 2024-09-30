@@ -40,16 +40,16 @@ class LoadSuiteBase:
                 allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
 
         test = f'Query{query_num:02d}'
-        allure_test_description(self.suite, test, refference_set=self.refference)
         allure_listener = next(filter(lambda x: isinstance(x, AllureListener), plugin_manager.get_plugin_manager().get_plugins()))
         allure_test_result = allure_listener.allure_logger.get_test(None)
         query_num_param = next(filter(lambda x: x.name == 'query_num', allure_test_result.parameters), None)
         if query_num_param:
             query_num_param.mode = allure.parameter_mode.HIDDEN.value
-
+        start_time = time()
         result = YdbCliHelper.workload_run(
             path=path, query_num=query_num, iterations=self.iterations, type=self.workload_type, timeout=self.timeout
         )
+        allure_test_description(self.suite, test, refference_set=self.refference, start_time=start_time, end_time=time())
         stats = result.stats.get(test)
         if stats is not None:
             allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
@@ -103,7 +103,7 @@ class LoadSuiteBase:
             kind='Load',
             suite=self.suite,
             test=test,
-            timestamp=time(),
+            timestamp=start_time,
             is_successful=success,
             min_duration=_get_duraton(stats, 'Min'),
             max_duration=_get_duraton(stats, 'Max'),
@@ -112,4 +112,7 @@ class LoadSuiteBase:
             statistics=stats,
         )
         if not success:
-            pytest.fail(error_message)
+            exc = pytest.fail.Exception(error_message)
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc

@@ -399,6 +399,9 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.table_profiles_config is not None:
             normalized_config["table_profiles_config"] = self.__cluster_details.table_profiles_config
 
+        if self.__cluster_details.http_proxy_config is not None:
+            normalized_config["http_proxy_config"] = self.__cluster_details.http_proxy_config
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:

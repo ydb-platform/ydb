@@ -70,13 +70,15 @@ private:
             UdfTerminate((TStringBuilder() << Ctx->Pos << "Entry point is not a callable").data());
         }
 
+        TPyObjectPtr callable(MakePyCallable(function.Release()));
+
         try {
-            SetupCallableSettings(castCtx, function.Get());
+            SetupCallableSettings(castCtx, callable.Get());
         } catch (const yexception& e) {
             UdfTerminate((TStringBuilder() << Ctx->Pos << "Failed to setup callable settings: "
                                            << e.what()).data());
         }
-        return FromPyCallable(castCtx, FunctionType_, function.Release());
+        return FromPyCallable(castCtx, FunctionType_, callable.Release());
     }
 
     static TPyObjectPtr CompileModule(const TString& name, const TString& source) {

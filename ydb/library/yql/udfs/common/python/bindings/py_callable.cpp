@@ -420,4 +420,8 @@ void SetupCallableSettings(const TPyCastContext::TPtr& castCtx, PyObject* value)
     }
 }
 
+PyObject* MakePyCallable(PyObject* value) {
+    return value;
+}
+
 } // namespace NPython

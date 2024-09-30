@@ -208,6 +208,10 @@ public:
         }
     }
 
+    bool HasReadLocks(const ui64 pathId) const {
+        return InteractionsContext.HasReadIntervals(pathId);
+    }
+
     TOperationsManager();
 
 private:

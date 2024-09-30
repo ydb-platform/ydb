@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 Callable(Type<Callable<(...)->T>>, lambda)->Callable<(...)->T>
 ```
 
@@ -15,7 +15,7 @@ Callable(Type<Callable<(...)->T>>, lambda)->Callable<(...)->T>
 
 ### Примеры
 
-``` yql
+```yql
 $lambda = ($x) -> {
     RETURN CAST($x as String)
 };

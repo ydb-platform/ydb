@@ -10,9 +10,13 @@ If a query contains both aggregate and window functions, grouping is performed a
 
 General syntax for calling a window function is as follows
 
-```
+```yql
 function_name([expression [, expression ...]]) OVER (window_definition)
+```
+
 or
+
+```yql
 function_name([expression [, expression ...]]) OVER window_name
 ```
 
@@ -20,7 +24,7 @@ Here, window name (`window_name`) is an arbitrary ID that is unique within the q
 
 In the query, each window name must be mapped to the window definition (`window_definition`):
 
-```
+```yql
 SELECT
     F0(...) OVER (window_definition_0),
     F1(...) OVER w1,
@@ -36,7 +40,7 @@ WINDOW
 
 Here, the `window_definition` is written as
 
-```
+```yql
 [ PARTITION BY (expression AS column_identifier | column_identifier) [, ...] ]
 [ ORDER BY expression [ASC | DESC] ]
 [ frame_definition ]
@@ -44,16 +48,16 @@ Here, the `window_definition` is written as
 
 You can set an optional *frame definition* (`frame_definition`) one of two ways:
 
-* ```ROWS frame_begin```
-* ```ROWS BETWEEN frame_begin AND frame_end```
+* `ROWS frame_begin`
+* `ROWS BETWEEN frame_begin AND frame_end`
 
 *The frame start* (`frame_begin`) and *frame end* (`frame_end`) are set one of the following ways:
 
-* ```UNBOUNDED PRECEDING```
-* ```offset PRECEDING```
-* ```CURRENT ROW```
-* ```offset FOLLOWING```
-* ```UNBOUNDED FOLLOWING```
+* `UNBOUNDED PRECEDING`
+* `offset PRECEDING`
+* `CURRENT ROW`
+* `offset FOLLOWING`
+* `UNBOUNDED FOLLOWING`
 
 Here, the *frame* `offset` is a non-negative numeric literal. If the frame end isn't set, the `CURRENT ROW` is assumed.
 
@@ -147,4 +151,3 @@ WINDOW w AS (
 * The `LEAD(expr, N)` and `LAG(expr, N)` functions always require O(N) of RAM.
 
 Given the above, a query with `ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING` should, if possible, be changed to `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` by reversing the `ORDER BY` sorting order.
-

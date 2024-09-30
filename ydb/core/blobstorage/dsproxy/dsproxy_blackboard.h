@@ -99,10 +99,9 @@ struct TBlobState {
             ui32 diskIdxInSubring, NKikimrBlobStorage::EVDiskQueueId queueId) const;
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
-            double multipler = 1) const;
+            const TAccelerationParams& accelerationParams) const;
     TString ToString() const;
     bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
-            
     static TString SituationToString(ESituation situation);
 };
 
@@ -166,7 +165,7 @@ public:
 
 struct TBlackboard {
     enum EAccelerationMode {
-        AccelerationModeSkipOneSlowest,
+        AccelerationModeSkipNSlowest,
         AccelerationModeSkipMarked
     };
 
@@ -190,7 +189,7 @@ struct TBlackboard {
             NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass)
         : Info(info)
         , GroupQueues(groupQueues)
-        , AccelerationMode(AccelerationModeSkipOneSlowest)
+        , AccelerationMode(AccelerationModeSkipNSlowest)
         , PutHandleClass(putHandleClass)
         , GetHandleClass(getHandleClass)
     {}
@@ -213,7 +212,7 @@ struct TBlackboard {
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
-            double multiplier = 1) const;
+            const TAccelerationParams& accelerationParams) const;
     TString ToString() const;
 
     void ChangeAll() {
@@ -225,6 +224,8 @@ struct TBlackboard {
     void InvalidatePartStates(ui32 orderNumber);
 
     void RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx);
+
+    void MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerationParams& accelerationParams);
 
     TBlobState& operator [](const TLogoBlobID& id);
 };

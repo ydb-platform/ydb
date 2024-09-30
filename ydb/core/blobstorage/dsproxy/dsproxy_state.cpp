@@ -327,6 +327,7 @@ namespace NKikimr {
         return TAccelerationParams{
             .SlowDiskThreshold = .001f * SlowDiskThreshold.Update(TActivationContext::Now()),
             .PredictedDelayMultiplier = .001f * PredictedDelayMultiplier.Update(TActivationContext::Now()),
+            .MaxNumOfSlowDisks = (ui32)MaxNumOfSlowDisks.Update(TActivationContext::Now()),
         };
     }
 

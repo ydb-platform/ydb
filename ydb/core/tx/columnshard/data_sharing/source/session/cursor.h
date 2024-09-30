@@ -8,6 +8,10 @@ class TColumnEngineForLogs;
 class TVersionedIndex;
 }
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TSharedBlobsManager;
@@ -30,8 +34,11 @@ private:
     std::set<ui64> PathIds;
     THashMap<ui64, TString> PathPortionHashes;
     bool IsStartedFlag = false;
-    YDB_ACCESSOR(bool, StaticSaved, false);
+    bool IsStaticSaved = false;
     void BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
+    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic SerializeDynamicToProto() const;
+    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic SerializeStaticToProto() const;
+
 public:
     bool IsAckDataReceived() const {
         return AckReceivedForPackIdx == PackIdx;
@@ -96,11 +103,10 @@ public:
 
     TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index);
+    void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic SerializeDynamicToProto() const;
-    NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic SerializeStaticToProto() const;
-
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager,
+        const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };

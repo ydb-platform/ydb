@@ -4,12 +4,12 @@
 
 ### Сигнатура
 
-```
+```yql
 TableRow()->Struct
 ```
 
 ### Пример
 
-``` yql
+```yql
 SELECT TableRow() FROM my_table;
 ```

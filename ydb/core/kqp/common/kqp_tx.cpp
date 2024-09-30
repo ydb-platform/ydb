@@ -40,10 +40,10 @@ NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableI
     TStringBuilder message;
     message << "Transaction locks invalidated.";
 
-    if (auto it = shardIdToTableInfo.find(shardId); it != std::end(shardIdToTableInfo)) {
+    if (auto tableInfoPtr = shardIdToTableInfo.GetPtr(shardId); tableInfoPtr) {
         message << " Tables: ";
         bool first = true;
-        for (const auto& path : it->second.Pathes) {
+        for (const auto& path : tableInfoPtr->Pathes) {
             if (!first) {
                 message << ", ";
                 first = false;

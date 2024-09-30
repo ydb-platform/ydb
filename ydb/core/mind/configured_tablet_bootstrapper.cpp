@@ -82,16 +82,13 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             TIntrusivePtr<TTabletSetupInfo> tabletSetupInfo = MakeTabletSetupInfo(tabletType, appData->UserPoolId, appData->SystemPoolId);
 
             TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
-            if (config.NodeSize() != 1) {
-                for (ui32 node : config.GetNode()) {
-                    if (node != selfNode)
-                        bi->OtherNodes.emplace_back(node);
-                }
-                if (config.HasWatchThreshold())
-                    bi->WatchThreshold = TDuration::MilliSeconds(config.GetWatchThreshold());
-                if (config.HasStartFollowers())
-                    bi->StartFollowers = config.GetStartFollowers();
+            for (ui32 node : config.GetNode()) {
+                bi->Nodes.emplace_back(node);
             }
+            if (config.HasWatchThreshold())
+                bi->WatchThreshold = TDuration::MilliSeconds(config.GetWatchThreshold());
+            if (config.HasStartFollowers())
+                bi->StartFollowers = config.GetStartFollowers();
 
             BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), false), TMailboxType::HTSwap, appData->SystemPoolId);
 

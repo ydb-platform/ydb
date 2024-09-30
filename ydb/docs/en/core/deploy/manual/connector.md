@@ -102,6 +102,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         ```bash
         sudo journalctl -u fq-connector-go.service
         ```
+
     {% endlist %}
 
 ### Running in Docker {#fq-connector-go-docker}

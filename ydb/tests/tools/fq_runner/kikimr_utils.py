@@ -50,6 +50,18 @@ class AddInflightExtension(ExtensionPoint):
         del request.param["inflight"]
 
 
+class AddAllowConcurrentListingsExtension(ExtensionPoint):
+    def is_applicable(self, request):
+        return (hasattr(request, 'param')
+                and isinstance(request.param, dict)
+                and "allow_concurrent_listings" in request.param)
+
+    def apply_to_kikimr(self, request, kikimr):
+        kikimr.allow_concurrent_listings = request.param["allow_concurrent_listings"]
+        kikimr.compute_plane.fq_config['gateways']['s3']['allow_concurrent_listings'] = kikimr.allow_concurrent_listings
+        del request.param["allow_concurrent_listings"]
+
+
 class AddDataInflightExtension(ExtensionPoint):
     def is_applicable(self, request):
         return (hasattr(request, 'param')
@@ -112,6 +124,7 @@ class DefaultConfigExtension(ExtensionPoint):
         solomon_endpoint = os.environ.get('SOLOMON_URL')
         if solomon_endpoint is not None:
             kikimr.compute_plane.fq_config['common']['monitoring_endpoint'] = solomon_endpoint
+        kikimr.control_plane.fq_config['common']['show_query_timeline'] = True
 
 
 class YQv2Extension(ExtensionPoint):

@@ -26,7 +26,7 @@
 
 Например, в рассматриваемую таблицу со схемой ```( timestamp, userid, userevent, PRIMARY KEY (userid, timestamp) )``` можно включить дополнительное поле, рассчитываемое как хеш-код: ```userhash = HASH(userid)```. В результате схема таблицы преобразуется к следующему виду:
 
-```
+```yql
 ( userhash, userid, timestamp, userevent, PRIMARY KEY (userhash, userid, timestamp) )
 ```
 

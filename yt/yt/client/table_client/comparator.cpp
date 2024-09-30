@@ -1,6 +1,7 @@
 #include "comparator.h"
 
 #include "key_bound.h"
+#include "private.h"
 #include "serialize.h"
 
 #include <yt/yt/core/logging/log.h>
@@ -15,7 +16,7 @@ using namespace NYson;
 using namespace NYTree;
 
 //! Used only for YT_LOG_FATAL below.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientComparator");
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

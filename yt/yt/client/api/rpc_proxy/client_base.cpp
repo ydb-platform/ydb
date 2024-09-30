@@ -1068,6 +1068,9 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
+    if (options.UseLookupCache) {
+        req->set_use_lookup_cache(*options.UseLookupCache);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

@@ -686,6 +686,11 @@ TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
     return GetAttribute(*this, "versioned_read_options", TVersionedReadOptions());
 }
 
+TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
+{
+    return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
@@ -787,6 +792,7 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "create",
         "read_via_exec_node",
         "versioned_read_options",
+        "versioned_write_options",
     };
     return WellKnownAttributes;
 }

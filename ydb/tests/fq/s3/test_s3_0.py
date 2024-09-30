@@ -574,6 +574,100 @@ Pear,15,33'''
         assert result_set.rows[2].items[3].uint32_value == 19663
         assert sum(kikimr.control_plane.get_metering(1)) == 10
 
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_inference_null_column_name(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = ''',Fruit,Price
+1,Banana,3
+2,Apple,2
+3,Pear,15'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits.csv`
+            WITH (format=csv_with_names, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 2
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+        assert result_set.columns[1].name == "Price"
+        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].text_value == "Banana"
+        assert result_set.rows[0].items[1].int64_value == 3
+        assert result_set.rows[1].items[0].text_value == "Apple"
+        assert result_set.rows[1].items[1].int64_value == 2
+        assert result_set.rows[2].items[0].text_value == "Pear"
+        assert result_set.rows[2].items[1].int64_value == 15
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_inference_unsupported_types(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''{ "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 10 }
+{ "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 20 }
+{ "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 30 }'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.json', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits.json`
+            WITH (format=json_each_row, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "c"
+        assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.INT64
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].int64_value == 10
+        assert result_set.rows[1].items[0].int64_value == 20
+        assert result_set.rows[2].items[0].int64_value == 30
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_hopping(self, kikimr, s3, client, unique_prefix):
@@ -761,6 +855,72 @@ Pear,15,33'''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_bad_request_on_invalid_parquet(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("bbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        s3_client.put_object(Body='not a parquet file', Bucket='bbucket', Key='file.txt', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "badbucket"
+        client.create_storage_connection(storage_connection_name, "bbucket")
+
+        sql = f'''
+            select * from `{storage_connection_name}`.`file.txt` with (format=parquet, schema (data string));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+
+        error_message = str(client.describe_query(query_id).result)
+        assert ("Query failed with code BAD_REQUEST" in error_message) and ("Parquet magic bytes not found in footer." in error_message)
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_bad_request_on_compression(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("bbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        s3_client.put_object(Body="invalid uncompressed json file", Bucket='bbucket', Key='file.json', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "badbucket"
+        client.create_storage_connection(storage_connection_name, "bbucket")
+
+        sql = f'''
+            select * from `{storage_connection_name}`.`file.json` with (
+                format=csv_with_names,
+                compression='gzip',
+                schema (data timestamp)
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        assert "Query failed with code BAD_REQUEST" in str(
+            client.describe_query(query_id).result
+        )
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

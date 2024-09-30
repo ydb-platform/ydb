@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -124,7 +125,6 @@ public:
     ui32 IndentY = 0;
     ui32 OffsetY = 0;
     ui32 Height = 0;
-    ui32 CteHeight = 0;
     std::shared_ptr<TSingleMetric> CpuTime;
     std::shared_ptr<TSingleMetric> MaxMemoryUsage;
     std::shared_ptr<TSingleMetric> OutputBytes;
@@ -143,8 +143,8 @@ public:
 
 struct TColorPalette {
     TColorPalette();
-    TString StageDark;
-    TString StageLight;
+    TString StageMain;
+    TString StageClone;
     TString StageText;
     TString StageTextHighlight;
     TString StageGrid;
@@ -166,6 +166,7 @@ struct TColorPalette {
     TString ConnectionText;
     TString MinMaxLine;
     TString TextLight;
+    TString TextInverted;
     TString TextSummary;
     TString SpillingBytesDark;
     TString SpillingBytesMedium;
@@ -186,8 +187,9 @@ struct TPlanViewConfig {
 class TPlan {
 
 public:
-    TPlan(const TString& nodeType, TPlanViewConfig& config, std::map<std::string, std::shared_ptr<TStage>>& cteStages)
-        : NodeType(nodeType), Config(config), CteStages(cteStages) {
+    TPlan(const TString& nodeType, TPlanViewConfig& config, std::map<std::string, std::shared_ptr<TStage>>& cteStages,
+        std::map<std::string, std::string>& cteSubPlans)
+        : NodeType(nodeType), Config(config), CteStages(cteStages), CteSubPlans(cteSubPlans) {
         CpuTime = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
         OutputBytes = std::make_shared<TSummaryMetric>();
@@ -237,8 +239,10 @@ public:
     ui32 OffsetY = 0;
     ui32 Tasks = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
+    std::vector<std::pair<std::string, std::pair<std::shared_ptr<TStage>, ui32>>> MemberRefs;
     TPlanViewConfig& Config;
     std::map<std::string, std::shared_ptr<TStage>>& CteStages;
+    std::map<std::string, std::string>& CteSubPlans;
 };
 
 class TPlanVisualizer {
@@ -256,4 +260,5 @@ public:
     ui64 BaseTime = 0;
     TPlanViewConfig Config;
     std::map<std::string, std::shared_ptr<TStage>> CteStages;
+    std::map<std::string, std::string> CteSubPlans;
 };

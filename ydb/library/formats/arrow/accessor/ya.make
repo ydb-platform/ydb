@@ -1,4 +1,4 @@
-LIBRARY()
+LIBRARY(library-formats-arrow-accessor)
 
 PEERDIR(
     ydb/library/formats/arrow/accessor/abstract

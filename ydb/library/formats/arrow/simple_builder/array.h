@@ -134,4 +134,23 @@ public:
 
     }
 };
+
+class TStaticArrayConstructor: public IArrayBuilder {
+private:
+    using TBase = IArrayBuilder;
+
+    const std::shared_ptr<arrow::Array> Array;
+
+protected:
+    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 /*recordsCount*/) const override {
+        return Array;
+    }
+
+public:
+    TStaticArrayConstructor(const TString& fieldName, std::shared_ptr<arrow::Array> array)
+        : TBase(fieldName)
+        , Array(array)
+    {}
+};
+
 }

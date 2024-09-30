@@ -1,4 +1,4 @@
-PROTO_LIBRARY()
+PROTO_LIBRARY(library-formats-arrow-protos)
 
 SRCS(
     ssa.proto

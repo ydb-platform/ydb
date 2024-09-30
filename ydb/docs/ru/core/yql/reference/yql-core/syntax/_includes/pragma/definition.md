@@ -15,15 +15,15 @@
 
 ### Примеры
 
-``` yql
+```yql
 PRAGMA AutoCommit;
 ```
 
-``` yql
+```yql
 PRAGMA TablePathPrefix = "home/yql";
 ```
 
-``` yql
+```yql
 PRAGMA Warning("disable", "1101");
 ```
 

@@ -29,6 +29,7 @@ namespace NYdb {
                 } identifier;
                 Color string;
                 Color number;
+                Color comment;
                 Color unknown;
 
                 static ColorSchema Monaco();
@@ -53,6 +54,7 @@ namespace NYdb {
             bool IsQuotedIdentifier(const antlr4::Token* token) const;
             bool IsString(const antlr4::Token* token) const;
             bool IsNumber(const antlr4::Token* token) const;
+            bool IsComment(const antlr4::Token* token) const;
 
         private:
             ColorSchema Coloring;

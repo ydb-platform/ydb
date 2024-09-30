@@ -439,7 +439,6 @@ class IRequestCtx
     friend class TProtoResponseHelper;
 public:
     using EStreamCtrl = NYdbGrpc::IRequestContextBase::EStreamCtrl;
-    virtual google::protobuf::Message* GetRequestMut() = 0;
 
     virtual void SetRuHeader(ui64 ru) = 0;
     virtual void AddServerHint(const TString& hint) = 0;
@@ -1166,13 +1165,6 @@ public:
         return request;
     }
 
-    template <typename T>
-    static TRequest* GetProtoRequestMut(const T& req) {
-        auto request = dynamic_cast<TRequest*>(req->GetRequestMut());
-        Y_ABORT_UNLESS(request != nullptr, "Wrong using of TGRpcRequestWrapper");
-        return request;
-    }
-
     const TRequest* GetProtoRequest() const {
         return GetProtoRequest(this);
     }
@@ -1270,10 +1262,6 @@ public:
 
     const google::protobuf::Message* GetRequest() const override {
         return Ctx_->GetRequest();
-    }
-
-    google::protobuf::Message* GetRequestMut() override {
-        return Ctx_->GetRequestMut();
     }
 
     void SetRespHook(TRespHook&& hook) override {

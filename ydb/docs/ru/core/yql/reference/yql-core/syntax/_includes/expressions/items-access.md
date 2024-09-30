@@ -11,7 +11,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   t.struct.member,
   t.tuple.7,
@@ -20,7 +20,7 @@ SELECT
 FROM my_table AS t;
 ```
 
-``` yql
+```yql
 SELECT
   Sample::ReturnsStruct().member;
 ```

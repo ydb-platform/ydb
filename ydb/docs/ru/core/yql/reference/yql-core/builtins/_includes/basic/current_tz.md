@@ -4,7 +4,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 CurrentTzDate(String, ...)->TzDate
 CurrentTzDatetime(String, ...)->TzDatetime
 CurrentTzTimestamp(String, ...)->TzTimestamp
@@ -14,10 +14,11 @@ CurrentTzTimestamp(String, ...)->TzTimestamp
 
 ### Примеры
 
-``` yql
+```yql
 SELECT CurrentTzDate("Europe/Moscow");
 ```
-``` yql
+
+```yql
 SELECT CurrentTzTimestamp("Europe/Moscow", TableRow()) FROM my_table;
 ```
 
@@ -27,7 +28,7 @@ SELECT CurrentTzTimestamp("Europe/Moscow", TableRow()) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 AddTimezone(Date, String)->TzDate
 AddTimezone(Date?, String)->TzDate?
 AddTimezone(Datetime, String)->TzDatetime
@@ -45,7 +46,7 @@ AddTimezone(Timestamp?, String)->TzTimestamp?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
 ```
 
@@ -55,7 +56,7 @@ SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
 
 ### Сигнатура
 
-```
+```yql
 RemoveTimezone(TzDate)->Date
 RemoveTimezone(TzDate?)->Date?
 RemoveTimezone(TzDatetime)->Datetime
@@ -72,6 +73,6 @@ RemoveTimezone(TzTimestamp?)->Timestamp?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```

@@ -20,7 +20,7 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
     case NKikimrMiniKQL::Data:
         return TTypeInfo((NScheme::TTypeId)type.GetData().GetScheme());
     case NKikimrMiniKQL::Pg:
-        return TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(type.GetPg().Getoid()));
+        return TTypeInfo(NPg::TypeDescFromPgTypeId(type.GetPg().Getoid()));
     default:
         Y_ENSURE(false, "not a data or pg type");
     }
@@ -39,7 +39,7 @@ TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
     case NMiniKQL::TType::EKind::Data:
         return TTypeInfo((NScheme::TTypeId)AS_TYPE(NMiniKQL::TDataType, type)->GetSchemeType());
     case NMiniKQL::TType::EKind::Pg:
-        return TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
+        return TTypeInfo(NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
     default:
         Y_ENSURE(false, "not a data or pg type");
     }

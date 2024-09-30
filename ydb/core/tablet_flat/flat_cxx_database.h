@@ -230,7 +230,6 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
@@ -245,7 +244,7 @@ template <NScheme::TTypeId ValType>
 class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(ValType))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo() : NScheme::TTypeInfo(ValType))
     {}
 
     template <typename ValueType> static typename NSchemeTypeMapper<ValType>::Type ConvertFrom(ValueType value) {
@@ -258,7 +257,7 @@ template <>
 class TConvertTypeValue<NScheme::NTypeIds::String> : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(NScheme::NTypeIds::String))
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo() : NScheme::TTypeInfo(NScheme::NTypeIds::String))
     {}
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TString& value) {

@@ -4,19 +4,19 @@ This section contains a step-by-step scenario which helps you complete necessary
 
 ## Set up the environment {#envsetup}
 
-### GitHub account {#github_login}
+### GitHub account {#GitHub_login}
 
-You need to have a GitHub account to suggest any changes to the {{ ydb-short-name }} source code. Register at [github.com](https://github.com/) if haven't done it yet.
+You need to have a GitHub account to suggest any changes to the {{ ydb-short-name }} source code. Register at [GitHub](https://github.com/) if haven't done it yet.
 
 ### SSH key pair {#ssh_key_pair}
 
-* In general to connect to github you can use: ssh/token/ssh from yubikey/password etc. Recommended method is ssh keys.
+* In general to connect to GitHub you can use: ssh/token/ssh from yubikey/password etc. Recommended method is ssh keys.
 * If you don't have already created keys (or yubikey), then just create new keys. Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
 * If you have a yubikey, you can use the legacy key from the yubikey:
 
   * Let's assume you have already configured yubikey (or configure yubikey locally)
   * On your laptop: `skotty ssh keys`
-  * Upload `legacy@yubikey` ssh key to github ([via UI](https://github.com/settings/keys))
+  * Upload `legacy@yubikey` ssh key to GitHub ([via UI](https://github.com/settings/keys))
   * test connection on laptop: `ssh -T git@github.com`
 
 #### Remote development
@@ -69,7 +69,7 @@ sudo apt-get install libidn11-dev libaio-dev libc6-dev
 
 Using GitHub CLI enables you to create Pull Requests and manage repositories from a command line. You can also use GitHub UI for such actions.
 
-Install GitHub CLI as described [at the home page](https://cli.github.com/). For Linux Ubuntu, you can go directly to [https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian-ubuntu-linux-raspberry-pi-os-apt](https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian-ubuntu-linux-raspberry-pi-os-apt).
+Install GitHub CLI as described [at the home page](https://cli.github.com/). For Linux Ubuntu, you can go directly to [the installation instructions](https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian-ubuntu-linux-raspberry-pi-os-apt).
 
 Run authentication configuration:
 
@@ -83,7 +83,7 @@ You will be asked several questions interactively, answer them as follows:
 |--|--|
 |What account do you want to log into?|**GitHub.com**|
 |What is your preferred protocol for Git operations?|**SSH**|
-|Upload your SSH public key to your GitHub account?|Choose a file with a public key (extention `.pub`) of those created on the ["Create SSH key pair"](#ssh_key_pair) step, for instance **/home/user/.ssh/id_ed25519.pub**|
+|Upload your SSH public key to your GitHub account?|Choose a file with a public key (extention `.pub`) of those created on the ["Create SSH key pair"](#ssh_key_pair) step, for instance `/home/user/.ssh/id_ed25519.pub`|
 |Title for your SSH key|**GitHub CLI** (leave default)|
 |How would you like to authenticate GitHub CLI|**Paste your authentication token**|
 
@@ -91,7 +91,7 @@ After the last answer, you will be asked for a token which you can generate in t
 
 {% note tip %}
 
-You can generate a Personal Access Token here https://github.com/settings/tokens
+You can generate a Personal Access Token [here](https://github.com/settings/tokens).
 The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
 
 {% endnote %}
@@ -212,7 +212,7 @@ When the changes are completed and locally tested (see [Ya Build and Test](build
 
 - GitHub UI
 
-  Visit your branch's page on GitHub.com (https://github.com/{your_github_user_name}/ydb/tree/{branch_name}), press `Contribute` and then `Open Pull Request`.
+  Visit your branch's page on GitHub.com (`https://github.com/{your_github_user_name}/ydb/tree/{branch_name}`), press `Contribute` and then `Open Pull Request`.
   You can also use the link in the `git push` output to open a Pull Request:
 
   ```text

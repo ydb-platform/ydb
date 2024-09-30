@@ -957,6 +957,7 @@ namespace NKikimr {
 #define XX(T) case T::EventType: preprocess(static_cast<T&>(*event)); break;
             DSPROXY_ENUM_DISK_EVENTS(XX)
 #undef XX
+            default: Y_ABORT_S("unexpected VDisk request Type# " << Sprintf("0x%08" PRIx32, type));
         }
 
         GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(), vdiskId, queueId);

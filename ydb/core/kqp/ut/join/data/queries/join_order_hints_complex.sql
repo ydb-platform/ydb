@@ -1,19 +1,18 @@
 PRAGMA TablePathPrefix='/Root';
 
-PRAGMA ydb.OptJoinOrderHints=
-    '[ 
-        [["R", "S"], ["T", "U"]]
-    ]';
+PRAGMA ydb.OptimizerHints = 
+'
+    Rows(Unused # 10e8)
+    JoinOrder( (Unused1 Unused2) (Unused3 Unused4) )
 
-PRAGMA ydb.OptCardinalityHints = 
-    '[
-        {"labels":["R"], "op":"#", "value":10e8},
-        {"labels":["T"], "op":"#", "value":1},
-        {"labels":["R", "T"], "op":"#", "value":1},
-        {"labels":["R", "S"], "op":"#", "value":10e8},
-        {"labels":["T", "U"], "op":"#", "value":10e8},
-        {"labels":["V"], "op":"#", "value":1}
-    ]';
+    Rows(R # 10e8)
+    Rows(T # 1)
+    Rows(R T # 1)
+    Rows(R S # 10e8)
+    Rows(T U # 10e8)
+    Rows(V # 1)
+    JoinOrder( (R S) (T U) )
+';
 
 SELECT * FROM 
     R   INNER JOIN  S   on  R.id = S.id

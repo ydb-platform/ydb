@@ -672,7 +672,7 @@ private:
         QLOG_DEBUG_S("BSQ34", "Status# " << status
             << " VDiskId# " << VDiskId
             << " Cookie# " << cookie);
-        auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, 0);
+        auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, false, 0);
         ctx.Send(sender, response.release(), 0, cookie);
     }
 

@@ -4,7 +4,7 @@ Returns the relative position (> 0 and <= 1) of a row within a [partition](../..
 
 ### Signature
 
-```
+```yql
 CUME_DIST()->Double
 ```
 

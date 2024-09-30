@@ -1,4 +1,4 @@
-## Enum, AsEnum {#enum}
+## Enum {#enum}
 
 `Enum()` creates an enumeration value.
 
@@ -15,6 +15,8 @@ SELECT
    Enum("Foo", $enum_type) as Enum1Value,
    Enum("Bar", $enum_type) as Enum2Value;
 ```
+
+## AsEnum {#asenum}
 
 `AsEnum()` creates a value of [enumeration](../../../types/containers.md) including one element. This value can be implicitly cast to any enumeration containing such a name.
 

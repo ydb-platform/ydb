@@ -13,12 +13,12 @@ TLimits::TLimits(const NKikimrTxDataShard::TEvCdcStreamScanRequest_TLimits& prot
 {
 }
 
-TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
+TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
     TVector<TRawTypeValue> key(Reserve(cells.size()));
 
-    Y_ABORT_UNLESS(cells.size() == table->KeyColumnTypes.size());
+    Y_ABORT_UNLESS(cells.size() == keyColumnTypes.size());
     for (TPos pos = 0; pos < cells.size(); ++pos) {
-        key.emplace_back(cells.at(pos).AsRef(), table->KeyColumnTypes.at(pos));
+        key.emplace_back(cells.at(pos).AsRef(), keyColumnTypes.at(pos));
     }
 
     return key;

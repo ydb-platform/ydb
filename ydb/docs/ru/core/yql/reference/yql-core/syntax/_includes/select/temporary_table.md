@@ -9,7 +9,7 @@
 
 ## Примеры
 
-``` yql
+```yql
 INSERT INTO @my_temp_table
 SELECT * FROM my_input_table ORDER BY value;
 
@@ -22,7 +22,7 @@ SELECT * FROM @my_temp_table WHERE value = "456";
 
 В имени временной таблицы может использоваться [именованное выражение](../../expressions.md#named-nodes):
 
-``` yql
+```yql
 $tmp_name = "my_temp_table";
 
 INSERT INTO @$tmp_name

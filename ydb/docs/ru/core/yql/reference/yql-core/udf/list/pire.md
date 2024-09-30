@@ -2,12 +2,12 @@
 
 ## Список функций
 
-* ```Pire::Grep(pattern:String) -> (string:String?) -> Bool```
-* ```Pire::Match(pattern:String) -> (string:String?) -> Bool```
-* ```Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::Capture(pattern:String) -> (string:String?) -> String?```
-* ```Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
+* `Pire::Grep(pattern:String) -> (string:String?) -> Bool`
+* `Pire::Match(pattern:String) -> (string:String?) -> Bool`
+* `Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Pire::Capture(pattern:String) -> (string:String?) -> String?`
+* `Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?`
 
 Одной из опций для поиска по регулярным выражениям в YQL является библиотека [Pire](https://github.com/yandex/pire) (Perl Incompatible Regular Expressions). Это разработанная в Яндексе очень быстрая библиотека регулярных выражений: на нижнем уровне она просматривает входную строку один раз, подряд, без откатов, и тратит (на x86 и x86_64) по 5 инструкций на символ.
 

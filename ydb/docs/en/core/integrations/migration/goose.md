@@ -12,7 +12,7 @@ Goose installation options are described in [its documentation](https://github.c
 
 After installation, the `goose` command line utility can be called:
 
-```
+```bash
 $ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 ```
 
@@ -43,13 +43,13 @@ Where:
 
 If connecting to a local {{ ydb-short-name }} docker container, the connection string could look like:
 
-```
+```text
 grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
 ```
 
 Let's store this connection string to an environment variable to re-use it later:
 
-```
+```bash
 export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
 ```
 
@@ -59,7 +59,7 @@ Further examples of calling `goose` commands will contain exactly this connectio
 
 Let's create a migrations directory and then all `goose` commands should be executed in this directory:
 
-```
+```bash
 $ mkdir migrations && cd migrations
 ```
 
@@ -169,7 +169,7 @@ There are alternative options to see the applied changes:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after the first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
@@ -263,7 +263,7 @@ Let's use the same methods to see the new changes:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
   ![YDB UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
@@ -329,7 +329,7 @@ Let's check the changes again:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on http://localhost:8765
+- Using {{ ydb-short-name }} UI on `http://localhost:8765`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 

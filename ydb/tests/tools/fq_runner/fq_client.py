@@ -405,7 +405,7 @@ class FederatedQueryClient(object):
     @retry.retry_intrusive
     def create_yds_connection(self, name, database=None, endpoint=None, database_id=None,
                               visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.no_auth(),
-                              check_issues=True):
+                              check_issues=True, shared_reading=False):
         assert (database_id is not None and database is None and endpoint is None) or (
             database_id is None and database is not None and endpoint is not None)
         request = fq.CreateConnectionRequest()
@@ -416,6 +416,8 @@ class FederatedQueryClient(object):
         else:
             yds.database = database
             yds.endpoint = endpoint
+
+        yds.shared_reading = shared_reading
 
         yds.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility

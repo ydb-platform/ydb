@@ -16,35 +16,35 @@ log-levels:
   MD019: 'error' # Multiple spaces after hash on atx style heading
   MD020: 'error' # No space inside hashes on closed atx style heading
   MD021: 'error' # Multiple spaces inside hashes on closed atx style heading
-  MD022: 'disabled' # Headings should be surrounded by blank lines
+  MD022: 'error' # Headings should be surrounded by blank lines
   MD023: 'disabled' # Headings must start at the beginning of the line
-  MD024: 'disabled' # Multiple headings with the same content
+  MD024: 'error' # Multiple headings with the same content
   MD025: 'error' # Multiple top-level headings in the same document
-  MD026: 'disabled' # Trailing punctuation in heading
-  MD027: 'disabled' # Multiple spaces after blockquote symbol
-  MD028: 'disabled' # Blank line inside blockquote
+  MD026: 'error' # Trailing punctuation in heading
+  MD027: 'error' # Multiple spaces after blockquote symbol
+  MD028: 'error' # Blank line inside blockquote
   MD029: 'disabled' # Ordered list item prefix
-  MD030: 'disabled' # Spaces after list markers
-  MD031: 'disabled' # Fenced code blocks should be surrounded by blank lines
-  MD032: 'disabled' # Lists should be surrounded by blank lines
-  MD033: 'disabled' # Inline HTML
-  MD034: 'disabled' # Bare URL used
+  MD030: 'error' # Spaces after list markers
+  MD031: 'error' # Fenced code blocks should be surrounded by blank lines
+  MD032: 'error' # Lists should be surrounded by blank lines
+  MD033: 'error' # Inline HTML
+  MD034: 'error' # Bare URL used
   MD035: 'error' # Horizontal rule style
-  MD036: 'disabled' # Emphasis used instead of a heading
-  MD037: 'disabled' # Spaces inside emphasis markers
+  MD036: 'error' # Emphasis used instead of a heading
+  MD037: 'error' # Spaces inside emphasis markers
   MD038: 'error' # Spaces inside code span elements
   MD039: 'disabled' # Spaces inside link text
-  MD040: 'disabled' # Fenced code blocks should have a language specified
+  MD040: 'error' # Fenced code blocks should have a language specified
   MD041: 'disabled' # First line in a file should be a top-level heading
   MD042: 'error' # No empty links
   MD043: 'disabled' # Required heading structure
-  MD044: 'disabled' # Proper names should have the correct capitalization
+  MD044: 'error' # Proper names should have the correct capitalization
   MD045: 'disabled' # Images should have alternate text (alt text)
   MD046: 'disabled' # Code block style
   MD047: 'disabled' # Files should end with a single newline character
-  MD048: 'disabled' # Code fence style
-  MD049: 'disabled' # Emphasis style should be consistent
-  MD050: 'disabled' # Strong style should be consistent
+  MD048: 'error' # Code fence style
+  MD049: 'error' # Emphasis style should be consistent
+  MD050: 'error' # Strong style should be consistent
   MD051: 'error' # Link fragments should be valid
   MD052: 'error' # Reference links and images should use a label that is defined
   MD053: 'error' # Link and image reference definitions should be needed
@@ -61,6 +61,16 @@ log-levels:
   YFM007: 'error' # Term used without definition
   YFM008: 'error' # Term inside definition not allowed
   YFM009: 'error' # Term definition used not at the end of file
+
+# Multiple headings with the same content
+MD024:
+  siblings_only: true
+
+MD044:
+  code_blocks: false
+  names:
+    - 'GitHub'
+    - 'ClickHouse'
 
 # Inline code length
 YFM001:

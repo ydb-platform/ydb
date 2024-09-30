@@ -201,7 +201,10 @@ struct TLogReader::TSectorData {
         , PreparedOffset(0)
         , PreparedSize(0)
         , IsScheduled(false)
-    {}
+    {
+      Y_VERIFY_S(buffer && dataSize <= buffer->Size(), "buffer has size less than log reader's sector, dataSize# "
+                     << dataSize << " bufferSize# " << (buffer ? (i64)buffer->Size() : -1));
+    }
 
     TString ToString() {
         TStringStream str;
@@ -294,7 +297,7 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , SizeLimit(sizeLimit)
     , Result(new NPDisk::TEvReadLogResult(
         NKikimrProto::ERROR, position, TLogPosition::Invalid(), false,
-        pDisk->GetStatusFlags(owner, ownerGroupType), nullptr, owner))
+        pDisk->GetStatusFlags(owner, ownerGroupType), "", owner))
     , ChunkInfo(nullptr)
     , Sector(new TDoubleBuffer(pDisk))
     , ChunkOwnerMap(IsInitial ? new TMap<ui32, TChunkState>() : nullptr)
@@ -374,7 +377,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         bool isOk = RegisterBadOffsets(badOffsets);
         if (!isOk) {
             P_LOG(PRI_ERROR, BPD01, "Log is damaged and unrevocerable");
-                
+
             ReplyError();
             return;
         }

@@ -445,7 +445,6 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
-    AddSetting("_ForceJobSizeAdjuster", ForceJobSizeAdjuster); // back compat
     REGISTER_SETTING(*this, _EnableWriteReorder);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);

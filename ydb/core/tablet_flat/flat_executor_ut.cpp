@@ -6568,5 +6568,56 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TCutTabletHistory) {
+    Y_UNIT_TEST(TestCutTabletHistory) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet);
+                info->Channels[1].History.emplace_back(1, 0);
+                info->Channels[1].History.emplace_back(2, 1);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel data;
+        bool wasCutHistory = false;
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 1);
+                UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
+                UNIT_ASSERT_LE(event->Record.GetGroupID(), 1);
+                wasCutHistory = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(data.MakeRows(3000));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        while (!wasCutHistory) {
+            env.Env.DispatchEvents({});
+        }
+
+    }
+}
+
 } // namespace NTabletFlatExecutor
 } // namespace NKikimr

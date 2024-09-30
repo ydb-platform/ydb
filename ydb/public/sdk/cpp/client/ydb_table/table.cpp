@@ -2011,6 +2011,11 @@ bool TTransaction::IsActive() const
     return TransactionImpl_->IsActive();
 }
 
+TAsyncStatus TTransaction::Precommit() const
+{
+    return TransactionImpl_->Precommit();
+}
+
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
     return TransactionImpl_->Commit(settings);
 }

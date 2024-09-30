@@ -79,7 +79,7 @@ public:
         CacheMissCounter.Inc();
 
         return ::NYdb::NSessionPool::InjectSessionStatusInterception(session.SessionImpl_,
-            ExecuteDataQueryInternal(session, query, txControl, params, settings, false),
+            ExecuteDataQueryImpl(session, query, txControl, params, settings, false),
             true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
     }
 
@@ -96,7 +96,7 @@ public:
 
         return ::NYdb::NSessionPool::InjectSessionStatusInterception<TDataQueryResult>(
             session.SessionImpl_,
-            session.Client_->ExecuteDataQueryInternal(session, dataQuery, txControl, params, settings, fromCache),
+            session.Client_->ExecuteDataQueryImpl(session, dataQuery, txControl, params, settings, fromCache),
             true,
             GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_),
             cb);
@@ -170,6 +170,32 @@ private:
     static void CollectQuerySize(const TString& query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram);
 
     static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>&);
+
+    template <typename TQueryType, typename TParamsType>
+    TAsyncDataQueryResult ExecuteDataQueryImpl(const TSession& session, const TQueryType& query,
+        const TTxControl& txControl, TParamsType params,
+        const TExecDataQuerySettings& settings, bool fromCache
+    ) {
+        if (!txControl.Tx_.Defined()) {
+            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
+        }
+
+        auto onPrecommitCompleted = [this, session, query, txControl, params, settings, fromCache](const NThreading::TFuture<TStatus>& f) {
+            TStatus status = f.GetValueSync();
+            if (!status.IsSuccess()) {
+                return NThreading::MakeFuture(TDataQueryResult(std::move(status),
+                                                               {},
+                                                               txControl.Tx_,
+                                                               Nothing(),
+                                                               false,
+                                                               Nothing()));
+            }
+
+            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
+        };
+
+        return txControl.Tx_->Precommit().Apply(onPrecommitCompleted);
+    }
 
     template <typename TQueryType, typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQueryInternal(const TSession& session, const TQueryType& query,

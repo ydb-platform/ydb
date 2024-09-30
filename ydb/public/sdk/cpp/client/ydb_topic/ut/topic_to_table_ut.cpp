@@ -2156,24 +2156,10 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
     CommitTx(tx, EStatus::SESSION_EXPIRED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
-{
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    NTable::TSession tableSession = CreateTableSession();
-    NTable::TTransaction tx = BeginTx(tableSession);
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
-
-    ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx).CommitTx(true));
-
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
-}
-
 Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
 {
+    // The recording stream will run into a quota. Before the commit, the client will receive confirmations
+    // for some of the messages. The `ExecuteDataQuery` call will wait for the rest.
     CreateTopic("topic_A", TEST_CONSUMER);
 
     NTable::TSession tableSession = CreateTableSession();
@@ -2191,6 +2177,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
 {
+    // the `ExecuteDataQuery` call waits if the `CommitTx` flag is set
     CreateTopic("topic_A", TEST_CONSUMER);
 
     NTable::TSession tableSession = CreateTableSession();

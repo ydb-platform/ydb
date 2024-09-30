@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 #include "changes/actualization/controller/controller.h"
 
@@ -81,8 +82,8 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema);
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NOlap::TVersionCounts::TVersionToKey&& versionToKey);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, NOlap::TVersionCounts::TVersionToKey&& versionToKey);
 
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
 
@@ -180,12 +181,21 @@ public:
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
 
+    TVersionCounts& MutableVersionCounts() {
+        return VersionCounts;
+    }
+
+    void RemoveSchemaVersion(ui64 version) {
+        VersionedIndex.RemoveVersion(version);
+    }
+
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
     std::map<TInstant, std::vector<TPortionInfo>> CleanupPortions;
     TColumnEngineStats Counters;
+    TVersionCounts VersionCounts;
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();

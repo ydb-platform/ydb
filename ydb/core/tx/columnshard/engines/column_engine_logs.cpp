@@ -27,7 +27,7 @@
 namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NOlap::TVersionCounts::TVersionToKey&& versionToKey)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
@@ -36,10 +36,11 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, schema);
+    VersionCounts.VersionToKey = versionToKey;
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema)
+    const TSnapshot& snapshot, TIndexInfo&& schema, NOlap::TVersionCounts::TVersionToKey&& versionToKey)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
@@ -47,6 +48,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
     , LastGranule(0) {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
+    VersionCounts.VersionToKey = versionToKey;
 }
 
 const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const {
@@ -237,7 +239,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         for (auto&& [granuleId, pathConstructors] : constructors) {
             auto g = GetGranulePtrVerified(granuleId);
             for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false));
+                g->UpsertPortionOnLoad(constructor.Build(false), VersionCounts);
             }
         }
     }
@@ -479,7 +481,7 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
         UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
     }
 
-    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo);
+    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo, VersionCounts);
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
@@ -495,7 +497,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
-        Y_ABORT_UNLESS(spg.ErasePortion(portion));
+        Y_ABORT_UNLESS(spg.ErasePortion(portion, VersionCounts));
         return true;
     }
 }

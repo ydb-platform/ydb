@@ -558,6 +558,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&progFile);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
+        .NoArgument()
         .SetFlag(&runOptions.Sql);
     opts.AddLongOption('l', "rlimit", "Resource (memory) limit, mb")
         .Optional()
@@ -735,7 +736,7 @@ int RunMain(int argc, const char* argv[])
         }
 
         rl.rlim_cur = memLimit * 1024 * 1024;
-        if (setrlimit(RLIMIT_DATA, &rl)) {
+        if (setrlimit(RLIMIT_AS, &rl)) {
             ythrow TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimit << " mbytes";
         }
 #else

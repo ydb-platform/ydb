@@ -79,11 +79,10 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
 
-    - name: Print uname
-      run: uname -a
-    
-    - name: Print YDB CLI version
-      run: cat ydb/apps/ydb/version.txt
+    - name: Print debug information
+      run: |
+        uname -a
+        cat ydb/apps/ydb/version.txt
       
     - name: Build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}

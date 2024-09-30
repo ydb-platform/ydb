@@ -75,6 +75,7 @@ struct TTableInfo {
     ui64 SaTabletId;
     TPathId DomainKey;
     TPathId PathId;
+    TString Path;
 };
 std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
 std::vector<TTableInfo> CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);

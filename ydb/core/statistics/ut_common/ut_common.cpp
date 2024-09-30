@@ -331,9 +331,9 @@ std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, ui8 tableCount) {
     std::vector<TTableInfo> ret;
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
         TTableInfo tableInfo;
-        const TString path = Sprintf("/Root/Database/Table%u", tableId);
-        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, path);
-        tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+        tableInfo.Path = Sprintf("/Root/Database/Table%u", tableId);
+        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, tableInfo.Path);
+        tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
         ret.emplace_back(tableInfo);
     }
     return ret;

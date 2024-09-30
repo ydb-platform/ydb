@@ -78,7 +78,7 @@ def main(
                 else:
                     continue
 
-                entry.filename = entry.filename
+                entry.filename = entry.filename.encode('utf-8')
                 jf.extract(entry, dest)
     timer.step("Jar files extracted")
 

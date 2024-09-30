@@ -340,7 +340,10 @@ public:
 
     bool IsIdle() const override
     {
-        return ActiveIOCount_ == 0 && !Failed_;
+        return
+            Underlying_->IsIdle() &&
+            ActiveIOCount_ == 0 &&
+            !Failed_;
     }
 
     TFuture<void> Abort() override
@@ -370,8 +373,8 @@ private:
     BIO* OutputBIO_ = nullptr;
 
     // This counter gets stuck after streams encounters an error.
-    std::atomic<int> ActiveIOCount_ = {0};
-    std::atomic<bool> Failed_ = {false};
+    std::atomic<int> ActiveIOCount_ = 0;
+    std::atomic<bool> Failed_ = false;
 
     // FSM
     TError Error_;

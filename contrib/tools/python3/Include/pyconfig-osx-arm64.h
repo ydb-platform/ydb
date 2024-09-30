@@ -807,13 +807,13 @@
 #define HAVE_MKFIFO 1
 
 /* Define to 1 if you have the `mkfifoat' function. */
-/* #undef HAVE_MKFIFOAT */
+#define HAVE_MKFIFOAT 1
 
 /* Define to 1 if you have the `mknod' function. */
 #define HAVE_MKNOD 1
 
 /* Define to 1 if you have the `mknodat' function. */
-/* #undef HAVE_MKNODAT */
+#define HAVE_MKNODAT 1
 
 /* Define to 1 if you have the `mktime' function. */
 #define HAVE_MKTIME 1
@@ -1610,7 +1610,10 @@
 #define PY_SUPPORT_TIER 2
 
 /* Define if you want to build an interpreter with many run-time checks. */
-/* #undef Py_DEBUG */
+#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
+#define Py_DEBUG
+#define GC_NDEBUG
+#endif
 
 /* Defined if Python is built as a shared library. */
 /* #undef Py_ENABLE_SHARED */

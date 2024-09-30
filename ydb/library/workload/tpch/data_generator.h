@@ -31,7 +31,7 @@ public:
     protected:
         class TContext {
         public:
-            TContext(const TBulkDataGenerator& owner, int tableNum);
+            TContext(const TBulkDataGenerator& owner, int tableNum, TGeneratorStateProcessor* state);
             NYdb::TValueBuilder& GetBuilder();
             TStringBuilder& GetCsv();
             void AppendPortions(TDataPortions& result);
@@ -43,6 +43,7 @@ public:
             TStringBuilder Csv;
             const TBulkDataGenerator& Owner;
             int TableNum;
+            TGeneratorStateProcessor* State;
         };
 
         using TContexts = TVector<TContext>;

@@ -5,7 +5,7 @@
  *
  * These definitions are used by both frontend and backend code.
  *
- * Copyright (c) 2003-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2003-2023, PostgreSQL Global Development Group
  *
  * src/include/common/ip.h
  *
@@ -14,15 +14,11 @@
 #ifndef IP_H
 #define IP_H
 
-#include "getaddrinfo.h"		/* pgrminclude ignore */
+#include <netdb.h>
+#include <sys/socket.h>
+
 #include "libpq/pqcomm.h"		/* pgrminclude ignore */
 
-
-#ifdef	HAVE_UNIX_SOCKETS
-#define IS_AF_UNIX(fam) ((fam) == AF_UNIX)
-#else
-#define IS_AF_UNIX(fam) (0)
-#endif
 
 extern int	pg_getaddrinfo_all(const char *hostname, const char *servname,
 							   const struct addrinfo *hintp,

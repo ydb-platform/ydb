@@ -9,6 +9,7 @@
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/metering_sink.h>
+#include <ydb/core/persqueue/write_id.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -575,13 +576,15 @@ struct TEvPQ {
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
-        TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config)
+        TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TBootstrapConfig& bootstrapConfig)
             : TopicConverter(topicConverter)
             , Config(config)
+            , BootstrapConfig(bootstrapConfig)
         {}
 
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
+        NKikimrPQ::TBootstrapConfig BootstrapConfig;
     };
 
     struct TEvPartitionConfigChanged : public TEventLocal<TEvPartitionConfigChanged, EvPartitionConfigChanged> {
@@ -819,7 +822,7 @@ struct TEvPQ {
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
-        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, bool predicate) :
+        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, TMaybe<bool> predicate) :
             Step(step),
             TxId(txId),
             Partition(partition),
@@ -830,7 +833,7 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         NPQ::TPartitionId Partition;
-        bool Predicate = false;
+        TMaybe<bool> Predicate;
     };
 
     struct TEvProposePartitionConfig : public TEventLocal<TEvProposePartitionConfig, EvProposePartitionConfig> {
@@ -844,6 +847,7 @@ struct TEvPQ {
         ui64 TxId;
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
+        NKikimrPQ::TBootstrapConfig BootstrapConfig;
     };
 
     struct TEvProposePartitionConfigResult : public TEventLocal<TEvProposePartitionConfigResult, EvProposePartitionConfigResult> {
@@ -1158,12 +1162,12 @@ struct TEvPQ {
     };
 
     struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
-        explicit TEvTransactionCompleted(TMaybe<ui64> writeId) :
+        explicit TEvTransactionCompleted(const TMaybe<NPQ::TWriteId>& writeId) :
             WriteId(writeId)
         {
         }
 
-        TMaybe<ui64> WriteId;
+        TMaybe<NPQ::TWriteId> WriteId;
     };
 };
 

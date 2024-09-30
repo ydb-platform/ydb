@@ -453,7 +453,7 @@ public:
         auto pos = options.Pos();
         try {
             TSession* session = GetSession(options);
-            
+
             TSet<TString> uniqueTables;
             const auto fullPrefix = options.Prefix().Empty() ? TString() : (options.Prefix() + '/');
             const auto fullSuffix = options.Suffix().Empty() ? TString() : ('/' + options.Suffix());
@@ -653,7 +653,7 @@ public:
             writer.OnBeginMap();
             if (NCommon::HasResOrPullOption(*node, "type")) {
                 writer.OnKeyedItem("Type");
-                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), columns);
+                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), TColumnOrder(columns));
             }
 
             bool truncated = false;
@@ -776,7 +776,7 @@ public:
             writer.SetSpecs(spec);
 
             TStringStream err;
-            auto type = BuildType(*tableInfo.RowSpec->GetType(), typeBuilder, err);
+            auto type = BuildType(*tableInfo.RowSpec->GetExtendedType(ctx), typeBuilder, err);
             TValuePacker packer(true, type);
             for (auto& c: content) {
                 auto val = packer.Unpack(c, holderFactory);
@@ -1141,6 +1141,10 @@ private:
         info.YqlCompatibleScheme = ValidateTableSchema(
             req.Table(), attrs, req.IgnoreYamrDsv(), req.IgnoreWeakSchema()
         );
+
+        if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+            info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+        }
 
         NYT::TNode schemaAttrs;
         if (req.ForceInferSchema() && req.InferSchemaRows() > 0) {

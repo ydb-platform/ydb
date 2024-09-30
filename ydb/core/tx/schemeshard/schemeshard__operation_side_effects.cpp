@@ -824,7 +824,7 @@ void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorC
         }
 
         for (auto& pathId : tempDirs) {
-            const auto tempDirIt = it->second.find(std::move(pathId));
+            const auto tempDirIt = it->second.find(pathId);
             if (tempDirIt == it->second.end()) {
                 continue;
             }

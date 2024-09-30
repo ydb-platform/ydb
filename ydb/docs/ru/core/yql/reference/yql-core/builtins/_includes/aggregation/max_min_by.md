@@ -1,7 +1,8 @@
 ## MAX_BY и MIN_BY {#max-min-by}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 MAX_BY(T1?, T2)->T1?
 MAX_BY(T1, T2)->T1?
 MAX_BY(T1, T2, limit:Uint64)->List<T1>?
@@ -22,23 +23,24 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 Если для задачи обязательно нужны все значения, и их количество может измеряться десятками тысяч и больше, то вместо данных агрегационных функций следует использовать `JOIN` исходной таблицы с подзапросом, где по ней же сделан `GROUP BY + MIN/MAX` на интересующих вас колонках.
 
-{% note warning "Внимание" %}
+{% note warning %}
 
-Если второй аргумент всегда NULL, то результатом агрегации будет NULL.
+Если второй аргумент всегда `NULL`, то результатом агрегации будет `NULL`.
 
 {% endnote %}
 
-При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregateby) передается `Tuple` из значения и ключа.
+При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из значения и ключа.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
   MIN_BY(value, LENGTH(value)),
   MAX_BY(value, key, 100)
 FROM my_table;
 ```
 
-``` yql
+```yql
 $min_by_factory = AggregationFactory("MIN_BY");
 $max_by_factory = AggregationFactory("MAX_BY", 100);
 

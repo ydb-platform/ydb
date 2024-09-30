@@ -14,9 +14,22 @@ NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollectio
 bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
+struct TTimeSeriesStats {
+    std::vector<ui64> Values;
+    ui32 HistorySampleCount = 0;
+    ui64 Sum = 0;
+    std::vector<std::pair<ui64, ui64>> History;
+
+    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
+    void ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
+    void Resize(ui32 taskCount);
+    void SetNonZero(ui32 taskIndex, ui64 value);
+    void Pack();
+};
+
 struct TAsyncStats {
     // Data
-    std::vector<ui64> Bytes;
+    TTimeSeriesStats Bytes;
     std::vector<ui64> DecompressedBytes;
     std::vector<ui64> Rows;
     std::vector<ui64> Chunks;
@@ -26,11 +39,13 @@ struct TAsyncStats {
     std::vector<ui64> PauseMessageMs;
     std::vector<ui64> ResumeMessageMs;
     std::vector<ui64> LastMessageMs;
-    std::vector<ui64> WaitTimeUs;
+    TTimeSeriesStats WaitTimeUs;
     std::vector<ui64> WaitPeriods;
     std::vector<ui64> ActiveTimeUs;
 
     void Resize(ui32 taskCount);
+    void SetHistorySampleCount(ui32 historySampleCount);
+    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncStatsAggr& stats);
 };
 
 struct TAsyncBufferStats {
@@ -46,6 +61,8 @@ struct TAsyncBufferStats {
     TAsyncStats Egress;
 
     void Resize(ui32 taskCount);
+    void SetHistorySampleCount(ui32 historySampleCount);
+    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
 };
 
 struct TTableStats {
@@ -73,7 +90,7 @@ struct TStageExecutionStats {
 
     std::map<ui32, ui32> Task2Index;
 
-    std::vector<ui64> CpuTimeUs;
+    TTimeSeriesStats CpuTimeUs;
     std::vector<ui64> SourceCpuTimeUs;
 
     std::vector<ui64> InputRows;
@@ -94,17 +111,25 @@ struct TStageExecutionStats {
     std::vector<ui64> WaitInputTimeUs;
     std::vector<ui64> WaitOutputTimeUs;
 
+    TTimeSeriesStats SpillingComputeBytes;
+    TTimeSeriesStats SpillingChannelBytes;
+    TTimeSeriesStats SpillingComputeTimeUs;
+    TTimeSeriesStats SpillingChannelTimeUs;
+
     std::map<TString, TTableStats> Tables;
     std::map<TString, TAsyncBufferStats> Ingress;
     std::map<TString, TAsyncBufferStats> Egress;
     std::map<ui32, TAsyncBufferStats> Input;
     std::map<ui32, TAsyncBufferStats> Output;
 
-    std::vector<ui64> MaxMemoryUsage;
+    TTimeSeriesStats MaxMemoryUsage;
+    ui32 HistorySampleCount;
 
     void Resize(ui32 taskCount);
-    void UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
-    void UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
+    void SetHistorySampleCount(ui32 historySampleCount);
+    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
+    ui64 UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
+    ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
 };
 
 struct TQueryExecutionStats {
@@ -112,6 +137,13 @@ private:
     std::map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::map<ui32, bool> UseLlvmByStageId;
     std::map<ui32, TStageExecutionStats> StageStats;
+    ui64 BaseTimeMs = 0;
+    void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
+    void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats);
+    void AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats);
+    void AdjustBaseTime(NYql::NDqProto::TDqStageStats* stageStats);
 public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
@@ -119,6 +151,7 @@ public:
 
     // basic stats
     std::unordered_set<ui64> AffectedShards;
+    ui32 HistorySampleCount = 0;
     ui32 TotalTasks = 0;
     ui64 ResultBytes = 0;
     ui64 ResultRows = 0;
@@ -145,6 +178,7 @@ public:
         , TasksGraph(tasksGraph)
         , Result(result)
     {
+        HistorySampleCount = 32;
     }
 
     void AddComputeActorStats(

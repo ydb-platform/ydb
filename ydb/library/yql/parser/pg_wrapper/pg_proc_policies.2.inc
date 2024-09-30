@@ -54,17 +54,9 @@ struct TArgs_arraycontsel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-struct TArgs_dsynonym_init_Policy {
+struct TArgs_currval_oid_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_dsynonym_lexize_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_elem_contained_by_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
 };
 struct TArgs_gist_box_consistent_Policy {
     static constexpr bool VarArgs = false;
@@ -134,177 +126,13 @@ struct TArgs_gist_poly_distance_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,false,true,true,true};
 };
-struct TArgs_hash_multirange_Policy {
+struct TArgs_hashhandler_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_hash_multirange_extended_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_multirange_adjacent_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_adjacent_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_after_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_after_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_before_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_before_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_cmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_constructor0_Policy {
+struct TArgs_lastval_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_multirange_constructor1_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_contained_by_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_contained_by_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_contains_elem_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_multirange_contains_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_contains_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_empty_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
-};
-struct TArgs_multirange_intersect_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_intersect_agg_transfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_lower_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_lower_inc_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_lower_inf_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_minus_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_overlaps_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_overlaps_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_overleft_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_overleft_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_overright_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_overright_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-struct TArgs_multirange_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_union_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_multirange_upper_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_upper_inc_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_multirange_upper_inf_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
 struct TArgs_networkjoinsel_Policy {
     static constexpr bool VarArgs = false;
@@ -314,161 +142,133 @@ struct TArgs_networksel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-struct TArgs_pg_get_constraintdef_Policy {
+struct TArgs_nextval_oid_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_constraintdef_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_pg_get_expr_Policy {
+struct TArgs_pg_backup_start_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-struct TArgs_pg_get_expr_ext_Policy {
+struct TArgs_pg_backup_stop_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_function_arg_default_Policy {
+struct TArgs_pg_create_restore_point_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_pg_current_wal_flush_lsn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_current_wal_insert_lsn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_current_wal_lsn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_database_collation_actual_version_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_get_wal_replay_pause_state_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_is_in_recovery_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_is_wal_replay_paused_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_last_wal_receive_lsn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_last_wal_replay_lsn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_last_xact_replay_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_log_standby_snapshot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_promote_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-struct TArgs_pg_get_function_arguments_Policy {
+struct TArgs_pg_sequence_last_value_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_function_identity_arguments_Policy {
+struct TArgs_pg_sequence_parameters_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_function_result_Policy {
+struct TArgs_pg_split_walfile_name_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_pg_switch_wal_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_wal_lsn_diff_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_pg_wal_replay_pause_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_wal_replay_resume_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_walfile_name_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_function_sqlbody_Policy {
+struct TArgs_pg_walfile_name_offset_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_functiondef_Policy {
+struct TArgs_prsd_end_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_indexdef_Policy {
+struct TArgs_prsd_headline_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,false};
+};
+struct TArgs_prsd_lextype_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_get_indexdef_ext_Policy {
+struct TArgs_prsd_nexttoken_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-struct TArgs_pg_get_partition_constraintdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_partkeydef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_ruledef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_ruledef_ext_Policy {
+struct TArgs_prsd_start_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-struct TArgs_pg_get_serial_sequence_Policy {
+struct TArgs_setval3_oid_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-struct TArgs_pg_get_statisticsobjdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_statisticsobjdef_columns_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_statisticsobjdef_expressions_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_triggerdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_triggerdef_ext_Policy {
+struct TArgs_setval_oid_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_pg_get_userbyid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_viewdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_get_viewdef_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_pg_get_viewdef_name_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_pg_get_viewdef_name_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_pg_get_viewdef_wrap_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_range_adjacent_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_after_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_agg_finalfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-struct TArgs_range_agg_transfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-struct TArgs_range_before_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_contained_by_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_contains_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_merge_from_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_range_overlaps_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_overleft_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_range_overright_multirange_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_spg_kd_choose_Policy {
     static constexpr bool VarArgs = false;
@@ -485,10 +285,6 @@ struct TArgs_spg_kd_inner_consistent_Policy {
 struct TArgs_spg_kd_picksplit_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_spghandler_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_tsq_mcontained_Policy {
     static constexpr bool VarArgs = false;

@@ -26,5 +26,3 @@ Generates a write-only load on the VDisk. Simulates a Distributed Storage Proxy.
 ### Parameters of probabilistic distribution {#params}
 
 {% include [load-actors-params](../_includes/load-actors-interval.md) %}
-
-<!-- ## Примеры {#examples} -->

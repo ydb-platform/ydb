@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
+import copy
 import json
 from functools import partial
 import os
-import shutil
 from concurrent.futures import ProcessPoolExecutor
+
+import tree_map
 
 HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
@@ -56,49 +58,6 @@ def get_compile_duration_and_cpp_path(time_trace_path: str) -> tuple[float, str,
     return duration_us / 1e6, cpp_file, time_trace_path
 
 
-def add_to_tree(chunks: list[tuple[str, str]], value: int, tree: dict) -> None:
-    if "data" not in tree:
-        tree["data"] = {}
-
-    tree["name"] = chunks[0][0]
-    tree["data"]["$symbol"] = chunks[0][1]
-    if len(chunks) == 1:
-        tree["data"]["$area"] = value
-    else:
-        if "children" not in tree:
-            tree["children"] = []
-        for child_ in tree["children"]:
-            if child_["name"] == chunks[1][0]:
-                child = child_
-                break
-
-        else:
-            child = {"name": chunks[1][0]}
-            tree["children"].append(child)
-        add_to_tree(chunks[1:], value, child)
-
-
-def propogate_area(tree):
-    if "data" not in tree:
-        tree["data"] = {}
-
-    area = 0
-    for child_ in tree.get("children", []):
-        propogate_area(child_)
-        area += child_["data"]["$area"]
-
-    if "$area" not in tree["data"]:
-        tree["data"]["$area"] = area
-
-
-def enrich_names_with_sec(tree):
-    area = 0
-    for child_ in tree.get("children", []):
-        enrich_names_with_sec(child_)
-
-    tree["name"] = tree["name"] + " " + "{:_} ms".format(tree["data"]["$area"])
-
-
 def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> list:
     with open(path) as f:
         obj = json.load(f)
@@ -115,26 +74,74 @@ def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> l
 
     include_events.sort(key=lambda event: (event[0], -event[1]))
 
-    path_to_time = {}
-    current_includes_stack = []  # stack
-    last_time_stamp = None
-
-    result = []
+    tree_path_to_sum_duration = {}
+    current_includes_stack = []
 
     for time_stamp, ev, path, duration in include_events:
-        if current_includes_stack:
-            last_path = current_includes_stack[-1]
-            prev = path_to_time.get(last_path, 0)
-            path_to_time[last_path] = prev + (time_stamp - last_time_stamp) / 1000 / 1000
-
         if ev == 1:
             current_includes_stack.append(sanitize_path(path, base_src_dir))
-            if duration > HEADER_COMPILE_TIME_TO_SHOW * 1000 * 1000:
-                result.append((current_includes_stack[:], duration))
+            tree_path = tuple(current_includes_stack)
+            prev = tree_path_to_sum_duration.get(tree_path, 0)
+            tree_path_to_sum_duration[tree_path] = prev + duration
         else:
             assert current_includes_stack[-1] == sanitize_path(path, base_src_dir)
             current_includes_stack.pop()
-        last_time_stamp = time_stamp
+    
+    # filter small entities    
+    tree_paths_to_include = set()
+    result = []
+    for tree_path, duration in tree_path_to_sum_duration.items():
+        if duration > HEADER_COMPILE_TIME_TO_SHOW * 1000 * 1000:
+            for i in range(1, len(tree_path) + 1):
+                tree_paths_to_include.add(tree_path[:i])
+
+    def add_to_tree(tree, tree_path, duration):
+        if len(tree_path) == 0:
+            tree["duration"] += duration 
+        else:
+            if tree_path[0] not in tree["children"]:
+                tree["children"][tree_path[0]] = {
+                    "duration": 0,
+                    "children": {},
+                }
+            add_to_tree(tree["children"][tree_path[0]], tree_path[1:], duration)
+
+    tree = {"children": {}, "duration": 0}
+    for tree_path in tree_paths_to_include:
+        add_to_tree(tree, tree_path, tree_path_to_sum_duration[tree_path])
+
+    def print_tree(tree, padding):
+        for child, child_tree in tree["children"].items():
+            print(padding + child, child_tree["duration"])
+            print_tree(child_tree, padding + "  ")
+
+    # handy for debug
+    # print_tree(tree,"")
+
+    # subtract children
+    def subtract_duration(tree):
+        if len(tree["children"]) == 0:
+            return tree["duration"]
+        else:
+            children_duration = 0
+            for child, child_tree in tree["children"].items():
+                children_duration += subtract_duration(child_tree)
+
+            tree["duration"] -= children_duration
+            return tree["duration"] + children_duration
+
+    subtract_duration(tree)
+
+    # collect result
+    result = []
+
+    def collect(tree, current_tree_path):
+        if current_tree_path:
+            result.append((current_tree_path[:], tree["duration"]))
+        for child, child_tree in tree["children"].items():
+            collect(child_tree, current_tree_path + [child])
+    
+    collect(tree, [])
 
     return result
 
@@ -168,14 +175,27 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
     cpp_compilation_times = []
     total_compilation_time = 0.0
 
+    tree_paths = []
+
     for duration, path, time_trace_path in result:
         splitted = path.split(os.sep)
         chunks = list(zip(splitted, (len(splitted) - 1) * ["dir"] + ["cpp"]))
-        add_to_tree(chunks, int(duration * 1000), tree)
+        chunks = ["/"] + chunks
+        cpp_tree_path = [[chunk, "dir", 0] for chunk in splitted]
+        cpp_tree_path[-1][1] = "cpp"
+
+        cpp_tree_path_fixed_duration = copy.deepcopy(cpp_tree_path)
+        cpp_tree_path_fixed_duration[-1][2] = duration * 1000
+
         include_tree = build_include_tree(time_trace_path, build_output_dir, base_src_dir)
+
         for inc_path, inc_duration in include_tree:
-            additional_chunks = list(zip(inc_path, "h" * len(inc_path)))
-            add_to_tree(chunks + additional_chunks, inc_duration / 1000, tree)
+            include_tree_path = [[chunk, "h", 0] for chunk in inc_path]
+            include_tree_path[-1][2] = inc_duration / 1000
+            cpp_tree_path_fixed_duration[-1][2] -= include_tree_path[-1][2]
+            tree_paths.append(cpp_tree_path + include_tree_path)
+
+        tree_paths.append(cpp_tree_path_fixed_duration)
         print("{} -> {:.2f}s".format(path, duration))
         cpp_compilation_times.append(
             {
@@ -184,6 +204,12 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
             }
         )
         total_compilation_time += duration
+    types = [
+        ("h", "Header", "#66C2A5"),
+        ("cpp", "Cpp", "#FC8D62"),
+        ("dir", "Dir", "#8DA0CB"),
+    ]
+    tree_map.generate_tree_map_html(result_dir, tree_paths, unit_name="ms", factor=1, types=types)
 
     os.makedirs(result_dir, exist_ok=True)
 
@@ -194,11 +220,6 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
 
     with open(os.path.join(result_dir, "output.json"), "w") as f:
         json.dump(human_readable_output, f, indent=4)
-
-    propogate_area(tree)
-    enrich_names_with_sec(tree)
-
-    return tree
 
 
 def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, str]], dict]:
@@ -315,14 +336,16 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
     tree = {}
 
     headers_compile_duration = []
-
+    tree_paths = []
     for duration, cnt, path in result:
         path_chunks = path.split(os.sep)
         path_chunks[-1] = path_chunks[-1] + " (total {} times)".format(cnt)
-        path_chunks_count = len(path_chunks)
-        chunks = list(zip(path_chunks, (path_chunks_count - 1) * ["dir"] + ["h"]))
-        add_to_tree(chunks, int(duration * 1000), tree)
+        tree_path = [[chunk, "dir", 0] for chunk in path_chunks]
+        tree_path[-1][1] = "h"
+        tree_path[-1][2] = duration * 1000
         print("{} -> {:.2f}s (aggregated {} times)".format(path, duration, cnt))
+        if duration > HEADER_COMPILE_TIME_TO_SHOW:
+            tree_paths.append(tree_path)
         headers_compile_duration.append(
             {
                 "path": path,
@@ -330,6 +353,13 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
                 "mean_compilation_time_s": duration / cnt,
             }
         )
+
+    types = [
+        ("h", "Header", "#66C2A5"),
+        ("cpp", "Cpp", "#FC8D62"),
+        ("dir", "Dir", "#8DA0CB"),
+    ]
+    tree_map.generate_tree_map_html(result_dir, tree_paths, unit_name="ms", factor=1, types=types)
 
     time_breakdown = {}
 
@@ -357,10 +387,6 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
     with open(os.path.join(result_dir, "output.json"), "w") as f:
         json.dump(human_readable_output, f, indent=4)
 
-    propogate_area(tree)
-    enrich_names_with_sec(tree)
-
-    return tree
 
 
 def parse_args():
@@ -396,30 +422,19 @@ will be generated in output_dir"""
 def main():
     args = parse_args()
 
-    actions = []
-
-    if args.html_dir_cpp:
-        actions.append(("cpp build time impact", generate_cpp_bloat, args.html_dir_cpp))
-
-    if args.html_dir_cpp:
-        actions.append(("header build time impact", generate_header_bloat, args.html_dir_headers))
-
     current_script_dir = os.path.dirname(os.path.realpath(__file__))
     base_src_dir = os.path.normpath(os.path.join(current_script_dir, "../../.."))
     # check we a in root of source tree
     assert os.path.isfile(os.path.join(base_src_dir, "AUTHORS"))
-    html_dir = os.path.join(current_script_dir, "html")
 
-    for description, fn, output_path in actions:
-        print("Performing '{}'".format(description))
-        tree = fn(args.build_dir, output_path, base_src_dir)
 
-        shutil.copytree(html_dir, output_path, dirs_exist_ok=True)
-        with open(os.path.join(output_path, "bloat.json"), "w") as f:
-            f.write("var kTree = ")
-            json.dump(tree, f, indent=4)
+    if args.html_dir_cpp:
+        generate_cpp_bloat(args.build_dir, args.html_dir_cpp, base_src_dir)
+        print("Done '{}'".format("cpp build time impact"))
+    if args.html_dir_headers:
+        generate_header_bloat(args.build_dir, args.html_dir_headers, base_src_dir)
+        print("Done '{}'".format("header build time impact"))
 
-        print("Done '{}'".format(description))
 
 
 if __name__ == "__main__":

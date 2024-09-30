@@ -26,13 +26,15 @@ namespace NKikimr {
         TLogoBlobID LastKey;
         bool Eof;
         std::deque<TLogoBlobID> DroppedBlobs;
+        TMilestoneQueue MilestoneQueue;
 
         TEvReplPlanFinished(std::unique_ptr<TRecoveryMachine>&& recoveryMachine, const TLogoBlobID& lastKey, bool eof,
-                std::deque<TLogoBlobID>&& droppedBlobs)
+                std::deque<TLogoBlobID>&& droppedBlobs, TMilestoneQueue&& milestoneQueue)
             : RecoveryMachine(std::move(recoveryMachine))
             , LastKey(lastKey)
             , Eof(eof)
             , DroppedBlobs(std::move(droppedBlobs))
+            , MilestoneQueue(std::move(milestoneQueue))
         {}
     };
 
@@ -52,16 +54,15 @@ namespace NKikimr {
         std::deque<TLogoBlobID> DroppedBlobs;
         ui64 QuantumBytes = 0;
         bool AddingTasks = true;
+        TMilestoneQueue MilestoneQueue;
 
     public:
         void Bootstrap(const TActorId& parentId) {
             Recipient = parentId;
 
             // count unreplicated so far blobs in this work too
-            for (const TLogoBlobID& id : *UnreplicatedBlobsPtr) {
-                ReplInfo->WorkUnitsTotal += id.BlobSize();
-            }
-            ReplInfo->ItemsTotal += UnreplicatedBlobsPtr->size();
+            ReplInfo->WorkUnitsTotal += UnreplicatedBlobsPtr->GetNumWorkUnits();
+            ReplInfo->ItemsTotal += UnreplicatedBlobsPtr->GetNumItems();
 
             // prepare the recovery machine
             RecoveryMachine = std::make_unique<TRecoveryMachine>(ReplCtx, ReplInfo);
@@ -88,12 +89,12 @@ namespace NKikimr {
 
             if (BlobsToReplicatePtr) {
                 // iterate over queue items and match them with iterator
-                for (; !BlobsToReplicatePtr->empty() && AddingTasks; BlobsToReplicatePtr->pop_front()) {
+                for (; !BlobsToReplicatePtr->IsEmpty() && AddingTasks; BlobsToReplicatePtr->PopFront()) {
                     if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
                         Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
                         return;
                     } else {
-                        const TLogoBlobID& key = BlobsToReplicatePtr->front();
+                        const TLogoBlobID& key = BlobsToReplicatePtr->Front();
                         it.Seek(key);
                         const bool processed = it.Valid() && it.GetCurKey().LogoBlobID() == key &&
                             ProcessItem(it, *barriers, allowKeepFlags);
@@ -102,53 +103,89 @@ namespace NKikimr {
                         }
                     }
                 }
-                if (!AddingTasks) {
-                    for (const TLogoBlobID& key : *BlobsToReplicatePtr) {
-                        ReplInfo->WorkUnitsTotal += key.BlobSize();
-                    }
-                    ReplInfo->ItemsTotal += BlobsToReplicatePtr->size();
-                }
-                eof = BlobsToReplicatePtr->empty();
+                ReplInfo->WorkUnitsTotal += BlobsToReplicatePtr->GetNumWorkUnits();
+                ReplInfo->ItemsTotal += BlobsToReplicatePtr->GetNumItems();
+                eof = BlobsToReplicatePtr->IsEmpty();
             } else {
                 // scan through the index until we have enough blobs to recover or the time is out
                 const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
-                for (it.Seek(StartKey); it.Valid(); it.Next()) {
-                    StartKey = it.GetCurKey().LogoBlobID();
+
+                if (StartKey == TLogoBlobID()) {
+                    it.SeekToFirst();
+                } else {
+                    it.Seek(StartKey);
+                    if (it.Valid() && it.GetCurKey() == StartKey) {
+                        it.Next();
+                    }
+                }
+
+                auto checkRestart = [&] {
                     if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
                         // we have event processing timer expired, restart processing later with new snapshot starting
                         // with current key
                         Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
-                        return;
-                    } else if (AddingTasks) {
-                        // we still have some space in recovery machine logic, so we can add new item
-                        ProcessItem(it, *barriers, allowKeepFlags);
-                    } else {
-                        // no space in recovery machine logic, but we still have to count remaining work
-                        const TMemRecLogoBlob memRec = it.GetMemRec();
-                        const TIngress ingress = memRec.GetIngress();
-                        const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
-                            StartKey) - ingress.LocalParts(topology.GType);
-                        if (!parts.Empty() && barriers->Keep(StartKey, memRec, {}, allowKeepFlags,
-                                true /*allowGarbageCollection*/).KeepData) {
-                            ++ReplInfo->ItemsTotal;
-                            ReplInfo->WorkUnitsTotal += StartKey.BlobSize();
+                        return true;
+                    }
+                    return false;
+                };
+
+                if (AddingTasks) {
+                    for (; it.Valid(); it.Next()) {
+                        if (checkRestart()) {
+                            return;
                         }
 
-                        if (!KeyToResumeNextTime) {
-                            // this is first valid key that is not processed with ProcessItem, so we remember it to
-                            // start next quantum with this exact key
-                            KeyToResumeNextTime.emplace(StartKey);
+                        StartKey = it.GetCurKey().LogoBlobID();
+
+                        // we still have some space in recovery machine logic, so we can add new item
+                        ProcessItem(it, *barriers, allowKeepFlags);
+                        MilestoneQueue.PopIfNeeded(StartKey);
+
+                        if (!AddingTasks) { // we have finished adding tasks after this key, remember it
+                            it.Next();
+                            Y_ABORT_UNLESS(!KeyToResumeNextTime);
+                            if (it.Valid()) {
+                                KeyToResumeNextTime.emplace(it.GetCurKey().LogoBlobID());
+                            }
+                            break;
                         }
+                    }
+                    eof = !it.Valid(); // we finish this quantum when there are no more tasks to generate
+                }
+
+                for (; it.Valid(); it.Next()) {
+                    if (checkRestart()) {
+                        return;
+                    }
+
+                    StartKey = it.GetCurKey().LogoBlobID();
+
+                    // check the milestone queue, if we have requested blob
+                    if (MilestoneQueue.Match(StartKey, &ReplInfo->ItemsTotal, &ReplInfo->WorkUnitsTotal)) {
+                        break;
+                    }
+
+                    // no space in recovery machine logic, but we still have to count remaining work
+                    const TMemRecLogoBlob memRec = it.GetMemRec();
+                    const TIngress ingress = memRec.GetIngress();
+                    const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
+                        StartKey) - ingress.LocalParts(topology.GType);
+                    if (!parts.Empty() && barriers->Keep(StartKey, memRec, {}, allowKeepFlags,
+                            true /*allowGarbageCollection*/).KeepData) {
+                        ++ReplInfo->ItemsTotal;
+                        ReplInfo->WorkUnitsTotal += StartKey.BlobSize();
+                        MilestoneQueue.Push(StartKey, StartKey.BlobSize());
                     }
                 }
 
-                // we shall run next quantum only if we have KeyToResumeNextTime filled in
-                eof = !KeyToResumeNextTime;
+                if (!it.Valid()) {
+                    MilestoneQueue.Finish();
+                }
             }
 
             // the planning stage has finished, issue reply to the job actor
             Send(Recipient, new TEvReplPlanFinished(std::move(RecoveryMachine), KeyToResumeNextTime.value_or(TLogoBlobID()),
-                eof, std::move(DroppedBlobs)));
+                eof, std::move(DroppedBlobs), std::move(MilestoneQueue)));
 
             // finish processing for this actor
             PassAway();
@@ -225,13 +262,15 @@ namespace NKikimr {
                 const TLogoBlobID &startKey,
                 TEvReplFinished::TInfoPtr replInfo,
                 TBlobIdQueuePtr blobsToReplicatePtr,
-                TBlobIdQueuePtr unreplicatedBlobsPtr)
+                TBlobIdQueuePtr unreplicatedBlobsPtr,
+                TMilestoneQueue milestoneQueue)
             : ReplCtx(std::move(replCtx))
             , GInfo(std::move(ginfo))
             , StartKey(startKey)
             , ReplInfo(replInfo)
             , BlobsToReplicatePtr(std::move(blobsToReplicatePtr))
             , UnreplicatedBlobsPtr(std::move(unreplicatedBlobsPtr))
+            , MilestoneQueue(std::move(milestoneQueue))
         {}
     };
 
@@ -271,6 +310,7 @@ namespace NKikimr {
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr;
         TUnreplicatedBlobRecords UnreplicatedBlobRecords;
+        TMilestoneQueue MilestoneQueue;
         std::optional<std::pair<TVDiskID, TActorId>> Donor;
 
         // parameters from planner
@@ -311,7 +351,7 @@ namespace NKikimr {
             for (const auto& proxy : DiskProxySet) {
                 dropDonor = dropDonor && proxy && proxy->NoTransientErrors();
             }
-            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, std::move(UnreplicatedBlobRecords));
+            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
 
             TProxyStat stat;
             for (const TVDiskProxyPtr& p : DiskProxySet) {
@@ -332,7 +372,8 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_REPL, BSVR02, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Bootstrap"));
 
             TimeAccount.SetState(ETimeState::PREPARE_PLAN);
-            auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr, UnreplicatedBlobsPtr);
+            auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr,
+                UnreplicatedBlobsPtr, std::move(MilestoneQueue));
             auto aid = RunInBatchPool(ActorContext(), actor.release());
             ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StatePreparePlan);
@@ -344,6 +385,7 @@ namespace NKikimr {
             RecoveryMachine = std::move(ev->Get()->RecoveryMachine);
             LastKey = ev->Get()->LastKey;
             Eof = ev->Get()->Eof;
+            MilestoneQueue = std::move(ev->Get()->MilestoneQueue);
 
             for (const TLogoBlobID& id : ev->Get()->DroppedBlobs) {
                 DropUnreplicatedBlobRecord(id);
@@ -360,8 +402,8 @@ namespace NKikimr {
                     (ReplItemsRemaining, (ui64)mon.ReplItemsRemaining()),
                     (LastKey, LastKey),
                     (Eof, Eof),
-                    (BlobsToReplicatePtr.size, ssize_t(BlobsToReplicatePtr ? BlobsToReplicatePtr->size() : (ssize_t)-1)),
-                    (UnreplicatedBlobsPtr.size, UnreplicatedBlobsPtr->size()));
+                    (BlobsToReplicatePtr.size, ssize_t(BlobsToReplicatePtr ? BlobsToReplicatePtr->GetNumItems() : (ssize_t)-1)),
+                    (UnreplicatedBlobsPtr.size, UnreplicatedBlobsPtr->GetNumItems()));
             }
 
             mon.ReplWorkUnitsRemaining() = ReplInfo->WorkUnitsTotal;
@@ -651,7 +693,7 @@ namespace NKikimr {
                     (RecoveryQueueSize, RecoveryQueue.size()));
 
                 // sort unreplicated blobs vector as it may contain records in incorrect order due to phantom checking
-                std::sort(UnreplicatedBlobsPtr->begin(), UnreplicatedBlobsPtr->end());
+                UnreplicatedBlobsPtr->Sort();
                 return true;
             }
 
@@ -762,7 +804,7 @@ namespace NKikimr {
             } else if (record.LooksLikePhantom) {
                 ++ReplCtx->MonGroup.ReplPhantomBlobsWithProblems();
             }
-            UnreplicatedBlobsPtr->push_back(item.Id);
+            UnreplicatedBlobsPtr->Push(item.Id);
         }
 
         void DropUnreplicatedBlobRecord(const TLogoBlobID& id) {
@@ -946,7 +988,8 @@ namespace NKikimr {
                 TBlobIdQueuePtr&& blobsToReplicatePtr,
                 TBlobIdQueuePtr&& unreplicatedBlobsPtr,
                 const std::optional<std::pair<TVDiskID, TActorId>>& donor,
-                TUnreplicatedBlobRecords&& ubr)
+                TUnreplicatedBlobRecords&& ubr,
+                TMilestoneQueue&& milestoneQueue)
             : TActorBootstrapped<THullReplJobActor>()
             , ReplCtx(std::move(replCtx))
             , GInfo(ReplCtx->GInfo) // it is safe to take it here
@@ -962,6 +1005,7 @@ namespace NKikimr {
             , BlobsToReplicatePtr(std::move(blobsToReplicatePtr))
             , UnreplicatedBlobsPtr(std::move(unreplicatedBlobsPtr))
             , UnreplicatedBlobRecords(std::move(ubr))
+            , MilestoneQueue(std::move(milestoneQueue))
             , Donor(donor)
         {
             if (Donor) {
@@ -993,10 +1037,12 @@ namespace NKikimr {
             TBlobIdQueuePtr blobsToReplicatePtr,
             TBlobIdQueuePtr unreplicatedBlobsPtr,
             const std::optional<std::pair<TVDiskID, TActorId>>& donor,
-            TUnreplicatedBlobRecords&& ubr)
+            TUnreplicatedBlobRecords&& ubr,
+            TMilestoneQueue&& milestoneQueue)
     {
         return new THullReplJobActor(std::move(replCtx), parentId, startKey, std::move(queueActorMapPtr),
-            std::move(blobsToReplicatePtr), std::move(unreplicatedBlobsPtr), donor, std::move(ubr));
+            std::move(blobsToReplicatePtr), std::move(unreplicatedBlobsPtr), donor, std::move(ubr),
+            std::move(milestoneQueue));
     }
 
 } // NKikimr

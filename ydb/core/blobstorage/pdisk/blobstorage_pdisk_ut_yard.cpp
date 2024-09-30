@@ -145,39 +145,15 @@ YARD_UNIT_TEST(TestSysLogReordering) {
     }
 }
 
-YARD_UNIT_TEST(TestLogWriteReaDifferentHashers) {
-    for (ui32 i = 0; i < 4; ++i) {
-        TTestContext tc(false, true);
-        TTestRunConfig cfg(&tc);
-
-        cfg.UseT1ha0Hasher = i / 2;
-        Run<TTestLogWriteRead<6000>>(cfg);
-        cfg.UseT1ha0Hasher = i % 2;
-        Run<TTestWholeLogRead>(cfg);
-    }
-}
-
-YARD_UNIT_TEST(TestChunkWriteReadDifferentHashers) {
-    for (ui32 i = 0; i < 2; ++i) {
-        TTestContext tc(false, true);
-        TTestRunConfig cfg(&tc);
-
-        cfg.UseT1ha0Hasher = i;
-        Run<TTestChunkWriteRead<1000000, 1500000>>(cfg);
-    }
-}
-
 YARD_UNIT_TEST(TestLogWriteCutUnequal) {
-    if constexpr (KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE) {
-        TTestContext tc(false, true);
-        FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
-        Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
-        TTestLogWriteCut<false>::Reset();
-        Run<TTestWholeLogRead>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestContext tc(false, true);
+    FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
+    Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestLogWriteCut<false>::Reset();
+    Run<TTestWholeLogRead>(&tc, 2, MIN_CHUNK_SIZE);
 
-        Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
-        TTestLogWriteCut<false>::Reset();
-    }
+    Run<TTestLogWriteCut<false>>(&tc, 2, MIN_CHUNK_SIZE);
+    TTestLogWriteCut<false>::Reset();
 }
 
 YARD_UNIT_TEST(TestChunkReadRandomOffset) {

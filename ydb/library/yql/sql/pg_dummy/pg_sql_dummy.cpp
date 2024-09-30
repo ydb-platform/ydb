@@ -21,7 +21,19 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     return {};
 }
 
-}  // NSQLTranslationPG
+std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
+    throw yexception() << "CreateExtensionSqlParser: PG types are not supported";
+}
+
+std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser() {
+    throw yexception() << "CreateSystemFunctionsParser: PG types are not supported";
+}
+
+std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
+    throw yexception() << "CreateSqlLanguageParser: PG types are not supported";
+}
+
+} // NSQLTranslationPG
 
 namespace NYql {
 namespace NCommon {
@@ -70,7 +82,7 @@ TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 ty
     throw yexception() << "PgValueCoerce: PG types are not supported";
 }
 
-void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
+void WriteYsonValuePg(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions) {
     Y_UNUSED(writer);
     Y_UNUSED(value);
@@ -79,10 +91,11 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     throw yexception() << "WriteYsonValuePg: PG types are not supported";
 }
 
-void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value) {
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel) {
     Y_UNUSED(buf);
     Y_UNUSED(type);
     Y_UNUSED(value);
+    Y_UNUSED(topLevel);
     throw yexception() << "WriteYsonValueInTableFormatPg: PG types are not supported";
 }
 
@@ -158,6 +171,10 @@ void PgReleaseThreadContext(void* ctx) {
 void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
     Y_UNUSED(ctx);
     Y_UNUSED(GUCSettings);
+}
+
+std::unique_ptr<NYql::NPg::IExtensionLoader> CreateExtensionLoader() {
+    throw yexception() << "PG types are not supported";
 }
 
 std::optional<std::string> PGGetGUCSetting(const std::string& key) {
@@ -410,23 +427,23 @@ IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, con
 
 namespace NKikimr::NPg {
 
-ui32 PgTypeIdFromTypeDesc(void* typeDesc) {
+ui32 PgTypeIdFromTypeDesc(const ITypeDesc* typeDesc) {
     Y_UNUSED(typeDesc);
     return 0;
 }
 
-void* TypeDescFromPgTypeId(ui32 pgTypeId) {
+const ITypeDesc* TypeDescFromPgTypeId(ui32 pgTypeId) {
     Y_UNUSED(pgTypeId);
     return {};
 }
 
-TString PgTypeNameFromTypeDesc(void* typeDesc, const TString& typeMod) {
+TString PgTypeNameFromTypeDesc(const ITypeDesc* typeDesc, const TString& typeMod) {
     Y_UNUSED(typeDesc);
     Y_UNUSED(typeMod);
     return "";
 }
 
-void* TypeDescFromPgTypeName(const TStringBuf name) {
+const ITypeDesc* TypeDescFromPgTypeName(const TStringBuf name) {
     Y_UNUSED(name);
     return {};
 }
@@ -436,27 +453,27 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
     return {};
 }
 
-bool TypeDescIsComparable(void* typeDesc) {
+bool TypeDescIsComparable(const ITypeDesc* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-i32 TypeDescGetTypeLen(void* typeDesc) {
+i32 TypeDescGetTypeLen(const ITypeDesc* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-ui32 TypeDescGetStoredSize(void* typeDesc) {
+ui32 TypeDescGetStoredSize(const ITypeDesc* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-bool TypeDescNeedsCoercion(void* typeDesc) {
+bool TypeDescNeedsCoercion(const ITypeDesc* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, void* typeDesc) {
+int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, const ITypeDesc* typeDesc) {
     Y_UNUSED(dataL);
     Y_UNUSED(sizeL);
     Y_UNUSED(dataR);
@@ -465,33 +482,33 @@ int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, si
     throw yexception() << "PG types are not supported";
 }
 
-ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
+ui64 PgNativeBinaryHash(const char* data, size_t size, const ITypeDesc* typeDesc) {
     Y_UNUSED(data);
     Y_UNUSED(size);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, void* typeDesc) {
+TTypeModResult BinaryTypeModFromTextTypeMod(const TString& str, const ITypeDesc* typeDesc) {
     Y_UNUSED(str);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, void* typeDesc) {
+TMaybe<TString> PgNativeBinaryValidate(const TStringBuf binary, const ITypeDesc* typeDesc) {
     Y_UNUSED(binary);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }
 
-TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 typmod) {
+TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, const ITypeDesc* typeDesc, i32 typmod) {
     Y_UNUSED(binary);
     Y_UNUSED(typeDesc);
     Y_UNUSED(typmod);
     throw yexception() << "PG types are not supported";
 }
 
-TConvertResult PgNativeBinaryFromNativeText(const TString& str, void* typeDesc) {
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, const ITypeDesc* typeDesc) {
     Y_UNUSED(str);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
@@ -503,7 +520,7 @@ TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     throw yexception() << "PG types are not supported";
 }
 
-TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, void* typeDesc) {
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, const ITypeDesc* typeDesc) {
     Y_UNUSED(binary);
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";

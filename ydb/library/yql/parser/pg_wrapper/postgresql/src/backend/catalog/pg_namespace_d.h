@@ -3,7 +3,7 @@
  * pg_namespace_d.h
  *    Macro definitions for pg_namespace
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_NAMESPACE_D_H
 
 #define NamespaceRelationId 2615
+#define NamespaceNameIndexId 2684
+#define NamespaceOidIndexId 2685
 
 #define Anum_pg_namespace_oid 1
 #define Anum_pg_namespace_nspname 2

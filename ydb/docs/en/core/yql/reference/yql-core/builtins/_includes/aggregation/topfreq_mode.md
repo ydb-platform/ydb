@@ -12,7 +12,7 @@ Optional arguments:
 1. For `TOPFREQ`, the desired number of items in the result. `MODE` is an alias to `TOPFREQ` with this argument set to 1. For `TOPFREQ`, this argument is also 1 by default.
 2. The number of items in the buffer used: lets you trade memory consumption for accuracy. Default: 100.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

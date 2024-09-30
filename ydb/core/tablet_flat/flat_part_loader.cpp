@@ -210,15 +210,20 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     TEpoch epoch = Epoch != TEpoch::Max() ? Epoch : TEpoch(Root.GetEpoch());
 
     // TODO: put index size to stat?
-    // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
     if (BTreeGroupIndexes) {
         for (const auto &meta : BTreeGroupIndexes) {
             indexesRawSize += meta.IndexSize;
         }
+        for (const auto &meta : BTreeHistoricIndexes) {
+            indexesRawSize += meta.IndexSize;
+        }
         // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
     } else {
         for (auto indexPage : FlatGroupIndexes) {
+            indexesRawSize += Packs[0]->GetPageSize(indexPage);
+        }
+        for (auto indexPage : FlatHistoricIndexes) {
             indexesRawSize += Packs[0]->GetPageSize(indexPage);
         }
     }

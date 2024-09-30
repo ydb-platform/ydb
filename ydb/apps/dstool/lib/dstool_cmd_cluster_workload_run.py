@@ -20,6 +20,7 @@ def add_options(p):
     p.add_argument('--enable-kill-blob-depot', action='store_true', help='Enable BlobDepot killer')
     p.add_argument('--enable-restart-pdisks', action='store_true', help='Enable PDisk restarter')
     p.add_argument('--kill-signal', type=str, default='KILL', help='Kill signal to send to restart node')
+    p.add_argument('--sleep-before-rounds', type=int, default=1, help='Seconds to sleep before rounds')
 
 
 def fetch_start_time_map(base_config):
@@ -142,6 +143,7 @@ def do(args):
             if args.enable_pdisk_encryption_keys_changes:
                 update_pdisk_key_config(node_fqdn_map, pdisk_keys, node_id)
             subprocess.call(['ssh', host, 'sudo', 'killall', '-%s' % args.kill_signal, 'kikimr'])
+            subprocess.call(['ssh', host, 'sudo', 'killall', '-%s' % args.kill_signal, 'ydbd'])
             if args.enable_pdisk_encryption_keys_changes:
                 remove_old_pdisk_keys(pdisk_keys, pdisk_key_versions, node_id)
 
@@ -312,4 +314,4 @@ def do(args):
             common.print_if_not_quiet(args, 'Failed to perform action: %s with error: %s' % (action_name, e), file=sys.stderr)
 
         common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)
-        time.sleep(1)
+        time.sleep(args.sleep_before_rounds)

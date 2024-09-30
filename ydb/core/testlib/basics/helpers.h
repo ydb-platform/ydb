@@ -20,9 +20,9 @@ namespace NFake {
     };
 
     struct TCaches {
-        ui64 Shared = 32 * (ui64(1) << 20); // Shared cache limit, bytes
-        ui64 ScanQueue = 512 * (ui64(1) << 20); // Scan queue in flight limit, bytes
-        ui64 AsyncQueue = 512 * (ui64(1) << 20); // Async queue in flight limit, bytes
+        std::optional<ui64> Shared = 32_MB; // Shared cache limit, bytes
+        ui64 ScanQueue = 512_MB; // Scan queue in flight limit, bytes
+        ui64 AsyncQueue = 512_MB; // Async queue in flight limit, bytes
     };
 
     struct INode {
@@ -35,6 +35,8 @@ namespace NFake {
     TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
         TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
     TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
+        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
+    TActorId StartTestTablet(TTestActorRuntime &runtime, TTabletStorageInfo *info,
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
     NTabletPipe::TClientConfig GetPipeConfigWithRetries();
 

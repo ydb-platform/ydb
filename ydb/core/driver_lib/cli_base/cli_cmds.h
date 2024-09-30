@@ -44,18 +44,6 @@ public:
     TClientCommandDb();
 };
 
-class TClientCommandWhoAmI : public TClientCommand {
-public:
-    TClientCommandWhoAmI();
-    virtual void Config(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-
-protected:
-    bool WithGroups = false;
-
-    int PrintResponse(const NMsgBusProxy::TBusResponse& response) const;
-};
-
 class TClientCommandDiscoveryBase
     : public TClientGRpcCommand<Ydb::Discovery::V1::DiscoveryService,
     Ydb::Discovery::ListEndpointsRequest,

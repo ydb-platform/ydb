@@ -1,17 +1,15 @@
 LIBRARY()
 
 SRCS(
+    common.h
     events.h
-    stat_service.h
-    stat_service.cpp
-    save_load_stats.h
-    save_load_stats.cpp
 )
 
 PEERDIR(
     util
     ydb/library/actors/core
     ydb/library/query_actor
+    ydb/library/minsketch
     ydb/core/protos
     ydb/core/scheme
 )
@@ -20,8 +18,13 @@ END()
 
 RECURSE(
     aggregator
+    database
+    service
+    ut_common
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    aggregator/ut
+    database/ut
+    service/ut
 )

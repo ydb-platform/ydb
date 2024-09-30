@@ -11,7 +11,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadCo
     Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 }
 
-TConclusion<std::optional<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
+TConclusion<std::shared_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
@@ -33,11 +33,11 @@ void TColumnShardScanIterator::FillReadyResults() {
     i64 limitLeft = Context->GetReadMetadata()->Limit == 0 ? INT64_MAX : Context->GetReadMetadata()->Limit - ItemsRead;
     for (size_t i = 0; i < ready.size() && limitLeft; ++i) {
         auto& batch = ReadyResults.emplace_back(std::move(ready[i]));
-        if (batch.GetResultBatch().num_rows() > limitLeft) {
-            batch.Cut(limitLeft);
+        if (batch->GetResultBatch().num_rows() > limitLeft) {
+            batch->Cut(limitLeft);
         }
-        limitLeft -= batch.GetResultBatch().num_rows();
-        ItemsRead += batch.GetResultBatch().num_rows();
+        limitLeft -= batch->GetResultBatch().num_rows();
+        ItemsRead += batch->GetResultBatch().num_rows();
     }
 
     if (limitLeft == 0) {
@@ -53,7 +53,7 @@ TColumnShardScanIterator::~TColumnShardScanIterator() {
     ReadMetadata->ReadStats->PrintToLog();
 }
 
-void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
+void TColumnShardScanIterator::Apply(const std::shared_ptr<IApplyAction>& task) {
     if (!IndexedData->IsFinished()) {
         Y_ABORT_UNLESS(task->Apply(*IndexedData));
     }

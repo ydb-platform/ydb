@@ -33,6 +33,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NotRegistered);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, SlowCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, SlowCanceledCall);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, LatchedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NoReply);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, FlakyCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequireCoolFeature);
@@ -65,13 +66,19 @@ DEFINE_REFCOUNTED_TYPE(ITestService)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TTestCreateChannelCallback = TCallback<IChannelPtr(const TString& address)>;
+using TTestCreateChannelCallback = TCallback<IChannelPtr(const std::string& address)>;
 
 ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel,
     IMemoryUsageTrackerPtr memoryUsageTracker);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ReleaseLatchedCalls();
+void MaybeInitLatch();
+void ResetLatch();
 
 ////////////////////////////////////////////////////////////////////////////////
 

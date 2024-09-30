@@ -3,6 +3,14 @@
     - types.h
     - stat.h
 
+- source_filter: "^contrib(?!/restricted/libnl)"
+  includes:
+    - netlink/genl/genl.h
+    - netlink/genl/family.h
+    - netlink/genl/ctrl.h
+    - netlink/msg.h
+    - netlink/attr.h
+
 - source_filter: ".*contrib.*"
   includes:
   - stat.h
@@ -105,7 +113,6 @@
   - pire/config.h
   - pngusr.h
   - pth.h
-  - relocatable.h
   - rtl.h
   - shlib-compat.h
   - sigsegv.h
@@ -138,10 +145,6 @@
   - yca/yca.h
   - prof.h
   - ll_alloc_hook.c
-  - cpptl/config.h
-  - cpptl/conststring.h
-  - cpptl/forwards.h
-  - cpptl/smallmap.h
   - forwards.h
   - json_valueiterator.inl
   - value.h
@@ -397,11 +400,6 @@
   - netdnet/dnetdb.h
   - sys/ethernet.h
   - sys/stream.h
-  - netlink/genl/genl.h
-  - netlink/genl/family.h
-  - netlink/genl/ctrl.h
-  - netlink/msg.h
-  - netlink/attr.h
   # end libpcap files
 
 # These includes are not used in autocheck builds, but might be necessary for

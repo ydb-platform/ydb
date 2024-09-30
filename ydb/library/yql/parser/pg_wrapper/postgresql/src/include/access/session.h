@@ -3,7 +3,7 @@
  * session.h
  *	  Encapsulation of user session.
  *
- * Copyright (c) 2017-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2017-2023, PostgreSQL Global Development Group
  *
  * src/include/access/session.h
  *
@@ -39,6 +39,6 @@ extern void AttachSession(dsm_handle handle);
 extern void DetachSession(void);
 
 /* The current session, or NULL for none. */
-extern __thread Session *CurrentSession;
+extern __thread PGDLLIMPORT Session *CurrentSession;
 
 #endif							/* SESSION_H */

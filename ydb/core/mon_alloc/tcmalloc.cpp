@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/cache/cache.h>
+#include <library/cpp/dwarf_backtrace/backtrace.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -206,25 +207,15 @@ class TAllocationAnalyzer {
     bool Prepared = false;
 
 private:
-    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz,
-        const char* sep)
-    {
-        char name[1024];
-        for (size_t i = 0; i < sz; ++i) {
-            TSymbol symbol;
-            auto it = SymbolCache.Find(stack[i]);
-            if (it != SymbolCache.End()) {
-                symbol = it.Value();
-            } else {
-                TResolvedSymbol rs = ResolveSymbol(stack[i], name, sizeof(name));
-                symbol = {rs.NearestSymbol, rs.Name};
-                SymbolCache.Insert(stack[i], symbol);
-            }
-
-            out << Hex((intptr_t)stack[i], HF_FULL) << " " << symbol.Name;
-            intptr_t offset = (intptr_t)stack[i] - (intptr_t)symbol.Address;
-            if (offset)
-                out << " +" << offset;
+    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
+        // TODO: ignore symbol cache for now - because of inlines.
+        if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {
+            out << "#" << info.Index << " " << info.FunctionName << " at " << info.FileName << ':' << info.Line << ':' << info.Col << sep;
+            return NDwarf::EResolving::Continue;
+        })) {
+            // TODO: print error message.
+            out << "Failed to resolve stacktrace: " << error->Message << sep;
+        } else {
             out << sep;
         }
     }
@@ -446,13 +437,16 @@ public:
 
 class TTcMallocState : public IAllocState {
 public:
-    ui64 GetAllocatedMemoryEstimate() const override {
+    TState Get() const override {
         const auto properties = tcmalloc::MallocExtension::GetProperties();
 
         ui64 used = GetProperty(properties, "generic.physical_memory_used");
         ui64 caches = GetCachesSize(properties);
 
-        return used > caches ? used - caches : 0;
+        return {
+            used - Min(used, caches),
+            caches
+        };
     }
 };
 

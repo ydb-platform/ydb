@@ -1127,9 +1127,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         ])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST_TWIN(UnionAllSortLimit, SourceRead) {
+    Y_UNIT_TEST(UnionAllSortLimit) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig);
 
@@ -1151,10 +1150,6 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-
-        if (SourceRead) {
-            return;
-        }
 
         for (auto& read : plan["tables"][0]["reads"].GetArraySafe()) {
             UNIT_ASSERT(read.Has("limit"));

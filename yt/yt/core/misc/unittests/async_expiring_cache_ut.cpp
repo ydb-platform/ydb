@@ -304,6 +304,30 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache2)
     EXPECT_EQ(1, cache->GetCount());
 }
 
+TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
+{
+    auto config = New<TAsyncExpiringCacheConfig>();
+    config->ExpireAfterAccessTime = TDuration::Zero();
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::Minutes(1);
+    config->ExpireAfterFailedUpdateTime = TDuration::Zero();
+    config->RefreshTime = TDuration::Minutes(1);
+
+    auto cache = New<TDelayedExpiringCache>(config, TDuration::MilliSeconds(100));
+    {
+        auto result = cache->Get(0).Get();
+        EXPECT_TRUE(result.IsOK());
+        EXPECT_EQ(1, result.Value());
+    }
+
+    cache->Set(0, 2);
+    EXPECT_EQ(1, cache->GetCount());
+    {
+        auto result = cache->Get(0).Get();
+        EXPECT_TRUE(result.IsOK());
+        EXPECT_EQ(2, result.Value());
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRevisionCache

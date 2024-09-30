@@ -117,7 +117,6 @@ public:
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
-            MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
@@ -125,7 +124,6 @@ public:
             MTYPE(TBusFillNode)
             MTYPE(TBusDrainNode)
             MTYPE(TBusTestShardControlRequest)
-            MTYPE(TBusLoginRequest)
 #undef MTYPE
         }
 
@@ -538,16 +536,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
     case MTYPE_CLIENT_SQS_REQUEST:
         return ClientActorRequest(CreateMessageBusSqsRequest, msg);
-    case MTYPE_CLIENT_WHOAMI:
-        return ClientActorRequest(CreateMessageBusWhoAmI, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:
         return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
     case MTYPE_CLIENT_TEST_SHARD_CONTROL:
         return ClientActorRequest(CreateMessageBusTestShardControl, msg);
-    case MTYPE_CLIENT_LOGIN_REQUEST:
-        return ClientActorRequest(CreateMessageBusLoginRequest, msg);
     default:
         return UnknownMessage(msg);
     }

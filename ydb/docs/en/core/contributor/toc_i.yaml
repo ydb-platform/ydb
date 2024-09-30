@@ -18,9 +18,8 @@ items:
     - name: Distributed transactions
       href: datashard-distributed-txs.md
   - name: Testing with load actors
+    href: load-actors-overview.md
     items:
-    - name: Overview
-      href: load-actors-overview.md
     - name: KqpLoad
       href: load-actors-kqp.md
     - name: KeyValueLoad

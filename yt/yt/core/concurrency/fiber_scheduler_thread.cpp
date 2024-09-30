@@ -16,6 +16,10 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <library/cpp/yt/error/origin_attributes.h>
+
+#include <library/cpp/yt/global/variable.h>
+
 #include <library/cpp/yt/memory/memory_tag.h>
 
 #include <library/cpp/yt/memory/function_view.h>
@@ -370,7 +374,7 @@ public:
     // Save fiber in AfterSwitch because it can be immediately concurrently reused.
     void SwichFromFiberAndMakeItIdle(TFiber* currentFiber, TFiber* targetFiber)
     {
-        RemoveOverdraftedIdleFibers();
+        RemoveOverdrawnIdleFibers();
 
         auto afterSwitch = MakeAfterSwitch([currentFiber, this] {
             currentFiber->SetIdle();
@@ -389,14 +393,14 @@ public:
         return TFiber::CreateFiber();
     }
 
-    void UpdateMaxIdleFibers(ui64 maxIdleFibers)
+    void UpdateMaxIdleFibers(int maxIdleFibers)
     {
         MaxIdleFibers_.store(maxIdleFibers, std::memory_order::relaxed);
     }
 
 private:
     moodycamel::ConcurrentQueue<TFiber*> IdleFibers_;
-    std::atomic<ui64> MaxIdleFibers_ = DefaultMaxIdleFibers;
+    std::atomic<int> MaxIdleFibers_ = DefaultMaxIdleFibers;
 
     // NB(arkady-e1ppa): Construct this last so that every other
     // field is initialized if this callback is ran concurrently.
@@ -434,7 +438,7 @@ private:
         while (true) {
             auto size = std::max<size_t>(1, IdleFibers_.size_approx());
 
-            DequeueBulk(&fibers, size);
+            DequeueFibersBulk(&fibers, size);
             if (fibers.empty()) {
                 break;
             }
@@ -454,9 +458,10 @@ private:
         }
     }
 
-    void RemoveOverdraftedIdleFibers()
+    void RemoveOverdrawnIdleFibers()
     {
-        auto size = IdleFibers_.size_approx();
+        // NB: size_t to int conversion.
+        int size = IdleFibers_.size_approx();
         if (size <= MaxIdleFibers_.load(std::memory_order::relaxed)) {
             return;
         }
@@ -464,14 +469,14 @@ private:
         auto targetSize = std::max<size_t>(1, MaxIdleFibers_ / 2);
 
         std::vector<TFiber*> fibers;
-        DequeueBulk(&fibers, size - targetSize);
+        DequeueFibersBulk(&fibers, size - targetSize);
         if (fibers.empty()) {
             return;
         }
         JoinFibers(std::move(fibers));
     }
 
-    void DequeueBulk(std::vector<TFiber*>* fibers, ui64 count)
+    void DequeueFibersBulk(std::vector<TFiber*>* fibers, int count)
     {
         fibers->resize(count);
         auto dequeued = IdleFibers_.try_dequeue_bulk(std::begin(*fibers), count);
@@ -502,15 +507,11 @@ Y_FORCE_INLINE TClosure PickCallback(TFiberSchedulerThread* fiberThread)
     // that the propagating storage created there won't spill into the fiber callbacks.
 
     TNullPropagatingStorageGuard guard;
-    YT_VERIFY(guard.GetOldStorage().IsNull());
+    YT_VERIFY(guard.GetOldStorage().IsEmpty());
     callback = fiberThread->OnExecute();
 
     return callback;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -528,18 +529,7 @@ void FiberTrampoline()
         YT_VERIFY(!TryGetResumerFiber());
         YT_VERIFY(CurrentFls() == nullptr);
 
-        if (auto perThreadFls = NDetail::PerThreadFls()) {
-            const auto* propStorage = TryGetPropagatingStorage(*perThreadFls);
-            if (propStorage != nullptr) {
-                if (!propStorage->IsNull()) {
-                    Cerr << "Unexpected propagating storage" << Endl;
-                    PrintLocationToStderr();
-                    YT_ABORT();
-                }
-            }
-        }
-
-        YT_VERIFY(GetCurrentPropagatingStorage().IsNull());
+        YT_VERIFY(GetCurrentPropagatingStorage().IsEmpty());
 
         auto callback = PickCallback(fiberThread);
 
@@ -994,6 +984,8 @@ Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
     TFiberSwitchHandler switchHandler(fiber);
     TNullPropagatingStorageGuard nullPropagatingStorageGuard;
     callback();
+    // To ensure callback is destroyed before switchHandler.
+    callback.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1088,7 +1080,7 @@ void TFiberSchedulerThread::ThreadMain()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void UpdateMaxIdleFibers(ui64 maxIdleFibers)
+void UpdateMaxIdleFibers(int maxIdleFibers)
 {
     NDetail::TIdleFiberPool::Get()->UpdateMaxIdleFibers(maxIdleFibers);
 }
@@ -1099,11 +1091,13 @@ YT_DEFINE_THREAD_LOCAL(TFiberId, CurrentFiberId);
 
 TFiberId GetCurrentFiberId()
 {
+    NYT::NDetail::EnableErrorOriginOverrides();
     return CurrentFiberId();
 }
 
 void SetCurrentFiberId(TFiberId id)
 {
+    NYT::NDetail::EnableErrorOriginOverrides();
     CurrentFiberId() = id;
 }
 

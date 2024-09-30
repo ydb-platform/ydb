@@ -15,10 +15,12 @@
 Для успешного соединения, кроме случая загрузки из публично доступного бакета, потребуется аутентифицироваться под учетной записью, для которой разрешена запись (для выгрузки) или чтение (для загрузки) из данного бакета.
 
 Для аутентификации в S3 необходимы два параметра:
+
 - Идентификатор ключа доступа (access_key_id).
 - Секретный ключ доступа (secret_access_key).
 
-YDB CLI определяет значения этих параметров из следующих источников (в порядке убывания приоритета):
+{{ ydb-short-name }} CLI определяет значения этих параметров из следующих источников (в порядке убывания приоритета):
+
 1. Командной строки.
 2. Переменных окружения.
 3. Файла `~/.aws/credentials`.
@@ -31,7 +33,7 @@ YDB CLI определяет значения этих параметров из
 
 ### Переменные окружения
 
-Если какой-либо параметр аутентификации не указан в командной строке, YDB CLI пробует его получить из следующих переменных окружения:
+Если какой-либо параметр аутентификации не указан в командной строке, {{ ydb-short-name }} CLI пробует его получить из следующих переменных окружения:
 
 * `AWS_ACCESS_KEY_ID` — идентификатор ключа доступа.
 * `AWS_SECRET_ACCESS_KEY` — секретный ключ доступа.
@@ -39,51 +41,51 @@ YDB CLI определяет значения этих параметров из
 
 ### Файл аутентификации AWS
 
-Если какой-либо параметр аутентификации не указан в командной строке и его не удалось получить из переменной окружения, YDB CLI пробует его получить из указанного профиля или профиля по умолчанию в файле `~/.aws/credentials`, применяемого для аутентификации [AWS CLI](https://aws.amazon.com/ru/cli/). Данный файл может быть создан командой AWS CLI `aws configure`.
+Если какой-либо параметр аутентификации не указан в командной строке и его не удалось получить из переменной окружения, {{ ydb-short-name }} CLI пробует его получить из указанного профиля или профиля по умолчанию в файле `~/.aws/credentials`, применяемого для аутентификации [AWS CLI](https://aws.amazon.com/ru/cli/). Данный файл может быть создан командой AWS CLI `aws configure`.
 
 ## Получение параметров соединения с S3 {#procure}
 
 ### {{ yandex-cloud }}
 
-Ниже описан сценарий получения ключей доступа к [{{ yandex-cloud }} Object Storage]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/storage/){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/storage/){% endif %} с применением {{ yandex-cloud }} CLI.
+Ниже описан сценарий получения ключей доступа к [{{ yandex-cloud }} Object Storage](https://cloud.yandex.ru/docs/storage/) с применением {{ yandex-cloud }} CLI.
 
-1. [Установите и сконфигурируйте]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/cli/quickstart){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/cli/quickstart){% endif %} {{ yandex-cloud }} CLI.
+1. [Установите и сконфигурируйте](https://cloud.yandex.ru/docs/cli/quickstart) {{ yandex-cloud }} CLI.
 
 2. Получите ID вашего каталога в облаке следующей командой, его понадобится указывать в командах ниже:
 
-   ``` bash
+   ```bash
    yc config list
    ```
 
    В выводе идентификатор каталога в облаке находится в строке `folder-id:`:
 
-   ``` yaml
+   ```yaml
    folder-id: b2ge70qdcff4bo9q6t19
    ```
-   
 
-3. [Создайте сервисный аккаунт]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create){% endif %}, выполнив следующую команду:
 
-   ``` bash
+3. [Создайте сервисный аккаунт](https://cloud.yandex.ru/docs/iam/operations/sa/create), выполнив следующую команду:
+
+   ```bash
    yc iam service-account create --name s3account
    ```
 
    Вы можете указать любое имя аккаунта кроме `s3account` или использовать существующий, тогда вам понадобится его также заменять при копировании команд ниже через буфер обмена.
 
-3. [Назначьте сервисному аккаунту]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/assign-role-for-sa){% endif %} роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
+4. [Назначьте сервисному аккаунту](https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa) роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
 
    {% list tabs %}
 
-   - Чтение (для загрузки в базу данных YDB)
+   - Чтение (для загрузки в базу данных {{ ydb-short-name }})
 
-     ``` bash
+     ```bash
      yc resource-manager folder add-access-binding <folder-id> \
        --role storage.viewer --subject serviceAccount:s3account
      ```
 
-   - Запись (для выгрузки из базы данных YDB)
+   - Запись (для выгрузки из базы данных {{ ydb-short-name }})
 
-     ``` bash
+     ```bash
      yc resource-manager folder add-access-binding <folder-id> \
        --role storage.editor --subject serviceAccount:s3account
      ```
@@ -92,17 +94,17 @@ YDB CLI определяет значения этих параметров из
 
    , где `<folder-id>` - это идентификатор каталога в облаке, полученный на шаге 2.
 
-   Вы можете также ознакомиться с [полным перечнем]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/concepts/access-control/roles#object-storage){% endif %} ролей {{ yandex-cloud }}.
+   Вы можете также ознакомиться с [полным перечнем](https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage) ролей {{ yandex-cloud }}.
 
-4. Получите [статические ключи доступа]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create-access-key){% endif %}, выполнив следующую команду:
+5. Получите [статические ключи доступа](https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key), выполнив следующую команду:
 
-   ``` bash
+   ```bash
    yc iam access-key create --service-account-name s3account
    ```
 
    Успешно исполненная команда выведет информацию об атрибутах access_key и значение secret:
 
-   ``` yaml
+   ```yaml
    access_key:
      id: aje6t3vsbj8lp9r4vk2u
      service_account_id: ajepg0mjt06siuj65usm

@@ -66,6 +66,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasServerlessComputeResourcesMode()) {
             ServerlessComputeResourcesMode = descr.GetServerlessComputeResourcesMode();
         }
+
+        if (descr.HasSharedHive()) {
+            SharedHiveId = descr.GetSharedHive();
+        }
     }
 
     inline ui64 GetVersion() const {
@@ -80,6 +84,14 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         }
     }
 
+    inline ui64 ExtractHive() const {
+        if (IsServerless()) {
+            return SharedHiveId;
+        } else {
+            return Params.GetHive();
+        }
+    }
+
     inline bool IsServerless() const {
         return DomainKey != ResourcesDomainKey;
     }
@@ -89,6 +101,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    ui64 SharedHiveId = 0;
 
     TString ToString() const;
 
@@ -359,7 +372,8 @@ struct TSchemeCacheRequest {
         KindUnknown = 0,
         KindRegularTable = 1,
         KindSyncIndexTable = 2,
-        KindAsyncIndexTable= 3,
+        KindAsyncIndexTable = 3,
+        KindVectorIndexTable = 4,
     };
 
     struct TEntry {

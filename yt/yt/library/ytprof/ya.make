@@ -13,9 +13,9 @@ SRCS(
 )
 
 IF (OS_LINUX)
-    SRCS(symbolize.cpp)
+    SRCS(symbolize_linux.cpp)
 ELSE()
-    SRCS(symbolize_other.cpp)
+    SRCS(symbolize_dummy.cpp)
 ENDIF()
 
 PEERDIR(

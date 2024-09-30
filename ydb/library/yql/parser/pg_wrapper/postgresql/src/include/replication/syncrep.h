@@ -3,7 +3,7 @@
  * syncrep.h
  *	  Exports from replication/syncrep.c.
  *
- * Portions Copyright (c) 2010-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		src/include/replication/syncrep.h
@@ -14,7 +14,6 @@
 #define _SYNCREP_H
 
 #include "access/xlogdefs.h"
-#include "utils/guc.h"
 
 #define SyncRepRequested() \
 	(max_wal_senders > 0 && synchronous_commit > SYNCHRONOUS_COMMIT_LOCAL_FLUSH)
@@ -72,14 +71,14 @@ typedef struct SyncRepConfigData
 	char		member_names[FLEXIBLE_ARRAY_MEMBER];
 } SyncRepConfigData;
 
-extern __thread SyncRepConfigData *SyncRepConfig;
+extern __thread PGDLLIMPORT SyncRepConfigData *SyncRepConfig;
 
 /* communication variables for parsing synchronous_standby_names GUC */
-extern __thread SyncRepConfigData *syncrep_parse_result;
-extern __thread char *syncrep_parse_error_msg;
+extern __thread PGDLLIMPORT SyncRepConfigData *syncrep_parse_result;
+extern __thread PGDLLIMPORT char *syncrep_parse_error_msg;
 
 /* user-settable parameters for synchronous replication */
-extern __thread char *SyncRepStandbyNames;
+extern __thread PGDLLIMPORT char *SyncRepStandbyNames;
 
 /* called by user backend */
 extern void SyncRepWaitForLSN(XLogRecPtr lsn, bool commit);
@@ -97,11 +96,6 @@ extern int	SyncRepGetCandidateStandbys(SyncRepStandbyData **standbys);
 /* called by checkpointer */
 extern void SyncRepUpdateSyncStandbysDefined(void);
 
-/* GUC infrastructure */
-extern bool check_synchronous_standby_names(char **newval, void **extra, GucSource source);
-extern void assign_synchronous_standby_names(const char *newval, void *extra);
-extern void assign_synchronous_commit(int newval, void *extra);
-
 /*
  * Internal functions for parsing synchronous_standby_names grammar,
  * in syncrep_gram.y and syncrep_scanner.l
@@ -109,7 +103,7 @@ extern void assign_synchronous_commit(int newval, void *extra);
 extern int	syncrep_yyparse(void);
 extern int	syncrep_yylex(void);
 extern void syncrep_yyerror(const char *str);
-extern void syncrep_scanner_init(const char *query_string);
+extern void syncrep_scanner_init(const char *str);
 extern void syncrep_scanner_finish(void);
 
 #endif							/* _SYNCREP_H */

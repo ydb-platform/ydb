@@ -43,6 +43,7 @@ SRCS(
     rpc_fq_internal.cpp
     rpc_fq.cpp
     rpc_get_operation.cpp
+    rpc_get_scale_recommendation.cpp
     rpc_get_shard_locations.cpp
     rpc_import.cpp
     rpc_import_data.cpp
@@ -126,6 +127,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security
+    ydb/core/security/ldap_auth_provider
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber
@@ -151,6 +153,7 @@ RECURSE(
     base
     counters
     local_rpc
+    tablet
 )
 
 RECURSE_FOR_TESTS(

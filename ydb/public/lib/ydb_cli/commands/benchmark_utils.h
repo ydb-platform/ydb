@@ -74,9 +74,11 @@ public:
         result.PlanAst = planAst;
         return result;
     }
-    static TQueryBenchmarkResult Error(const TString& error) {
+    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
+        result.QueryPlan = queryPlan;
+        result.PlanAst = planAst;
         return result;
     }
     operator bool() const {
@@ -89,6 +91,8 @@ void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
 TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client);
 TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client);
+TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client);
+TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);

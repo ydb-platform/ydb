@@ -76,6 +76,7 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         "database_id", // managed YDB
         "use_tls",
         "schema", // managed PG
+        "service_name", // oracle
     };
 
     for (const auto& property: properties) {

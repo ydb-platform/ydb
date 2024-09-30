@@ -794,6 +794,7 @@ public:
         UpdateConfig(db, "MinNetworkScatterToBalance", configUpdates);
         UpdateConfig(db, "MinCounterScatterToBalance", configUpdates);
         UpdateConfig(db, "MaxNodeUsageToKick", configUpdates, TSchemeIds::State::MaxNodeUsageToKick);
+        UpdateConfig(db, "NodeUsageRangeToKick", configUpdates);
         UpdateConfig(db, "ResourceChangeReactionPeriod", configUpdates, TSchemeIds::State::ResourceChangeReactionPeriod);
         UpdateConfig(db, "TabletKickCooldownPeriod", configUpdates, TSchemeIds::State::TabletKickCooldownPeriod);
         UpdateConfig(db, "SpreadNeighbours", configUpdates, TSchemeIds::State::SpreadNeighbours);
@@ -835,6 +836,7 @@ public:
         UpdateConfig(db, "MinStorageScatterToBalance", configUpdates);
         UpdateConfig(db, "MinGroupUsageToBalance", configUpdates);
         UpdateConfig(db, "StorageBalancerInflight", configUpdates);
+        UpdateConfig(db, "LessSystemTabletsMoves", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1140,6 +1142,7 @@ public:
         ShowConfig(out, "MinCounterScatterToBalance");
         ShowConfig(out, "MinNodeUsageToBalance");
         ShowConfig(out, "MaxNodeUsageToKick");
+        ShowConfig(out, "NodeUsageRangeToKick");
         ShowConfig(out, "ResourceChangeReactionPeriod");
         ShowConfig(out, "TabletKickCooldownPeriod");
         ShowConfig(out, "NodeSelectStrategy");
@@ -1180,6 +1183,7 @@ public:
         ShowConfig(out, "MinStorageScatterToBalance");
         ShowConfig(out, "MinGroupUsageToBalance");
         ShowConfig(out, "StorageBalancerInflight");
+        ShowConfig(out, "LessSystemTabletsMoves");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";
@@ -4018,8 +4022,14 @@ public:
             auto group = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Group>();
             bool filterOk = (filterTabletId == id) || (filterGroupId == group) || (filterTabletId == (ui64)-1 && filterGroupId == (ui64)-1);
             if (filterOk) {
+                TLeaderTabletInfo* tablet = Self->FindTablet(id);
                 ui32 channel = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Channel>();
-                out << "<tr>";
+                bool isLatest = (tablet && tablet->TabletStorageInfo->Version == tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::Version>(0));
+                if (isLatest) {
+                    out << "<tr style='font-weight:bold'>";
+                } else {
+                    out << "<tr>";
+                }
                 out << "<td><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
                 out << "<td>" << channel << "</td>";
                 out << "<td>" << group << "</td>";
@@ -4035,7 +4045,6 @@ public:
                     out << "<td></td>";
                 }
                 TString unitSize;
-                TTabletInfo* tablet = Self->FindTablet(id);
                 if (tablet) {
                     TLeaderTabletInfo& leader = tablet->GetLeader();
                     if (channel < leader.GetChannelCount()) {

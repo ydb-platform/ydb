@@ -55,7 +55,7 @@ private:
         size_t patternsToCompileSize = PatternsToCompile.size();
         for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
             auto& patternToCompile = PatternsToCompile[PatternToCompileIndex];
-            if (!patternToCompile.Entry->IsInCache.load()) {
+            if (!patternToCompile.Entry->IsInCache.load() || patternToCompile.Entry->Pattern->IsCompiled()) {
                 continue;
             }
 

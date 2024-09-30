@@ -55,7 +55,8 @@ struct TWriteSessionEvent {
         enum EEventState {
             EES_WRITTEN, //! Successfully written.
             EES_ALREADY_WRITTEN, //! Skipped on SeqNo deduplication.
-            EES_DISCARDED //! In case of destruction of writer or retry policy discarded future retries in this writer.
+            EES_DISCARDED, //! In case of destruction of writer or retry policy discarded future retries in this writer.
+            EES_WRITTEN_IN_TX, //! Successfully written in tx.
         };
         //! Details of successfully written message.
         struct TWrittenMessageDetails {

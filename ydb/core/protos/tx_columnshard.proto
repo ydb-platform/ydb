@@ -1,9 +1,9 @@
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
-import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
+import "ydb/library/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -72,11 +72,11 @@ message TEvWrite {
     optional uint32 WritePartId = 9 [default = 0];
     optional uint32 GranuleShardingVersion = 10;
     enum EModificationType {
-        UPSERT = 1;
-        INSERT = 2;
-        UPDATE = 3;
-        REPLACE = 4;
-        DELETE = 5;
+        OPERATION_UPSERT = 1;
+        OPERATION_INSERT = 2;
+        OPERATION_UPDATE = 3;
+        OPERATION_REPLACE = 4;
+        OPERATION_DELETE = 5;
     }
     optional EModificationType ModificationType = 11;
 
@@ -88,6 +88,8 @@ message TLogicalMetadata {
     optional uint64 DirtyWriteTimeSeconds = 5;
     optional string SpecialKeysRawData = 6;
     optional TEvWrite.EModificationType ModificationType = 7;
+    optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
+    optional string SpecialKeysPayloadData = 9;
 }
 
 message TEvWriteResult {
@@ -142,6 +144,8 @@ enum ETransactionKind {
     TX_KIND_COMMIT_WRITE = 5;
     TX_KIND_BACKUP = 6;
     TX_KIND_SHARING = 7;
+    TX_KIND_COMMIT_WRITE_PRIMARY = 8;
+    TX_KIND_COMMIT_WRITE_SECONDARY = 9;
 }
 
 enum ETransactionFlag {
@@ -202,6 +206,29 @@ message TBackupTxBody {
 
 message TCommitWriteTxBody {
     optional uint64 LockId = 1;
+
+    message TPrimary {
+        repeated uint64 SendingShards = 1;
+        repeated uint64 ReceivingShards = 2;
+        repeated uint64 WaitShardsBrokenFlags = 3;
+        repeated uint64 WaitShardsResultAck = 4;
+        optional bool TxBroken = 5;
+    }
+
+    message TSecondary {
+        optional uint64 ArbiterTabletId = 1;
+        optional bool NeedReceiveBroken = 2;
+        optional bool ReceiveAck = 3;
+        optional bool SelfBroken = 4;
+        optional bool TxBroken = 5;
+    }
+
+    oneof Implementation {
+        TPrimary PrimaryTabletData = 5;
+        TSecondary SecondaryTabletData = 6;
+    }
+
+    optional bool Broken = 4 [default = false];
 }
 
 message TSchemaPresetVersionInfo {

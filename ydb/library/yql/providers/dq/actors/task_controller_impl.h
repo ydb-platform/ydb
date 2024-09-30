@@ -385,6 +385,13 @@ private:
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
 
+        ADD_COUNTER(SpillingComputeWriteBytes)
+        ADD_COUNTER(SpillingChannelWriteBytes)
+        ADD_COUNTER(SpillingComputeReadTimeUs)
+        ADD_COUNTER(SpillingComputeWriteTimeUs)
+        ADD_COUNTER(SpillingChannelReadTimeUs)
+        ADD_COUNTER(SpillingChannelWriteTimeUs)
+
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
 
@@ -600,7 +607,7 @@ private:
 
 public:
     void OnQueryResult(TEvQueryResponse::TPtr& ev) {
-        YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+        YQL_ENSURE(!ev->Get()->Record.SampleSize());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
             IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());

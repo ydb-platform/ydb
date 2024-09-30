@@ -65,6 +65,9 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableAddColumsWithDefaults, std::nullopt);
         OPTION(std::optional<bool>, EnableReplaceIfExistsForExternalEntities, std::nullopt);
         OPTION(std::optional<TString>, GraphBackendType, std::nullopt);
+        OPTION(std::optional<bool>, EnableChangefeedsOnIndexTables, std::nullopt);
+        OPTION(std::optional<bool>, EnableTieringInColumnShard, std::nullopt);
+        OPTION(std::optional<bool>, EnableParameterizedDecimal, std::nullopt);
 
         #undef OPTION
     };

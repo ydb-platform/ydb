@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 #include <charconv>
 
@@ -22,32 +23,67 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     const TKqpOptimizeContext& kqpCtx) {
 
     auto inputNode = TExprBase(input);
-    double nRows = 0;
-    int nAttrs = 0;
+    std::shared_ptr<TOptimizerStatistics> inputStats;
 
-    const TExprNode* path;
+    int nAttrs = 0;
+    bool readRange = false;
 
     if (auto readTable = inputNode.Maybe<TKqlReadTableBase>()) {
-        path = readTable.Cast().Table().Path().Raw();
+        inputStats = typeCtx->GetStats(readTable.Cast().Table().Raw());
         nAttrs = readTable.Cast().Columns().Size();
+
+        auto range = readTable.Cast().Range();
+        auto rangeFrom = range.From().Maybe<TKqlKeyTuple>();
+        auto rangeTo = range.To().Maybe<TKqlKeyTuple>();
+        if (rangeFrom && rangeTo) {
+            readRange = true;
+        }
     } else if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
-        path = readRanges.Cast().Table().Path().Raw();
+        inputStats = typeCtx->GetStats(readRanges.Cast().Table().Raw());
         nAttrs = readRanges.Cast().Columns().Size();
     } else {
         Y_ENSURE(false, "Invalid node type for InferStatisticsForReadTable");
     }
 
-    const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path->Content());
-    int totalAttrs = tableData.Metadata->Columns.size();
-    nRows = tableData.Metadata->RecordsCount;
-    double byteSize = tableData.Metadata->DataSize * (nAttrs / (double)totalAttrs);
-
-    auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
-    auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
-    if (kqpCtx.Config->OverrideStatistics.Get()) {
-        stats = OverrideStatistics(*stats, path->Content(), *kqpCtx.Config->OverrideStatistics.Get());
+    if (!inputStats) {
+        return;
     }
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table, nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols;
+
+    auto keyColumns = inputStats->KeyColumns;
+    if (auto indexRead = inputNode.Maybe<TKqlReadTableIndex>()) {
+        const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexRead.Cast().Table().Path().Value());
+        const auto& [indexMeta, _] = tableData.Metadata->GetIndexMetadata(indexRead.Cast().Index().StringValue());
+
+        keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
+            new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
+    }
+
+    /**
+     * We need index statistics to calculate this in the future
+     * Right now we use very small estimates to make sure CBO picks Lookup Joins
+     * I.e. there can be a chain of lookup joins in OLTP scenario and we want to make
+     * sure the cardinality doesn't blow up and lookup joins are still being picked
+     */
+    double inputRows = inputStats->Nrows;
+    double nRows = inputRows;
+    if (readRange) {
+        nRows = 1;
+    }
+
+    double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
+    double byteSize = nRows * sizePerRow * (nAttrs / (double)inputStats->Ncols);
+
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, 
+        nRows, 
+        nAttrs, 
+        byteSize, 
+        0.0, 
+        keyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
     typeCtx->SetStats(input.Get(), stats);
 }
@@ -56,24 +92,49 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
  * Infer statistics for KQP table
  */
 void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext& kqpCtx) {
+    TKqpOptimizeContext& kqpCtx) {
 
     auto inputNode = TExprBase(input);
     auto readTable = inputNode.Cast<TKqpTable>();
     auto path = readTable.Path();
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
+    if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
+        return;
+    }
+
     double nRows = tableData.Metadata->RecordsCount;
     double byteSize = tableData.Metadata->DataSize;
     int nAttrs = tableData.Metadata->Columns.size();
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
-    if (kqpCtx.Config->OverrideStatistics.Get()) {
-        stats = OverrideStatistics(*stats, path.Value(), *kqpCtx.Config->OverrideStatistics.Get());
+    if (typeCtx->ColumnStatisticsByTableName.contains(path.StringValue())) {
+        stats->ColumnStatistics = typeCtx->ColumnStatisticsByTableName[path.StringValue()];
+    }
+    if (kqpCtx.Config->OptOverrideStatistics.Get()) {
+        stats = OverrideStatistics(*stats, path.Value(), kqpCtx.GetOverrideStatistics());
+    }
+    if (stats->ColumnStatistics) {
+        for (const auto& [columnName, metaData]: tableData.Metadata->Columns) {
+            stats->ColumnStatistics->Data[columnName].Type = metaData.Type;
+        }
     }
 
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ", nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols << ", nKeyColumns: " << stats->KeyColumns->Data.size();
+    EStorageType storageType = EStorageType::NA;
+    switch (tableData.Metadata->Kind) {
+        case EKikimrTableKind::Datashard:
+            storageType = EStorageType::RowStorage;
+            break;
+        case EKikimrTableKind::Olap:
+            storageType = EStorageType::ColumnStorage;
+            break;
+        default:
+            break;
+    }
+    stats->StorageType = storageType;
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
     typeCtx->SetStats(input.Get(), stats);
 }
@@ -93,9 +154,23 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
 
     int nAttrs = streamLookup.Columns().Size();
     auto inputStats = typeCtx->GetStats(streamLookup.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
     auto byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
 
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, inputStats->Nrows, nAttrs, byteSize, 0, inputStats->KeyColumns));
+    auto res = std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, 
+        inputStats->Nrows, 
+        nAttrs, 
+        byteSize, 
+        0, 
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
+
+    typeCtx->SetStats(input.Get(), res); 
+
 }
 
 /**
@@ -113,6 +188,9 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
     double byteSize = 0;
 
     auto inputStats = typeCtx->GetStats(lookupTable.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
 
     if (lookupTable.LookupKeys().Maybe<TCoIterator>()) {
         if (inputStats) {
@@ -126,7 +204,15 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
         byteSize = 10;
     }
 
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0, inputStats->KeyColumns));
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, 
+        nRows,
+        nAttrs, 
+        byteSize, 
+        0, 
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType));
 }
 
 /**
@@ -134,7 +220,9 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
  * We look into range expression to check if its a point lookup or a full scan
  * We currently don't try to figure out whether this is a small range vs full scan
  */
-void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
+    const TKqpOptimizeContext& kqpCtx) {
+
     auto inputNode = TExprBase(input);
     auto sourceSettings = inputNode.Cast<TKqpReadRangesSourceSettings>();
 
@@ -143,7 +231,8 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         return;
     }
 
-    double nRows = inputStats->Nrows;
+    double inputRows =  inputStats->Nrows;
+    double nRows = inputRows;
 
     // Check if we have a range expression, in that case just assign a single row to this read
     // We don't currently check the size of an index lookup
@@ -156,11 +245,30 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         }
     }
 
-    int nAttrs = sourceSettings.Columns().Size();
-    double cost = inputStats->Cost;
-    double byteSize = inputStats->ByteSize * (nAttrs / (double)inputStats->Ncols);
+    auto keyColumns = inputStats->KeyColumns;
+    if (auto indexRead = inputNode.Maybe<TKqlReadTableIndexRanges>()) {
+        const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexRead.Cast().Table().Path().Value());
+        const auto& [indexMeta, _] = tableData.Metadata->GetIndexMetadata(indexRead.Cast().Index().StringValue());
 
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, cost, inputStats->KeyColumns));
+        keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
+            new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
+    }
+
+    int nAttrs = sourceSettings.Columns().Size();
+
+    double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
+    double byteSize = nRows * sizePerRow * (nAttrs / (double)inputStats->Ncols);
+    double cost = inputStats->Cost;
+
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, 
+        nRows, 
+        nAttrs, 
+        byteSize, 
+        cost, 
+        keyColumns, 
+        inputStats->ColumnStatistics,
+        inputStats->StorageType));
 }
 
 /**
@@ -169,6 +277,35 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
  */
 void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 5, 5, 20, 0.0));
+}
+
+void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto indexRanges = TKqlReadTableIndexRanges(input);
+
+    auto inputStats = typeCtx->GetStats(indexRanges.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
+    
+    TVector<TString> indexColumns;
+    for (auto c : indexRanges.Columns()) {
+        indexColumns.push_back(c.StringValue());
+    }
+
+    auto indexColumnsPtr = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(indexColumns));
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        inputStats->Type, 
+        inputStats->Nrows, 
+        inputStats->Ncols, 
+        inputStats->ByteSize, 
+        inputStats->Cost, 
+        indexColumnsPtr,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType);
+
+    typeCtx->SetStats(input.Get(), stats);
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for index: " << stats->ToString();
 }
 
 /***
@@ -193,34 +330,343 @@ void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotati
             std::from_chars(bindingNoStr.data(), bindingNoStr.data() + bindingNoStr.size(), bindingNo);
             std::from_chars(resultNoStr.data(), resultNoStr.data() + resultNoStr.size(), resultNo);
 
-            typeCtx->SetStats(param.Name().Raw(), txStats[bindingNo][resultNo]);
-            typeCtx->SetStats(inputNode.Raw(), txStats[bindingNo][resultNo]);
+            auto resStats = txStats[bindingNo][resultNo];
+            typeCtx->SetStats(param.Name().Raw(), resStats);
+            typeCtx->SetStats(inputNode.Raw(), resStats);
         }
     }
 }
 
+class TKqpOlapPredicateSelectivityComputer: public TPredicateSelectivityComputer {
+public:
+    TKqpOlapPredicateSelectivityComputer(const std::shared_ptr<TOptimizerStatistics>& stats)
+        : TPredicateSelectivityComputer(stats)
+    {}
+
+    double Compute(const NNodes::TExprBase& input) {
+        std::optional<double> resSelectivity;
+
+        if (auto andNode = input.Maybe<TKqpOlapAnd>()) {
+            double tmpSelectivity = 1.0;
+            for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
+                tmpSelectivity *= Compute(andNode.Cast().Arg(i));
+            }
+            resSelectivity = tmpSelectivity;
+        } else if (auto orNode = input.Maybe<TKqpOlapOr>()) {
+            double tmpSelectivity = 0.0;
+            for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
+                tmpSelectivity += Compute(orNode.Cast().Arg(i));
+            }
+            resSelectivity = tmpSelectivity;
+        } else if (auto notNode = input.Maybe<TKqpOlapNot>()) {
+            resSelectivity = 1 - Compute(notNode.Cast().Value());
+        } else if (input.Maybe<TCoAtomList>() && input.Ptr()->ChildrenSize() >= 1) {
+            auto listPtr = input.Maybe<TCoAtomList>().Cast().Ptr()->Child(1);
+            size_t listSize = listPtr->ChildrenSize();
+
+            if (listSize == 3) {
+                TString compSign = TString(listPtr->Child(0)->Content());
+                TString attr = TString(listPtr->Child(1)->Content());
+
+                TExprContext dummyCtx;
+                TPositionHandle dummyPos;
+
+                auto rowArg = 
+                    Build<TCoArgument>(dummyCtx, dummyPos)
+                        .Name("row")
+                    .Done();
+
+                auto member = 
+                        Build<TCoMember>(dummyCtx, dummyPos)
+                            .Struct(rowArg)
+                            .Name().Build(attr)
+                        .Done();
+
+                auto value = TExprBase(listPtr->ChildPtr(2));
+                if (listPtr->ChildPtr(2)->ChildrenSize() >= 2 && listPtr->ChildPtr(2)->ChildPtr(0)->Content() == "just") {
+                    value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
+                }
+                if (OlapCompSigns.contains(compSign)) {
+                    resSelectivity = this->ComputeComparisonSelectivity(member, value);
+                } else if (compSign == "eq") {
+                    resSelectivity = this->ComputeEqualitySelectivity(member, value);
+                } else if (compSign == "neq") {
+                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
+                } else if (RegexpSigns.contains(compSign)) {
+                    return 0.5;
+                }
+            }
+        }
+
+        if (!resSelectivity.has_value()) {
+            auto dumped = input.Raw()->Dump();
+            YQL_CLOG(TRACE, ProviderKqp) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
+            return 1.0;
+        }
+
+        return std::min(1.0, resSelectivity.value());
+    }
+
+private:
+    THashSet<TString> OlapCompSigns = {
+        {"lt"},
+        {"lte"},
+        {"gt"},
+        {"gte"}
+    };
+
+    THashSet<TString> RegexpSigns = {
+        "string_contains",
+        "starts_with",
+        "ends_with"
+    };
+};
+
+void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto filter = inputNode.Cast<TKqpOlapFilter>();
+    auto filterInput = filter.Input();
+    auto inputStats = typeCtx->GetStats(filterInput.Raw());
+
+    if (!inputStats) {
+        return;
+    }
+
+    double selectivity = TKqpOlapPredicateSelectivityComputer(inputStats).Compute(filter.Condition());
+
+    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns, inputStats->ColumnStatistics );
+    outputStats.Labels = inputStats->Labels;
+    outputStats.Selectivity *= selectivity;
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for OLAP Filter: " << outputStats.ToString();
+
+
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
+}
+
+void InferStatisticsForOlapRead(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto olapRead = inputNode.Cast<TKqpReadOlapTableRangesBase>();
+
+    auto process = olapRead.Process();
+    auto lambdaStats = typeCtx->GetStats(process.Body().Raw());
+    if (lambdaStats) {
+        YQL_CLOG(TRACE, CoreDq) << "Infer statistics for OLAP table: " << lambdaStats->ToString();
+        typeCtx->SetStats(input.Get(), lambdaStats);
+    }
+}
+
+double EstimateRowSize(const TStructExprType& rowType, const TString& format, const TString& compression, bool decoded) {
+    double result = 0.0;
+    for (auto item : rowType.GetItems()) {
+        auto itemType = item->GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Data) {
+            switch(itemType->Cast<TDataExprType>()->GetSlot()) {
+                case EDataSlot::Bool:
+                    result += decoded ? 1.0 : 0.2;
+                    break;
+                case EDataSlot::Int8:
+                    [[fallthrough]];
+                case EDataSlot::Uint8:
+                    result += decoded ? 1.0 : 0.72;
+                    break;
+                case EDataSlot::Int16:
+                    [[fallthrough]];
+                case EDataSlot::Uint16:
+                    result += decoded ? 2.0 : 1.44;
+                    break;
+                case EDataSlot::Int32:
+                    [[fallthrough]];
+                case EDataSlot::Uint32:
+                    result += decoded ? 4.0 : 2.88;
+                    break;
+                case EDataSlot::Int64:
+                    [[fallthrough]];
+                case EDataSlot::Uint64:
+                    [[fallthrough]];
+                case EDataSlot::Double:
+                    result += decoded ? 8.0 : 3.88;
+                    break;
+                case EDataSlot::Float:
+                    result += decoded ? 4.0 : 2.88;
+                    break;
+                case EDataSlot::String:
+                    [[fallthrough]];
+                case EDataSlot::Utf8:
+                    result += decoded ? 28.0 : 8.0;
+                    break;
+                case EDataSlot::Yson:
+                    [[fallthrough]];
+                case EDataSlot::Json:
+                    result += decoded ? 56.0 : 16.0;
+                    break;
+                case EDataSlot::Uuid:
+                    break;
+                case EDataSlot::Date:
+                    result += decoded ? 2.0 : 1.51;
+                    break;
+                case EDataSlot::Datetime:
+                    [[fallthrough]];
+                case EDataSlot::Timestamp:
+                    result += decoded ? 8.0 : 6.04;
+                    break;
+                case EDataSlot::Interval:
+                    break;
+                case EDataSlot::TzDate:
+                    break;
+                case EDataSlot::TzDatetime:
+                    break;
+                case EDataSlot::TzTimestamp:
+                    break;
+                case EDataSlot::Decimal:
+                    result += decoded ? 16.0 : 7.76;
+                    break;
+                case EDataSlot::DyNumber:
+                    break;
+                case EDataSlot::JsonDocument:
+                    break;
+                case EDataSlot::Date32:
+                    result += decoded ? 4.0 : 2.88;
+                    break;
+                case EDataSlot::Datetime64:
+                    [[fallthrough]];
+                case EDataSlot::Timestamp64:
+                case EDataSlot::Interval64:
+                    result += decoded ? 8.0 : 3.88;
+                    break;
+                case EDataSlot::TzDate32:
+                    break;
+                case EDataSlot::TzDatetime64:
+                    break;
+                case EDataSlot::TzTimestamp64:
+                    break;
+            }
+        }
+    }
+
+    if (result == 0.0) {
+        result = 1000.0;
+    }
+
+    if (format != "parquet" && !decoded) {
+        double compressionRatio = 1.0;
+        if (format == "csv_with_names" || format == "tsv_with_names") {
+            result *= 5.0;
+            compressionRatio = 4.5;   // gzip
+        } else if (format != "raw") { // json's
+            result *= 12.0;
+            compressionRatio = 14.0;   // gzip
+        }
+        if (compression) {
+            if (compression == "gzip") {
+                // 1.00
+            } else if (compression == "zstd") {
+                compressionRatio *= 1.05;
+            } else if (compression == "lz4") {
+                compressionRatio *= 1.43;
+            } else if (compression == "brotli") {
+                compressionRatio *= 1.20;
+            } else if (compression == "bzip2") {
+                compressionRatio *= 1.24;
+            } else if (compression == "xz") {
+                compressionRatio *= 1.45;
+            }
+            result /= compressionRatio; 
+        }
+    }
+
+    return result;
+}
+
 void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext& kqpCtx) {
+    TKqpOptimizeContext& kqpCtx) {
     auto inputNode = TExprBase(input);
     if (auto wrapBase = inputNode.Maybe<TDqSourceWrapBase>()) {
         if (auto maybeS3DataSource = wrapBase.Cast().DataSource().Maybe<TS3DataSource>()) {
             auto s3DataSource = maybeS3DataSource.Cast();
             if (s3DataSource.Name()) {
-                auto path = s3DataSource.Name().Cast().StringValue();
-                if (kqpCtx.Config->OverrideStatistics.Get() && path) {
-                    auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
-                    stats = OverrideStatistics(*stats, path, *kqpCtx.Config->OverrideStatistics.Get());
-                    if (stats->ByteSize == 0.0) {
+                auto stats = typeCtx->GetStats(s3DataSource.Raw());
+                if (!stats) {
+                    stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
+                }
+                if (!stats->Specific) {
+                    stats->Specific = std::make_shared<TS3ProviderStatistics>();
+                }
+
+                const TS3ProviderStatistics* specific = dynamic_cast<const TS3ProviderStatistics*>((stats->Specific.get()));
+
+                if (!specific->OverrideApplied && kqpCtx.Config->OptOverrideStatistics.Get()) {
+                    auto path = s3DataSource.Name().Cast().StringValue();
+                    auto dbStats = kqpCtx.GetOverrideStatistics()->GetMapSafe();
+                    if (!dbStats.contains(path)) {
                         auto n = path.find_last_of('/');
                         if (n != path.npos) {
-                            stats = OverrideStatistics(*stats, path.substr(n + 1), *kqpCtx.Config->OverrideStatistics.Get());
+                            path = path.substr(n + 1);
                         }
                     }
-                    if (stats->ByteSize != 0.0) {
-                        YQL_CLOG(TRACE, CoreDq) << "Infer statistics for s3 data source " << path;
-                        typeCtx->SetStats(input.Get(), stats);
+                    if (dbStats.contains(path)) {
+                        YQL_CLOG(TRACE, CoreDq) << "Override statistics for s3 data source " << path;
+                        stats = OverrideStatistics(*stats, path, kqpCtx.GetOverrideStatistics());
+                        auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                        newSpecific->OverrideApplied = true;
+                        stats->Specific = newSpecific;
+                        specific = newSpecific.get();
                         typeCtx->SetStats(s3DataSource.Raw(), stats);
                     }
+                }
+
+                auto dataSourceStats = stats;
+
+                auto rowType = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (specific->FullRawRowAvgSize == 0.0) {
+                    auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
+                    newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
+                    newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
+                    specific = newSpecific.get();
+                    typeCtx->SetStats(s3DataSource.Raw(), stats);
+                }
+
+                auto wrapStats = typeCtx->GetStats(input.Get());
+                if (!wrapStats) {
+                    typeCtx->SetStats(input.Get(), stats);
+                } else {
+                    stats = wrapStats;
+                }
+
+                if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize()) || stats->Nrows == 0 || stats->ByteSize == 0.0 || stats->Cost == 0.0) {
+                    auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
+
+                    if (stats->Nrows == 0 && newSpecific->FullRawRowAvgSize) {
+                        stats->Nrows = newSpecific->RawByteSize / newSpecific->FullRawRowAvgSize;
+                    }
+                    if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize())) {
+                        stats->Ncols = rowType->GetSize();
+                        newSpecific->PrunedRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
+                        newSpecific->PrunedDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
+                        stats->ByteSize = 0.0;
+                    }
+                    if (stats->ByteSize == 0.0) {
+                        stats->ByteSize = stats->Nrows * newSpecific->PrunedDecodedRowAvgSize;
+                    }
+                    double rowSize = 0.0;
+                    if (stats->Cost == 0.0) {
+                        if (newSpecific->Format == "parquet") {
+                            rowSize = newSpecific->PrunedRawRowAvgSize;
+                        } else {
+                            rowSize = newSpecific->FullRawRowAvgSize;
+                        }
+                        stats->Cost = rowSize * stats->Nrows;
+                        if (newSpecific->Compression) {
+                            stats->Cost *= 1.5;
+                        }
+                        {
+                            auto specific = const_cast<TS3ProviderStatistics*>(dynamic_cast<const TS3ProviderStatistics*>((dataSourceStats->Specific.get())));
+                            specific->Costs[TStructExprType::MakeHash(rowType->GetItems())] = stats->Cost;
+                        }
+                    }
+                    typeCtx->SetStats(input.Get(), stats);
                 }
             }
         }
@@ -265,7 +711,10 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     Y_UNUSED(ctx);
     bool matched = true;
     // KQP Matchers
-    if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
+    if(TKqlReadTableIndexRanges::Match(input.Get())) {
+        InferStatisticsForReadTableIndexRanges(input, TypeCtx);
+    }
+    else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
     }
     else if(TKqlLookupTableBase::Match(input.Get())) {
@@ -278,7 +727,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
         InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
     }
     else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
-        InferStatisticsForRowsSourceSettings(input, TypeCtx);
+        InferStatisticsForRowsSourceSettings(input, TypeCtx, KqpCtx);
     }
     else if (TKqpCnStreamLookup::Match(input.Get())) {
         InferStatisticsForSteamLookup(input, TypeCtx);
@@ -290,6 +739,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if(TDqSourceWrapBase::Match(input.Get())) {
         InferStatisticsForDqSourceWrap(input, TypeCtx, KqpCtx);
+    } 
+    else if (TKqpOlapFilter::Match(input.Get())) {
+        InferStatisticsForOlapFilter(input, TypeCtx);
     }
     else {
         matched = false;
@@ -303,6 +755,8 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
     bool matched = true;
     if (TKqpPhysicalTx::Match(input.Get())) {
         AppendTxStats(input, TypeCtx, TxStats);
+    } else if (TKqpReadOlapTableRangesBase::Match(input.Get())) {
+        InferStatisticsForOlapRead(input, TypeCtx);
     } else {
         matched = false;
     }

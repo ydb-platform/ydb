@@ -2,7 +2,7 @@ PY23_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
 
-SUBSCRIBER(g:python-contrib)
+VERSION(Service-proxy-version)
 
 IF (PYTHON2)
     PEERDIR(contrib/python/prettytable/py2)

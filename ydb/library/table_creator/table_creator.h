@@ -66,7 +66,8 @@ private:
     NYql::TIssues Issues;
 };
 
-THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents);
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database = {});
 
 } // namespace NTableCreator
 
@@ -75,6 +76,9 @@ NActors::IActor* CreateTableCreator(
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
-    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing());
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
+    const TString& database = {},
+    bool isSystemUser = false,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
 
 } // namespace NKikimr

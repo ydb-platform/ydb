@@ -116,4 +116,20 @@ CFLAGS(
     -Dpg_hmac_init=yql_pg_hmac_init
     -Dpg_hmac_create=yql_pg_hmac_create
     -Dpg_pwritev_with_retry=yql_pg_pwritev_with_retry
+    -Dpg_cryptohash_error=yql_pg_cryptohash_error
+    -Dpg_hmac_error=yql_pg_hmac_error
+    -Dpg_global_prng_state=yql_pg_global_prng_state
+    -Dpg_prng_bool=yql_pg_prng_bool
+    -Dpg_prng_double=yql_pg_prng_double
+    -Dpg_prng_int32p=yql_pg_prng_int32p
+    -Dpg_prng_int32=yql_pg_prng_int32
+    -Dpg_prng_uint32=yql_pg_prng_uint32
+    -Dpg_prng_int64p=yql_pg_prng_int64p
+    -Dpg_prng_int64=yql_pg_prng_int64
+    -Dpg_prng_uint64_range=yql_pg_prng_uint64_range
+    -Dpg_prng_uint64=yql_pg_prng_uint64
+    -Dpg_prng_fseed=yql_pg_prng_fseed
+    -Dpg_prng_seed_check=yql_pg_prng_seed_check
+    -Dpg_prng_seed=yql_pg_prng_seed
+    -Dpg_prng_double_normal=yql_pg_prng_double_normal
 )

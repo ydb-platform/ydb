@@ -3,7 +3,7 @@
  * pg_attrdef_d.h
  *    Macro definitions for pg_attrdef
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_ATTRDEF_D_H
 
 #define AttrDefaultRelationId 2604
+#define AttrDefaultIndexId 2656
+#define AttrDefaultOidIndexId 2657
 
 #define Anum_pg_attrdef_oid 1
 #define Anum_pg_attrdef_adrelid 2

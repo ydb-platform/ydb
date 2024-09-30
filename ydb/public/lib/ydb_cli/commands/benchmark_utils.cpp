@@ -1,6 +1,7 @@
 #include "benchmark_utils.h"
 
 #include <util/string/split.h>
+#include <util/string/builder.h>
 #include <util/stream/file.h>
 #include <util/folder/pathsplit.h>
 #include <util/folder/path.h>
@@ -10,6 +11,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <vector>
 #include <algorithm>
@@ -127,9 +130,12 @@ void ThrowOnError(const TStatus& status) {
 }
 
 bool HasCharsInString(const TString& str) {
-    for (auto c : str) {
-        if (std::isalpha(c)) {
-            return true;
+    for(TStringBuf q(str), line; q.ReadLine(line);) {
+        line = line.NextTok("--");
+        for (auto c: line) {
+            if (std::isalpha(c)) {
+                return true;
+            }
         }
     }
     return false;
@@ -157,13 +163,6 @@ public:
     bool Scan(TIterator& it) {
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                if (!streamPart.EOS()) {
-                    OnError(streamPart.GetIssues().ToString());
-                    return false;
-                }
-                break;
-            }
 
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
@@ -178,6 +177,14 @@ public:
                     QueryPlan = stats->GetPlan().GetOrElse("");
                     PlanAst = stats->GetAst().GetOrElse("");
                 }
+            }
+
+            if (!streamPart.IsSuccess()) {
+                if (!streamPart.EOS()) {
+                    OnError(streamPart.GetIssues().ToString());
+                    return false;
+                }
+                break;
             }
 
             if (streamPart.HasResultSet()) {
@@ -285,9 +292,10 @@ public:
     }
 };
 
-TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, bool explainOnly) {
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+    settings.Explain(explainOnly);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
 
@@ -297,7 +305,8 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+        return TQueryBenchmarkResult::Error(
+            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
             scannerYson->GetResult(),
@@ -309,9 +318,18 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
+TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
+    return ExecuteImpl(query, client, false);
+}
+
+TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client) {
+    return ExecuteImpl(query, client, true);
+}
+
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
     settings.StatsMode(NQuery::EStatsMode::Full);
+    settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
@@ -324,7 +342,8 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+        return TQueryBenchmarkResult::Error(
+            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
             scannerYson->GetResult(),
@@ -334,6 +353,14 @@ TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client
             composite.GetPlanAst()
             );
     }
+}
+
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
+    return ExecuteImpl(query, client, false);
+}
+
+TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client) {
+    return ExecuteImpl(query, client, true);
 }
 
 NJson::TJsonValue GetQueryLabels(ui32 queryId) {
@@ -368,41 +395,105 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
-    const auto& vp = v.GetProto();
-    if (vp.has_bool_value()) {
-        return CompareValueImpl<bool>(vp.bool_value(), vExpected);
+template <class T>
+bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, const double floatPrecesion) {
+    T valExpected;
+    if (!TryFromString<T>(vExpected, valExpected)) {
+        Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+        return false;
     }
-    if (vp.has_int32_value()) {
-        return CompareValueImpl<i32>(vp.int32_value(), vExpected);
+    return valResult > (1 - floatPrecesion) * valExpected && valResult < (1 + floatPrecesion) * valExpected;
+}
+
+bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
+    TInstant expected;
+    if (!TInstant::TryParseIso8601(vExpected, expected)) {
+        i64 i;
+        if (!TryFromString(vExpected, i)) {
+            Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+            return false;
+        }
+        expected = TInstant::Zero() + i * unit;
     }
-    if (vp.has_uint32_value()) {
-        return CompareValueImpl<ui32>(vp.uint32_value(), vExpected);
+    return valResult == expected;
+}
+
+template<class T>
+bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDuration unit) {
+    T valExpected;
+    if (!TryFromString<T>(vExpected, valExpected)) {
+        TInstant expected;
+        if (!TInstant::TryParseIso8601(vExpected, expected)) {
+            Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+            return false;
+        }
+        valExpected = expected.GetValue() / unit.GetValue();
     }
-    if (vp.has_int64_value()) {
-        return CompareValueImpl<i64>(vp.int64_value(), vExpected);
+    return valResult == valExpected;
+}
+
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrecession) {
+    TValueParser vp(v);
+    TTypeParser tp(v.GetType());
+    if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
+        if (vp.IsNull()) {
+            return vExpected == "";
+        }
+        vp.OpenOptional();
+        tp.OpenOptional();
     }
-    if (vp.has_uint64_value()) {
-        return CompareValueImpl<ui64>(vp.uint64_value(), vExpected);
+    switch (tp.GetPrimitive()) {
+    case EPrimitiveType::Bool:
+        return CompareValueImpl(vp.GetBool(), vExpected);
+    case EPrimitiveType::Int8:
+        return CompareValueImpl(vp.GetInt8(), vExpected);
+    case EPrimitiveType::Uint8:
+        return CompareValueImpl(vp.GetUint8(), vExpected);
+    case EPrimitiveType::Int16:
+        return CompareValueImpl(vp.GetInt16(), vExpected);
+    case EPrimitiveType::Uint16:
+        return CompareValueImpl(vp.GetUint16(), vExpected);
+    case EPrimitiveType::Int32:
+        return CompareValueImpl(vp.GetInt32(), vExpected);
+    case EPrimitiveType::Uint32:
+        return CompareValueImpl(vp.GetUint32(), vExpected);
+    case EPrimitiveType::Int64:
+        return CompareValueImpl(vp.GetInt64(), vExpected);
+    case EPrimitiveType::Uint64:
+        return CompareValueImpl(vp.GetUint64(), vExpected);
+    case EPrimitiveType::Float:
+        return CompareValueImplFloat(vp.GetFloat(), vExpected, floatPrecession);
+    case EPrimitiveType::Double:
+        return CompareValueImplFloat(vp.GetDouble(), vExpected, floatPrecession);
+    case EPrimitiveType::Date:
+        return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
+    case EPrimitiveType::Datetime:
+        return CompareValueImplDatetime(vp.GetDatetime(), vExpected, TDuration::Seconds(1));
+    case EPrimitiveType::Timestamp:
+        return CompareValueImplDatetime(vp.GetTimestamp(), vExpected, TDuration::MicroSeconds(1));
+    case EPrimitiveType::Interval:
+        return CompareValueImpl(vp.GetInterval(), vExpected);
+    case EPrimitiveType::Date32:
+        return CompareValueImplDatetime64(vp.GetDate32(), vExpected, TDuration::Days(1));
+    case EPrimitiveType::Datetime64:
+        return CompareValueImplDatetime64(vp.GetDatetime64(), vExpected, TDuration::Seconds(1));
+    case EPrimitiveType::Timestamp64:
+        return CompareValueImplDatetime64(vp.GetTimestamp64(), vExpected, TDuration::MicroSeconds(1));
+    case EPrimitiveType::Interval64:
+        return CompareValueImpl(vp.GetInterval64(), vExpected);
+    case EPrimitiveType::String:
+        return CompareValueImpl(vp.GetString(), vExpected);
+    case EPrimitiveType::Utf8:
+        return CompareValueImpl(vp.GetUtf8(), vExpected);
+    default:
+        Cerr << "unexpected type for comparision: " << v.GetProto().DebugString() << Endl;
+        return false;
     }
-    if (vp.has_float_value()) {
-        return CompareValueImpl<float>(vp.float_value(), vExpected);
-    }
-    if (vp.has_double_value()) {
-        return CompareValueImpl<double>(vp.double_value(), vExpected);
-    }
-    if (vp.has_text_value()) {
-        return CompareValueImpl<TString>(TString(vp.text_value().data(), vp.text_value().size()), vExpected);
-    }
-    if (vp.has_null_flag_value()) {
-        return vExpected == "";
-    }
-    Cerr << "unexpected type for comparision: " << vp.DebugString() << Endl;
-    return false;
 }
 
 
 bool TQueryResultInfo::IsExpected(std::string_view expected) const {
+    constexpr double floatPrecesion = 0.0001;
     if (expected.empty()) {
         return true;
     }
@@ -450,7 +541,7 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
                 return false;
             }
             TStringBuf cItem = splitter.Consume();
-            if (!CompareValue(resultValue, cItem)) {
+            if (!CompareValue(resultValue, cItem, floatPrecesion)) {
                 Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
                 return false;
             }

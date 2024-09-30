@@ -144,6 +144,8 @@ struct TSelectRowsOptionsBase
     ui64 RangeExpansionLimit = 200000;
     //! Limits maximum parallel subqueries.
     int MaxSubqueries = std::numeric_limits<int>::max();
+    //! Limits parallel subqueries by row count.
+    ui64 MinRowCountPerSubquery = 100'000;
     //! Path in Cypress with UDFs.
     std::optional<TString> UdfRegistryPath;
     //! If |true| then logging is more verbose.
@@ -196,6 +198,8 @@ struct TSelectRowsOptions
     TExpectedTableSchemas ExpectedTableSchemas;
     //! Add |$timestamp:columnName| to result if read_mode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
+    //! Explicitly allow or forbid the usage of row cache.
+    std::optional<bool> UseLookupCache;
 };
 
 struct TFallbackReplicaOptions

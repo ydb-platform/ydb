@@ -3,7 +3,7 @@
  * pg_constraint_d.h
  *    Macro definitions for pg_constraint
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,11 @@
 #define PG_CONSTRAINT_D_H
 
 #define ConstraintRelationId 2606
+#define ConstraintNameNspIndexId 2664
+#define ConstraintRelidTypidNameIndexId 2665
+#define ConstraintTypidIndexId 2666
+#define ConstraintOidIndexId 2667
+#define ConstraintParentIndexId 2579
 
 #define Anum_pg_constraint_oid 1
 #define Anum_pg_constraint_conname 2
@@ -43,10 +48,11 @@
 #define Anum_pg_constraint_conpfeqop 21
 #define Anum_pg_constraint_conppeqop 22
 #define Anum_pg_constraint_conffeqop 23
-#define Anum_pg_constraint_conexclop 24
-#define Anum_pg_constraint_conbin 25
+#define Anum_pg_constraint_confdelsetcols 24
+#define Anum_pg_constraint_conexclop 25
+#define Anum_pg_constraint_conbin 26
 
-#define Natts_pg_constraint 25
+#define Natts_pg_constraint 26
 
 
 /* Valid values for contype */

@@ -171,6 +171,10 @@ public:
         NTableClient::TUnversionedValueRange valueRange,
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
 
+    virtual void WriteSerializedRowset(
+        size_t rowCount,
+        const std::vector<TSharedRef>& serializedRowset) = 0;
+
     virtual void WriteUnversionedRowset(
         TRange<NTableClient::TUnversionedRow> rowset,
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
@@ -312,7 +316,7 @@ DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetWriter)
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     NTableClient::TTableSchemaPtr schema,
     bool isSchemaful,
     const NLogging::TLogger& logger);

@@ -27,7 +27,7 @@ android-x86_64="ANDROID AND CMAKE_ANDROID_ARCH STREQUAL \"x86_64\""
 
 [root]
 templates=[
-    { path="conanfile.jinja", dest="conanfile.txt" },
+    { path="conanfile.py.jinja", dest="conanfile.py" },
     { path="root_cmake_lists.jinja", dest="CMakeLists.txt" },
     { path="root_global_vars.jinja", dest="cmake/global_vars.cmake" },
 ]
@@ -72,6 +72,11 @@ copy=["cmake/antlr.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr.cmake"]}]
 
 [[rules]]
+attrs=["run_antlr4"]
+copy=["cmake/antlr4.cmake"]
+add_values=[{attr="includes", values=["cmake/antlr4.cmake"]}]
+
+[[rules]]
 attrs=[
     "target_bison_parser",
     "target_flex_lexers"
@@ -99,8 +104,8 @@ attrs=[
     "conan_require_tool",
     "old_conan_cmake_install",
 ]
-copy=["cmake/conan.cmake"]
-add_values=[{attr="includes", values=["cmake/conan.cmake"]}]
+copy=["cmake/conan1_deprecated.cmake", "cmake/conan_provider.cmake"]
+add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
 
 [[rules]]
 attrs=[
@@ -210,6 +215,24 @@ copy=[
     "build/scripts/gather_swig_java.cmake"
 ]
 add_values=[{attr="includes", values=["cmake/swig.cmake"]}]
+
+[[rules]]
+attrs=[
+    "find_package=IDN",
+]
+copy=[
+    "cmake/FindIDN.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindIDN.cmake"]}]
+
+[[rules]]
+attrs=[
+    "find_package=AIO",
+]
+copy=[
+    "cmake/FindAIO.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindAIO.cmake"]}]
 
 # Conan profiles for platforms
 [[rules]]

@@ -787,6 +787,8 @@ TYPED_TEST(TRpcTest, SlowCall)
 
 TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 {
+    MaybeInitLatch();
+
     std::vector<TFuture<void>> futures;
     std::vector<TTestProxy> proxies;
 
@@ -798,7 +800,7 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     }
 
     for (int i = 0; i <= 30; ++i) {
-        auto req = proxies[i].SlowCall();
+        auto req = proxies[i].LatchedCall();
         futures.push_back(req->Invoke().AsVoid());
     }
 
@@ -806,14 +808,17 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     {
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
-        auto req = proxy.SlowCall();
+        auto req = proxy.LatchedCall();
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }
+    ReleaseLatchedCalls();
 
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
+
+    ResetLatch();
 }
 
-TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
+TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -828,7 +833,7 @@ TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryOverflow, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)
@@ -968,12 +973,15 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
 
 TYPED_TEST(TRpcTest, ConcurrencyLimit)
 {
+    MaybeInitLatch();
+
     std::vector<TFuture<void>> futures;
     for (int i = 0; i < 10; ++i) {
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
-        auto req = proxy.SlowCall();
-        futures.push_back(req->Invoke().AsVoid());
+        auto req = proxy.LatchedCall();
+        futures.push_back(
+            req->Invoke().AsVoid());
     }
 
     Sleep(TDuration::MilliSeconds(200));
@@ -981,16 +989,21 @@ TYPED_TEST(TRpcTest, ConcurrencyLimit)
     TFuture<void> backlogFuture;
     {
         TTestProxy proxy(this->CreateChannel());
-        auto req = proxy.SlowCall();
-        backlogFuture = req->Invoke().AsVoid();
+        auto req = proxy.LatchedCall();
+        req->set_wait_on_latch(false);
+        backlogFuture =
+            req->Invoke().AsVoid();
     }
+
+    Sleep(TDuration::Seconds(2));
+    EXPECT_FALSE(backlogFuture.IsSet());
+    ReleaseLatchedCalls();
 
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 
-    Sleep(TDuration::MilliSeconds(200));
-    EXPECT_FALSE(backlogFuture.IsSet());
-
     EXPECT_TRUE(backlogFuture.Get().IsOK());
+
+    ResetLatch();
 }
 
 TYPED_TEST(TRpcTest, NoReply)
@@ -1553,7 +1566,7 @@ TEST(TCachingChannelFactoryTest, IdleChannels)
         : public IChannelFactory
     {
     public:
-        IChannelPtr CreateChannel(const TString& /*address*/) override
+        IChannelPtr CreateChannel(const std::string& /*address*/) override
         {
             return CreateLocalChannel(Server_);
         }

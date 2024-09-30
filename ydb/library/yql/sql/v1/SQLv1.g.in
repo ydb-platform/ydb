@@ -6,7 +6,7 @@ options {
 }
 
 // Input is a list of statements.
-sql_query: sql_stmt_list | (PRAGMA ANSI DIGITS ansi_sql_stmt_list);
+sql_query: sql_stmt_list | PRAGMA ANSI DIGITS ansi_sql_stmt_list;
 sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF;
 ansi_sql_stmt_list: SEMICOLON* EOF;
 
@@ -66,6 +66,15 @@ sql_stmt_core:
   | create_resource_pool_stmt
   | alter_resource_pool_stmt
   | drop_resource_pool_stmt
+  | create_backup_collection_stmt
+  | alter_backup_collection_stmt
+  | drop_backup_collection_stmt
+  | analyze_stmt
+  | create_resource_pool_classifier_stmt
+  | alter_resource_pool_classifier_stmt
+  | drop_resource_pool_classifier_stmt
+  | backup_stmt
+  | restore_stmt
 ;
 
 expr:
@@ -111,7 +120,7 @@ con_subexpr: unary_subexpr | unary_op unary_subexpr;
 
 unary_op: PLUS | MINUS | TILDA | NOT;
 
-unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | an_id_or_type)))* (COLLATE an_id)?;
+unary_subexpr_suffix: ((key_expr | invoke_expr | DOT (bind_parameter | DIGITS | an_id_or_type)))* (COLLATE an_id)?;
 
 unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
 
@@ -171,7 +180,7 @@ exists_expr: EXISTS LPAREN (select_stmt | values_stmt) RPAREN;
 
 case_expr: CASE expr? when_expr+ (ELSE expr)? END;
 
-lambda: smart_parenthesis (ARROW ((LPAREN expr RPAREN) | (LBRACE_CURLY lambda_body RBRACE_CURLY)) )?;
+lambda: smart_parenthesis (ARROW (LPAREN expr RPAREN | LBRACE_CURLY lambda_body RBRACE_CURLY) )?;
 
 in_expr: in_unary_subexpr;
 
@@ -188,7 +197,7 @@ json_variables: json_variable (COMMA json_variable)*;
 
 json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?;
 
-json_case_handler: ERROR | NULL | (DEFAULT expr);
+json_case_handler: ERROR | NULL | DEFAULT expr;
 
 json_value: JSON_VALUE LPAREN
   json_common_args
@@ -203,8 +212,8 @@ json_exists: JSON_EXISTS LPAREN
   json_exists_handler?
 RPAREN;
 
-json_query_wrapper: (WITHOUT ARRAY?) | (WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?);
-json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT);
+json_query_wrapper: WITHOUT ARRAY? | WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?;
+json_query_handler: ERROR | NULL | EMPTY ARRAY | EMPTY OBJECT;
 
 json_query: JSON_QUERY LPAREN
   json_common_args
@@ -224,7 +233,7 @@ pure_column_or_named: bind_parameter | an_id;
 pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN;
 
 column_name: opt_id_prefix an_id;
-without_column_name: (an_id DOT an_id) | an_id_without;
+without_column_name: an_id DOT an_id | an_id_without;
 
 column_list: column_name (COMMA column_name)* COMMA?;
 without_column_list: without_column_name (COMMA without_column_name)* COMMA?;
@@ -241,7 +250,7 @@ invoke_expr_tail:
     (null_treatment | filter_clause)? (OVER window_name_or_specification)?
 ;
 
-using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
+using_call_expr: (an_id_or_type NAMESPACE an_id_or_type | an_id_expr | bind_parameter | EXTERNAL FUNCTION) invoke_expr;
 
 key_expr: LBRACE_SQUARE expr RBRACE_SQUARE;
 
@@ -519,7 +528,7 @@ hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr R
 
 result_column:
     opt_id_prefix ASTERISK
-  | expr ((AS an_id_or_type) | an_id_as_compat)?
+  | expr (AS an_id_or_type | an_id_as_compat)?
 ;
 
 join_source: ANY? flatten_source (join_op ANY? flatten_source join_constraint?)*;
@@ -533,7 +542,7 @@ flatten_by_arg:
 
 flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS))?;
 
-named_single_source: single_source row_pattern_recognition_clause? (((AS an_id) | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
+named_single_source: single_source row_pattern_recognition_clause? ((AS an_id | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
 
 single_source:
     table_ref
@@ -593,7 +602,7 @@ alter_external_data_source_action:
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW object_ref
-    with_table_settings
+    create_object_features?
     AS select_stmt
 ;
 
@@ -621,7 +630,7 @@ drop_object_stmt: DROP OBJECT (IF EXISTS)? object_ref
 ;
 drop_object_features: WITH object_features;
 
-object_feature_value: id_or_type | bind_parameter | STRING_VALUE;
+object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
 object_feature_kv: an_id_or_type EQUALS object_feature_value;
 object_feature_flag: an_id_or_type;
 object_feature: object_feature_kv | object_feature_flag;
@@ -643,6 +652,32 @@ create_table_entry:
   | changefeed
   | an_id_schema
 ;
+
+create_backup_collection_stmt: CREATE backup_collection WITH LPAREN backup_collection_settings RPAREN database_or_table_list?;
+alter_backup_collection_stmt: ALTER backup_collection (alter_backup_collection_actions | alter_backup_collection_entries);
+drop_backup_collection_stmt: DROP backup_collection;
+
+database_or_table_list: DATABASE | table_list;
+table_list: TABLE an_id_table (COMMA TABLE an_id_table)*;
+
+alter_backup_collection_actions: alter_backup_collection_action (COMMA alter_backup_collection_action)*;
+alter_backup_collection_action:
+    alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+alter_backup_collection_entries: alter_backup_collection_entry (COMMA alter_backup_collection_entry)*;
+alter_backup_collection_entry:
+    ADD DATABASE
+  | DROP DATABASE
+  | ADD TABLE an_id_table
+  | DROP TABLE an_id_table
+;
+backup_collection: BACKUP COLLECTION object_ref;
+backup_collection_settings: backup_collection_settings_entry (COMMA backup_collection_settings_entry)*;
+backup_collection_settings_entry: an_id EQUALS table_setting_value;
+
+backup_stmt: BACKUP object_ref (INCREMENTAL)?;
+restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -669,6 +704,7 @@ alter_table_action:
   | alter_table_drop_changefeed
   | alter_table_rename_index_to
   | alter_table_alter_index
+  | alter_table_alter_column_drop_not_null
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -690,6 +726,7 @@ alter_table_store_action:
 alter_table_add_column: ADD COLUMN? column_schema;
 alter_table_drop_column: DROP COLUMN? an_id;
 alter_table_alter_column: ALTER COLUMN an_id SET family_relation;
+alter_table_alter_column_drop_not_null: ALTER COLUMN an_id DROP NOT NULL;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;
@@ -716,17 +753,26 @@ table_constraint:
 ;
 
 table_index: INDEX an_id table_index_type
-    (WITH LPAREN an_id EQUALS an_id (COMMA an_id EQUALS an_id)* COMMA? RPAREN)?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
-    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
-
-table_index_type:
-      global_index
-    | local_index
+    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?
+    with_index_settings?
 ;
+
+table_index_type: (global_index | local_index) (USING index_subtype)?;
 
 global_index: GLOBAL UNIQUE? (SYNC | ASYNC)?;
 local_index: LOCAL;
+
+index_subtype: an_id;
+
+with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* COMMA? RPAREN;
+index_setting_entry: an_id EQUALS index_setting_value;
+index_setting_value:
+      id_or_type
+    | STRING_VALUE
+    | integer
+    | bool_value
+;
 
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
 changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;
@@ -809,12 +855,25 @@ alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
   alter_resource_pool_action (COMMA alter_resource_pool_action)*
 ;
 alter_resource_pool_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 
 drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
+
+create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref
+  with_table_settings
+;
+
+alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
+  alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+;
+alter_resource_pool_classifier_action:
+    alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
 
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
@@ -842,10 +901,10 @@ define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_c
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? PARALLEL? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
+table_ref: (cluster_expr DOT)? COMMAT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
 
 table_key: id_table_or_type (VIEW view_name)?;
-table_arg: AT? named_expr (VIEW view_name)?;
+table_arg: COMMAT? named_expr (VIEW view_name)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
@@ -854,7 +913,7 @@ table_hint:
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
-simple_table_ref_core: object_ref | AT? bind_parameter;
+simple_table_ref_core: object_ref | COMMAT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
@@ -871,7 +930,7 @@ multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source R
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
 // topics
-create_topic_stmt: CREATE TOPIC topic_ref create_topic_entries? with_topic_settings?;
+create_topic_stmt: CREATE TOPIC (IF NOT EXISTS)? topic_ref create_topic_entries? with_topic_settings?;
 
 create_topic_entries: LPAREN create_topic_entry (COMMA create_topic_entry)* RPAREN;
 create_topic_entry:
@@ -879,7 +938,7 @@ create_topic_entry:
 ;
 with_topic_settings: WITH LPAREN topic_settings RPAREN;
 
-alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+alter_topic_stmt: ALTER TOPIC (IF EXISTS)? topic_ref alter_topic_action (COMMA alter_topic_action)*;
 alter_topic_action:
     alter_topic_add_consumer
   | alter_topic_alter_consumer
@@ -905,7 +964,7 @@ topic_alter_consumer_reset: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 alter_topic_set_settings: SET LPAREN topic_settings RPAREN;
 alter_topic_reset_settings: RESET LPAREN an_id (COMMA an_id_pure)* RPAREN;
 
-drop_topic_stmt: DROP TOPIC topic_ref;
+drop_topic_stmt: DROP TOPIC (IF EXISTS)? topic_ref;
 
 topic_settings: topic_settings_entry (COMMA topic_settings_entry)*;
 topic_settings_entry: an_id EQUALS topic_setting_value;
@@ -980,6 +1039,10 @@ named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
 commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
+
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
+analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
+analyze_stmt: ANALYZE analyze_table_list;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1091,9 +1154,9 @@ cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
 
 id_or_type: id | type_id;
 opt_id_prefix_or_type: (an_id_or_type DOT)?;
-id_or_at: AT? an_id_or_type;
+id_or_at: COMMAT? an_id_or_type;
 id_table_or_type: an_id_table | type_id;
-id_table_or_at: AT? id_table_or_type;
+id_table_or_at: COMMAT? id_table_or_type;
 
 keyword:
     keyword_compat
@@ -1190,9 +1253,11 @@ keyword_as_compat:
   | ARRAY
   | ASC
   | ASYNC
+  | AT
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
+  | BACKUP
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1200,7 +1265,9 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   // | COLLATE
+  | COLLECTION
   | COMMIT
   | CONDITIONAL
   | CONFLICT
@@ -1262,6 +1329,7 @@ keyword_as_compat:
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENTAL
   | INDEX
   | INDEXED
   | INHERITS
@@ -1335,6 +1403,7 @@ keyword_as_compat:
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTORE
   | RESTRICT
   // | RESULT
   | REVERT
@@ -1402,9 +1471,11 @@ keyword_compat: (
   | ARRAY
   | ASC
   | ASYNC
+  | AT
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
+  | BACKUP
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1412,7 +1483,9 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   | COLLATE
+  | COLLECTION
   | COMMIT
   | CONDITIONAL
   | CONFLICT
@@ -1474,6 +1547,7 @@ keyword_compat: (
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENTAL
   | INDEX
   | INDEXED
   | INHERITS
@@ -1547,6 +1621,7 @@ keyword_compat: (
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTORE
   | RESTRICT
   | RESULT
   | REVERT
@@ -1654,8 +1729,8 @@ LPAREN:        '(';
 RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
-AT:            '@';
-DOUBLE_AT:     '@@';
+COMMAT:        '@';
+DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
 QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
 QUOTE_SINGLE:  '\'';
@@ -1712,10 +1787,13 @@ ASC: A S C;
 ASSUME: A S S U M E;
 ASYMMETRIC: A S Y M M E T R I C;
 ASYNC: A S Y N C;
+AT: A T;
 ATTACH: A T T A C H;
 ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
 AUTOMAP: A U T O M A P;
+BACKUP: B A C K U P;
+COLLECTION: C O L L E C T I O N;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;
 BERNOULLI: B E R N O U L L I;
@@ -1728,6 +1806,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;
@@ -1813,6 +1892,7 @@ ILIKE: I L I K E;
 IMMEDIATE: I M M E D I A T E;
 IMPORT: I M P O R T;
 IN: I N;
+INCREMENTAL: I N C R E M E N T A L;
 INDEX: I N D E X;
 INDEXED: I N D E X E D;
 INHERITS: I N H E R I T S;
@@ -1901,6 +1981,7 @@ REPLICATION: R E P L I C A T I O N;
 RESET: R E S E T;
 RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;
+RESTORE: R E S T O R E;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
 RETURN: R E T U R N;
@@ -1987,7 +2068,7 @@ fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
+fragment STRING_MULTILINE: (DOUBLE_COMMAT .* DOUBLE_COMMAT)+ COMMAT?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 

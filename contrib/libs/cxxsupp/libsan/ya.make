@@ -2,6 +2,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
+VERSION(Service-proxy-version)
+
 LICENSE(YandexOpen)
 
 NO_PLATFORM()

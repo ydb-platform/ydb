@@ -6,6 +6,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -254,6 +255,10 @@ public:
             return NUdf::TBlockItem();
         }
         YQL_ENSURE(prev == BeginListSymbol);
+        if (buf.Current() == EndListSymbol) {
+            buf.Next();
+            return NUdf::TBlockItem();
+        }
         auto result = GetNotNull(buf);
         if (buf.Current() == ListItemSeparatorSymbol) {
             buf.Next();
@@ -401,7 +406,7 @@ public:
             }
         }
 
-        if constexpr (std::is_integral_v<T>) {
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, NYql::NDecimal::TInt128>) {
             if constexpr (std::is_signed_v<T>) {
                 YQL_ENSURE(buf.Current() == Int64Marker);
                 buf.Next();
@@ -411,11 +416,13 @@ public:
                 buf.Next();
                 return NUdf::TBlockItem(T(buf.ReadVarUI64()));
             }
+        } else if constexpr (std::is_floating_point_v<T>) {
+            YQL_ENSURE(buf.Current() == DoubleMarker);
+            buf.Next();                
+            return NUdf::TBlockItem(T(buf.NextDouble()));
+        } else {
+            static_assert(std::is_floating_point_v<T>);
         }
-
-        YQL_ENSURE(buf.Current() == DoubleMarker);
-        buf.Next();
-        return NUdf::TBlockItem(T(buf.NextDouble()));
     }
 };
 
@@ -460,7 +467,8 @@ struct TYsonBlockReaderTraits {
     using TResult = IYsonBlockReader;
     template <bool Nullable>
     using TTuple = TYsonTupleBlockReader<Nullable, Native>;
-    template <typename T, bool Nullable>
+    // TODO: Implement reader for decimals
+    template <typename T, bool Nullable, typename = std::enable_if_t<!std::is_same_v<T, NYql::NDecimal::TInt128> && (std::is_integral_v<T> || std::is_floating_point_v<T>)>>
     using TFixedSize = TYsonFixedSizeBlockReader<T, Nullable, Native>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
     using TStrings = TYsonStringBlockReader<TStringType, Nullable, OriginalT, Native>;
@@ -510,7 +518,7 @@ public:
             case arrow::Type::UINT64:   PrimitiveConverterImpl_ = GEN_TYPE(UInt64); break;
             case arrow::Type::DOUBLE:   PrimitiveConverterImpl_ = GEN_TYPE(Double); break;
             case arrow::Type::FLOAT:    PrimitiveConverterImpl_ = GEN_TYPE(Float); break;
-            case arrow::Type::STRING:   PrimitiveConverterImpl_ = GEN_TYPE_STR(String); break;
+            case arrow::Type::STRING:   PrimitiveConverterImpl_ = GEN_TYPE_STR(Binary); break; // all strings from yt is in binary format
             case arrow::Type::BINARY:   PrimitiveConverterImpl_ = GEN_TYPE_STR(Binary); break;
             default:
                 return; // will check in runtime
@@ -612,12 +620,30 @@ public:
         : Settings_(std::move(settings))
         , DictYsonConverter_(Settings_)
         , YsonConverter_(Settings_)
-        , DictPrimitiveConverter_(Settings_) {}
+        , DictPrimitiveConverter_(Settings_)
+    {
+        auto type = Settings_.Type;
+        IsJson_ = type->IsData() && AS_TYPE(TDataType, type)->GetDataSlot() == NUdf::EDataSlot::Json 
+            || (Native && type->IsOptional() && AS_TYPE(TOptionalType, type)->GetItemType()->IsData() 
+            && AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Json);
+    }
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
-            if (static_cast<const arrow::DictionaryType&>(*block->type).value_type()->Equals(Settings_.ArrowType)) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
+            if (valType->Equals(Settings_.ArrowType)) {
+                // just unpack
                 return DictPrimitiveConverter_.Convert(block);
+            }  else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == valType->id()) {
+                // unpack an cast
+                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
+            } else if (IsJson_ && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == valType->id())
+            {
+                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
             } else {
                 return DictYsonConverter_.Convert(block);
             }
@@ -628,7 +654,12 @@ public:
                 return block;
             } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-                Y_ENSURE(result.ok());
+                YQL_ENSURE(result.ok());
+                return *result;
+            } else if (IsJson_ && arrow::Type::STRING == Settings_.ArrowType->id() && arrow::Type::BINARY == blockType->id())
+            {
+                auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
                 return *result;
             } else {
                 YQL_ENSURE(arrow::Type::BINARY == blockType->id());
@@ -641,6 +672,7 @@ private:
     TYtYsonColumnConverter<Native, IsTopOptional, true> DictYsonConverter_;
     TYtYsonColumnConverter<Native, IsTopOptional, false> YsonConverter_;
     TPrimitiveColumnConverter<true> DictPrimitiveConverter_;
+    bool IsJson_;
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) 

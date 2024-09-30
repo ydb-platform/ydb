@@ -12,8 +12,6 @@ SRCS(
     concurrent_rw_hash.h
     console.cpp
     console.h
-    count_min_sketch.cpp
-    count_min_sketch.h
     counted_leaky_bucket.h
     defs.h
     event_priority_queue.h
@@ -48,7 +46,6 @@ SRCS(
     single_thread_ic_mock.h
     stlog.cpp
     stlog.h
-    templates.h
     testactorsys.cpp
     testactorsys.h
     text.cpp

@@ -72,6 +72,21 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
 }
 
 template <typename TRow>
+void UpdateLargeColumnarStatistics(TLargeColumnarStatistics& statistics, TRange<TRow> rows)
+{
+    for (const auto& values : rows) {
+        for (const auto& value : values) {
+            if (value.Type != EValueType::Null) {
+                auto valueNoFlags = value;
+                valueNoFlags.Flags = EValueFlags::None;
+                auto fingerprint = TBitwiseUnversionedValueHash()(valueNoFlags);
+                statistics.ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
+            }
+        }
+    }
+}
+
+template <typename TRow>
 void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows)
 {
     int maxId = -1;
@@ -92,6 +107,10 @@ void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows
 
     if (!statistics.HasValueStatistics()) {
         return;
+    }
+
+    if (statistics.HasLargeStatistics()) {
+        UpdateLargeColumnarStatistics(statistics.LargeStatistics, rows);
     }
 
     // Vectors for precalculation of minimum and maximum values from rows that we are adding.
@@ -139,10 +158,37 @@ void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows
 
 } // namespace
 
+////////////////////////////////////////////////////////////////////////////////
+
+bool TLargeColumnarStatistics::Empty() const
+{
+    return ColumnHyperLogLogDigests.empty();
+}
+
+void TLargeColumnarStatistics::Clear()
+{
+    ColumnHyperLogLogDigests.clear();
+}
+
+void TLargeColumnarStatistics::Resize(int columnCount)
+{
+    ColumnHyperLogLogDigests.resize(columnCount);
+}
+
+TLargeColumnarStatistics& TLargeColumnarStatistics::operator+=(const TLargeColumnarStatistics& other)
+{
+    for (int index = 0; index < std::ssize(ColumnHyperLogLogDigests); ++index) {
+        ColumnHyperLogLogDigests[index].Merge(other.ColumnHyperLogLogDigests[index]);
+    }
+    return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& other)
 {
     if (GetColumnCount() == 0) {
-        Resize(other.GetColumnCount(), other.HasValueStatistics());
+        Resize(other.GetColumnCount(), other.HasValueStatistics(), other.HasLargeStatistics());
     }
 
     YT_VERIFY(GetColumnCount() == other.GetColumnCount());
@@ -169,6 +215,7 @@ TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& 
     if (!other.HasValueStatistics()) {
         ClearValueStatistics();
     } else if (HasValueStatistics()) {
+        bool mergeLargeStatistics = HasLargeStatistics() && other.HasLargeStatistics();
         for (int index = 0; index < GetColumnCount(); ++index) {
 
             if (other.ColumnMinValues[index] != NullUnversionedValue &&
@@ -185,14 +232,20 @@ TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& 
 
             ColumnNonNullValueCounts[index] += other.ColumnNonNullValueCounts[index];
         }
+        if (mergeLargeStatistics) {
+            LargeStatistics += other.LargeStatistics;
+        } else {
+            LargeStatistics.Clear();
+        }
     }
+
     return *this;
 }
 
-TColumnarStatistics TColumnarStatistics::MakeEmpty(int columnCount, bool hasValueStatistics)
+TColumnarStatistics TColumnarStatistics::MakeEmpty(int columnCount, bool hasValueStatistics, bool hasLargeStatistics)
 {
     TColumnarStatistics result;
-    result.Resize(columnCount, hasValueStatistics);
+    result.Resize(columnCount, hasValueStatistics, hasLargeStatistics);
     return result;
 }
 
@@ -234,11 +287,17 @@ bool TColumnarStatistics::HasValueStatistics() const
     return GetColumnCount() == 0 || !ColumnMinValues.empty();
 }
 
+bool TColumnarStatistics::HasLargeStatistics() const
+{
+    return GetColumnCount() == 0 || !LargeStatistics.Empty();
+}
+
 void TColumnarStatistics::ClearValueStatistics()
 {
     ColumnMinValues.clear();
     ColumnMaxValues.clear();
     ColumnNonNullValueCounts.clear();
+    LargeStatistics.Clear();
 }
 
 int TColumnarStatistics::GetColumnCount() const
@@ -246,9 +305,14 @@ int TColumnarStatistics::GetColumnCount() const
     return ColumnDataWeights.size();
 }
 
-void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics)
+void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics, bool keepLargeStatistics)
 {
+    if (columnCount < GetColumnCount()) {
+        // Downsizes are not allowed. If reducing column count, must clear the stats completely.
+        YT_VERIFY(columnCount == 0);
+    }
     keepValueStatistics &= HasValueStatistics();
+    keepLargeStatistics &= (keepValueStatistics && HasLargeStatistics());
 
     ColumnDataWeights.resize(columnCount, 0);
 
@@ -256,6 +320,12 @@ void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics)
         ColumnMinValues.resize(columnCount, NullUnversionedValue);
         ColumnMaxValues.resize(columnCount, NullUnversionedValue);
         ColumnNonNullValueCounts.resize(columnCount, 0);
+
+        if (keepLargeStatistics) {
+            LargeStatistics.Resize(columnCount);
+        } else {
+            LargeStatistics.Clear();
+        }
     } else {
         ClearValueStatistics();
     }
@@ -298,7 +368,7 @@ void TColumnarStatistics::Update(TRange<TVersionedRow> rows)
 
 TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr& nameTable, const std::vector<TColumnStableName>& columnStableNames) const
 {
-    auto result = MakeEmpty(columnStableNames.size(), HasValueStatistics());
+    auto result = MakeEmpty(columnStableNames.size(), HasValueStatistics(), HasLargeStatistics());
 
     for (const auto& [columnIndex, columnName] : Enumerate(columnStableNames)) {
         if (auto id = nameTable->FindId(columnName.Underlying()); id && *id < GetColumnCount()) {
@@ -308,6 +378,10 @@ TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr
                 result.ColumnMinValues[columnIndex] = ColumnMinValues[*id];
                 result.ColumnMaxValues[columnIndex] = ColumnMaxValues[*id];
                 result.ColumnNonNullValueCounts[columnIndex] = ColumnNonNullValueCounts[*id];
+
+                if (HasLargeStatistics()) {
+                    result.LargeStatistics.ColumnHyperLogLogDigests[columnIndex] = LargeStatistics.ColumnHyperLogLogDigests[*id];
+                }
             }
         }
     }

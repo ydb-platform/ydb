@@ -1,5 +1,7 @@
 #include "composite_compare.h"
 
+#include "private.h"
+
 #include <yt/yt/client/table_client/row_base.h>
 
 #include <yt/yt/core/yson/pull_parser.h>
@@ -20,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto Logger = NLogging::TLogger{"YsonCompositeCompare"};
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -214,6 +216,25 @@ i64 GetMinResultingSize(const TYsonItem& item, bool isInsideList)
 }
 
 } // namespace
+
+int CompareDoubleValues(double lhs, double rhs)
+{
+    if (lhs < rhs) {
+        return -1;
+    } else if (lhs > rhs) {
+        return +1;
+    } else if (std::isnan(lhs)) {
+        if (std::isnan(rhs)) {
+            return 0;
+        } else {
+            return 1;
+        }
+    } else if (std::isnan(rhs)) {
+        return -1;
+    }
+
+    return 0;
+}
 
 int CompareYsonValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
 {

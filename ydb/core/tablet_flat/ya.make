@@ -56,6 +56,8 @@ SRCS(
     flat_stat_part.h
     flat_stat_table.h
     flat_stat_table.cpp
+    flat_stat_table_btree_index.cpp
+    flat_stat_table_btree_index_histogram.cpp
     flat_stat_part_group_iter_create.cpp
     flat_store_hotdog.cpp
     flat_table.cpp
@@ -72,7 +74,6 @@ SRCS(
     shared_handle.cpp
     shared_sausagecache.cpp
     shared_sausagecache.h
-    shared_cache_memtable.h
     tablet_flat_executor.h
     tablet_flat_executor.cpp
     tablet_flat_executed.h

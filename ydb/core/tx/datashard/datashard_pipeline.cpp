@@ -5,7 +5,6 @@
 #include "datashard_txs.h"
 #include "datashard_write_operation.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
@@ -1604,16 +1603,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                 tx->SetForceOnlineFlag();
             } else if (tx->IsReadTable()) {
                 // Feature flag tells us txproxy supports immediate mode for ReadTable
-                const bool immediateSupported = (
-                        KIKIMR_ALLOW_READTABLE_IMMEDIATE ||
-                        AppData()->AllowReadTableImmediate);
-
-                if (!immediateSupported) {
-                    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                            "Shard " << Self->TabletID() << " force immediate tx "
-                            << tx->GetTxId() << " to online because immediate ReadTable is NYI");
-                    tx->SetForceOnlineFlag();
-                }
             } else if (dataTx->RequirePrepare()) {
                 LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                            "Shard " << Self->TabletID() << " force immediate tx "
@@ -2285,11 +2274,15 @@ void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
     if (!Self->IsMvccEnabled() || op->IsReadOnly())
         return;
 
+    Y_VERIFY_S(!op->GetCommittingOpsVersion(),
+        "Trying to AddCommittingOp " << *op << " more than once");
+
     TRowVersion version = Self->GetReadWriteVersions(op.Get()).WriteVersion;
     if (op->IsImmediate())
         CommittingOps.Add(op->GetTxId(), version);
     else
         CommittingOps.Add(version);
+    op->SetCommittingOpsVersion(version);
 }
 
 void TPipeline::RemoveCommittingOp(const TRowVersion& version) {
@@ -2299,13 +2292,13 @@ void TPipeline::RemoveCommittingOp(const TRowVersion& version) {
 }
 
 void TPipeline::RemoveCommittingOp(const TOperation::TPtr& op) {
-    if (!Self->IsMvccEnabled() || op->IsReadOnly())
-        return;
-
-    if (op->IsImmediate())
-        CommittingOps.Remove(op->GetTxId());
-    else
-        CommittingOps.Remove(TRowVersion(op->GetStep(), op->GetTxId()));
+    if (const auto& version = op->GetCommittingOpsVersion()) {
+        if (op->IsImmediate())
+            CommittingOps.Remove(op->GetTxId(), *version);
+        else
+            CommittingOps.Remove(*version);
+        op->ResetCommittingOpsVersion();
+    }
 }
 
 bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {

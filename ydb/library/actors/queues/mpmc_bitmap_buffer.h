@@ -15,9 +15,9 @@ struct TMPMCBitMapBuffer {
 
     const ui64 MaxSize;
     const ui64 SizeBits;
-    NThreading::TPadded<TArrayHolder<std::atomic_uint64_t>> Buffer;
-    NThreading::TPadded<TArrayHolder<NThreading::TPadded<std::atomic_uint64_t>>> Bitmap;
-    NThreading::TPadded<std::atomic_uint64_t> TailSize = 0;
+    NThreading::TPadded<TArrayHolder<std::atomic<ui64>>> Buffer;
+    NThreading::TPadded<TArrayHolder<NThreading::TPadded<std::atomic<ui64>>>> Bitmap;
+    NThreading::TPadded<std::atomic<ui64>> TailSize = 0;
 
     struct TTailSize {
         ui32 Tail = 0;
@@ -57,8 +57,8 @@ struct TMPMCBitMapBuffer {
     TMPMCBitMapBuffer(ui64 sizeBits)
         : MaxSize(1ull << sizeBits) 
         , SizeBits(sizeBits)
-        , Buffer(new std::atomic_uint64_t[MaxSize])
-        , Bitmap(new NThreading::TPadded<std::atomic_uint64_t>[MaxSize / 64])
+        , Buffer(new std::atomic<ui64>[MaxSize])
+        , Bitmap(new NThreading::TPadded<std::atomic<ui64>>[MaxSize / 64])
     {
         for (ui32 idx = 0; idx < MaxSize; ++idx) {
             if (idx % 64 == 0) {
@@ -138,7 +138,7 @@ struct TMPMCBitMapBuffer {
                 ui64 generation = pos / MaxSize;
                 ui64 expected = TSlot::MakeEmpty(generation);
                 TSlot parsedSlot = TSlot::Recognise(expected);
-                std::atomic_uint64_t &slot = Buffer[ConvertIdx(pos)];
+                std::atomic<ui64> &slot = Buffer[ConvertIdx(pos)];
                 bool success = false;
                 do {
                     if (slot.compare_exchange_strong(expected, el, std::memory_order_acq_rel)) {
@@ -244,7 +244,7 @@ struct TMPMCBitMapBuffer {
         }
         pos = *nextPos;
         while (pos < stopPosition) {
-            std::atomic_uint64_t &slot = Buffer[ConvertIdx(pos)];
+            std::atomic<ui64> &slot = Buffer[ConvertIdx(pos)];
             ui64 expected = slot.load(std::memory_order_acquire);
             TSlot parsedSlot = TSlot::Recognise(expected);
             if (!parsedSlot.IsEmpty) {
@@ -271,7 +271,7 @@ struct TMPMCBitMapBuffer {
         idx %= MaxSize;
         ui64 maskIdx = idx / 64;
         ui64 bitIdx = idx % 64;
-        std::atomic_uint64_t &mask = Bitmap[maskIdx];
+        std::atomic<ui64> &mask = Bitmap[maskIdx];
         ui64 currentMask = mask.load(std::memory_order_acquire);
         return currentMask & (1ull << bitIdx);
     }
@@ -282,7 +282,7 @@ struct TMPMCBitMapBuffer {
         ui64 maskIdx = idx / 64;
         ui64 bitIdx = idx % 64;
         // // Cerr << "Set bit at maskIdx: " << maskIdx << " bitIdx: " << bitIdx << Endl;
-        std::atomic_uint64_t &mask = Bitmap[maskIdx];
+        std::atomic<ui64> &mask = Bitmap[maskIdx];
         ui64 currentMask = mask.load(std::memory_order_acquire);
         for (;;) {
             if (currentMask & (1ull << bitIdx)) {
@@ -302,7 +302,7 @@ struct TMPMCBitMapBuffer {
         ui64 maskIdx = idx / 64;
         ui64 bitIdx = idx % 64;
         // // Cerr << "Unset bit at maskIdx: " << maskIdx << " bitIdx: " << bitIdx << Endl;
-        std::atomic_uint64_t &mask = Bitmap[maskIdx];
+        std::atomic<ui64> &mask = Bitmap[maskIdx];
         ui64 currentMask = mask.load(std::memory_order_acquire);
         for (;;) {
             if (!(currentMask & (1ull << bitIdx))) {

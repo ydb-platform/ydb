@@ -203,7 +203,7 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
     const auto& block = node.GetBlock1();
     switch (block.Alt_case()) {
         case TRule_using_call_expr::TBlock1::kAlt1: {
-            auto& subblock = block.GetAlt1().GetBlock1();
+            auto& subblock = block.GetAlt1();
             Module = Id(subblock.GetRule_an_id_or_type1(), *this);
             Func = Id(subblock.GetRule_an_id_or_type3(), *this);
             break;
@@ -378,11 +378,15 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
     }
 
     if (tail.HasBlock2()) {
-        if (AggMode == EAggregateMode::Distinct) {
-            Ctx.Error() << "DISTINCT is not yet supported in window functions";
-            return false;
+        if (Ctx.DistinctOverWindow) {
+            AggMode == EAggregateMode::Distinct ? SetOverWindowDistinct() : SetOverWindow();
+        } else {
+            if (AggMode == EAggregateMode::Distinct) {
+                Ctx.Error() << "DISTINCT is not yet supported in window functions";
+                return false;
+            }
+            SetOverWindow();
         }
-        SetOverWindow();
         auto winRule = tail.GetBlock2().GetRule_window_name_or_specification2();
         switch (winRule.Alt_case()) {
         case TRule_window_name_or_specification::kAltWindowNameOrSpecification1: {

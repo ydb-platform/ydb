@@ -1,5 +1,5 @@
-/* Manipulating the FPU control word.
-   Copyright (C) 2007-2013 Free Software Foundation, Inc.
+/* Manipulating the FPU control word.  -*- coding: utf-8 -*-
+   Copyright (C) 2007-2020 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2007.
 
    This program is free software: you can redistribute it and/or modify
@@ -13,7 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FPUCW_H
 #define _FPUCW_H
@@ -35,15 +35,15 @@
 
    The FPU control word is under control of the application, i.e. it is
    not required to be set either way by the ABI.  (In fact, the i386 ABI
-   http://refspecs.freestandards.org/elf/abi386-4.pdf page 3-12 = page 38
+   https://www.linux-mips.org/pub/linux/mips/doc/ABI/abi386-4.pdf page 3-12 = page 38
    is not clear about it.  But in any case, gcc treats the control word
    like a "preserved" register: it emits code that assumes that the control
    word is preserved across calls, and it restores the control word at the
    end of functions that modify it.)
 
-   See Vincent Lefèvre's page http://www.vinc17.org/research/extended.en.html
+   See Vincent Lefèvre's page https://www.vinc17.net/research/extended.en.html
    for a good explanation.
-   See http://www.uwsg.iu.edu/hypermail/linux/kernel/0103.0/0453.html for
+   See https://web.archive.org/web/20060905133417/http://www.uwsg.iu.edu/hypermail/linux/kernel/0103.0/0453.html
    some argumentation which setting should be the default.  */
 
 /* This header file provides the following facilities:
@@ -61,8 +61,8 @@
                                     'long double' safe operation precision
  */
 
-/* Inline assembler like this works only with GNU C.  */
-#if (defined __i386__ || defined __x86_64__) && defined __GNUC__
+/* Inline assembler like this works only with GNU C and clang.  */
+#if (defined __i386__ || defined __x86_64__) && (defined __GNUC__ || defined __clang__)
 
 typedef unsigned short fpucw_t; /* glibc calls this fpu_control_t */
 
@@ -70,12 +70,12 @@ typedef unsigned short fpucw_t; /* glibc calls this fpu_control_t */
 # define FPU_PC_DOUBLE 0x200    /* glibc calls this _FPU_DOUBLE */
 # define FPU_PC_EXTENDED 0x300  /* glibc calls this _FPU_EXTENDED */
 
-# define GET_FPUCW() \
+# define GET_FPUCW() __extension__ \
   ({ fpucw_t _cw;                                               \
      __asm__ __volatile__ ("fnstcw %0" : "=m" (*&_cw));         \
      _cw;                                                       \
    })
-# define SET_FPUCW(word) \
+# define SET_FPUCW(word) __extension__ \
   (void)({ fpucw_t _ncw = (word);                               \
            __asm__ __volatile__ ("fldcw %0" : : "m" (*&_ncw));  \
          })

@@ -7,11 +7,8 @@ void TWorker::ExecuteTask(const TWorkerTask& workerTask) {
     if (CPUUsage < 1) {
         start = TMonotonic::Now();
     }
-    if (workerTask.GetTask()->Execute(workerTask.GetTaskSignals())) {
-        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask, workerTask.GetTask()).SendTo(DistributorId);
-    } else {
-        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask, workerTask.GetTask()->GetErrorMessage()).SendTo(DistributorId);
-    }
+    Y_UNUSED(workerTask.GetTask()->Execute(workerTask.GetTaskSignals(), workerTask.GetTask()));
+    TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask).SendTo(DistributorId);
     if (CPUUsage < 1) {
         Schedule((TMonotonic::Now() - *start) * (1 - CPUUsage), new NActors::TEvents::TEvWakeup);
         WaitWakeUp = true;

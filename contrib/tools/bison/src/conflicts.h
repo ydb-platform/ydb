@@ -1,7 +1,7 @@
 /* Find and resolve or report lookahead conflicts for bison,
 
-   Copyright (C) 2000-2002, 2004, 2007, 2009-2013 Free Software
-   Foundation, Inc.
+   Copyright (C) 2000-2002, 2004, 2007, 2009-2015, 2018-2021 Free
+   Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef CONFLICTS_H_
 # define CONFLICTS_H_
@@ -41,7 +41,10 @@ int conflicts_total_count (void);
 void conflicts_output (FILE *out);
 void conflicts_free (void);
 
+bool has_conflicts (const state *s);
+
 /* Were there conflicts? */
 extern int expected_sr_conflicts;
 extern int expected_rr_conflicts;
+
 #endif /* !CONFLICTS_H_ */

@@ -8,7 +8,7 @@ All the {{ ydb-short-name }} DSTool utility subcommands share the same global op
 | `-v`, `--verbose` | Print detailed output while executing the command. |
 | `-q`, `--quiet` | Suppress non-critical messages when executing the command. |
 | `-n`, `--dry-run` | Dry-run the command. |
-| `-e`, `--endpoint` | Endpoint to connect to the {{ ydb-short-name }} cluster, in the format: `[PROTOCOL://]HOST[:PORT]`.<br>Default values: PROTOCOL — `http`, PORT — `8765`. |
+| `-e`, `--endpoint` | Endpoint to connect to the {{ ydb-short-name }} cluster, in the format: `[PROTOCOL://]HOST[:PORT]`.<br/>Default values: PROTOCOL — `http`, PORT — `8765`. |
 | `--grpc-port` | gRPC port used to invoke procedures. |
 | `--mon-port` | Port to view HTTP monitoring data in JSON format. |
 | `--mon-protocol` | If you fail to specify the cluster connection protocol explicitly in the endpoint, the protocol is taken from here. |

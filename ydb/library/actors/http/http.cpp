@@ -446,6 +446,10 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseNotFound(TStringBuf
     return CreateResponse("404", "Not Found", contentType, html);
 }
 
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseTooManyRequests(TStringBuf html, TStringBuf contentType) {
+    return CreateResponse("429", "Too Many Requests", contentType, html);
+}
+
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseServiceUnavailable(TStringBuf html, TStringBuf contentType) {
     return CreateResponse("503", "Service Unavailable", contentType, html);
 }
@@ -551,6 +555,7 @@ THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const 
     }
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
     THeadersBuilder newHeaders(Headers);
+    newHeaders.Erase("Accept-Encoding");
     newHeaders.Set("Host", newHost);
     request->Set(newHeaders);
     if (Body) {

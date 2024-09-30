@@ -1,5 +1,7 @@
 # Аутентификация при помощи токена
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [work in progress message](_includes/addition.md) %}
 
 Ниже приведены примеры кода аутентификации при помощи токена в разных {{ ydb-short-name }} SDK.
@@ -171,7 +173,7 @@
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
   ];
 

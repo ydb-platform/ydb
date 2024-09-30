@@ -108,10 +108,12 @@
   - sys/mtio.h
   - sys/param.h
   - sys/personality.h
+  - sys/platform/ppc.h
   - sys/poll.h
   - sys/prctl.h
   - sys/procfs.h
   - sys/ptrace.h
+  - sys/queue.h
   - sys/quota.h
   - sys/reboot.h
   - sys/resource.h
@@ -122,12 +124,14 @@
   - sys/signalfd.h
   - sys/signal.h
   - sys/socket.h
+  - sys/socketvar.h
   - sys/soundcard.h
   - sys/statfs.h
   - sys/stat.h
   - sys/statvfs.h
   - sys/stropts.h
   - sys/syscall.h
+  - sys/sysctl.h
   - sys/sysinfo.h
   - sys/syslog.h
   - sys/sysmacros.h
@@ -142,6 +146,7 @@
   - sys/ucontext.h
   - sys/uio.h
   - sys/un.h
+  - sys/unistd.h
   - sys/user.h
   - sys/utsname.h
   - sys/vfs.h
@@ -149,9 +154,11 @@
   - sys/wait.h
   - sys/xattr.h
   - tar.h
+  - termio.h
   - termios.h
   - threads.h
   - time.h
+  - ttyent.h
   - uchar.h
   - ucontext.h
   - ulimit.h
@@ -162,3 +169,4 @@
   - values.h
   - wait.h
   - wordexp.h
+  - xlocale.h

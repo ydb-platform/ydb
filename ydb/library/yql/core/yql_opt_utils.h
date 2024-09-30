@@ -103,7 +103,7 @@ TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& c
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
 
 constexpr std::initializer_list<std::string_view> SkippableCallables = {"Unordered", "AssumeSorted", "AssumeUnique", "AssumeDistinct",
-    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce"};
+    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce", "AssumeConstraints"};
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables);
 
@@ -163,5 +163,9 @@ std::optional<std::pair<TPartOfConstraintBase::TPathType, ui32>> GetPathToKey(co
 
 template<bool Ordered = false>
 TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExprNode& arg);
+
+// generates column names with pattern "prefixN" that do not clash with source columns
+// prefix should start with "_yql"
+TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
 
 }

@@ -55,6 +55,10 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
         *import.MutableEndTime() = SecondsToProtoTimeStamp(importInfo->EndTime.Seconds());
     }
 
+    if (importInfo->UserSID) {
+        import.SetUserSID(*importInfo->UserSID);
+    }
+
     switch (importInfo->State) {
     case TImportInfo::EState::Waiting:
         switch (GetMinState(importInfo)) {
@@ -170,6 +174,11 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
     );
+    if (item.Permissions.Defined()) {
+        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
+        );
+    }
 }
 
 void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {

@@ -4,7 +4,7 @@ Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Bool
 
 These functions **don't skip** `NULL` during aggregation, with even one `NULL` turning the result into `NULL`. To skip `NULLs` during aggregation, you can use the functions `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -18,7 +18,7 @@ FROM my_table;
 
 Apply the relevant bitwise operation to all values of a numeric column or expression.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

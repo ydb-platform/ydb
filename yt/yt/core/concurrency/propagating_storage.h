@@ -107,7 +107,7 @@ class TPropagatingStorageGuard
 {
 public:
     explicit TPropagatingStorageGuard(
-        TPropagatingStorage storage, TSourceLocation loc = FROM_HERE);
+        TPropagatingStorage storage, TSourceLocation loc = YT_CURRENT_SOURCE_LOCATION);
     ~TPropagatingStorageGuard();
 
     TPropagatingStorageGuard(const TPropagatingStorageGuard& other) = delete;
@@ -128,7 +128,7 @@ class TNullPropagatingStorageGuard
     : public TPropagatingStorageGuard
 {
 public:
-    TNullPropagatingStorageGuard(TSourceLocation loc = FROM_HERE);
+    TNullPropagatingStorageGuard(TSourceLocation loc = YT_CURRENT_SOURCE_LOCATION);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

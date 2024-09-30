@@ -31,9 +31,18 @@ private:
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
     YDB_READONLY(TAtomicCounter, ShardingFiltersCount, 0);
 
+    YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsSave, 0);
+    YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsRemove, 0);
+
     YDB_ACCESSOR(TAtomicCounter, CompactionsLimit, 10000000);
 
 protected:
+    virtual void OnRequestTracingChanges(
+        const std::set<NOlap::TSnapshot>& snapshotsToSave, const std::set<NOlap::TSnapshot>& snapshotsToRemove) override {
+        RequestTracingSnapshotsSave.Add(snapshotsToSave.size());
+        RequestTracingSnapshotsRemove.Add(snapshotsToRemove.size());
+    }
+
     virtual void OnSelectShardingFilter() override {
         ShardingFiltersCount.Inc();
     }
@@ -62,11 +71,11 @@ protected:
         return EOptimizerCompactionWeightControl::Force;
     }
 
-public:
-    virtual TDuration GetOverridenGCPeriod(const TDuration /*def*/) const override {
+    virtual TDuration DoGetOverridenGCPeriod(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
 
+public:
     void WaitCompactions(const TDuration d) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
@@ -82,10 +91,10 @@ public:
 
     void WaitIndexation(const TDuration d) const {
         TInstant start = TInstant::Now();
-        ui32 compactionsStart = GetInsertStartedCounter().Val();
+        ui32 insertsStart = GetInsertStartedCounter().Val();
         while (Now() - start < d) {
-            if (compactionsStart != GetInsertStartedCounter().Val()) {
-                compactionsStart = GetInsertStartedCounter().Val();
+            if (insertsStart != GetInsertStartedCounter().Val()) {
+                insertsStart = GetInsertStartedCounter().Val();
                 start = TInstant::Now();
             }
             Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;

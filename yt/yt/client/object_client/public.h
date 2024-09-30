@@ -17,6 +17,14 @@ namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TUserDirectory;
+
+} // namespace NProto
+
+////////////////////////////////////////////////////////////////////////////////
+
 YT_DEFINE_ERROR_ENUM(
     ((PrerequisiteCheckFailed)                   (1000))
     ((InvalidObjectLifeStage)                    (1001))

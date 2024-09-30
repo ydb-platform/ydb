@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/public/udf
     ydb/library/yql/utils
+    ydb/library/yql/public/result_format
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/schema/mkql
     ydb/library/yql/providers/common/schema/parser

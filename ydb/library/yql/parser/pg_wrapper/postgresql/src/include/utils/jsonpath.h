@@ -3,7 +3,7 @@
  * jsonpath.h
  *	Definitions for jsonpath datatype
  *
- * Copyright (c) 2019-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2019-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	src/include/utils/jsonpath.h
@@ -29,8 +29,18 @@ typedef struct
 #define JSONPATH_LAX		(0x80000000)
 #define JSONPATH_HDRSZ		(offsetof(JsonPath, data))
 
-#define DatumGetJsonPathP(d)			((JsonPath *) DatumGetPointer(PG_DETOAST_DATUM(d)))
-#define DatumGetJsonPathPCopy(d)		((JsonPath *) DatumGetPointer(PG_DETOAST_DATUM_COPY(d)))
+static inline JsonPath *
+DatumGetJsonPathP(Datum d)
+{
+	return (JsonPath *) PG_DETOAST_DATUM(d);
+}
+
+static inline JsonPath *
+DatumGetJsonPathPCopy(Datum d)
+{
+	return (JsonPath *) PG_DETOAST_DATUM_COPY(d);
+}
+
 #define PG_GETARG_JSONPATH_P(x)			DatumGetJsonPathP(PG_GETARG_DATUM(x))
 #define PG_GETARG_JSONPATH_P_COPY(x)	DatumGetJsonPathPCopy(PG_GETARG_DATUM(x))
 #define PG_RETURN_JSONPATH_P(p)			PG_RETURN_POINTER(p)
@@ -244,8 +254,11 @@ typedef struct JsonPathParseResult
 	bool		lax;
 } JsonPathParseResult;
 
-extern JsonPathParseResult *parsejsonpath(const char *str, int len);
+extern JsonPathParseResult *parsejsonpath(const char *str, int len,
+										  struct Node *escontext);
 
-extern int	jspConvertRegexFlags(uint32 xflags);
+extern bool jspConvertRegexFlags(uint32 xflags, int *result,
+								 struct Node *escontext);
+
 
 #endif

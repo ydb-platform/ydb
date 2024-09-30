@@ -362,3 +362,31 @@ class TestYdbOverFq(TestYdsBase):
                     assert column.type == ydb.PrimitiveType.Int32
                 else:
                     assert False
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_insert_data_query(self, kikimr, s3, client, unique_prefix, yq_version):
+        kikimr.control_plane.wait_bootstrap()
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(
+            client,
+            bind_name,
+            "/sub/",
+            connection_id,
+            [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")],
+        )
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+        session = driver.table_client.session().create()
+        with session.transaction() as tx:
+            query = '''
+                insert into {}{}
+                select
+                    'Banana' as `Fruit`,
+                    3 as Price,
+                    100 as Weight
+            '''.format(
+                "bindings." if yq_version == "v1" else "", bind_name
+            )
+            result = tx.execute(query)
+            assert len(result) == 0, str(result)

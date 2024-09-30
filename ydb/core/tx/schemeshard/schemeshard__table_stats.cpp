@@ -64,6 +64,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     sysStats.SetDataSize(stats.DataSize);
     sysStats.SetRowCount(stats.RowCount);
     sysStats.SetIndexSize(stats.IndexSize);
+    sysStats.SetByKeyFilterSize(stats.ByKeyFilterSize);
     sysStats.SetCPUCores(std::min(stats.GetCurrentRawCpuUsage() / 1000000., 1.0));
     sysStats.SetTabletId(ui64(datashardId));
     sysStats.SetAccessTime(stats.LastAccessTime.MilliSeconds());
@@ -164,6 +165,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     newStats.RowCount = tableStats.GetRowCount();
     newStats.DataSize = tableStats.GetDataSize();
     newStats.IndexSize = tableStats.GetIndexSize();
+    newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
     for (const auto& channelStats : tableStats.GetChannels()) {
@@ -321,11 +323,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
 
             if (Self->ColumnTables.contains(tablePathId)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "add stats for exists table with pathId=" << tablePathId);
 
-                auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
-                columnTable->UpdateTableStats(tablePathId, newTableStats);
+                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);
@@ -336,7 +337,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
-        auto columnTable = Self->ColumnTables.TakeVerified(pathId);
+        auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;
         columnTable->UpdateShardStats(shardIdx, newStats);
         newAggrStats = columnTable->GetStats().Aggregated;

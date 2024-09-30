@@ -948,6 +948,8 @@ public:
             const NUdf::TType* dictType,
             ui32 flags) const;
 
+    NUdf::IListValueBuilder::TPtr NewList() const;
+
     NUdf::TUnboxedValuePod Cloned(const NUdf::TUnboxedValuePod& it) const;
     NUdf::TUnboxedValuePod Reversed(const NUdf::TUnboxedValuePod& it) const;
 
@@ -1069,7 +1071,7 @@ public: //unavailable getters may be eliminated at compile time, but it'd make c
     }
 private:
     TKeyTypes KeyTypes;
-    bool IsTuple;
+    bool IsTuple = false;
     
     //unsused pointers may be eliminated at compile time, but it'd make code much less readable
     NUdf::IEquate::TPtr Equate;

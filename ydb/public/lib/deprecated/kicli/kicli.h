@@ -866,12 +866,6 @@ protected:
         }
     }
 
-    void PrepareRequest(NKikimrClient::TWhoAmI& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
     void PrepareRequest(NKikimrClient::TLocalMKQL& request) const {
         if (!SecurityToken.empty()) {
             request.SetSecurityToken(SecurityToken);

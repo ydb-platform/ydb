@@ -3,7 +3,7 @@
  * syslogger.h
  *	  Exports from postmaster/syslogger.c.
  *
- * Copyright (c) 2004-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2004-2023, PostgreSQL Global Development Group
  *
  * src/include/postmaster/syslogger.h
  *
@@ -46,8 +46,7 @@ typedef struct
 	char		nuls[2];		/* always \0\0 */
 	uint16		len;			/* size of this chunk (counts data only) */
 	int32		pid;			/* writer's pid */
-	char		is_last;		/* last chunk of message? 't' or 'f' ('T' or
-								 * 'F' for CSV case) */
+	bits8		flags;			/* bitmask of PIPE_PROTO_* */
 	char		data[FLEXIBLE_ARRAY_MEMBER];	/* data payload starts here */
 } PipeProtoHeader;
 
@@ -60,26 +59,32 @@ typedef union
 #define PIPE_HEADER_SIZE  offsetof(PipeProtoHeader, data)
 #define PIPE_MAX_PAYLOAD  ((int) (PIPE_CHUNK_SIZE - PIPE_HEADER_SIZE))
 
+/* flag bits for PipeProtoHeader->flags */
+#define PIPE_PROTO_IS_LAST	0x01	/* last chunk of message? */
+/* log destinations */
+#define PIPE_PROTO_DEST_STDERR	0x10
+#define PIPE_PROTO_DEST_CSVLOG	0x20
+#define PIPE_PROTO_DEST_JSONLOG	0x40
 
 /* GUC options */
-extern __thread bool Logging_collector;
-extern __thread int	Log_RotationAge;
-extern __thread int	Log_RotationSize;
+extern __thread PGDLLIMPORT bool Logging_collector;
+extern __thread PGDLLIMPORT int Log_RotationAge;
+extern __thread PGDLLIMPORT int Log_RotationSize;
 extern __thread PGDLLIMPORT char *Log_directory;
 extern __thread PGDLLIMPORT char *Log_filename;
-extern __thread bool Log_truncate_on_rotation;
-extern __thread int	Log_file_mode;
+extern __thread PGDLLIMPORT bool Log_truncate_on_rotation;
+extern __thread PGDLLIMPORT int Log_file_mode;
 
 #ifndef WIN32
-extern __thread int	syslogPipe[2];
+extern __thread PGDLLIMPORT int syslogPipe[2];
 #else
-extern __thread HANDLE syslogPipe[2];
+extern __thread PGDLLIMPORT HANDLE syslogPipe[2];
 #endif
 
 
 extern int	SysLogger_Start(void);
 
-extern void write_syslogger_file(const char *buffer, int count, int dest);
+extern void write_syslogger_file(const char *buffer, int count, int destination);
 
 #ifdef EXEC_BACKEND
 extern void SysLoggerMain(int argc, char *argv[]) pg_attribute_noreturn();

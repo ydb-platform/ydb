@@ -1,0 +1,18 @@
+{
+    "/Root/quotas_browsers_relation": {
+        "n_rows": 222,
+        "byte_size": 28140
+    },
+    "/Root/browsers": {
+        "n_rows": 87,
+        "byte_size": 26719
+    },
+    "/Root/browser_groups": {
+        "n_rows": 17,
+        "byte_size": 1905
+    },
+    "/Root/quota": {
+        "n_rows": 55,
+        "byte_size": 9241
+    }
+}

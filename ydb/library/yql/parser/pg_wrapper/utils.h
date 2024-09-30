@@ -65,7 +65,7 @@ inline NKikimr::NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByVal
 }
 
 inline Datum PointerDatumFromPod(const NKikimr::NUdf::TUnboxedValuePod& value) {
-    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsBoxed().Get()) + 1);
+    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsRawBoxed()) + 1);
 }
 
 inline Datum PointerDatumFromItem(const NKikimr::NUdf::TBlockItem& value) {
@@ -148,5 +148,24 @@ inline bool PrepareVariadicArray(FunctionCallInfoBaseData& callInfo, const NPg::
     PrepareVariadicArraySlow(callInfo, desc);
     return true;
 }
+
+bool GetPgFuncAddr(ui32 procOid, FmgrInfo& finfo);
+
+class TExtensionsRegistry {
+class TImpl;
+public:
+    static TExtensionsRegistry& Instance();
+    void InitThread();
+    void CleanupThread();
+    void Load(ui32 extensionIndex, const TString& name, const TString& path);
+    PGFunction GetFuncAddr(ui32 extensionIndex, const TString& funcName);
+
+    TExtensionsRegistry();
+
+private:
+    std::unique_ptr<TImpl> Impl_;
+};
+
+void RebuildSysCache();
 
 }

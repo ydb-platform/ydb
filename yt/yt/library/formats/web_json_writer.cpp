@@ -31,12 +31,13 @@
 
 namespace NYT::NFormats {
 
-using namespace NConcurrency;
 using namespace NComplexTypes;
-using namespace NYTree;
-using namespace NYson;
+using namespace NConcurrency;
+using namespace NCrypto;
 using namespace NJson;
 using namespace NTableClient;
+using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -502,6 +503,7 @@ public:
     i64 GetWrittenSize() const override;
     TFuture<void> Close() override;
     TFuture<void> Flush() override;
+    std::optional<TMD5Hash> GetDigest() const override;
 
 private:
     const TWebJsonFormatConfigPtr Config_;
@@ -743,6 +745,12 @@ void TWriterForWebJson<TValueWriter>::DoClose()
 
         DoFlush(true);
     }
+}
+
+template <typename TValueWriter>
+std::optional<TMD5Hash> TWriterForWebJson<TValueWriter>::GetDigest() const
+{
+    return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

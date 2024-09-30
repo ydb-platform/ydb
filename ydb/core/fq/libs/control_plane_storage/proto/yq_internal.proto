@@ -57,6 +57,7 @@ message QueryInternal {
     NYql.NDqProto.StatusIds.StatusCode pending_status_code = 28;
     repeated StatisticsNamedValue statistics = 29;
     int32 current_load = 30;
+    string timeline = 31;
 }
 
 message JobInternal {
@@ -77,4 +78,5 @@ message ComputeDatabaseInternal {
     string id = 1;
     NFq.NConfig.TYdbStorageConfig connection = 2;
     bool synchronized = 3;
+    bool workload_manager_synchronized = 4;
 }

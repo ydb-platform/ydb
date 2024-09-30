@@ -3,7 +3,7 @@
  * walsender_private.h
  *	  Private definitions from replication/walsender.c.
  *
- * Portions Copyright (c) 2010-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * src/include/replication/walsender_private.h
  *
@@ -13,8 +13,11 @@
 #define _WALSENDER_PRIVATE_H
 
 #include "access/xlog.h"
+#include "lib/ilist.h"
 #include "nodes/nodes.h"
+#include "nodes/replnodes.h"
 #include "replication/syncrep.h"
+#include "storage/condition_variable.h"
 #include "storage/latch.h"
 #include "storage/shmem.h"
 #include "storage/spin.h"
@@ -65,7 +68,7 @@ typedef struct WalSnd
 	 */
 	int			sync_standby_priority;
 
-	/* Protects shared variables shown above. */
+	/* Protects shared variables in this structure. */
 	slock_t		mutex;
 
 	/*
@@ -78,9 +81,11 @@ typedef struct WalSnd
 	 * Timestamp of the last message received from standby.
 	 */
 	TimestampTz replyTime;
+
+	ReplicationKind kind;
 } WalSnd;
 
-extern __thread WalSnd *MyWalSnd;
+extern __thread PGDLLIMPORT WalSnd *MyWalSnd;
 
 /* There is one WalSndCtl struct for the whole database cluster */
 typedef struct
@@ -89,7 +94,7 @@ typedef struct
 	 * Synchronous replication queue with one queue per request type.
 	 * Protected by SyncRepLock.
 	 */
-	SHM_QUEUE	SyncRepQueue[NUM_SYNC_REP_WAIT_MODE];
+	dlist_head	SyncRepQueue[NUM_SYNC_REP_WAIT_MODE];
 
 	/*
 	 * Current location of the head of the queue. All waiters should have a
@@ -104,10 +109,14 @@ typedef struct
 	 */
 	bool		sync_standbys_defined;
 
+	/* used as a registry of physical / logical walsenders to wake */
+	ConditionVariable wal_flush_cv;
+	ConditionVariable wal_replay_cv;
+
 	WalSnd		walsnds[FLEXIBLE_ARRAY_MEMBER];
 } WalSndCtlData;
 
-extern __thread WalSndCtlData *WalSndCtl;
+extern __thread PGDLLIMPORT WalSndCtlData *WalSndCtl;
 
 
 extern void WalSndSetState(WalSndState state);
@@ -118,11 +127,11 @@ extern void WalSndSetState(WalSndState state);
  */
 extern int	replication_yyparse(void);
 extern int	replication_yylex(void);
-extern void replication_yyerror(const char *str) pg_attribute_noreturn();
-extern void replication_scanner_init(const char *query_string);
+extern void replication_yyerror(const char *message) pg_attribute_noreturn();
+extern void replication_scanner_init(const char *str);
 extern void replication_scanner_finish(void);
 extern bool replication_scanner_is_replication_command(void);
 
-extern __thread Node *replication_parse_result;
+extern __thread PGDLLIMPORT Node *replication_parse_result;
 
 #endif							/* _WALSENDER_PRIVATE_H */

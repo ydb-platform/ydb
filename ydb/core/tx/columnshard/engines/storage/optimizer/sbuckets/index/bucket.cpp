@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 void TPortionsBucket::RebuildOptimizedFeature(const TInstant currentInstant) const {
     for (auto&& [_, p] : Portions) {
         p.MutablePortionInfo().InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Portions.size() == 1 && currentInstant > p->RecordSnapshotMax().GetPlanInstant() +
-            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60))
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings()
         );
     }
 }
@@ -28,7 +28,7 @@ std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TPortionsBucket::BuildOpti
     auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, context.GetPortions(), saverContext);
     for (auto&& i : context.GetSplitRightOpenIntervalPoints()) {
         NArrow::NMerger::TSortableBatchPosition pos(i.ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
-        result->AddCheckPoint(pos, false, false);
+        result->AddCheckPoint(pos, false);
     }
     return result;
 }

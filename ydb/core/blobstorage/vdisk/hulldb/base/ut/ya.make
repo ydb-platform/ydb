@@ -20,6 +20,7 @@ SRCS(
     blobstorage_hullstorageratio_ut.cpp
     hullbase_barrier_ut.cpp
     hullds_generic_it_ut.cpp
+    hullds_heap_it_ut.cpp
 )
 
 END()

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 
@@ -55,23 +56,17 @@ namespace NKikimr {
 
             // create iterator and start traversing the whole barrier database
             TBarriersSnapshot::TForwardIterator it(hullDs->HullCtx, &snapshot);
-            it.SeekToFirst();
-
+            THeapIterator<TKeyBarrier, TMemRecBarrier, true> heapIt(&it);
             TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(hullDs->HullCtx->VCtx->Top->GType);
-            while (it.Valid()) {
-                it.PutToMerger(&merger);
-                merger.Finish();
-
-                const TKeyBarrier& key = it.GetCurKey();
-                const TMemRecBarrier& memRec = merger.GetMemRec();
+            auto callback = [&] (TKeyBarrier key, auto* merger) -> bool {
+                const TMemRecBarrier& memRec = merger->GetMemRec();
                 if (!hullDs->HullCtx->GCOnlySynced || memRec.Ingress.IsQuorum(hullDs->HullCtx->IngressCache.Get()) ||
                         key.Hard) {
                     Update(key.TabletId, key.Channel, key.Hard, memRec.CollectGen, memRec.CollectStep);
                 }
-
-                it.Next();
-                merger.Clear();
-            }
+                return true;
+            };
+            heapIt.Walk(TKeyBarrier::First(), &merger, callback);
         }
 
         void Update(ui64 tabletId, ui32 channel, bool hard, ui32 collectGen, ui32 collectStep) {

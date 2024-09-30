@@ -53,8 +53,11 @@ IGraphTransformer::TStatus TExprLogTransformer::operator()(
     Y_UNUSED(ctx);
     output = input;
     if (YQL_CVLOG_ACTIVE(Level, Component)) {
+        TConvertToAstSettings settings;
+        settings.AllowFreeArgs = true;
+        settings.RefAtoms = true;
+        auto ast = ConvertToAst(*input, ctx, settings);
         TStringStream out;
-        auto ast = ConvertToAst(*input, ctx, TExprAnnotationFlags::None, true);
         ast.Root->PrettyPrintTo(out, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         YQL_CVLOG(Level, Component) << Description << ":\n" << out.Str();
     }

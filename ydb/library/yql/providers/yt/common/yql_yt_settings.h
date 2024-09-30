@@ -226,6 +226,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTables;
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
+    NCommon::TConfSetting<bool, false> DisableFuseOperations;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;
@@ -279,6 +280,7 @@ struct TYtSettings {
     NCommon::TConfSetting<EColumnGroupMode, false> ColumnGroupMode;
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
+    NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

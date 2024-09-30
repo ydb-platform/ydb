@@ -1,9 +1,12 @@
 #include "utils.h"
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NFq {
 
@@ -430,7 +433,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline, ui64 maxTimelineSize) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -470,6 +473,24 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                 }
             }
         }
+    }
+    if (timeline) {
+        TPlanVisualizer planViz;
+        planViz.LoadPlans(plan);
+        *timeline = planViz.PrintSvgSafe();
+        if (maxTimelineSize && timeline->size() > maxTimelineSize) {
+            TStringBuilder builder;
+            builder
+                << "<svg width='600' height='200' xmlns='http://www.w3.org/2000/svg'>" << Endl
+                << "  <text font-size='16px' x='20' y='40'>There is nothing wrong with the request.</text>" << Endl
+                << "  <text font-size='16px' x='20' y='80'>Unfortunately, image size " << timeline->size() << " is too large.</text>" << Endl
+                << "  <text font-size='16px' x='20' y='120'>It exceeds limit of " << maxTimelineSize << " and was discarded</text>" << Endl
+                << "</svg>" << Endl;
+            *timeline = builder;
+        }
+        // remove json "timeline" field after migration
+        writer.OnKeyedItem("timeline");
+        writer.OnStringScalar(*timeline);
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
@@ -1133,8 +1154,8 @@ TString SimplifiedPlan(const TString& plan) {
 }
 
 struct TNoneStatProcessor : IPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_NONE;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::None;
     }
 
     TString ConvertPlan(const TString& plan) override {
@@ -1145,7 +1166,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString&, double& cpuUsage) override {
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*, ui64) override {
         cpuUsage = 0.0;
         return "";
     }
@@ -1160,14 +1181,14 @@ struct TNoneStatProcessor : IPlanStatProcessor {
 };
 
 struct TBasicStatProcessor : TNoneStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_BASIC;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Basic;
     }
 };
 
 struct TPlanStatProcessor : IPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_FULL;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Full;
     }
 
     TString ConvertPlan(const TString& plan) override {
@@ -1178,8 +1199,8 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, ui64 maxtimelineSize) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline, maxtimelineSize);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
@@ -1204,14 +1225,14 @@ struct TCostStatProcessor : TPlanStatProcessor {
 };
 
 struct TProfileStatProcessor : TPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Profile;
     }
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, ui64 maxtimelineSize) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline, maxtimelineSize));
     }
 };
 
@@ -1229,11 +1250,15 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
 
 PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
     : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
-    , Processor(std::move(processor))
-{}
+    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline()), MaxQueryTimelineSize(commonConfig.GetMaxQueryTimelineSize())
+{
+    if (!MaxQueryTimelineSize) {
+        MaxQueryTimelineSize = 200_KB;
+    }
+}
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
-    const Ydb::TableStats::QueryStats& queryStats, 
+    const NYdb::NQuery::TExecStats& queryStats,
     const NYql::TIssues& issues, 
     std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus,
     std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode
@@ -1256,8 +1281,9 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
 }
 
 
-Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const Ydb::TableStats::QueryStats& queryStats) {
-    return Build(queryStats.query_plan(), queryStats.query_ast(), queryStats.compilation().duration_us(), queryStats.total_duration_us());
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const NYdb::NQuery::TExecStats& queryStats) {
+    const auto& statsProto = NYdb::TProtoAccessor().GetProto(queryStats); 
+    return Build(statsProto.query_plan(), statsProto.query_ast(), statsProto.compilation().duration_us(), statsProto.total_duration_us());
 }
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryPlan, const TString& queryAst, int64_t compilationTimeUs, int64_t computeTimeUs) {
@@ -1294,9 +1320,13 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
 
     CpuUsage = 0.0;
     try {
-        auto stat = Processor->GetQueryStat(plan, CpuUsage);
+        TString timeline;
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr, MaxQueryTimelineSize);
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
+        if (timeline) {
+            pingTaskRequest.set_timeline(timeline);
+        }
         auto flatStat = Processor->GetFlatStat(plan);
         flatStat["CompilationTimeUs"] = compilationTimeUs;
         flatStat["ComputeTimeUs"] = computeTimeUs;

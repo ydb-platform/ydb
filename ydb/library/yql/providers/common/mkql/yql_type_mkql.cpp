@@ -426,5 +426,65 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
     YQL_ENSURE(false, "Unknown kind");
 }
 
+ETypeAnnotationKind ConvertMiniKQLTypeKind(NKikimr::NMiniKQL::TType* type) {
+    using namespace NKikimr::NMiniKQL;
+    switch (type->GetKind()) {
+    case TType::EKind::Type:
+        return ETypeAnnotationKind::Generic;
+    case TType::EKind::Void:
+        return ETypeAnnotationKind::Void;
+    case TType::EKind::Data:
+        return ETypeAnnotationKind::Data;
+    case TType::EKind::Struct:
+        return ETypeAnnotationKind::Struct;
+    case TType::EKind::List:
+        return ETypeAnnotationKind::List;
+    case TType::EKind::Optional:
+        return ETypeAnnotationKind::Optional;
+    case TType::EKind::Dict:
+        return ETypeAnnotationKind::Dict;
+    case TType::EKind::Callable:
+        return ETypeAnnotationKind::Callable;
+    case TType::EKind::Any:
+    case TType::EKind::ReservedKind:
+        YQL_ENSURE(false, "Not supported");
+        break;
+    case TType::EKind::Tuple:
+        return ETypeAnnotationKind::Tuple;
+    case TType::EKind::Resource:
+        return ETypeAnnotationKind::Resource;
+    case TType::EKind::Stream:
+        return ETypeAnnotationKind::Stream;
+    case TType::EKind::Variant:
+        return ETypeAnnotationKind::Variant;
+    case TType::EKind::Null:
+        return ETypeAnnotationKind::Null;
+    case TType::EKind::EmptyList:
+        return ETypeAnnotationKind::EmptyList;
+    case TType::EKind::EmptyDict:
+        return ETypeAnnotationKind::EmptyDict;
+    case TType::EKind::Tagged:
+        return ETypeAnnotationKind::Tagged;
+    case TType::EKind::Block:
+    {
+        auto blockType = static_cast<TBlockType*>(type);
+        if (blockType->GetShape() == NKikimr::NMiniKQL::TBlockType::EShape::Many) {
+            return ETypeAnnotationKind::Block;
+        } else {
+            return ETypeAnnotationKind::Scalar;
+        }
+    }
+    case TType::EKind::Flow:
+        return ETypeAnnotationKind::Flow;
+    case TType::EKind::Pg:
+        return ETypeAnnotationKind::Pg;
+    case TType::EKind::Multi:
+        return ETypeAnnotationKind::Multi;
+    }
+
+    YQL_ENSURE(false, "Unknown kind");
+}
+
+
 } // namespace NCommon
 } // namespace NYql

@@ -3,7 +3,7 @@
  * strerror.c
  *	  Replacements for standard strerror() and strerror_r() functions
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -34,7 +34,7 @@ static char *win32_socket_strerror(int errnum, char *buf, size_t buflen);
 char *
 pg_strerror(int errnum)
 {
-	static char errorstr_buf[PG_STRERROR_R_BUFLEN];
+	static __thread char errorstr_buf[PG_STRERROR_R_BUFLEN];
 
 	return pg_strerror_r(errnum, errorstr_buf, sizeof(errorstr_buf));
 }

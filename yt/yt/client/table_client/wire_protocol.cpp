@@ -1,5 +1,7 @@
 #include "wire_protocol.h"
 
+#include "private.h"
+
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/schema.h>
@@ -32,10 +34,11 @@ using NYT::ToProto;
 using NYT::FromProto;
 
 using NChunkClient::NProto::TDataStatistics;
+using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static NLogging::TLogger Logger("WireProtocol");
+static constexpr auto& Logger = TableClientLogger;
 
 struct TWireProtocolWriterTag
 { };
@@ -86,7 +89,7 @@ public:
 
     size_t GetByteSize() const override
     {
-        return Stream_.GetSize();
+        return Stream_.GetSize() + (Current_ - BeginPreallocated_);
     }
 
     void WriteCommand(EWireProtocolCommand command) override
@@ -205,9 +208,21 @@ public:
         TRange<TUnversionedRow> rowset,
         const TNameTableToSchemaIdMapping* idMapping) override
     {
-        WriteRowCount(rowset);
+        WriteRowCount(rowset.Size());
         for (auto row : rowset) {
             WriteUnversionedRow(row, idMapping);
+        }
+    }
+
+    void WriteSerializedRowset(
+        size_t rowCount,
+        const std::vector<TSharedRef>& serializedRowset) override
+    {
+        WriteRowCount(rowCount);
+
+        for (const auto& item : serializedRowset) {
+            EnsureCapacity(item.Size());
+            UnsafeWriteRaw(item.Data(), item.Size());
         }
     }
 
@@ -215,7 +230,7 @@ public:
         TRange<TUnversionedRow> rowset,
         const TNameTableToSchemaIdMapping* idMapping) override
     {
-        WriteRowCount(rowset);
+        WriteRowCount(rowset.Size());
         for (auto row : rowset) {
             WriteSchemafulRow(row, idMapping);
         }
@@ -223,7 +238,7 @@ public:
 
     void WriteVersionedRowset(TRange<TVersionedRow> rowset) override
     {
-        WriteRowCount(rowset);
+        WriteRowCount(rowset.Size());
         for (auto row : rowset) {
             WriteVersionedRow(row);
         }
@@ -325,10 +340,8 @@ private:
         UnsafeWritePod(value);
     }
 
-    template <class TRow>
-    void WriteRowCount(TRange<TRow> rowset)
+    void WriteRowCount(size_t rowCount)
     {
-        size_t rowCount = rowset.Size();
         ValidateRowCount(rowCount);
         WriteUint64(rowCount);
     }
@@ -391,7 +404,7 @@ private:
                 return lhs.Id < rhs.Id;
             });
 
-        return MakeRange(PooledValues_);
+        return TRange(PooledValues_);
     }
 
     void UnsafeWriteNullBitmap(TUnversionedValueRange values)
@@ -604,7 +617,7 @@ public:
         ::google::protobuf::io::CodedInputStream chunkStream(
             reinterpret_cast<const ui8*>(Current_),
             static_cast<int>(size));
-        Y_PROTOBUF_SUPPRESS_NODISCARD message->ParsePartialFromCodedStream(&chunkStream);
+        Y_UNUSED(message->ParsePartialFromCodedStream(&chunkStream));
         Current_ += AlignUp<size_t>(size, SerializationAlignment);
     }
 
@@ -1185,7 +1198,7 @@ class TWireProtocolRowsetWriter
 public:
     TWireProtocolRowsetWriter(
         NCompression::ECodec codecId,
-        size_t desiredUncompressedBlockSize,
+        i64 desiredUncompressedBlockSize,
         TTableSchemaPtr schema,
         bool schemaful,
         const NLogging::TLogger& logger)
@@ -1244,6 +1257,11 @@ public:
         return CompressedBlocks_;
     }
 
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
+    }
+
 private:
     NCompression::ICodec* const Codec_;
     const size_t DesiredUncompressedBlockSize_;
@@ -1280,7 +1298,7 @@ private:
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     TTableSchemaPtr schema,
     bool schemaful,
     const NLogging::TLogger& logger)

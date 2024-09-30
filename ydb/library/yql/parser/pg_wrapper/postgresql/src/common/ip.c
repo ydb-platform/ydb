@@ -3,7 +3,7 @@
  * ip.c
  *	  IPv6-aware network access.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -30,15 +30,14 @@
 #include <netinet/in.h>
 #ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
-#endif
 #include <arpa/inet.h>
+#endif
 #include <sys/file.h>
 
 #include "common/ip.h"
 
 
 
-#ifdef	HAVE_UNIX_SOCKETS
 static int	getaddrinfo_unix(const char *path,
 							 const struct addrinfo *hintsp,
 							 struct addrinfo **result);
@@ -47,7 +46,6 @@ static int	getnameinfo_unix(const struct sockaddr_un *sa, int salen,
 							 char *node, int nodelen,
 							 char *service, int servicelen,
 							 int flags);
-#endif
 
 
 /*
@@ -62,10 +60,8 @@ pg_getaddrinfo_all(const char *hostname, const char *servname,
 	/* not all versions of getaddrinfo() zero *result on failure */
 	*result = NULL;
 
-#ifdef HAVE_UNIX_SOCKETS
 	if (hintp->ai_family == AF_UNIX)
 		return getaddrinfo_unix(servname, hintp, result);
-#endif
 
 	/* NULL has special meaning to getaddrinfo(). */
 	rc = getaddrinfo((!hostname || hostname[0] == '\0') ? NULL : hostname,
@@ -87,7 +83,6 @@ pg_getaddrinfo_all(const char *hostname, const char *servname,
 void
 pg_freeaddrinfo_all(int hint_ai_family, struct addrinfo *ai)
 {
-#ifdef HAVE_UNIX_SOCKETS
 	if (hint_ai_family == AF_UNIX)
 	{
 		/* struct was built by getaddrinfo_unix (see pg_getaddrinfo_all) */
@@ -101,7 +96,6 @@ pg_freeaddrinfo_all(int hint_ai_family, struct addrinfo *ai)
 		}
 	}
 	else
-#endif							/* HAVE_UNIX_SOCKETS */
 	{
 		/* struct was built by getaddrinfo() */
 		if (ai != NULL)
@@ -126,14 +120,12 @@ pg_getnameinfo_all(const struct sockaddr_storage *addr, int salen,
 {
 	int			rc;
 
-#ifdef HAVE_UNIX_SOCKETS
 	if (addr && addr->ss_family == AF_UNIX)
 		rc = getnameinfo_unix((const struct sockaddr_un *) addr, salen,
 							  node, nodelen,
 							  service, servicelen,
 							  flags);
 	else
-#endif
 		rc = getnameinfo((const struct sockaddr *) addr, salen,
 						 node, nodelen,
 						 service, servicelen,
@@ -151,8 +143,6 @@ pg_getnameinfo_all(const struct sockaddr_storage *addr, int salen,
 }
 
 
-#if defined(HAVE_UNIX_SOCKETS)
-
 /* -------
  *	getaddrinfo_unix - get unix socket info using IPv6-compatible API
  *
@@ -165,13 +155,11 @@ static int
 getaddrinfo_unix(const char *path, const struct addrinfo *hintsp,
 				 struct addrinfo **result)
 {
-	struct addrinfo hints;
+	struct addrinfo hints = {0};
 	struct addrinfo *aip;
 	struct sockaddr_un *unp;
 
 	*result = NULL;
-
-	MemSet(&hints, 0, sizeof(hints));
 
 	if (strlen(path) >= sizeof(unp->sun_path))
 		return EAI_FAIL;
@@ -232,10 +220,6 @@ getaddrinfo_unix(const char *path, const struct addrinfo *hintsp,
 		aip->ai_addrlen = offsetof(struct sockaddr_un, sun_path) + strlen(path);
 	}
 
-#ifdef HAVE_STRUCT_SOCKADDR_STORAGE_SS_LEN
-	unp->sun_len = sizeof(struct sockaddr_un);
-#endif
-
 	return 0;
 }
 
@@ -278,4 +262,3 @@ getnameinfo_unix(const struct sockaddr_un *sa, int salen,
 
 	return 0;
 }
-#endif							/* HAVE_UNIX_SOCKETS */

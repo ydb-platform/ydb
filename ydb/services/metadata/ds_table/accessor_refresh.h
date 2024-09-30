@@ -9,6 +9,7 @@ private:
     YDB_READONLY_DEF(NFetcher::ISnapshot::TPtr, CurrentSnapshot);
     YDB_READONLY_DEF(Ydb::Table::ExecuteQueryResult, CurrentSelection);
     Ydb::Table::ExecuteQueryResult ProposedProto;
+    bool FetchingRequestIsRunning = false;
     const TConfig Config;
 
     void Handle(TEvRefresh::TPtr& ev);

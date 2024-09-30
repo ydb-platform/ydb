@@ -3,12 +3,18 @@
 
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/utils/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
+
+TRope MakeReadOnlyRopeAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
+    MKQLArrowUntrack(owner->data());
+    return NYql::MakeReadOnlyRope(owner, data, size);
+}
 
 class TOwnedArrowBuffer : public arrow::Buffer {
 public:
@@ -25,22 +31,35 @@ std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
     return std::make_shared<arrow::Buffer>(nullptr, 0);
 }
 
+bool HasArrrowAlignment(const void* buf) {
+    return AlignUp(buf, NYql::NUdf::ArrowMemoryAlignment) == buf;
+}
+
 std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
-    constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
-    static ui64 nulls[NullWordCount] = { 0 };
-    if (byteLen <= sizeof(nulls)) {
-        return std::make_shared<arrow::Buffer>(reinterpret_cast<const ui8*>(nulls), byteLen);
+    using namespace NYql::NUdf;
+    if (!byteLen) {
+        return MakeEmptyBuffer();
     }
 
-    size_t wordCount = (byteLen + sizeof(ui64) - 1) / sizeof(ui64);
-    std::shared_ptr<ui64[]> buf(new ui64[wordCount]);
-    std::fill(buf.get(), buf.get() + wordCount, 0);
-    return std::make_shared<TOwnedArrowBuffer>(TContiguousSpan{ reinterpret_cast<const char*>(buf.get()), byteLen }, buf);
+    constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
+    constexpr size_t ExtraAlignWords = (ArrowMemoryAlignment > sizeof(ui64)) ? (ArrowMemoryAlignment / sizeof(ui64) - 1) : 0;
+    static const ui64 nulls[NullWordCount + ExtraAlignWords] = { 0 };
+
+    // round all buffer length to 64 bytes
+    size_t capacity = AlignUp(byteLen, size_t(64));
+    if (capacity <= NullWordCount * sizeof(ui64)) {
+        return std::make_shared<arrow::Buffer>(AlignUp(reinterpret_cast<const ui8*>(nulls), ArrowMemoryAlignment), byteLen);
+    }
+
+    auto result = AllocateResizableBuffer(byteLen, GetYqlMemoryPool());
+    ARROW_OK(result->Resize(byteLen));
+    std::memset(result->mutable_data(), 0, byteLen);
+    return result;
 }
 
 std::shared_ptr<arrow::Buffer> MakeZeroBitmap(size_t bitCount) {
     // align up 8 byte boundary
-    size_t byteCount = ((bitCount + 63u) & ~size_t(63u)) >> 3;
+    size_t byteCount = AlignUp(bitCount, size_t(64)) >> 3;
     return MakeZeroBuffer(byteCount);
 }
 
@@ -57,7 +76,7 @@ void StoreNullsSizes(const arrow::ArrayData& data, const IBlockSerializer::TMeta
     }
 
     const ui64 desiredOffset = data.offset % 8;
-    size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
+    size_t nullBytes = AlignUp((size_t)data.length + desiredOffset, size_t(8)) >> 3;
     metaSink(nullBytes);
 }
 
@@ -72,11 +91,11 @@ void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
         return;
     }
     const ui64 desiredOffset = data.offset % 8;
-    size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
+    size_t nullBytes = AlignUp((size_t)data.length + desiredOffset, size_t(8)) >> 3;
     YQL_ENSURE(desiredOffset <= (size_t)data.offset);
     YQL_ENSURE((data.offset - desiredOffset) % 8 == 0);
     const char* nulls = data.GetValues<char>(0, 0) + (data.offset - desiredOffset) / 8;
-    dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[0], nulls, nullBytes));
+    dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[0], nulls, nullBytes));
 }
 
 void LoadBufferSize(const IBlockDeserializer::TMetadataSource& metaSource, TMaybe<ui64>& result) {
@@ -85,9 +104,10 @@ void LoadBufferSize(const IBlockDeserializer::TMetadataSource& metaSource, TMayb
 }
 
 std::shared_ptr<arrow::Buffer> LoadBuffer(TRope& source, TMaybe<ui64> size) {
+    using namespace NYql::NUdf;
     YQL_ENSURE(size.Defined(), "Buffer size is not loaded");
     if (!*size) {
-        return std::make_shared<arrow::Buffer>(nullptr, 0);
+        return MakeEmptyBuffer();
     }
 
     YQL_ENSURE(source.size() >= *size, "Premature end of data");
@@ -95,7 +115,15 @@ std::shared_ptr<arrow::Buffer> LoadBuffer(TRope& source, TMaybe<ui64> size) {
     source.EraseFront(*size);
 
     owner->Compact();
-    return std::make_shared<TOwnedArrowBuffer>(owner->GetContiguousSpan(), owner);
+    auto span = owner->GetContiguousSpan();
+    if (HasArrrowAlignment(span.Data())) {
+        return std::make_shared<TOwnedArrowBuffer>(span, owner);
+    }
+
+    auto result = AllocateResizableBuffer(span.Size(), NYql::NUdf::GetYqlMemoryPool());
+    ARROW_OK(result->Resize((int64_t)span.Size()));
+    std::memcpy(result->mutable_data(), span.Data(), span.Size());
+    return result;
 }
 
 std::shared_ptr<arrow::Buffer> LoadNullsBitmap(TRope& source, TMaybe<ui64> nullCount, TMaybe<ui64> bitmapSize) {
@@ -205,7 +233,7 @@ public:
         const ui64 desiredOffset = data.offset % 8;
         const char* buf = reinterpret_cast<const char*>(data.buffers[1]->data()) + (data.offset - desiredOffset) * ObjectSize;
         size_t dataBytes = ((size_t)data.length + desiredOffset) * ObjectSize;
-        dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[1], buf, dataBytes));
+        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[1], buf, dataBytes));
     }
 };
 
@@ -277,11 +305,11 @@ private:
         const ui64 desiredOffset = data.offset % 8;
         const char* offsets = reinterpret_cast<const char*>(data.GetValues<TOffset>(1) - desiredOffset);
         size_t offsetsSize = ((size_t)data.length + 1 + desiredOffset) * sizeof(TOffset);
-        dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[1], offsets, offsetsSize));
+        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[1], offsets, offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data());
         size_t mainSize = data.buffers[2]->size();
-        dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[2], mainData, mainSize));
+        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[2], mainData, mainSize));
     }
 };
 

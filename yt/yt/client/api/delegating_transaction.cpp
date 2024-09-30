@@ -276,13 +276,6 @@ DELEGATE_METHOD(void, ModifyRows, (
     (path, nameTable, modifications, options))
 
 DELEGATE_METHOD(void, AdvanceConsumer, (
-    const NYPath::TYPath& path,
-    int partitionIndex,
-    std::optional<i64> oldOffset,
-    i64 newOffset),
-    (path, partitionIndex, oldOffset, newOffset))
-
-DELEGATE_METHOD(void, AdvanceConsumer, (
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
     int partitionIndex,
@@ -308,6 +301,26 @@ DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     TSharedRange<NTableClient::TUnversionedRow> rows,
     const TPushQueueProducerOptions& options),
     (producerPath, queuePath, sessionId, epoch, nameTable, rows, options))
+
+DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
+    NQueueClient::TQueueProducerEpoch epoch,
+    NTableClient::TNameTablePtr nameTable,
+    const std::vector<TSharedRef>& serializedRows,
+    const TPushQueueProducerOptions& options),
+    (producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options))
+
+DELEGATE_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options),
+    (path, options))
+
+DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options),
+    (std::move(session), options))
 
 #undef DELEGATE_METHOD
 

@@ -38,6 +38,8 @@ public:
 
     TFuture<void> Flush() override;
 
+    std::optional<NCrypto::TMD5Hash> GetDigest() const override;
+
 protected:
     const NTableClient::TNameTablePtr NameTable_;
     const NConcurrency::IAsyncOutputStreamPtr Output_;

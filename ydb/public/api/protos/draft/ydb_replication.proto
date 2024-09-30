@@ -15,6 +15,8 @@ message DescribeReplicationRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Replication path.
     string path = 2 [(required) = true];
+    // Include statistics.
+    bool include_stats = 3;
 }
 
 message DescribeReplicationResponse {
@@ -34,6 +36,8 @@ message ConnectionParams {
 
     string endpoint = 1;
     string database = 2;
+    bool enable_ssl = 5;
+    string connection_string = 6;
 
     oneof credentials {
         StaticCredentials static_credentials = 3;
@@ -42,15 +46,21 @@ message ConnectionParams {
 }
 
 message DescribeReplicationResult {
+    message Stats {
+        optional google.protobuf.Duration lag = 1;
+        optional float initial_scan_progress = 2;
+    }
+
     message Item {
         string source_path = 1;
         string destination_path = 2;
         optional string source_changefeed_name = 3;
         uint64 id = 4;
+        Stats stats = 5;
     }
 
     message RunningState {
-        optional google.protobuf.Duration lag = 1;
+        Stats stats = 1;
     }
 
     message ErrorState {

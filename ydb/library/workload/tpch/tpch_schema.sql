@@ -12,7 +12,7 @@ CREATE {external} TABLE `{path}/customer` (
     {primary_key} (c_custkey)
 )
 {partition_by}(c_custkey)
-WITH ({store}"{s3_prefix}/customer/",
+WITH ({store}"{s3_prefix}/customer/"
 {partitioning} = 64
 );
 
@@ -36,7 +36,7 @@ CREATE {external} TABLE `{path}/lineitem` (
     {primary_key} (l_orderkey, l_linenumber)
 )
 {partition_by}(l_orderkey)
-WITH ({store}"{s3_prefix}/lineitem/",
+WITH ({store}"{s3_prefix}/lineitem/"
 {partitioning} = 64
 );
 
@@ -49,7 +49,7 @@ CREATE {external} TABLE `{path}/nation` (
 )
 {partition_by}(n_nationkey)
 
-WITH ({store}"{s3_prefix}/nation/",
+WITH ({store}"{s3_prefix}/nation/"
 {partitioning} = 1
 );
 
@@ -66,7 +66,7 @@ CREATE {external} TABLE `{path}/orders` (
     {primary_key} (o_orderkey)
 )
 {partition_by}(o_orderkey)
-WITH ({store}"{s3_prefix}/orders/",
+WITH ({store}"{s3_prefix}/orders/"
 {partitioning} = 64
 );
 
@@ -83,7 +83,7 @@ CREATE {external} TABLE `{path}/part` (
     {primary_key}(p_partkey)
 )
 {partition_by}(p_partkey)
-WITH ({store}"{s3_prefix}/part/",
+WITH ({store}"{s3_prefix}/part/"
 {partitioning} = 64
 );
 
@@ -96,7 +96,7 @@ CREATE {external} TABLE `{path}/partsupp` (
     {primary_key}(ps_partkey, ps_suppkey)
 )
 {partition_by}(ps_partkey)
-WITH ({store}"{s3_prefix}/partsupp/",
+WITH ({store}"{s3_prefix}/partsupp/"
 {partitioning} = 64
 );
 
@@ -107,7 +107,7 @@ CREATE {external} TABLE `{path}/region` (
     {primary_key}(r_regionkey)
 )
 {partition_by}(r_regionkey)
-WITH ({store}"{s3_prefix}/region/",
+WITH ({store}"{s3_prefix}/region/"
 {partitioning} = 1
 );
 
@@ -122,6 +122,6 @@ CREATE {external} TABLE `{path}/supplier` (
     {primary_key}(s_suppkey)
 )
 {partition_by}(s_suppkey)
-WITH ({store}"{s3_prefix}/supplier/",
+WITH ({store}"{s3_prefix}/supplier/"
 {partitioning} = 64
 );

@@ -8,7 +8,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>
 
 #include <ydb/public/api/protos/ydb_auth.pb.h>
@@ -43,7 +43,7 @@ public:
         const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
         Credentials = PrepareCredentials(protoRequest->user(), protoRequest->password(), AppData()->AuthConfig);
         TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
-        PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : DatabaseName;
+        PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : GetDatabaseName();
         auto sendParameters = GetSendParameters(Credentials, PathToDatabase);
         Send(sendParameters.Recipient, sendParameters.Event.Release());
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
@@ -63,6 +63,7 @@ public:
                 PipeClient = RegisterWithSameMailbox(pipe);
                 THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
                 request.Get()->Record = CreateLoginRequest(Credentials, AppData()->AuthConfig);
+                request.Get()->Record.SetPeerName(Request->GetPeerName());
                 NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
                 return;
             }

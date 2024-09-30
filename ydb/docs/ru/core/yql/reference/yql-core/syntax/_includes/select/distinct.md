@@ -1,6 +1,4 @@
-
-
-## DISTINCT {#distinct}
+# DISTINCT
 
 Выбор уникальных строк.
 
@@ -10,9 +8,9 @@
 
 {% endnote %}
 
-**Пример**
+## Пример
 
-``` yql
+```yql
 SELECT DISTINCT value -- только уникальные значения из таблицы
 FROM my_table;
 ```

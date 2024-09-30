@@ -150,15 +150,14 @@ Y_UNIT_TEST_SUITE(TAggregationsTests) {
         UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.SerializeFuncId).Name, "int8_avg_serialize");
         UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.DeserializeFuncId).Name, "int8_avg_deserialize");
 
-        ret = LookupAggregation("string_agg", {LookupType("text").TypeId, LookupType("text").TypeId});
-        UNIT_ASSERT_VALUES_EQUAL(ret.TransTypeId, LookupType("internal").TypeId);
-        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "string_agg");
-        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("text").TypeId);
-        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[1], LookupType("text").TypeId);
-        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.TransFuncId).Name, "string_agg_transfn");
+        ret = LookupAggregation("xmlagg", {LookupType("xml").TypeId});
+        UNIT_ASSERT_VALUES_EQUAL(ret.TransTypeId, LookupType("xml").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "xmlagg");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("xml").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.TransFuncId).Name, "xmlconcat2");
         UNIT_ASSERT_VALUES_EQUAL(ret.CombineFuncId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.FinalFuncId).Name, "string_agg_finalfn");
+        UNIT_ASSERT_VALUES_EQUAL(ret.FinalFuncId, 0);
         UNIT_ASSERT_VALUES_EQUAL(ret.SerializeFuncId, 0);
         UNIT_ASSERT_VALUES_EQUAL(ret.DeserializeFuncId, 0);
 

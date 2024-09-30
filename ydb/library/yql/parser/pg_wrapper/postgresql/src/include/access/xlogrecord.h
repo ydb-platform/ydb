@@ -3,7 +3,7 @@
  *
  * Definitions for the WAL record format.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xlogrecord.h
@@ -15,7 +15,7 @@
 #include "access/xlogdefs.h"
 #include "port/pg_crc32c.h"
 #include "storage/block.h"
-#include "storage/relfilenode.h"
+#include "storage/relfilelocator.h"
 
 /*
  * The overall layout of an XLOG record is:
@@ -63,6 +63,17 @@ typedef struct XLogRecord
 #define XLR_RMGR_INFO_MASK		0xF0
 
 /*
+ * XLogReader needs to allocate all the data of a WAL record in a single
+ * chunk.  This means that a single XLogRecord cannot exceed MaxAllocSize
+ * in length if we ignore any allocation overhead of the XLogReader.
+ *
+ * To accommodate some overhead, this value allows for 4M of allocation
+ * overhead, that should be plenty enough for what
+ * DecodeXLogRecordRequiredSpace() expects as extra.
+ */
+#define XLogRecordMaxSize	(1020 * 1024 * 1024)
+
+/*
  * If a WAL record modifies any relation files, in ways not covered by the
  * usual block references, this flag is set. This is not used for anything
  * by PostgreSQL itself, but it allows external tools that read WAL and keep
@@ -97,7 +108,7 @@ typedef struct XLogRecordBlockHeader
 								 * image) */
 
 	/* If BKPBLOCK_HAS_IMAGE, an XLogRecordBlockImageHeader struct follows */
-	/* If BKPBLOCK_SAME_REL is not set, a RelFileNode follows */
+	/* If BKPBLOCK_SAME_REL is not set, a RelFileLocator follows */
 	/* BlockNumber follows */
 } XLogRecordBlockHeader;
 
@@ -114,8 +125,8 @@ typedef struct XLogRecordBlockHeader
  * present is (BLCKSZ - <length of "hole" bytes>).
  *
  * Additionally, when wal_compression is enabled, we will try to compress full
- * page images using the PGLZ compression algorithm, after removing the "hole".
- * This can reduce the WAL volume, but at some extra cost of CPU spent
+ * page images using one of the supported algorithms, after removing the
+ * "hole". This can reduce the WAL volume, but at some extra cost of CPU spent
  * on the compression during WAL logging. In this case, since the "hole"
  * length cannot be calculated by subtracting the number of page image bytes
  * from BLCKSZ, basically it needs to be stored as an extra information.
@@ -134,7 +145,7 @@ typedef struct XLogRecordBlockImageHeader
 	uint8		bimg_info;		/* flag bits, see below */
 
 	/*
-	 * If BKPIMAGE_HAS_HOLE and BKPIMAGE_IS_COMPRESSED, an
+	 * If BKPIMAGE_HAS_HOLE and BKPIMAGE_COMPRESSED(), an
 	 * XLogRecordBlockCompressHeader struct follows.
 	 */
 } XLogRecordBlockImageHeader;
@@ -144,9 +155,16 @@ typedef struct XLogRecordBlockImageHeader
 
 /* Information stored in bimg_info */
 #define BKPIMAGE_HAS_HOLE		0x01	/* page image has "hole" */
-#define BKPIMAGE_IS_COMPRESSED		0x02	/* page image is compressed */
-#define BKPIMAGE_APPLY		0x04	/* page image should be restored during
-									 * replay */
+#define BKPIMAGE_APPLY			0x02	/* page image should be restored
+										 * during replay */
+/* compression methods supported */
+#define BKPIMAGE_COMPRESS_PGLZ	0x04
+#define BKPIMAGE_COMPRESS_LZ4	0x08
+#define BKPIMAGE_COMPRESS_ZSTD	0x10
+
+#define	BKPIMAGE_COMPRESSED(info) \
+	((info & (BKPIMAGE_COMPRESS_PGLZ | BKPIMAGE_COMPRESS_LZ4 | \
+			  BKPIMAGE_COMPRESS_ZSTD)) != 0)
 
 /*
  * Extra header information used when page image has "hole" and
@@ -168,7 +186,7 @@ typedef struct XLogRecordBlockCompressHeader
 	(SizeOfXLogRecordBlockHeader + \
 	 SizeOfXLogRecordBlockImageHeader + \
 	 SizeOfXLogRecordBlockCompressHeader + \
-	 sizeof(RelFileNode) + \
+	 sizeof(RelFileLocator) + \
 	 sizeof(BlockNumber))
 
 /*
@@ -180,7 +198,8 @@ typedef struct XLogRecordBlockCompressHeader
 #define BKPBLOCK_HAS_IMAGE	0x10	/* block data is an XLogRecordBlockImage */
 #define BKPBLOCK_HAS_DATA	0x20
 #define BKPBLOCK_WILL_INIT	0x40	/* redo will re-init the page */
-#define BKPBLOCK_SAME_REL	0x80	/* RelFileNode omitted, same as previous */
+#define BKPBLOCK_SAME_REL	0x80	/* RelFileLocator omitted, same as
+									 * previous */
 
 /*
  * XLogRecordDataHeaderShort/Long are used for the "main data" portion of

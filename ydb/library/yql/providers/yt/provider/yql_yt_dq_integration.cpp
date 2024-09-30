@@ -426,11 +426,6 @@ public:
                     AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
                     return false;
                 }
-                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
-                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
-                    AddMessage(ctx, "system sampling", skipIssues, State_->PassiveExecution);
-                    return false;
-                }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
                         AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);
@@ -489,7 +484,7 @@ public:
         if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
             return false;
         }
-    
+
         auto supportedTypes = State_->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
         auto supportedDataTypes = State_->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
@@ -515,6 +510,14 @@ public:
         const TYtSectionList& sectionList = wrap.Input().Cast<TYtReadTable>().Input();
         for (size_t i = 0; i < sectionList.Size(); ++i) {
             auto section = sectionList.Item(i);
+            auto paths = section.Paths();
+            for (const auto& path : section.Paths()) {
+                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");
+                    return false;
+                }
+            }
             if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
                 BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "system column");
                 return false;
@@ -586,14 +589,14 @@ public:
                             }
                             if (tableInfo->Stat) {
                                 chunksCount += tableInfo->Stat->ChunkCount;
+                                if (chunksCount > maxChunks) {
+                                    AddErrorWrap(ctx, node_->Pos(),  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
+                                    return Nothing();
+                                }
                             }
                         }
                         groupIdPathInfo.back().emplace_back(pathInfo);
                     }
-                }
-                if (chunksCount > maxChunks) {
-                    AddErrorWrap(ctx, node_->Pos(),  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
-                    return Nothing();
                 }
                 clusterToNodesAndErasure[cluster].push_back({node_, hasErasure});
             } else {
@@ -653,7 +656,7 @@ public:
         TYtTableBaseInfo::TPtr tableInfo{TYtTableBaseInfo::Parse(table)};
         auto codecSpec = tableInfo->GetCodecSpecNode({});
         TString rowSpec = NodeToYsonString(codecSpec, NYT::NYson::EYsonFormat::Text);
-        
+
         NYt::NSource::TLookupSource source;
         source.SetCluster(table.Cluster().StringValue());
         source.SetTable(table.Name().StringValue());

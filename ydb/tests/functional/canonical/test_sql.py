@@ -114,7 +114,8 @@ class BaseCanonicalTest(object):
                 domain_name='local',
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
-                disable_iterator_lookups=True
+                disable_iterator_lookups=True,
+                extra_feature_flags=["enable_resource_pools"]
             )
         )
         cls.cluster.start()
@@ -449,6 +450,16 @@ class BaseCanonicalTest(object):
                 )
             )
 
+    def remove_optimizer_estimates(self, query_plan):
+        if 'Plans' in query_plan:
+            for p in query_plan['Plans']:
+                self.remove_optimizer_estimates(p)
+        if 'Operators' in query_plan:
+            for op in query_plan['Operators']:
+                for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
+                    if key in op:
+                        del op[key]
+
     def run_test_case(self, query_name, kind):
         self.initialize_common(query_name, kind)
         query = self.format_query(self.read_query_text(query_name))
@@ -465,6 +476,8 @@ class BaseCanonicalTest(object):
                 for q in plan['queries']:
                     if 'SimplifiedPlan' in q:
                         del q['SimplifiedPlan']
+                    if 'Plan' in q:
+                        self.remove_optimizer_estimates(q['Plan'])
             canons['script_plan'] = self.canonical_plan(query_name, self.pretty_json(plan))
             self.compare_tables_test(canons, config, query_name)
         elif kind == 'plan':

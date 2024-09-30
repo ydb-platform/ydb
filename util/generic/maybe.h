@@ -18,9 +18,9 @@ namespace NMaybe {
     struct TPolicyUndefinedFail {
         [[noreturn]] static void OnEmpty(const std::type_info& valueTypeInfo);
     };
-}
+} // namespace NMaybe
 
-struct TNothing {
+struct [[nodiscard]] TNothing {
     explicit constexpr TNothing(int) noexcept {
     }
 };

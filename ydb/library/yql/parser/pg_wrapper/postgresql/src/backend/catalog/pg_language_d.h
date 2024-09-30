@@ -3,7 +3,7 @@
  * pg_language_d.h
  *    Macro definitions for pg_language
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_LANGUAGE_D_H
 
 #define LanguageRelationId 2612
+#define LanguageNameIndexId 2681
+#define LanguageOidIndexId 2682
 
 #define Anum_pg_language_oid 1
 #define Anum_pg_language_lanname 2

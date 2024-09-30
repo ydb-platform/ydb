@@ -38,6 +38,20 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
     }
 }
 
+inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
+    if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
+        if (AppData()->AuthConfig.GetUseAccessService()
+            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
+            static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+            };
+            return entries;
+        }
+    }
+    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
+    return emptyEntries;
+}
+
 template <typename TEvent>
 class TGrpcRequestCheckActor
     : public TGRpcRequestProxyHandleMethods
@@ -73,7 +87,8 @@ public:
     }
 
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id", "container_id"};
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
+        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
         for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
@@ -82,7 +97,16 @@ public:
             }
         }
         if (!attributes.empty()) {
-            SetEntries({{GetPermissions(), attributes}});
+            entries.emplace_back(GetPermissions(), attributes);
+        }
+
+        if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+            const auto& e = GetEntriesForAuthAndCheckRequest(Request_);
+            entries.insert(entries.end(), e.begin(), e.end());
+        }
+
+        if (!entries.empty()) {
+            SetEntries(entries);
         }
     }
 
@@ -288,6 +312,7 @@ private:
                     SetTokenAndDie();
                     break;
                 case Ydb::StatusIds::TIMEOUT:
+                case Ydb::StatusIds::CANCELLED:
                     Counters_->IncDatabaseRateLimitedCounter();
                     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
                     ReplyOverloadedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, "Throughput limit exceeded"));
@@ -307,7 +332,8 @@ private:
             }
         };
 
-        req.mutable_operation_params()->mutable_operation_timeout()->set_nanos(200000000); // same as cloud-go serverless proxy
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(10);
+        req.mutable_operation_params()->mutable_cancel_after()->set_nanos(200000000); // same as cloud-go serverless proxy
 
         NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(
             std::move(req),
@@ -462,6 +488,12 @@ private:
     template <ui32 TRpcId>
     void HandleAndDie(TAutoPtr<TEventHandle<TRefreshTokenImpl<TRpcId>>>&) {
         ReplyBackAndDie();
+    }
+
+    void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+        GrpcRequestBaseCtx_->FinishSpan();
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+        PassAway();
     }
 
     template <typename T>

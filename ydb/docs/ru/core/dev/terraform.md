@@ -15,7 +15,7 @@
 
 Для начала работы необходимо:
 
-1. Развернуть кластер [YDB](../deploy/index.md)
+1. Развернуть кластер [{{ ydb-short-name }}](../devops/index.md)
 2. Создать базу данных (описано в п.1 для соответствующего типа развертывания кластера)
 3. Установить [Terraform](https://developer.hashicorp.com/terraform/install)
 4. Установить и настроить [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/)
@@ -23,8 +23,7 @@
 ## Настройка Terraform провайдера для работы с {{ ydb-short-name }} {#setup}
 
 1. Нужно скачать [код провайдера](https://github.com/ydb-platform/terraform-provider-ydb/)
-2. Собрать провайдер, выполнив `$ make local-build` в корневой директории кода провайдера. Для этого вам необходимо дополнительно установить утилиту [make](https://www.gnu.org/software/make/) и [go](https://go.dev/)
-Провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
+2. Собрать провайдер, выполнив `$ make local-build` в корневой директории кода провайдера. Для этого вам необходимо дополнительно установить утилиту [make](https://www.gnu.org/software/make/) и [go](https://go.dev/); провайдер установится в папку плагинов Terraform - `~/.terraform.d/plugins/terraform.storage.ydb.tech/...`
 3. Добавить провайдер в `~/.terraformrc`, дописав в секцию `provider_installation` следующее содержание (если такой секции ещё не было, то создать):
 
     ```tf
@@ -51,7 +50,7 @@
       }
       required_version = ">= 0.13"
     }
-    
+
     provider "ydb" {
       token = "<TOKEN>"
       //OR for static credentials
@@ -244,10 +243,9 @@ resource "ydb_topic" "test" {
 
 * `path` — (обязательный) путь таблицы, относительно корня базы (пример - `/path/to/table`).
 * `connection_string` — (обязательный) [строка соединения](#connection_string).
-
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
-* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) таблицы, содержит упорядоченный список имён колонок первичного ключа.
+* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table/index.md) таблицы, содержит упорядоченный список имён колонок первичного ключа.
 * `ttl` — (необязательный) TTL (см. аргумент [ttl](#ttl)).
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (необязательный) (bool) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter), значение по умолчанию - false.
@@ -255,7 +253,7 @@ resource "ydb_topic" "test" {
 
 #### column {#column}
 
-Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table.md#columns) таблицы.
+Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table/index.md) таблицы.
 
 {% note warning %}
 
@@ -281,11 +279,11 @@ column {
 
 #### family {#family}
 
-Аргумент `family` описывает [свойства группы колонок](../yql/reference/syntax/create_table.md#column-family).
+Аргумент `family` описывает [свойства группы колонок](../yql/reference/syntax/create_table/family.md).
 
 * `name` — (обязательный) имя группы колонок.
-* `data` — (обязательный) [тип устройства хранения](../yql/reference/syntax/create_table#column-family) для данных колонок этой группы.
-* `compression` — (обязательный) [кодек сжатия данных](../yql/reference/syntax/create_table#column-family).
+* `data` — (обязательный) [тип устройства хранения](../yql/reference/syntax/create_table/family.md) для данных колонок этой группы.
+* `compression` — (обязательный) [кодек сжатия данных](../yql/reference/syntax/create_table/family.md).
 
 Пример:
 
@@ -368,7 +366,7 @@ resource "ydb_table_index" "ydb_table_index" {
 * `table_id` - terraform-идентификатор таблицы. Указывается, если не задан `table_path` или `connection_string`.
 
 * `name` — (обязательный) имя индекса.
-* `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
+* `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table/secondary_index.md).
 * `columns` — (обязательный) упорядоченный список имён колонок, участвующий в индексе.
 * `cover` — (обязательный) список дополнительных колонок для покрывающего индекса.
 
@@ -459,7 +457,7 @@ resource "ydb_table" "ydb_table" {
 resource "ydb_table" "ydb_table" {
   # Путь до таблицы
   path = "path/to/table" # путь относительно корня базы
-  
+
   # ConnectionString до базы данных.
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
 
@@ -537,7 +535,7 @@ resource "ydb_table_index" "ydb_table_index" {
 }
 ```
 
-## Управление конфигурацией топиков {{ydb-short-name}} через Terraform
+## Управление конфигурацией топиков {{ ydb-short-name }} через Terraform
 
 Для работы с [топиками](../concepts/topic.md) используется ресурс `ydb_topic`
 

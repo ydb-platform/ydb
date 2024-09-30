@@ -94,7 +94,7 @@ public:
             return CanBuildResultImpl(cons.Cast().Input().Ref(), visited);
         }
 
-        if (!node.IsComposable()) {
+        if (!node.GetTypeAnn()->IsComposable()) {
             return false;
         }
 

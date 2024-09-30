@@ -18,20 +18,20 @@ The `topic write` command writes messages to a topic from a file or `stdin`:
 
 `--file VAL` (`-f VAL`): Read a stream of incoming messages and write them to a topic from the specified file. If not set, messages are read from `stdin`.
 
-`--format STR`: Format of the incoming message stream.
-* Supported formats
+`--format STR`: Format of the incoming message stream. Supported formats:
 
    | Name | Description |
    ---|---
-   | `single-message`<br>(default) | The entire input stream is treated as a single message to be written to the topic. |
+   | `single-message`<br/>(default) | The entire input stream is treated as a single message to be written to the topic. |
    | `newline-delimited` | A stream at the input contains multiple messages delimited with the `0x0A` newline character. |
 
 `--transform VAL`: Method for transforming messages.
 
 - Defaults to `none`.
 - Possible values:
-   `base64`: Decode each message in the input stream from [Base64](https://ru.wikipedia.org/wiki/Base64) and write the output to the topic. If decoding fails, the command is aborted with an error.
-   `none`: Write the contents of a message from the input stream to the topic byte by byte without transforming them.
+
+   - `base64`: Decode each message in the input stream from [Base64](https://ru.wikipedia.org/wiki/Base64) and write the output to the topic. If decoding fails, the command is aborted with an error.
+   - `none`: Write the contents of a message from the input stream to the topic byte by byte without transforming them.
 
 ### Additional parameters
 
@@ -48,23 +48,27 @@ The `topic write` command writes messages to a topic from a file or `stdin`:
 All the examples given below use a topic named `topic1`.
 
 * Writing a terminal input to a single message Once the command is run, you can type any multi-line text and press `Ctrl+D` to input it.
+
    ```bash
    {{ ydb-cli }} -p quickstart topic write topic1
    ```
 
 * Writing the contents of the `message.bin` file to a single message compressed with the GZIP codec
+
    ```bash
    {{ ydb-cli }} -p quickstart topic write topic1 -f message.bin --codec GZIP
    ```
 
 * Writing the contents of the `example.txt` file delimited into messages line by line
+
    ```bash
    {{ ydb-cli }} -p quickstart topic write topic1 -f example.txt --format newline-delimited
    ```
 
 * Writing a resource downloaded via HTTP and delimited into messages with tab characters
+
    ```bash
    curl http://example.com/resource | {{ ydb-cli }} -p quickstart topic write topic1 --delimiter "\t"
    ```
 
-* [Examples of YDB CLI command integration](topic-pipeline.md)
+* [Examples of {{ ydb-short-name }} CLI command integration](topic-pipeline.md)

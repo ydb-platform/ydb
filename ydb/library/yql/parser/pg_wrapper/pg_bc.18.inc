@@ -1,65 +1,72 @@
 LLVM_BC(
-    postgresql/src/backend/access/gin/ginutil.c
     postgresql/src/backend/access/spgist/spgquadtreeproc.c
+    postgresql/src/backend/access/spgist/spgutils.c
     postgresql/src/backend/jit/jit.c
+    postgresql/src/backend/tsearch/dict_synonym.c
+    postgresql/src/backend/utils/adt/multirangetypes.c
     postgresql/src/backend/utils/adt/multirangetypes_selfuncs.c
     postgresql/src/backend/utils/adt/orderedsetaggs.c
     postgresql/src/backend/utils/adt/pg_lsn.c
-    postgresql/src/backend/utils/adt/pseudotypes.c
-    postgresql/src/backend/utils/adt/tsvector.c
+    postgresql/src/backend/utils/adt/ruleutils.c
+    postgresql/src/backend/utils/init/miscinit.c
     pg_kernels.18.cpp
 
     NAME PgFuncs18
 
     SYMBOLS
-    arrow_any_in
-    arrow_any_out
-    arrow_anyarray_in
-    arrow_anyarray_out
-    arrow_anyarray_recv
-    arrow_anyarray_send
-    arrow_anycompatible_in
-    arrow_anycompatible_out
-    arrow_anycompatiblearray_in
-    arrow_anycompatiblearray_out
-    arrow_anycompatiblearray_recv
-    arrow_anycompatiblearray_send
-    arrow_anycompatiblemultirange_in
-    arrow_anycompatiblemultirange_out
-    arrow_anycompatiblenonarray_in
-    arrow_anycompatiblenonarray_out
-    arrow_anycompatiblerange_in
-    arrow_anycompatiblerange_out
-    arrow_anyelement_in
-    arrow_anyelement_out
-    arrow_anyenum_in
-    arrow_anyenum_out
-    arrow_anymultirange_in
-    arrow_anymultirange_out
-    arrow_anynonarray_in
-    arrow_anynonarray_out
-    arrow_anyrange_in
-    arrow_anyrange_out
-    arrow_cstring_in
-    arrow_cstring_out
-    arrow_cstring_recv
-    arrow_cstring_send
-    arrow_event_trigger_in
-    arrow_event_trigger_out
-    arrow_fdw_handler_in
-    arrow_fdw_handler_out
-    arrow_ginhandler
+    arrow_dsynonym_init
+    arrow_dsynonym_lexize
+    arrow_elem_contained_by_multirange
+    arrow_hash_multirange
+    arrow_hash_multirange_extended
     arrow_hypothetical_cume_dist_final
     arrow_hypothetical_dense_rank_final
     arrow_hypothetical_percent_rank_final
     arrow_hypothetical_rank_final
-    arrow_index_am_handler_in
-    arrow_index_am_handler_out
-    arrow_internal_in
-    arrow_internal_out
-    arrow_language_handler_in
-    arrow_language_handler_out
     arrow_mode_final
+    arrow_multirange_adjacent_multirange
+    arrow_multirange_adjacent_range
+    arrow_multirange_after_multirange
+    arrow_multirange_after_range
+    arrow_multirange_agg_transfn
+    arrow_multirange_before_multirange
+    arrow_multirange_before_range
+    arrow_multirange_cmp
+    arrow_multirange_constructor0
+    arrow_multirange_constructor1
+    arrow_multirange_constructor2
+    arrow_multirange_contained_by_multirange
+    arrow_multirange_contained_by_range
+    arrow_multirange_contains_elem
+    arrow_multirange_contains_multirange
+    arrow_multirange_contains_range
+    arrow_multirange_empty
+    arrow_multirange_eq
+    arrow_multirange_ge
+    arrow_multirange_gt
+    arrow_multirange_in
+    arrow_multirange_intersect
+    arrow_multirange_intersect_agg_transfn
+    arrow_multirange_le
+    arrow_multirange_lower
+    arrow_multirange_lower_inc
+    arrow_multirange_lower_inf
+    arrow_multirange_lt
+    arrow_multirange_minus
+    arrow_multirange_ne
+    arrow_multirange_out
+    arrow_multirange_overlaps_multirange
+    arrow_multirange_overlaps_range
+    arrow_multirange_overleft_multirange
+    arrow_multirange_overleft_range
+    arrow_multirange_overright_multirange
+    arrow_multirange_overright_range
+    arrow_multirange_recv
+    arrow_multirange_send
+    arrow_multirange_union
+    arrow_multirange_upper
+    arrow_multirange_upper_inc
+    arrow_multirange_upper_inf
     arrow_multirangesel
     arrow_ordered_set_transition
     arrow_ordered_set_transition_multi
@@ -69,10 +76,34 @@ LLVM_BC(
     arrow_percentile_cont_interval_multi_final
     arrow_percentile_disc_final
     arrow_percentile_disc_multi_final
-    arrow_pg_ddl_command_in
-    arrow_pg_ddl_command_out
-    arrow_pg_ddl_command_recv
-    arrow_pg_ddl_command_send
+    arrow_pg_get_constraintdef
+    arrow_pg_get_constraintdef_ext
+    arrow_pg_get_expr
+    arrow_pg_get_expr_ext
+    arrow_pg_get_function_arg_default
+    arrow_pg_get_function_arguments
+    arrow_pg_get_function_identity_arguments
+    arrow_pg_get_function_result
+    arrow_pg_get_function_sqlbody
+    arrow_pg_get_functiondef
+    arrow_pg_get_indexdef
+    arrow_pg_get_indexdef_ext
+    arrow_pg_get_partition_constraintdef
+    arrow_pg_get_partkeydef
+    arrow_pg_get_ruledef
+    arrow_pg_get_ruledef_ext
+    arrow_pg_get_serial_sequence
+    arrow_pg_get_statisticsobjdef
+    arrow_pg_get_statisticsobjdef_columns
+    arrow_pg_get_statisticsobjdef_expressions
+    arrow_pg_get_triggerdef
+    arrow_pg_get_triggerdef_ext
+    arrow_pg_get_userbyid
+    arrow_pg_get_viewdef
+    arrow_pg_get_viewdef_ext
+    arrow_pg_get_viewdef_name
+    arrow_pg_get_viewdef_name_ext
+    arrow_pg_get_viewdef_wrap
     arrow_pg_jit_available
     arrow_pg_lsn_cmp
     arrow_pg_lsn_eq
@@ -92,29 +123,22 @@ LLVM_BC(
     arrow_pg_lsn_recv
     arrow_pg_lsn_send
     arrow_pg_lsn_smaller
-    arrow_pg_node_tree_in
-    arrow_pg_node_tree_out
-    arrow_pg_node_tree_recv
-    arrow_pg_node_tree_send
-    arrow_shell_in
-    arrow_shell_out
+    arrow_range_adjacent_multirange
+    arrow_range_after_multirange
+    arrow_range_agg_finalfn
+    arrow_range_agg_transfn
+    arrow_range_before_multirange
+    arrow_range_contained_by_multirange
+    arrow_range_contains_multirange
+    arrow_range_merge_from_multirange
+    arrow_range_overlaps_multirange
+    arrow_range_overleft_multirange
+    arrow_range_overright_multirange
     arrow_spg_quad_choose
     arrow_spg_quad_config
     arrow_spg_quad_inner_consistent
     arrow_spg_quad_leaf_consistent
     arrow_spg_quad_picksplit
-    arrow_table_am_handler_in
-    arrow_table_am_handler_out
-    arrow_trigger_in
-    arrow_trigger_out
-    arrow_tsm_handler_in
-    arrow_tsm_handler_out
-    arrow_tsvectorin
-    arrow_tsvectorout
-    arrow_tsvectorrecv
-    arrow_tsvectorsend
-    arrow_void_in
-    arrow_void_out
-    arrow_void_recv
-    arrow_void_send
+    arrow_spghandler
+    arrow_system_user
 )

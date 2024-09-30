@@ -9,6 +9,9 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.mysql as mysql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.oracle as oracle
+import ydb.library.yql.providers.generic.connector.tests.utils.types.ms_sql_server as ms_sql_server
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
 
@@ -18,6 +21,9 @@ YsonList: TypeAlias = yson.yson_types.YsonList
 @dataclass
 class DataSourceType:
     ch: clickhouse.Type = None
+    ms: ms_sql_server.Type = None
+    my: mysql.Type = None
+    ora: oracle.Type = None
     pg: postgresql.Type = None
     ydb: Ydb.Type = None
 
@@ -26,6 +32,12 @@ class DataSourceType:
         match kind:
             case EDataSourceKind.CLICKHOUSE:
                 target = self.ch
+            case EDataSourceKind.MS_SQL_SERVER:
+                target = self.ms
+            case EDataSourceKind.MYSQL:
+                target = self.my
+            case EDataSourceKind.ORACLE:
+                target = self.ora
             case EDataSourceKind.POSTGRESQL:
                 target = self.pg
             case EDataSourceKind.YDB:

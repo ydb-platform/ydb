@@ -10,7 +10,7 @@
  * guarantee that there can only be one matching row for a key combination.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/catcache.h
@@ -61,6 +61,11 @@ typedef struct catcache
 	slist_node	cc_next;		/* list link */
 	ScanKeyData cc_skey[CATCACHE_MAXKEYS];	/* precomputed key info for heap
 											 * scans */
+
+	/* These fields are placed here to avoid ABI breakage in v16 */
+	int			cc_nlist;		/* # of CatCLists currently in this cache */
+	int			cc_nlbuckets;	/* # of CatCList hash buckets in this cache */
+	dlist_head *cc_lbucket;		/* hash buckets for CatCLists */
 
 	/*
 	 * Keep these at the end, so that compiling catcache.c with CATCACHE_STATS

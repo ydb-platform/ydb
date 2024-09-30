@@ -1,5 +1,6 @@
 #include "kqp_gateway.h"
 #include "actors/kqp_ic_gateway_actors.h"
+#include "actors/analyze_actor.h"
 #include "actors/scheme.h"
 #include "kqp_metadata_loader.h"
 #include "local_rpc/helper.h"
@@ -976,7 +977,11 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
+    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) override {
+        if (existingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF NOT EXISTS statement is not supported for CREATE TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -988,9 +993,27 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+        Y_UNUSED(existingOk);
     }
 
-    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) override {
+    TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NKikimr::NGRpcProxy::V1::TAlterTopicResponse>();
+        auto schemaTxFuture = schemaTxPromise.GetFuture();
+
+        NKikimr::NGRpcProxy::V1::TAlterTopicRequest request{
+                std::move(settings.Request), settings.WorkDir, settings.Name, Database, GetTokenCompat(),
+                settings.MissingOk
+        };
+        IActor* requestHandler = new NKikimr::NGRpcProxy::V1::TAlterTopicActorInternal(std::move(request), std::move(schemaTxPromise), settings.MissingOk);
+        RegisterActor(requestHandler);
+        return schemaTxFuture;
+    }
+
+    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
+        if (missingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF EXISTS statement is not supported for ALTER TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1004,7 +1027,11 @@ public:
         }
     }
 
-    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) override {
+    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) override {
+        if (missingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF EXISTS statement is not supported for DROP TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1019,6 +1046,7 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+
     }
 
     TFuture<TGenericResult> CreateReplication(const TString&, const NYql::TCreateReplicationSettings&) override {
@@ -1382,6 +1410,22 @@ public:
             return dropUserPromise.GetFuture();
         }
         catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+            
+            auto analyzePromise = NewPromise<TGenericResult>();
+            IActor* analyzeActor = new TAnalyzeActor(settings.TablePath, settings.Columns, analyzePromise);
+            RegisterActor(analyzeActor);
+            
+            return analyzePromise.GetFuture();
+        } catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
@@ -1847,7 +1891,8 @@ public:
 
     TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query,
         TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target,
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -1857,6 +1902,10 @@ public:
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -1946,7 +1995,8 @@ public:
     }
 
     TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query, TQueryData::TPtr params,
-        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
+        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings, 
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -1956,6 +2006,10 @@ public:
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -2021,11 +2075,16 @@ public:
     }
 
     TFuture<TQueryResult> ExecGenericQuery(const TString& cluster, const TString& query, TQueryData::TPtr params,
-        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
+        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings, 
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
+        }
 
         auto& request = *ev->Record.MutableRequest();
         request.SetCollectStats(settings.CollectStats);
@@ -2047,7 +2106,8 @@ public:
 
     TFuture<TQueryResult> StreamExecGenericQuery(const TString& cluster, const TString& query,
         TQueryData::TPtr params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target,
+        const TMaybe<TString>& traceId) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -2057,6 +2117,10 @@ public:
         auto ev = MakeHolder<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(*traceId);
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);

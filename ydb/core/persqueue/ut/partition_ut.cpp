@@ -882,7 +882,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
                                                       bool immediate,
                                                       ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -988,7 +988,8 @@ void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
     auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
                                                                                         config.Consumers,
                                                                                         1,
-                                                                                        config.MeteringMode));
+                                                                                        config.MeteringMode),
+                                                                            NKikimrPQ::TBootstrapConfig());
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1028,7 +1029,7 @@ void CompareVectors(const TVector<ui64>& expected, const TIterable& actual) {
 }
 
 void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
-    const TPartitionId partition{0, 1111, 123};
+    const TPartitionId partition{0, TWriteId{0, 1111}, 123};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString session = "session";
@@ -1605,7 +1606,7 @@ ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected)
 ui64 TPartitionTxTestHelper::MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected) {
     auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, 0);
 
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -2320,7 +2321,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
 
     CreatePartition({
-                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
                     //
                     // partition configuration
                     //
@@ -2389,7 +2390,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
 
 Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     CreatePartition({
-                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
                     .Begin=0, .End=10,
                     //
                     // partition configuration
@@ -2444,7 +2445,7 @@ Y_UNIT_TEST_F(ShadowPartitionCountersFirstClass, TPartitionFixture) {
 }
 
 Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
-    const TPartitionId partitionId{0, 1111, 123};
+    const TPartitionId partitionId{0, TWriteId{0, 1111}, 123};
     const ui64 begin = 0;
     const ui64 end = 10;
     const TString session = "session";
@@ -3126,7 +3127,7 @@ Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
     auto* actor = CreatePartition({
-                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
                     .Begin=0, .End=10,
                     //
                     // partition configuration

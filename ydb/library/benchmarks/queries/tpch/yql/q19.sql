@@ -5,7 +5,7 @@
 -- using 1680793381 as a seed to the RNG
 
 select
-    sum(l.l_extendedprice* (1 - l.l_discount)) as revenue
+    sum(l.l_extendedprice* ($z1_12 - l.l_discount)) as revenue
 from
     {{lineitem}} as l
 join

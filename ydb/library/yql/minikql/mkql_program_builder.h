@@ -86,6 +86,10 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     combined = (EAnyJoinSettings)combinedVal;
 }
 
+inline bool HasSpillingFlag(const TCallable& callable) {
+    return TStringBuf(callable.GetType()->GetName()).EndsWith("WithSpilling"_sb);
+}
+
 #define MKQL_SCRIPT_TYPES(xx) \
     xx(Unknown, 0, unknown, false) \
     xx(Python, 1, python, false) \
@@ -101,6 +105,12 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     xx(CustomPython3, 11, custompython3, true) \
     xx(SystemPython2, 12, systempython2, false) \
     xx(SystemPython3, 13, systempython3, false) \
+    xx(SystemPython3_8, 14, systempython3_8, false) \
+    xx(SystemPython3_9, 15, systempython3_9, false) \
+    xx(SystemPython3_10, 16, systempython3_10, false) \
+    xx(SystemPython3_11, 17, systempython3_11, false) \
+    xx(SystemPython3_12, 18, systempython3_12, false) \
+    xx(SystemPython3_13, 19, systempython3_13, false) \
 
 enum class EScriptType {
     MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)
@@ -245,6 +255,9 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+        const TArrayRef<const ui32>& leftKeyDrops, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -567,6 +580,10 @@ public:
     TRuntimeNode DecimalMod(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalMul(TRuntimeNode data1, TRuntimeNode data2);
 
+    TRuntimeNode BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockDecimalMod(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockDecimalMul(TRuntimeNode first, TRuntimeNode second);
+
     //-- bit logical functions
     TRuntimeNode BitNot(TRuntimeNode data);
     TRuntimeNode CountBits(TRuntimeNode data);
@@ -736,6 +753,9 @@ protected:
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
+    
+    TRuntimeNode BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
+
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);
 

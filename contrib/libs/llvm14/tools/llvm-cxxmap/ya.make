@@ -2,6 +2,8 @@
 
 PROGRAM()
 
+VERSION(14.0.6)
+
 LICENSE(Apache-2.0 WITH LLVM-exception)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

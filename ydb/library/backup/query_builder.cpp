@@ -91,7 +91,6 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         break;
 
     case EPrimitiveType::Int32:
-    case EPrimitiveType::Date32:
         Value.Int32(TryParse<i32>(buf));
         break;
 
@@ -128,10 +127,23 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         break;
 
     case EPrimitiveType::Interval:
-    case EPrimitiveType::Datetime64:
-    case EPrimitiveType::Timestamp64:
-    case EPrimitiveType::Interval64:
         Value.Interval(TryParse<i64>(buf));
+        break;
+
+    case EPrimitiveType::Date32:
+        Value.Date32(TryParse<i32>(buf));
+        break;
+
+    case EPrimitiveType::Datetime64:
+        Value.Datetime64(TryParse<i64>(buf));
+        break;        
+
+    case EPrimitiveType::Timestamp64:
+        Value.Timestamp64(TryParse<i64>(buf));
+        break;        
+
+    case EPrimitiveType::Interval64:
+        Value.Interval64(TryParse<i64>(buf));
         break;
 
     case EPrimitiveType::TzDate:

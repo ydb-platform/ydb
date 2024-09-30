@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 10,
+                "PlanNodeId": 12,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 8
+                                        "ExternalPlanNodeId": 10
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 9,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 8,
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -56,54 +56,61 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "f1 = unique2",
+                                                "Condition": "a.f1 = b.unique2",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 6
+                                                        "ExternalPlanNodeId": 8
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "ExternalPlanNodeId": 5
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 7,
+                                        "PlanNodeId": 9,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 4,
+                                                "PlanNodeId": 5,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
-                                                        "PlanNodeId": 3,
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
-                                                                "PlanNodeId": 2,
+                                                                "PlanNodeId": 3,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "TableFullScan",
-                                                                        "Operators": [
+                                                                        "Node Type": "Stage",
+                                                                        "PlanNodeId": 2,
+                                                                        "Plans": [
                                                                             {
-                                                                                "Inputs": [],
-                                                                                "Name": "TableFullScan",
-                                                                                "ReadColumns": [
-                                                                                    "unique2"
+                                                                                "Node Type": "TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [],
+                                                                                        "Name": "TableFullScan",
+                                                                                        "ReadColumns": [
+                                                                                            "unique2"
+                                                                                        ],
+                                                                                        "ReadRanges": [
+                                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                        "Scan": "Parallel",
+                                                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                                    }
                                                                                 ],
-                                                                                "ReadRanges": [
-                                                                                    "unique1 (-\u221e, +\u221e)",
-                                                                                    "unique2 (-\u221e, +\u221e)"
-                                                                                ],
-                                                                                "Scan": "Parallel",
-                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                                "PlanNodeId": 1,
+                                                                                "Tables": [
+                                                                                    "postgres_jointest/join0.test_plan/tenk1"
+                                                                                ]
                                                                             }
-                                                                        ],
-                                                                        "PlanNodeId": 1,
-                                                                        "Tables": [
-                                                                            "postgres_jointest/join0.test_plan/tenk1"
                                                                         ]
                                                                     }
                                                                 ]
@@ -114,28 +121,35 @@
                                             },
                                             {
                                                 "Node Type": "Map",
-                                                "PlanNodeId": 6,
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TableFullScan",
-                                                        "Operators": [
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
                                                             {
-                                                                "Inputs": [],
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "f1"
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "ReadColumns": [
+                                                                            "f1"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "f1 (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_jointest/join0.test_plan/int4_tbl"
+                                                                    }
                                                                 ],
-                                                                "ReadRanges": [
-                                                                    "f1 (-\u221e, +\u221e)"
-                                                                ],
-                                                                "Scan": "Parallel",
-                                                                "Table": "postgres_jointest/join0.test_plan/int4_tbl"
+                                                                "PlanNodeId": 6,
+                                                                "Tables": [
+                                                                    "postgres_jointest/join0.test_plan/int4_tbl"
+                                                                ]
                                                             }
-                                                        ],
-                                                        "PlanNodeId": 5,
-                                                        "Tables": [
-                                                            "postgres_jointest/join0.test_plan/int4_tbl"
                                                         ]
                                                     }
                                                 ]
@@ -148,7 +162,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

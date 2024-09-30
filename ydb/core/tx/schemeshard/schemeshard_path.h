@@ -5,6 +5,8 @@
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
+#include <util/generic/maybe.h>
+
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
@@ -153,13 +155,14 @@ public:
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
+    bool IsUnderOutgoingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath() const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex() const;
+    bool IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type = {}) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;

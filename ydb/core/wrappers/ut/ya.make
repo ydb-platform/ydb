@@ -9,6 +9,7 @@ IF (NOT OS_WINDOWS)
         ydb/library/actors/core
         library/cpp/digest/md5
         library/cpp/testing/unittest
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
         ydb/core/protos
         ydb/core/testlib/basics/default
         ydb/library/yql/minikql/comp_nodes/llvm14
@@ -21,6 +22,8 @@ ENDIF()
 
 YQL_LAST_ABI_VERSION()
 
-REQUIREMENTS(ram:12)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:12)
+ENDIF()
 
 END()

@@ -361,6 +361,8 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
     } else {
         Y_ABORT("UNREACHABLE");
     }
@@ -695,7 +697,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                                                                                        const TTopicTabletInfo& pqShard,
                                                                                        const TString& topicName,
                                                                                        const TString& topicPath,
-                                                                                       const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                                                                                       const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                                                                                        const TString& cloudId,
                                                                                        const TString& folderId,
                                                                                        const TString& databaseId,
@@ -703,7 +705,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                                                                                        TTxState::ETxType txType,
                                                                                        const TOperationContext& context)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
     event->Record.SetTxId(ui64(txId));
     ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
 
@@ -719,7 +721,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                        databasePath);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(*bootstrapConfig);
+        event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
     }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -734,7 +736,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                                                                            const TTopicTabletInfo& pqShard,
                                                                            const TString& topicName,
                                                                            const TString& topicPath,
-                                                                           const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
+                                                                           const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
                                                                            const TString& cloudId,
                                                                            const TString& folderId,
                                                                            const TString& databaseId,
@@ -742,7 +744,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                                                                            TTxState::ETxType txType,
                                                                            const TOperationContext& context)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfig>();
+    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
     event->Record.SetTxId(ui64(txId));
 
     MakePQTabletConfig(context,
@@ -757,7 +759,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                        databasePath);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->Record.MutableBootstrapConfig()->CopyFrom(*bootstrapConfig);
+        event->PreSerializedData += bootstrapConfig->GetPreSerializedUpdateConfig();
     }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -294,11 +294,9 @@ IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
 IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
-IActor* CreateMessageBusLoginRequest(TBusMessageContext &msg);
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
 

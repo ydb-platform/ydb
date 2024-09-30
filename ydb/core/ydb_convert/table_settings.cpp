@@ -405,18 +405,20 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
 }
 
 bool FillIndexTablePartitioning(
-    NKikimrSchemeOp::TTableDescription& out,
+    std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions,
     const Ydb::Table::TableIndex& index,
     Ydb::StatusIds::StatusCode& code, TString& error
 ) {
-    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings) {
+    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
+        auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
+
         if (settings.has_partitioning_settings()) {
-            if (!FillPartitioningPolicy(*out.MutablePartitionConfig(), settings, code, error)) {
+            if (!FillPartitioningPolicy(*indexImplTableDescription.MutablePartitionConfig(), settings, code, error)) {
                 return false;
             }
         }
         if (settings.partitions_case() != Ydb::Table::GlobalIndexSettings::PARTITIONS_NOT_SET) {
-            if (!FillPartitions(out, settings, code, error)) {
+            if (!FillPartitions(indexImplTableDescription, settings, code, error)) {
                 return false;
             }
         }
@@ -425,25 +427,34 @@ bool FillIndexTablePartitioning(
 
     switch (index.type_case()) {
     case Ydb::Table::TableIndex::kGlobalIndex:
-        if (!fillIndexPartitioning(index.global_index().settings())) {
+        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions)) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-        if (!fillIndexPartitioning(index.global_async_index().settings())) {
+        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions)) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-        if (!fillIndexPartitioning(index.global_unique_index().settings())) {
+        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions)) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
-      break;
+        break;
     }
 
     return true;

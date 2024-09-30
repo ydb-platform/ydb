@@ -100,7 +100,14 @@ public:
         YQL_CLOG(INFO, ProviderSolomon) << "Optimize SoWriteToShard";
 
         const auto solomonCluster = TString(write.DataSink().Cluster().Value());
-        auto shard = BuildSolomonShard(write.Shard().Cast<TCoAtom>(), ctx, solomonCluster);
+        auto* typeAnn = write.Input().Ref().GetTypeAnn();
+        const TTypeAnnotationNode* inputItemType = nullptr;
+        if (!EnsureNewSeqType<false, true, false>(write.Input().Pos(), *typeAnn, ctx, &inputItemType)) {
+            return {};
+        }
+
+        auto rowTypeNode = ExpandType(write.Pos(), *inputItemType, ctx);
+        auto shard = BuildSolomonShard(write.Shard().Cast<TCoAtom>(), TExprBase(rowTypeNode), ctx, solomonCluster);
 
         auto dqSink = Build<TDqSink>(ctx, write.Pos())
             .DataSink(write.DataSink())
@@ -131,7 +138,7 @@ public:
     }
 
 private:
-    TCallable BuildSolomonShard(TCoAtom shardNode, TExprContext& ctx, TString solomonCluster) const {
+    TCallable BuildSolomonShard(TCoAtom shardNode, TExprBase rowType, TExprContext& ctx, TString solomonCluster) const {
         const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(solomonCluster);
         YQL_ENSURE(clusterDesc, "Unknown cluster " << solomonCluster);
 
@@ -148,31 +155,14 @@ private:
         }
         YQL_ENSURE(!cluster.empty(), "Cluster is not defined. You can define it inside connection, or inside query.");
 
-        auto solomonClusterAtom = Build<TCoAtom>(ctx, shardNode.Pos())
-            .Value(solomonCluster)
+        return Build<TSoShard>(ctx, shardNode.Pos())
+            .SolomonCluster<TCoAtom>().Value(solomonCluster).Build()
+            .Project<TCoAtom>().Value(project).Build()
+            .Cluster<TCoAtom>().Value(cluster).Build()
+            .Service<TCoAtom>().Value(service).Build()
+            .RowType(rowType)
+            .Token<TCoSecureParam>().Name().Build("cluster:default_" + solomonCluster).Build()
             .Done();
-
-        auto projectAtom = Build<TCoAtom>(ctx, shardNode.Pos())
-            .Value(project)
-            .Done();
-
-        auto clusterAtom = Build<TCoAtom>(ctx, shardNode.Pos())
-            .Value(cluster)
-            .Done();
-
-        auto serviceAtom = Build<TCoAtom>(ctx, shardNode.Pos())
-            .Value(service)
-            .Done();
-
-        auto dqSoShardBuilder = Build<TSoShard>(ctx, shardNode.Pos());
-        dqSoShardBuilder.SolomonCluster(solomonClusterAtom);
-        dqSoShardBuilder.Project(projectAtom);
-        dqSoShardBuilder.Cluster(clusterAtom);
-        dqSoShardBuilder.Service(serviceAtom);
-
-        dqSoShardBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + solomonCluster).Build();
-
-        return dqSoShardBuilder.Done();
     }
 
 private:

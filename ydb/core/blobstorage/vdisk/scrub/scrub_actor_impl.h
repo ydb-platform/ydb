@@ -112,6 +112,7 @@ namespace NKikimr {
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> GetBarriersEssence();
 
         class THugeBlobMerger;
+        class THugeBlobAndIndexMerger;
         class TSstBlobMerger;
         class TBlobLocationExtractorMerger;
 

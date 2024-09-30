@@ -9,6 +9,7 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
+
 namespace NYdb::NTopic {
 
 class TCommonCodecsProvider {
@@ -372,6 +373,12 @@ TString TPartitionConsumerStats::GetReadSessionId() const {
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)
     : NodeId_(partitionLocation.node_id())
     , Generation_(partitionLocation.generation())
+{
+}
+
+TPartitionLocation::TPartitionLocation(i32 nodeId, i64 generation)
+    : NodeId_(nodeId)
+    , Generation_(generation)
 {
 }
 

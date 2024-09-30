@@ -2892,7 +2892,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                  }
             }
             TChunkState &state = ChunkState[ev.ChunkIdx];
-            if (state.OwnerId == OwnerSystem) {
+            if (state.OwnerId != ev.Owner) {
+                err << "Can't write chunkIdx# " << ev.ChunkIdx
+                    << " chunk is owner by another owner."
+                    << " chunk's owner# " << state.OwnerId
+                    << " request's owner# " << ev.Owner;
+                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                delete request;
+                return false;
+            }
+            if (!IsOwnerUser(state.OwnerId)) {
                 err << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk is owned by the system! ownerId# " << ev.Owner;
                 SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);

@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) { 
         TList<TString> result;
         ui64 resultOffset;
-        MakeParser({"a1", "a2"}, {"String", "Int32"}, [&](ui64 offset, TList<TString>&& value){
+        MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"}, [&](ui64 offset, TList<TString>&& value){
                 resultOffset = offset;
                 result = std::move(value);
             });

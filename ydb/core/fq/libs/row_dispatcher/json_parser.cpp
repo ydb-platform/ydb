@@ -266,7 +266,7 @@ private:
         for (size_t i = 0; i < columnNames.size(); ++i) {
             const TString& lastSymbol = i + 1 == columnNames.size() ? "" : " ";
             const TString& column = columnNames[i];
-            const TString& type = columnTypes[i];
+            const TString& type = SkipOptional(columnTypes[i]);
 
             udfOutputType << "'('" << column << " (DataType '" << type << "))" << lastSymbol;
             resultType << "'('" << column << " (SafeCast (Member $parsed '" << column << ") $string_type))" << lastSymbol;
@@ -293,6 +293,14 @@ private:
         )";
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
+    }
+
+    static TString SkipOptional(TStringBuf type) {
+        if (type.StartsWith("Optional")) {
+            Y_ABORT_UNLESS(type.SkipPrefix("Optional<"));
+            Y_ABORT_UNLESS(type.ChopSuffix(">"));
+        }
+        return TString(type);
     }
 
 private:

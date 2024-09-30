@@ -102,9 +102,9 @@ NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrPro
     }
 }
 
-bool TypeInfoFromProto(const ::Ydb::Type& typeProto, NScheme::TTypeInfo& typeInfo, TString& error) {
+bool TypeInfoFromProto(const ::Ydb::Type& typeProto, TTypeInfoMod& typeInfoMod, TString& error) {
     if (typeProto.has_type_id()) {
-        typeInfo = NScheme::TTypeInfo(typeProto.type_id());
+        typeInfoMod = {NScheme::TTypeInfo(typeProto.type_id()), {}};
         return true;
     } else if (typeProto.has_decimal_type()) {
         ui32 precision = typeProto.decimal_type().precision();
@@ -112,17 +112,17 @@ bool TypeInfoFromProto(const ::Ydb::Type& typeProto, NScheme::TTypeInfo& typeInf
         if (!NScheme::TDecimalType::Validate(precision, scale, error)) {
             return false;
         }
-        typeInfo = NScheme::TTypeInfo(TDecimalType(precision, scale));
+        typeInfoMod = {NScheme::TTypeInfo(TDecimalType(precision, scale)), {}};
         return true;
     } else if (typeProto.has_pg_type()) {
         const auto& typeName = typeProto.pg_type().type_name();
         auto pgDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!pgDesc) {
-            error = Sprintf("Unknown pg type %s", typeProto.pg_type().type_name().c_str());
+            error = Sprintf("Unknown pg type %s", typeName.c_str());
             return false;
         }
 
-        typeInfo = NScheme::TTypeInfo(pgDesc);
+        typeInfoMod = {NScheme::TTypeInfo(pgDesc), typeProto.pg_type().type_modifier()};
         return true;
     } else {
         error = Sprintf("Unexpected type, got proto: %s", typeProto.ShortDebugString().c_str());

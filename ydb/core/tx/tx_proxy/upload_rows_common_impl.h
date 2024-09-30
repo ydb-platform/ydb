@@ -484,7 +484,7 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
-            i32 typmod = -1;
+            i32 pgTypeMod = -1;            
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
@@ -493,12 +493,14 @@ private:
             const Ydb::Type& typeInProto = reqColumns[pos].second;
             
             TString parseProtoError;
-            NScheme::TTypeInfo typeInRequest;
-            if (!NScheme::TypeInfoFromProto(typeInProto, typeInRequest, parseProtoError)){
+            NScheme::TTypeInfoMod inTypeInfoMod;
+            if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
                 errorMessage = Sprintf("Type parse error for column %s: %s",
                     name.c_str(), parseProtoError.c_str());
                 return false;
             }
+
+            const NScheme::TTypeInfo& typeInRequest = inTypeInfoMod.TypeInfo;
 
             TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
@@ -527,14 +529,19 @@ private:
                     return false;
                 }
                 if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
-                    auto result = NPg::BinaryTypeModFromTextTypeMod(ci.PTypeMod, typeInRequest.GetPgTypeDesc());
-                    if (result.Error) {
-                        errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
-                            name.c_str(), NScheme::TypeName(ci.PType, ci.PTypeMod).c_str(),
-                            result.Error->c_str());
+                    if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
+                        errorMessage = Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str());
                         return false;
                     }
-                    typmod = result.Typmod;
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
+                    if (result.Error) {
+                        errorMessage = Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                           inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str());
+                        return false;
+                    }
+                    pgTypeMod = result.Typmod;
                 }
             }
 
@@ -545,11 +552,11 @@ private:
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }

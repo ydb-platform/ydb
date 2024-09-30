@@ -1209,6 +1209,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove", {NKikimrScheme::StatusPreconditionFailed});
+        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
     }
 }

@@ -6,18 +6,19 @@ namespace NKikimr::NCms {
 
 class TReason {  
 public:
+    // Must be sync with proto enum
     enum class EType {
-        UNSPECIFIED = NKikimrCms::TAction::STATUS_UNSPECIFIED,
-        TOO_MANY_UNAVAILABLE_VDISKS = NKikimrCms::TAction::TOO_MANY_UNAVAILABLE_VDISKS,
-        TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = NKikimrCms::TAction::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS,
-        DISABLED_NODES_LIMIT_REACHED = NKikimrCms::TAction::DISABLED_NODES_LIMIT_REACHED,
-        TENANT_DISABLED_NODES_LIMIT_REACHED = NKikimrCms::TAction::TENANT_DISABLED_NODES_LIMIT_REACHED,
-        SYS_TABLETS_NODE_LIMIT_REACHED = NKikimrCms::TAction::SYS_TABLETS_NODE_LIMIT_REACHED,
+        Unspecified,
+        TooManyUnavailableVDisks,
+        TooManyUnavailableStateStorageRings,
+        DisabledNodesLimitReached,
+        TenantDisabledNodesLimitReached,
+        SysTabletsNodeLimitReached,
     };
 
-    explicit TReason(const TString &message, EType type = EType::UNSPECIFIED)
-    : Message(message)
-    , Type(type)
+    TReason(const TString &message, EType type = EType::Unspecified)
+        : Message(message)
+        , Type(type)
     {}
 
     TReason() = default;
@@ -32,7 +33,7 @@ public:
 
 private:
     TString Message;
-    EType Type = EType::UNSPECIFIED;
+    EType Type = EType::Unspecified;
 }; 
 
 struct TErrorInfo {

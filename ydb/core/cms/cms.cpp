@@ -423,14 +423,14 @@ bool TCms::IsActionHostValid(const TAction &action, TErrorInfo &error) const
     if (!ClusterInfo->HasNode(action.GetHost())
         && ActionRequiresHost(action)) {
         error.Code = TStatus::NO_SUCH_HOST;
-        error.Reason = TReason(Sprintf("Unknown host '%s'", action.GetHost().data()));
+        error.Reason = Sprintf("Unknown host '%s'", action.GetHost().data());
         return false;
     }
 
     if (ClusterInfo->HasNode(action.GetHost())
         && action.GetType() == TAction::ADD_HOST) {
         error.Code = TStatus::WRONG_REQUEST;
-        error.Reason = TReason(Sprintf("Host '%s' already exists", action.GetHost().data()));
+        error.Reason = Sprintf("Host '%s' already exists", action.GetHost().data());
         return false;
     }
 #if 0
@@ -449,8 +449,8 @@ bool TCms::ParseServices(const TAction &action, TServices &services, TErrorInfo 
         EService value;
         if (!TryFromString(service, value)) {
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TReason(Sprintf("Invalid service '%s' (supported services: %s)",
-                                           service.data(), GetEnumAllNames<EService>().data()));
+            error.Reason = Sprintf("Invalid service '%s' (supported services: %s)",
+                                   service.data(), GetEnumAllNames<EService>().data());
             return false;
         }
 
@@ -514,7 +514,7 @@ bool TCms::CheckAccess(const TString &token,
 bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
     if (!State->Sentinel) {
         error.Code = TStatus::ERROR;
-        error.Reason = TReason("Unable to evict vdisks while Sentinel (self heal) is disabled");
+        error.Reason = "Unable to evict vdisks while Sentinel (self heal) is disabled";
         return false;
     }
 
@@ -525,17 +525,14 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
             break;
         default:
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TReason(TStringBuilder() << "Unable to evict vdisks to perform action: "
-                                                    << action.GetType());
+            error.Reason = TStringBuilder() << "Unable to evict vdisks to perform action: " << action.GetType();
             return false;
     }
 
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (!node->VDisks.empty()) {
             error.Code = TStatus::DISALLOW_TEMP;
-            error.Reason = TReason(TStringBuilder() << "VDisks eviction from host "
-                                                    << action.GetHost()
-                                                    << " has not yet been completed");
+            error.Reason = TStringBuilder() << "VDisks eviction from host " << action.GetHost() << " has not yet been completed";
             return false;
         }
     }
@@ -562,11 +559,11 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
         case TAction::ADD_DEVICES:
         case TAction::REMOVE_DEVICES:
             error.Code = TStatus::ERROR;
-            error.Reason = TReason(TStringBuilder() << "Unsupported action: " << action.GetType());
+            error.Reason = TStringBuilder() << "Unsupported action: " << action.GetType();
             return false;
         default:
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TReason(TStringBuilder() << "Unknown action: " << static_cast<int>(action.GetType()));
+            error.Reason = TStringBuilder() << "Unknown action: " << static_cast<int>(action.GetType());
             return false;
     }
 }
@@ -577,20 +574,21 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
                                    TErrorInfo &error,
                                    const TActorContext &ctx) const
 {
-    if (!TryToLockNode(node, opts, error)) {
+    if (!TryToLockNode(action, opts, node, error)) {
         return false;
     }
 
-    if (!TryToLockVDisks(node.VDisks, action, opts, error)) {
+    if (!TryToLockVDisks(action, opts, node.VDisks, error)) {
         return false;
     }
 
     // node is not locked
-    if (!TryToLockStateStorageReplica(node, action, opts, error, ctx)) {
+    if (!TryToLockStateStorageReplica(action, opts, node, error, ctx)) {
         return false;
     }
 
-    if (!AppData(ctx)->DisableCheckingSysNodesCms && !CheckSysTabletsNode(node, opts, error)) {
+    if (!AppData(ctx)->DisableCheckingSysNodesCms &&
+        !CheckSysTabletsNode(opts, node, error)) {
         return false;
     }
 
@@ -608,7 +606,7 @@ bool TCms::CheckActionRestartServices(const TAction &action,
 
     if (!services) {
         error.Code = TStatus::WRONG_REQUEST;
-        error.Reason = TReason("Empty services list");
+        error.Reason = "Empty services list";
         return false;
     }
 
@@ -623,9 +621,9 @@ bool TCms::CheckActionRestartServices(const TAction &action,
     }
 
     if (!found) {
-        error.Code = TStatus::NO_SUCH_SERVICE;
-        error.Reason = TReason(Sprintf("No such services: %s on host %s",
-            JoinSeq(", ", action.GetServices()).c_str(), action.GetHost().c_str()));
+        error.Code =  TStatus::NO_SUCH_SERVICE;
+        error.Reason = Sprintf("No such services: %s on host %s",
+            JoinSeq(", ", action.GetServices()).c_str(), action.GetHost().c_str());
         return false;
     }
 
@@ -652,9 +650,9 @@ bool TCms::CheckActionShutdownHost(const TAction &action,
     return true;
 }
 
-bool TCms::TryToLockStateStorageReplica(const TNodeInfo& node,
-                                        const TAction& action,
+bool TCms::TryToLockStateStorageReplica(const TAction& action,
                                         const TActionOptions& opts,
+                                        const TNodeInfo& node,
                                         TErrorInfo& error,
                                         const TActorContext &ctx) const
 {
@@ -662,7 +660,7 @@ bool TCms::TryToLockStateStorageReplica(const TNodeInfo& node,
 
     if (!ClusterInfo->IsStateStorageinfoReceived()) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason("Did not received state storage configuration");
+        error.Reason = "Did not received state storage configuration";
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -723,7 +721,7 @@ bool TCms::TryToLockStateStorageReplica(const TNodeInfo& node,
                     << ". Temporary (for a 2 minutes) locked rings: "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Maximum allowed number of unavailable rings for this mode: " << 1;
-                error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
+                error.Reason = TReason(message, TReason::EType::TooManyUnavailableStateStorageRings);
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -739,7 +737,7 @@ bool TCms::TryToLockStateStorageReplica(const TNodeInfo& node,
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Disabled rings: " << disabledRings
                     << ". Maximum allowed number of unavailable rings for this mode: " << (nToSelect - 1) / 2;
-                error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
+                error.Reason = TReason(message, TReason::EType::TooManyUnavailableStateStorageRings);
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -748,9 +746,9 @@ bool TCms::TryToLockStateStorageReplica(const TNodeInfo& node,
             break;
         default:
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TReason(Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
-                                           EAvailabilityMode_Name(opts.AvailabilityMode).data(),
-                                           static_cast<ui32>(opts.AvailabilityMode)));
+            error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
+                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(),
+                                   static_cast<ui32>(opts.AvailabilityMode));
             error.Deadline = defaultDeadline;
             return false;
     }
@@ -758,8 +756,8 @@ bool TCms::TryToLockStateStorageReplica(const TNodeInfo& node,
     return true;
 }
 
-bool TCms::CheckSysTabletsNode(const TNodeInfo &node,
-                               const TActionOptions &opts,
+bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
+                               const TNodeInfo &node,
                                TErrorInfo &error) const
 {
     if (node.Services & EService::DynamicNode || node.PDisks.size()) {
@@ -780,10 +778,14 @@ bool TCms::CheckSysTabletsNode(const TNodeInfo &node,
     return true;
 }
 
-bool TCms::TryToLockNode(const TNodeInfo& node,
+bool TCms::TryToLockNode(const TAction& action,
                          const TActionOptions& opts,
+                         const TNodeInfo& node,
                          TErrorInfo& error) const
 {   
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    duration += opts.PermissionDuration;
+
     auto result = ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode);
     if (!result.IsSuccess()) {
         error.Code = TStatus::DISALLOW_TEMP;
@@ -806,21 +808,21 @@ bool TCms::TryToLockNode(const TNodeInfo& node,
     return true;
 }
 
-bool TCms::TryToLockPDisk(const TPDiskInfo &pdisk,
-                          const TAction &action,
+bool TCms::TryToLockPDisk(const TAction &action,
                           const TActionOptions& opts,
+                          const TPDiskInfo &pdisk,
                           TErrorInfo &error) const
 {
-    if (!TryToLockVDisks(pdisk.VDisks, action, opts, error))
+    if (!TryToLockVDisks(action, opts, pdisk.VDisks, error))
         return false;
 
     error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
     return true;
 }
 
-bool TCms::TryToLockVDisks(const TSet<TVDiskID> &vdisks,
-                           const TAction &action,
+bool TCms::TryToLockVDisks(const TAction &action,
                            const TActionOptions& opts,
+                           const TSet<TVDiskID> &vdisks,
                            TErrorInfo &error) const
 {
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
@@ -830,7 +832,7 @@ bool TCms::TryToLockVDisks(const TSet<TVDiskID> &vdisks,
     auto point = ClusterInfo->PushRollbackPoint();
     for (const auto &vdId : vdisks) {
         const auto &vdisk = ClusterInfo->VDisk(vdId);
-        if (TryToLockVDisk(vdisk, opts, duration, error)) {
+        if (TryToLockVDisk(opts, vdisk, duration, error)) {
             ClusterInfo->AddVDiskTempLock(vdId, action);
         } else {
             res = false;
@@ -842,8 +844,8 @@ bool TCms::TryToLockVDisks(const TSet<TVDiskID> &vdisks,
     return res;
 }
 
-bool TCms::TryToLockVDisk(const TVDiskInfo &vdisk,
-                          const TActionOptions& opts,
+bool TCms::TryToLockVDisk(const TActionOptions& opts,
+                          const TVDiskInfo &vdisk,
                           TDuration duration,
                           TErrorInfo &error) const
 {
@@ -866,7 +868,7 @@ bool TCms::TryToLockVDisk(const TVDiskInfo &vdisk,
 
         if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount) {
             error.Code = TStatus::ERROR;
-            error.Reason = TReason(Sprintf("Affected group %u has unknown erasure type", groupId));
+            error.Reason = Sprintf("Affected group %u has unknown erasure type", groupId);
             error.Deadline = defaultDeadline;
             return false;
         }
@@ -874,7 +876,7 @@ bool TCms::TryToLockVDisk(const TVDiskInfo &vdisk,
         if (opts.AvailabilityMode != MODE_FORCE_RESTART
             && !group.Erasure.ParityParts()) {
             error.Code = TStatus::DISALLOW;
-            error.Reason = TReason(Sprintf("Affected group %u has no parity parts", groupId));
+            error.Reason = Sprintf("Affected group %u has no parity parts", groupId);
             error.Deadline = defaultDeadline;
             return false;
         }
@@ -896,8 +898,8 @@ bool TCms::TryToLockVDisk(const TVDiskInfo &vdisk,
         case MODE_FORCE_RESTART:
             if ( counters->GroupAlreadyHasLockedDisks() && opts.PartialPermissionAllowed) {
                 error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = TReason("You cannot get two or more disks from the same group at the same time"
-                                       " without specifying the PartialPermissionAllowed parameter");
+                error.Reason = "You cannot get two or more disks from the same group at the same time"
+                               " without specifying the PartialPermissionAllowed parameter";
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -905,9 +907,9 @@ bool TCms::TryToLockVDisk(const TVDiskInfo &vdisk,
             break;
         default:
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TReason(Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
-                                           EAvailabilityMode_Name(opts.AvailabilityMode).data(),
-                                           static_cast<ui32>(opts.AvailabilityMode)));
+            error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
+                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(),
+                                   static_cast<ui32>(opts.AvailabilityMode));
             error.Deadline = defaultDeadline;
             return false;
         }
@@ -928,7 +930,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
     for (const auto &device : action.GetDevices()) {
         if (ClusterInfo->HasPDisk(device)) {
             const auto &pdisk = ClusterInfo->PDisk(device);
-            if (TryToLockPDisk(pdisk, action, opts, error))
+            if (TryToLockPDisk(action, opts, pdisk, error))
                 ClusterInfo->AddPDiskTempLock(pdisk.PDiskId, action);
             else {
                 res = false;
@@ -936,7 +938,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
             }
         } else if (ClusterInfo->HasPDisk(action.GetHost(), device)) {
             const auto &pdisk = ClusterInfo->PDisk(action.GetHost(), device);
-            if (TryToLockPDisk(pdisk, action, opts, error))
+            if (TryToLockPDisk(action, opts, pdisk, error))
                 ClusterInfo->AddPDiskTempLock(pdisk.PDiskId, action);
             else {
                 res = false;
@@ -944,7 +946,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
             }
         } else if (ClusterInfo->HasVDisk(device)) {
             const auto &vdisk = ClusterInfo->VDisk(device);
-            if (TryToLockVDisk(vdisk, opts, duration, error))
+            if (TryToLockVDisk(opts, vdisk, duration, error))
                 ClusterInfo->AddVDiskTempLock(vdisk.VDiskId, action);
             else {
                 res = false;
@@ -952,8 +954,8 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
             }
         } else {
             error.Code = TStatus::NO_SUCH_DEVICE;
-            error.Reason = TReason(Sprintf("Unknown device %s (use cluster state command"
-                                           " to get list of known devices)", device.data()));
+            error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                                   " to get list of known devices)", device.data());
             res = false;
         }
     }
@@ -1435,14 +1437,14 @@ bool TCms::RemoveNotification(const TString &id, const TString &user, bool remov
     auto it = State->Notifications.find(id);
     if (it == State->Notifications.end()) {
         error.Code = TStatus::WRONG_REQUEST;
-        error.Reason = TReason("Unknown notification " + id);
+        error.Reason = "Unknown notification " + id;
         return false;
     }
 
     const auto &notification = it->second;
     if (notification.Owner != user) {
         error.Code = TStatus::WRONG_REQUEST;
-        error.Reason = TReason(Sprintf("Notification %s doesn't belong to %s", id.data(), user.data()));
+        error.Reason = Sprintf("Notification %s doesn't belong to %s", id.data(), user.data());
         return false;
     }
 
@@ -2039,7 +2041,7 @@ bool TCms::CheckNotificationDeadline(const TAction &action, TInstant time,
 {
     if (time + TDuration::MicroSeconds(action.GetDuration()) < ctx.Now()) {
         error.Code =  TStatus::WRONG_REQUEST;
-        error.Reason = TReason("Action already finished");
+        error.Reason = "Action already finished";
         return false;
     }
 
@@ -2055,7 +2057,7 @@ bool TCms::CheckNotificationRestartServices(const TAction &action, TInstant time
 
     if (!services) {
         error.Code =  TStatus::WRONG_REQUEST;
-        error.Reason = TReason("Empty services list");
+        error.Reason = "Empty services list";
         return false;
     }
 
@@ -2082,8 +2084,8 @@ bool TCms::CheckNotificationReplaceDevices(const TAction &action, TInstant time,
                 && !ClusterInfo->HasPDisk(action.GetHost(), device)
                 && !ClusterInfo->HasVDisk(device)) {
             error.Code = TStatus::NO_SUCH_DEVICE;
-            error.Reason = TReason(Sprintf("Unknown device %s (use cluster state command"
-                                           " to get list of known devices)", device.data()));
+            error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                                   " to get list of known devices)", device.data());
             return false;
         }
     }
@@ -2115,12 +2117,11 @@ bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
         case TAction::ADD_DEVICES:
         case TAction::REMOVE_DEVICES:
             error.Code = TStatus::ERROR;
-            error.Reason = TReason(TStringBuilder() << "Unsupported action: " << action.GetType());
+            error.Reason = TStringBuilder() << "Unsupported action: " << action.GetType();
             return false;
         default:
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TReason(TStringBuilder() << "Unknown action: "
-                                                    << static_cast<int>(action.GetType()));
+            error.Reason = TStringBuilder() << "Unknown action: " << static_cast<int>(action.GetType());
             return false;
     }
 }

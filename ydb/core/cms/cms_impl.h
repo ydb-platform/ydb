@@ -324,27 +324,28 @@ private:
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         TErrorInfo &error) const;
-    bool CheckSysTabletsNode(const TNodeInfo &node,
-        const TActionOptions &opts,
+    bool CheckSysTabletsNode(const TActionOptions &opts,
+        const TNodeInfo &node,
         TErrorInfo &error) const;
-    bool TryToLockNode(const TNodeInfo &node,
+    bool TryToLockNode(const NKikimrCms::TAction &action,
         const TActionOptions &options,
+        const TNodeInfo &node,
         TErrorInfo &error) const;
-    bool TryToLockPDisk(const TPDiskInfo &pdisk,
-        const NKikimrCms::TAction &action,
+    bool TryToLockPDisk(const NKikimrCms::TAction &action,
         const TActionOptions &options,
+        const TPDiskInfo &pdisk,
         TErrorInfo &error) const;
-    bool TryToLockVDisks(const TSet<TVDiskID> &vdisks,
-        const NKikimrCms::TAction &action,
+    bool TryToLockVDisks(const NKikimrCms::TAction &action,
         const TActionOptions &options,
+        const TSet<TVDiskID> &vdisks,
         TErrorInfo &error) const;
-    bool TryToLockVDisk(const TVDiskInfo &vdisk,
-        const TActionOptions &options,
+    bool TryToLockVDisk(const TActionOptions &options,
+        const TVDiskInfo &vdisk,
         TDuration duration,
         TErrorInfo &error) const;
-    bool TryToLockStateStorageReplica(const TNodeInfo &node,
-        const NKikimrCms::TAction &action,
+    bool TryToLockStateStorageReplica(const NKikimrCms::TAction &action,
         const TActionOptions &options,
+        const TNodeInfo &node,
         TErrorInfo &error,
         const TActorContext &ctx) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,

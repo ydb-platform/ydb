@@ -32,18 +32,16 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
     if (State == RESTART) {
         Y_ABORT_UNLESS(Lock.Defined());
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason(Sprintf("%s is restarting (permission %s owned by %s)",
-                                       PrettyItemName().data(), Lock->PermissionId.data(),
-                                       Lock->Owner.data()));
+        error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
+                               PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
         error.Deadline = Lock->ActionDeadline;
         return true;
     }
 
     if (Lock.Defined()) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason(Sprintf("%s has planned shutdown (permission %s owned by %s)",
-                                       PrettyItemName().data(), Lock->PermissionId.data(),
-                                       Lock->Owner.data()));
+        error.Reason = Sprintf("%s has planned shutdown (permission %s owned by %s)",
+                               PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
         error.Deadline = Lock->ActionDeadline;
         return true;
     }
@@ -57,26 +55,25 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
             continue;
 
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason(Sprintf("%s has planned shutdown (notification %s owned by %s)",
-                                       PrettyItemName().data(), lock.NotificationId.data(),
-                                       lock.Owner.data()));
+        error.Reason = Sprintf("%s has planned shutdown (notification %s owned by %s)",
+                               PrettyItemName().data(), lock.NotificationId.data(), lock.Owner.data());
         error.Deadline = lock.LockDeadline;
         return true;
     }
 
     if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < DeactivatedLocksPriority) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason(Sprintf("%s has scheduled action %s owned by %s (priority %" PRIi32 " vs %" PRIi32 ")",
-                                       PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),
-                                       ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Priority,
-                                       DeactivatedLocksPriority));
+        error.Reason = Sprintf("%s has scheduled action %s owned by %s (priority %" PRIi32 " vs %" PRIi32 ")",
+                               PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),
+                               ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Priority,
+                               DeactivatedLocksPriority);
         error.Deadline = now + defaultRetryTime;
         return true;
     }
 
     if (!TempLocks.empty()) {
         error.Code = TStatus::DISALLOW;
-        error.Reason = TReason(Sprintf("%s has temporary lock", PrettyItemName().data()));
+        error.Reason = Sprintf("%s has temporary lock", PrettyItemName().data());
         error.Deadline = now + defaultRetryTime;
         error.RollbackPoint = TempLocks.back().RollbackPoint;
         return true;
@@ -90,16 +87,15 @@ bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
     if (State == RESTART) {
         Y_ABORT_UNLESS(Lock.Defined());
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason(Sprintf("%s is restarting (permission %s owned by %s)",
-                                       PrettyItemName().data(), Lock->PermissionId.data(),
-                                       Lock->Owner.data()));
+        error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
+                               PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
         error.Deadline = Lock->ActionDeadline;
         return true;
     }
 
     if (State != UP) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TReason(Sprintf("%s is down", PrettyItemName().data()));
+        error.Reason = Sprintf("%s is down", PrettyItemName().data());
         error.Deadline = defaultDeadline;
         return true;
     }

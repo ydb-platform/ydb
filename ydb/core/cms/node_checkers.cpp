@@ -107,11 +107,10 @@ INodesChecker::TTryToLockResult TNodesLimitsCounterBase::TryToLockNode(ui32 node
             break;
         case NODE_STATE_UNSPECIFIED:
         case NODE_STATE_LOCKED:
-        case NODE_STATE_RESTART: {
-            TReason reason = TReason(TStringBuilder() << ReasonPrefix(nodeId)
-                << ": node state: '" << nodeState << "'");
-            return TTryToLockResult::Fail(reason);
-        }
+        case NODE_STATE_RESTART:
+            return TTryToLockResult::Fail(
+                TStringBuilder() << ReasonPrefix(nodeId) << ": node state: '" << nodeState << "'"
+            );
         case NODE_STATE_DOWN:
             // Allow to maintain down/unavailable node
             return TTryToLockResult::Success();
@@ -129,24 +128,22 @@ INodesChecker::TTryToLockResult TNodesLimitsCounterBase::TryToLockNode(ui32 node
     const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
 
     if (DisabledNodesLimit > 0 && disabledNodes > DisabledNodesLimit) {
-        TString message = TStringBuilder() << ReasonPrefix(nodeId)
+        const TString message = TStringBuilder() << ReasonPrefix(nodeId)
             << ": too many unavailable nodes."
             << " Locked: " << LockedNodesCount
             << ", down: " << DownNodesCount
             << ", limit: " << DisabledNodesLimit;
-        TReason reason = TReason(message, DisabledNodesLimitReachedReasonType());
-        return TTryToLockResult::Fail(reason);
+        return TTryToLockResult::Fail(DisabledNodesLimitReachedReasonType(), message);
     }
 
     if (DisabledNodesRatioLimit > 0 && (disabledNodes * 100 > NodeToState.size() * DisabledNodesRatioLimit)) {
-        TString message = TStringBuilder() << ReasonPrefix(nodeId)
+        const TString message = TStringBuilder() << ReasonPrefix(nodeId)
             << ": too many unavailable nodes."
             << " Locked: " << LockedNodesCount
             << ", down: " << DownNodesCount
             << ", total: " << NodeToState.size()
             << ", limit: " << DisabledNodesRatioLimit << "%";
-        TReason reason = TReason(message, DisabledNodesLimitReachedReasonType());
-        return TTryToLockResult::Fail(reason);
+        return TTryToLockResult::Fail(DisabledNodesLimitReachedReasonType(), message);
     }
 
     return TTryToLockResult::Success();
@@ -167,11 +164,10 @@ INodesChecker::TTryToLockResult TSysTabletsNodesCounter::TryToLockNode(ui32 node
             break;
         case NODE_STATE_UNSPECIFIED:
         case NODE_STATE_LOCKED:
-        case NODE_STATE_RESTART: {
-            TReason reason = TReason(TStringBuilder() << "Cannot lock node '" << nodeId << "'"
-                << ": node state: '" << nodeState << "'");
-            return TTryToLockResult::Fail(reason);
-        }      
+        case NODE_STATE_RESTART:
+            return TTryToLockResult::Fail(
+                TStringBuilder() << "Cannot lock node '" << nodeId << "'" << ": node state: '" << nodeState << "'"
+            ); 
         case NODE_STATE_DOWN:
             // Allow to maintain down/unavailable node
             return TTryToLockResult::Success();
@@ -204,14 +200,13 @@ INodesChecker::TTryToLockResult TSysTabletsNodesCounter::TryToLockNode(ui32 node
             Y_ABORT("Unknown availability mode");
     }
 
-    TString message = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
+    const TString message = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
         << ": tablet '" << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType) << "'"
         << " has too many unavailable nodes."
         << " Locked: " << LockedNodesCount
         << ", down: " << DownNodesCount
         << ", limit: " << limit;
-    TReason reason = TReason(message, TReason::EType::SYS_TABLETS_NODE_LIMIT_REACHED);
-    return TTryToLockResult::Fail(reason);
+    return TTryToLockResult::Fail(TReason::EType::SysTabletsNodeLimitReached, message);
 }
 
 } // namespace NKikimr::NCms

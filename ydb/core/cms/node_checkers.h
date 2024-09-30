@@ -35,29 +35,37 @@ public:
 
         static TTryToLockResult Fail(const TReason &reason) {
             return TTryToLockResult(false, reason);
-        };
+        }
+
+        static TTryToLockResult Fail(TReason::EType type, const TString& msg) {
+            return Fail(TReason(msg, type));
+        }
+
+        static TTryToLockResult Fail(const TString& msg) {
+            return Fail(TReason(msg));
+        }
 
         bool IsSuccess() const {
             return IsSuccess_;
         }
 
-        TReason GetReason() const {
+        const TReason& GetReason() const {
             return Reason;
         }
 
     private:
         TTryToLockResult(bool isSuccess, const TReason &reason)
-        : IsSuccess_(isSuccess)
-        , Reason(reason)
+            : IsSuccess_(isSuccess)
+            , Reason(reason)
         {}
 
         explicit TTryToLockResult(bool isSuccess)
-        : IsSuccess_(isSuccess)
+            : IsSuccess_(isSuccess)
         {}
 
     private:
         bool IsSuccess_ = false;
-        TReason Reason;
+        const TReason Reason;
     };
 
 protected:
@@ -119,7 +127,7 @@ protected:
     }
     
     virtual TReason::EType DisabledNodesLimitReachedReasonType() const {
-        return TReason::EType::DISABLED_NODES_LIMIT_REACHED;
+        return TReason::EType::DisabledNodesLimitReached;
     };
 
 public:
@@ -147,7 +155,7 @@ protected:
     }
 
     TReason::EType DisabledNodesLimitReachedReasonType() const override final {
-        return TReason::EType::TENANT_DISABLED_NODES_LIMIT_REACHED;
+        return TReason::EType::TenantDisabledNodesLimitReached;
     }
 
 public:

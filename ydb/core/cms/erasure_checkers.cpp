@@ -82,7 +82,7 @@ bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorIn
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
             << ". Down: " << DumpVDisksInfo(Down, info);
-        error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
+        error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -156,7 +156,7 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
             << ". Down: " << DumpVDisksInfo(Down, info);
-        error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
+        error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -199,7 +199,7 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
             << ". Number of data centers with unavailable vdisks: " << DataCenterDisabledNodes.size()
             << ". Locked: " << DumpVDisksInfo(Locked, info)
             << ". Down: " << DumpVDisksInfo(Down, info);
-        error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
+        error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -209,7 +209,7 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
         << ": too many unavailable vdisks"
         << ". Locked: " << DumpVDisksInfo(Locked, info)
         << ". Down: " << DumpVDisksInfo(Down, info);
-    error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
+    error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
     error.Deadline = defaultDeadline;
 
     return false;

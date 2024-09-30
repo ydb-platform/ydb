@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 
+
 Y_UNIT_TEST_SUITE(TEventSerialization) {
     struct TMockEvent: public NActors::IEventBase {
         TBigMessage* msg;

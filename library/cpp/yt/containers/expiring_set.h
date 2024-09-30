@@ -21,6 +21,8 @@ public:
     template <class TItems>
     void InsertMany(TInstant now, const TItems& items);
 
+    void Remove(const TItem& item);
+
     void Expire(TInstant now);
 
     void Clear();

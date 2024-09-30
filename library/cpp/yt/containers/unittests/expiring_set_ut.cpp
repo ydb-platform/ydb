@@ -96,6 +96,36 @@ TEST(TExpiringSetTest, Clear)
     EXPECT_FALSE(set.Contains(1));
 }
 
+TEST(TExpiringSetTest, RemoveBeforeExpire)
+{
+    TExpiringSet<int> set;
+    set.SetTTl(TDuration::Seconds(1));
+
+    set.Insert(0_ts, 1);
+    EXPECT_EQ(set.GetSize(), 1);
+    EXPECT_TRUE(set.Contains(1));
+
+    set.Remove(1);
+    EXPECT_EQ(set.GetSize(), 0);
+    EXPECT_FALSE(set.Contains(1));
+}
+
+TEST(TExpiringSetTest, RemoveAfterExpire)
+{
+    TExpiringSet<int> set;
+    set.SetTTl(TDuration::Seconds(1));
+
+    set.Insert(0_ts, 1);
+    set.Expire(2_ts);
+
+    EXPECT_EQ(set.GetSize(), 0);
+    EXPECT_FALSE(set.Contains(1));
+
+    set.Remove(1);
+    EXPECT_EQ(set.GetSize(), 0);
+    EXPECT_FALSE(set.Contains(1));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

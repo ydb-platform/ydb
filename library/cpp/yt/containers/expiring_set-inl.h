@@ -4,8 +4,6 @@
 #include "expiring_set.h"
 #endif
 
-#include <array>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,8 +17,10 @@ void TExpiringSet<TItem, THash, TEqual>::SetTTl(TDuration ttl)
 template <class TItem, class THash, class TEqual>
 void TExpiringSet<TItem, THash, TEqual>::Insert(TInstant now, const TItem& item)
 {
-    std::array<std::reference_wrapper<const TItem>, 1> items{std::cref(item)};
-    InsertMany(now, items);
+    Expire(now);
+    auto deadline = now + TTl_;
+    ItemToDeadline_[item] = deadline;
+    ExpirationQueue_.push(TItemPack{.Items = {item}, .Deadline = deadline});
 }
 
 template <class TItem, class THash, class TEqual>
@@ -33,6 +33,12 @@ void TExpiringSet<TItem, THash, TEqual>::InsertMany(TInstant now, const TItems& 
         ItemToDeadline_[item] = deadline;
     }
     ExpirationQueue_.push(TItemPack{.Items = {items.begin(), items.end()}, .Deadline = deadline});
+}
+
+template <class TItem, class THash, class TEqual>
+void TExpiringSet<TItem, THash, TEqual>::Remove(const TItem& item)
+{
+    ItemToDeadline_.erase(item);
 }
 
 template <class TItem, class THash, class TEqual>

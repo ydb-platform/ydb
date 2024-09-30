@@ -735,7 +735,7 @@ int RunMain(int argc, const char* argv[])
         }
 
         rl.rlim_cur = memLimit * 1024 * 1024;
-        if (setrlimit(RLIMIT_AS, &rl)) {
+        if (setrlimit(RLIMIT_DATA, &rl)) {
             ythrow TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimit << " mbytes";
         }
 #else

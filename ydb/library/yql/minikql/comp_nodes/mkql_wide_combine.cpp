@@ -348,21 +348,6 @@ class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
         std::unique_ptr<TState> InMemoryProcessingState;
         TAsyncWriteOperation AsyncWriteOperation;
 
-        bool SpillStateTillYield() {
-            MKQL_ENSURE(AsyncWriteOperation == std::nullopt, "Internal logic error");
-            while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState->Extract())) {
-                AsyncWriteOperation = SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-                    for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
-                        //releasing values stored in unsafe TUnboxedValue buffer
-                        keyAndState[i].UnRef();
-                    }
-                    if (AsyncWriteOperation) return true;
-
-                    AsyncWriteOperation = SpilledState->FinishWriting();
-                    if (bucket.AsyncWriteOperation) return true;
-            }
-        }
-
         enum class EBucketState {
             InMemory,
             SpillingState,
@@ -371,7 +356,6 @@ class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
 
         EBucketState BucketState = EBucketState::InMemory;
         ui64 LineCount = 0;
-        bool HasStateInMemory = false;
     };
 
     enum class EOperatingMode {
@@ -544,20 +528,6 @@ private:
         return ProcessSpilledData();
     }
 
-    i32 GetNextBucketIdToSpill() const {
-        ui64 maxLineCount = 0;
-        i32 maxLineBucketInd = -1;
-        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            const auto& bucket = SpilledBuckets[i];
-            if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && bucket.LineCount >= maxLineCount) {
-                maxLineCount = bucket.LineCount;
-                maxLineBucketInd = i;
-            }
-        }
-
-        return maxLineBucketInd;
-    }
-
     i64 SplitStateSpillingBucket = -1;
 
     bool SplitStateIntoBucketsAndWait() {
@@ -575,10 +545,10 @@ private:
                     keyAndState[i].UnRef();
                 }
                 if (bucket.AsyncWriteOperation) return true;
-            }
 
-            bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
-            if (bucket.AsyncWriteOperation) return true;
+                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                if (bucket.AsyncWriteOperation) return true;
+            }
 
             SplitStateSpillingBucket = -1;
             bucket.InMemoryProcessingState->ReadMore<false>();
@@ -617,7 +587,17 @@ private:
             }
 
             if (!HasMemoryForProcessing()) {
-                auto  bucketNumToSpill = GetNextBucketIdToSpill();
+
+                i64 bucketNumToSpill = -1;
+                ui64 sizeToSpill = 0;
+                for (ui64 i = 0; i < SpillingBucketsCount; ++i) {
+                    if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
+                        if (SpilledBuckets[i].LineCount >= sizeToSpill) {
+                            bucketNumToSpill = i;
+                            sizeToSpill = SpilledBuckets[i].LineCount;
+                        }
+                    }
+                }
                 if (bucketNumToSpill == -1) continue;
 
                 SplitStateSpillingBucket = bucketNumToSpill;
@@ -647,7 +627,6 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        // std::cerr << "MISHA: " << AllowSpilling << Ctx.SpillerFactory << IsSwitchToSpillingModeCondition() << std::endl;
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             LogMemoryUsage();
 
@@ -721,8 +700,16 @@ private:
             return true;
         }
         while (InMemoryBucketsCount > 0) {
-            auto maxLineBucketInd = GetNextBucketIdToSpill();
-            MKQL_ENSURE(maxLineBucketInd >= 0, "Internal logic error");
+            ui64 maxLineCount = 0;
+            ui32 maxLineBucketInd = (ui32)-1;
+            for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+                const auto& bucket = SpilledBuckets[i];
+                if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && (maxLineBucketInd == (ui32)-1 || bucket.LineCount > maxLineCount)) {
+                    maxLineCount = bucket.LineCount;
+                    maxLineBucketInd = i;
+                }
+            }
+            MKQL_ENSURE(maxLineBucketInd != (ui32)-1, "Internal logic error");
 
             auto& bucketToSpill = SpilledBuckets[maxLineBucketInd];
             SpillMoreStateFromBucket(bucketToSpill);

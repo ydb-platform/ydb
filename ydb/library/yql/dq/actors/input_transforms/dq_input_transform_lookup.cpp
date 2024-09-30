@@ -90,9 +90,9 @@ public:
             .MaxKeysInRequest = 1000 // TODO configure me
         };
         auto guard = Guard(*Alloc);
-        auto LookupSource = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
-        MaxKeysInRequest = LookupSource.first->GetMaxSupportedKeysInRequest();
-        LookupSourceId = RegisterWithSameMailbox(LookupSource.second);
+        auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
+        MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
+        LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
     }
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;

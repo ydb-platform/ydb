@@ -16,6 +16,7 @@
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
+#include "blobs_action/transaction/tx_clean_versions.h"
 #include "bg_tasks/events/events.h"
 
 #include "data_sharing/destination/session/destination.h"
@@ -521,6 +522,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupTtl();
     SetupGC();
     SetupCleanupInsertTable();
+    SetupCleanupUnusedSchemaVersions();
 }
 
 class TChangesTask: public NConveyor::ITask {
@@ -892,6 +894,14 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
     StartCompaction(ev->Get()->GetGuard());
 }
 
+void TColumnShard::SetupCleanupUnusedSchemaVersions() {
+    auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    if (primaryIndex.MutableVersionCounts().IsEmpty()) {
+        return;
+    }
+    Execute(new TTxSchemaVersionsCleanup(this));
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxGarbageCollectionFinished(this, ev->Get()->Action), ctx);
 }
@@ -1221,6 +1231,29 @@ const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPoint
 
 TDuration TColumnShard::GetMaxReadStaleness() {
     return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean();
+}
+
+void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db) {
+    auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
+    ui64 lastVersion = primaryIndex.GetVersionedIndex().GetLastSchemaVersion();
+    primaryIndex.MutableVersionCounts().EnumerateVersionsToErase([&](ui64 version, auto& key) {
+        if (version != lastVersion) {
+            LOG_S_DEBUG("Removing schema version from db " << version << " tablet id " << TabletID());
+            RemovedSchemaVersions.insert(version);
+            table.Key(key.Id, key.PlanStep, key.TxId).Delete();
+        }
+    });
+}
+
+void TColumnShard::CompleteSchemaVersionsCleanup() {
+    auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    for (ui64 version: RemovedSchemaVersions) {
+        LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << TabletID());
+        primaryIndex.RemoveSchemaVersion(version);
+        primaryIndex.MutableVersionCounts().VersionsToErase.erase(version);
+    }
+    RemovedSchemaVersions.clear();
 }
 
 }

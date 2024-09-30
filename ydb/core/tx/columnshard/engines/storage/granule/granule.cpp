@@ -6,10 +6,13 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
+#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 
 namespace NKikimr::NOlap {
 
-void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
+void TGranuleMeta::UpsertPortion(const TPortionInfo& info, TVersionCounts& versionCounts) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
     auto it = Portions.find(info.GetPortion());
     AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
@@ -23,6 +26,10 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
         OnBeforeChangePortion(nullptr);
         auto portionNew = std::make_shared<TPortionInfo>(info);
         it = Portions.emplace(portionNew->GetPortion(), portionNew).first;
+        auto schemaVersionOpt = info.GetSchemaVersionOptional();
+        if (schemaVersionOpt.has_value()) {
+            versionCounts.VersionAddRef(*schemaVersionOpt);
+        }
     } else {
         OnBeforeChangePortion(it->second);
         it->second = std::make_shared<TPortionInfo>(info);
@@ -30,13 +37,17 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
     OnAfterChangePortion(it->second, nullptr);
 }
 
-bool TGranuleMeta::ErasePortion(const ui64 portion) {
+bool TGranuleMeta::ErasePortion(const ui64 portion, TVersionCounts& versionCounts) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
         return false;
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
+        auto schemaVersionOpt = it->second->GetSchemaVersionOptional();
+        if (schemaVersionOpt.has_value()) {
+            versionCounts.VersionRemoveRef(*schemaVersionOpt);
+        }
     }
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
@@ -141,7 +152,11 @@ TGranuleMeta::TGranuleMeta(
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
+std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts* versionCounts) {
+    auto schemaVersionOpt = portion.GetSchemaVersionOptional();
+    if (schemaVersionOpt.has_value()) {
+        versionCounts.VersionAddRef(*schemaVersionOpt);
+    }
     if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
         const TInsertWriteId insertWriteId = portion.GetInsertWriteIdVerified();
         auto emplaceInfo = InsertedPortions.emplace(insertWriteId, std::make_shared<TPortionInfo>(std::move(portion)));

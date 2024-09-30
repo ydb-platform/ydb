@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
 
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -329,7 +330,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void UpsertPortion(const TPortionInfo& info);
+    void UpsertPortion(const TPortionInfo& info, TVersionCounts& versionCounts);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
@@ -340,7 +341,7 @@ public:
             ;
     }
 
-    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion);
+    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts& versionCounts);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
@@ -376,7 +377,7 @@ public:
         return it->second;
     }
 
-    bool ErasePortion(const ui64 portion);
+    bool ErasePortion(const ui64 portion, TVersionCounts& versionCounts);
 
     explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 

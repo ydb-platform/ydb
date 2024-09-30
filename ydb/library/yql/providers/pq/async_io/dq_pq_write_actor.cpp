@@ -166,7 +166,6 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-        
         SINK_LOG_T("SendData. Batch: " << batch.RowCount()
             << ". Checkpoint: " << checkpoint.Defined()
             << ". Finished: " << finished);

@@ -181,8 +181,10 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 }
 
 void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
+    if (fqCfgFile.empty()) {
+        return;
+    }
     auto configData = TFileInput(fqCfgFile).ReadAll();
-
     using ::google::protobuf::TextFormat;
     if (!TextFormat::ParseFromString(configData, fqConfig)) {
         ythrow yexception() << "Bad format of fq configuration";
@@ -340,8 +342,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
     NYql::NLog::ELevel loggingLevel,
-    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
-    const TVector<TActorSystemManager::TSetupModifier>& setupModifiers
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -352,9 +353,6 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
     }
 
-    std::for_each(setupModifiers.cbegin(), setupModifiers.cend(), [&](const auto& mod) {
-        actorSystemManager->ApplySetupModifier(mod);
-    });
     // One can modify actor system setup via actorSystemManager->ApplySetupModifier().
     // TODO: https://st.yandex-team.ru/YQL-16131
     // This will be useful for DQ Gateway initialization refactoring.
@@ -935,12 +933,10 @@ int RunMain(int argc, const char* argv[])
 
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
-    TVector<TActorSystemManager::TSetupModifier> setupModifiers;
-
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory, setupModifiers);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {

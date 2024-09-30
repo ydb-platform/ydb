@@ -232,8 +232,7 @@ public:
         const TVector<TString>& columns,
         TCallback callback)
         : Sql(GenerateSql(columns)) {
-        //auto options = NYql::NPureCalc::TProgramFactoryOptions();
-        auto options = NYql::NPureCalc::TProgramFactoryOptions().SetUDFsDir("/home/kardymon-d/ydb3/ydb/ydb/library/yql/udfs/common");
+        auto options = NYql::NPureCalc::TProgramFactoryOptions();
         auto factory = NYql::NPureCalc::MakeProgramFactory(options);
 
         LOG_ROW_DISPATCHER_DEBUG("Creating program...");

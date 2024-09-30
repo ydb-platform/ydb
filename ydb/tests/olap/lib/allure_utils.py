@@ -4,6 +4,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from urllib.parse import urlencode
 from datetime import datetime
+from typing import Optional
 
 
 def allure_test_description(
@@ -11,7 +12,9 @@ def allure_test_description(
     test: str,
     addition_table_strings: dict[str, any] = {},
     attachments: tuple[str, str, allure.attachment_type] = [],
-    refference_set: str = ''
+    refference_set: str = '',
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
 ):
     def _pretty_str(s):
         return ' '.join(s.split('_')).capitalize()
@@ -28,12 +31,17 @@ def allure_test_description(
         YdbCluster.monitoring_cluster if YdbCluster.monitoring_cluster is not None else test_info['name']
     )
     test_info.update(addition_table_strings)
+    monitoring_params = ''
+    if start_time is not None:
+        monitoring_params += f'&from={int(start_time * 1000)}'
+    if end_time is not None:
+        monitoring_params += f'&to={int(end_time * 1000)}'
     test_info.update(
         {
             'table_path': YdbCluster.tables_path,
             'monitoring': (
                 f"<a target='_blank' href='https://monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?"
-                f"p.cluster={monitoring_cluster}&p.database=/{test_info['database']}'>link</a>"
+                f"p.cluster={monitoring_cluster}&p.database=/{test_info['database']}{monitoring_params}'>link</a>"
             ),
             'coredumps': f"<a target='_blank' href='{core_link}'>link</a>",
             'db_admin': (

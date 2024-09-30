@@ -578,7 +578,11 @@ public:
                 Limit += group->Limit;
                 Read += group->Read;
                 Write += group->Write;
-                Available = std::min(Available, group->Available);
+                if (Available) {
+                    Available = std::min(Available, group->Available);
+                } else {
+                    Available = group->Available;
+                }
                 PutTabletLogLatency = std::max(PutTabletLogLatency, group->PutTabletLogLatency);
                 PutUserDataLatency = std::max(PutUserDataLatency, group->PutUserDataLatency);
                 GetFastLatency = std::max(GetFastLatency, group->GetFastLatency);
@@ -710,6 +714,8 @@ public:
             result = EGroupFields::PDiskId;
         } else if (field == "Latency") {
             result = EGroupFields::Latency;
+        } else if (field == "Available") {
+            result = EGroupFields::Available;
         }
         return result;
     }

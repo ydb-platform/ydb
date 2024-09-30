@@ -718,9 +718,9 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                 "MyRoot", domainUid, schemeRoot,
                 planResolution,
-                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
+                TVector<ui64>{TTestTxConfig::Coordinator},
                 TVector<ui64>{},
-                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
+                TVector<ui64>{TTestTxConfig::TxAllocator},
                 DefaultPoolKinds(2));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();

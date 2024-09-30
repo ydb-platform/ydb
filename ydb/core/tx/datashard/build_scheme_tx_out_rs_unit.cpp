@@ -74,18 +74,11 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
         TString rsBody;
         bool extended = false;
 
-        const bool mvcc = DataShard.IsMvccEnabled();
-
-        TRowVersion minVersion = mvcc ? TRowVersion(op->GetStep(), op->GetTxId()).Next()
-                                      : DataShard.GetSnapshotManager().GetMinWriteVersion();
-        TRowVersion completeEdge = mvcc ? DataShard.GetSnapshotManager().GetCompleteEdge()
-                                    : TRowVersion::Min();
-        TRowVersion incompleteEdge = mvcc ? DataShard.GetSnapshotManager().GetIncompleteEdge()
-                                     : TRowVersion::Min();
-        TRowVersion immediateWriteEdge = mvcc ? DataShard.GetSnapshotManager().GetImmediateWriteEdge()
-                                              : TRowVersion::Min();
-        TRowVersion lowWatermark = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark() :
-                                   TRowVersion::Min();
+        TRowVersion minVersion = TRowVersion(op->GetStep(), op->GetTxId()).Next();
+        TRowVersion completeEdge = DataShard.GetSnapshotManager().GetCompleteEdge();
+        TRowVersion incompleteEdge = DataShard.GetSnapshotManager().GetIncompleteEdge();
+        TRowVersion immediateWriteEdge = DataShard.GetSnapshotManager().GetImmediateWriteEdge();
+        TRowVersion lowWatermark = DataShard.GetSnapshotManager().GetLowWatermark();
 
         if (minVersion || completeEdge || incompleteEdge || immediateWriteEdge || lowWatermark || txSnapshot->HasOpenTxs())
             extended = true; // Must use an extended format

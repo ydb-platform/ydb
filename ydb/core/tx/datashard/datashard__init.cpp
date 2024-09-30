@@ -43,7 +43,6 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         bool done = ReadEverything(txc);
 
         if (done && Self->State != TShardState::Offline) {
-            Self->SnapshotManager.Fix_KIKIMR_12289(txc.DB);
             Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB);
             for (const auto& pr : Self->TableInfos) {
                 pr.second->Fix_KIKIMR_17222(txc.DB);
@@ -98,9 +97,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     {
         // Initialize snapshot expiration queue with current context time
         Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
-
-        if (Self->GetSnapshotManager().HasExpiringSnapshots())
-            Self->PlanCleanup(ctx);
+        Self->PlanCleanup(ctx);
     }
 
     // Find subdomain path id if needed
@@ -129,9 +126,6 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
             }
         }
     }
-
-    // Switch mvcc state if needed
-    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 #define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
@@ -591,13 +585,10 @@ public:
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
 
-            auto state = EMvccState::MvccEnabled;
-            Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
-
-            LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
-                << " MVCC state switched to  enabled state");
-
-            Self->MvccSwitchState = TSwitchState::DONE;
+            // New shards had mvcc initially enabled for a while now
+            // We need to persist this as long as previous versions could pick
+            // up missing values interpreting it as disabled.
+            Self->PersistSys(db, Schema::SysMvcc_State, (ui32)EMvccState::MvccEnabled);
         }
 
         //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys

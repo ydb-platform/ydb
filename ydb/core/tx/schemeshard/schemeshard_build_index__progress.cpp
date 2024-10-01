@@ -333,9 +333,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
         const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
-        NKikimrScheme::EStatus status;
-        TString errStr;
-        Y_ABORT_UNLESS(NTableIndex::CommonCheck(tableInfo, indexDesc, path.DomainInfo()->GetSchemeLimits(), false, implTableColumns, status, errStr));
+        const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
+        const auto& indexKeys = NTableIndex::ExtractInfo(indexDesc);
+        implTableColumns = CalcTableImplDescription(buildInfo.IndexType, baseTableColumns, indexKeys);
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
+        implTableColumns.Columns.emplace(indexKeys.KeyColumns[0]);
         modifyScheme.ClearInitiateIndexBuild();
     }
 

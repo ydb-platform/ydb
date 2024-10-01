@@ -396,6 +396,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
+
             action.MutableIssue()->CopyFrom(ConvertIssue(error.Reason));
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {

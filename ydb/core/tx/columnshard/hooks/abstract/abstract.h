@@ -272,7 +272,7 @@ public:
         return nullptr;
     }
 
-    virtual std::optional<NColumnShard::NTiers::TConfigsSnapshot> GetFallbackTiersSnapshot() const {
+    virtual std::optional<NColumnShard::NTiers::TConfigsSnapshot> GetTiersSnapshotOverride() const {
         return std::nullopt;
     }
 

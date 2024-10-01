@@ -52,7 +52,7 @@ private:
 public:
     TBaseObject::TPtr DeserializeFromRecord(const NInternal::TTableRecord& value) const override {
         auto recordSet = value.BuildRecordSet();
-        AFL_VERIFY(recordSet.columnsSize() == 1);
+        AFL_VERIFY(recordSet.rowsSize() == 1);
         typename TObject::TDecoder decoder(recordSet);
         auto result = std::make_shared<TObject>();
         if (!result->DeserializeFromRecord(decoder, recordSet.Getrows(0))) {

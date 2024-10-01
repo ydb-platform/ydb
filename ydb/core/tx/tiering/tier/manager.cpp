@@ -15,10 +15,10 @@ TTiersManager::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
         return TConclusionStatus::Fail("tier name cannot start with '$', '_' characters");
     }
     {
-        auto fConfig = settings.GetFeaturesExtractor().Extract(TTierConfig::TDecoder::TierConfig);
+        const std::optional<TString>& fConfig = settings.GetFeaturesExtractor().Extract(TTierConfig::TDecoder::TierConfig);
         if (fConfig) {
             NKikimrSchemeOp::TStorageTierConfig proto;
-            if (!::google::protobuf::TextFormat::ParseFromString(*fConfig, &proto)) {
+            if (!proto.ParseFromString(*fConfig)) {
                 return TConclusionStatus::Fail("incorrect proto format");
             }
             result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));

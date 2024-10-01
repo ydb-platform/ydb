@@ -1,5 +1,6 @@
 #include "common.h"
 #include "manager.h"
+#include "fetcher.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
@@ -10,126 +11,26 @@ namespace NKikimr::NColumnShard {
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
-    enum ESchemeObject {
-        UNKNOWN = 0,
-        TIER = 1,
-        TIERING = 2,
-    };
-
     std::shared_ptr<TTiersManager> Owner;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
+    TActorId TieringFetcher;
 
-    THashSet<TString> WatchedTiers;
-    THashSet<TString> WatchedTierings;
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
+    THashMap<TString, NTiers::TTierConfig> Tiers;
+    THashMap<TString, NTiers::TTieringRule> Tierings;
 
 private:
-    template <typename T>
-    static T DeserializeObject(const NKikimrSchemeOp::TAbstractObjectProperties& properties) {
-        NMetadata::NInternal::TTableRecord record;
-        AFL_VERIFY(record.DeserializeFromProto(properties.GetProperties()))("proto", properties.DebugString());
-
-        const auto object = NMetadata::NModifications::TObjectManager<T>().DeserializeFromRecord(record);
-        auto castObject = std::dynamic_pointer_cast<T>(object);
-        AFL_VERIFY(castObject);
-
-        return *castObject;
-    }
-
     TActorId GetExternalDataActorId() const {
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
 
-    void InitializeTierings(const std::vector<TString>& tierings) {
-        std::vector<TString> newTierings;
-        for (const TString& tieringId : tierings) {
-            if (WatchedTierings.emplace(tieringId).second) {
-                newTierings.emplace_back(tieringId);
-            }
-        }
-        RequestPaths(newTierings, {});
+    void UpdateSnapshot() const {
+        Owner->TakeConfigs(NTiers::TConfigsSnapshot(Tiers, Tierings), SecretsSnapshot);
     }
 
-    void InitializeTiers(const std::vector<TString>& tiers) {
-        std::vector<TString> newTiers;
-        for (const TString& tierName : tiers) {
-            if (WatchedTiers.emplace(tierName).second) {
-                newTiers.emplace_back(tierName);
-            }
-        }
-        RequestPaths({}, newTiers);
-    }
-
-    void RequestPaths(const std::vector<TString>& tierings, const std::vector<TString>& tiers) {
-        TVector<TVector<TString>> paths;
-        {
-            const TString storagePath = NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath();
-            for (const TString& tieringId : tierings) {
-                paths.emplace_back(TVector<TString>({ storagePath, tieringId }));
-            }
-        }
-        {
-            const TString storagePath = NTiers::TTierConfig::GetBehaviour()->GetStorageTablePath();
-            for (const TString& tierName : tiers) {
-                paths.emplace_back(TVector<TString>({ storagePath, tierName }));
-            }
-        }
-
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
-            std::move(paths), AppData()->TenantName, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}));
-        event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
-    }
-
-    void OnPathFetched(const TPathId& pathId, const TString& objectType) {
-        ESchemeObject type;
-        if (objectType == NTiers::TTierConfig::GetTypeId()) {
-            type = ESchemeObject::TIER;
-        } else if (objectType == NTiers::TTieringRule::GetTypeId()) {
-            type = ESchemeObject::TIERING;
-        } else {
-            Y_ABORT_S("object_type=" + objectType);
-        }
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId, static_cast<ui64>(type)), IEventHandle::FlagTrackDelivery);
-    }
-
-    void OnPathNotFound(const std::vector<TString>& path) {
-        OnObjectResolutionFailure(path);
-    }
-
-    void OnLookupError(const std::vector<TString>& path) {
-        OnObjectResolutionFailure(path);
-    }
-
-    void OnObjectResolutionFailure(const std::vector<TString>& path) {
-        AFL_VERIFY(path.size() == 2)("size", path.size());
-        const TString& storageDirectory = path[0];
-        const TString& objectId = path[1];
-        if (storageDirectory == NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath()) {
-            WatchedTierings.erase(objectId);
-            Owner->OnTieringResolutionFailure(objectId);
-        } else if (storageDirectory == NTiers::TTierConfig::GetBehaviour()->GetStorageTablePath()){
-            WatchedTiers.erase(objectId);
-            Owner->OnTierResolutionFailure(objectId);
-        } else {
-            AFL_VERIFY(false)("storage_dir", storageDirectory)("object_id", objectId);
-        }
-    }
-
-    void OnTierFetched(const TString& tierName, NTiers::TTierConfig config) {
-        Owner->TakeTierConfig(tierName, std::move(config));
-    }
-
-    void OnTieringFetched(const TString& tieringId, NTiers::TTieringRule config) {
-        Owner->TakeTieringConfig(tieringId, std::move(config));
-    }
-
-    void OnTierDeleted(const TString& tierName) {
-        Owner->EraseTier(tierName);
-    }
-
-    void OnTieringDeleted(const TString& tieringId) {
-        Owner->EraseTiering(tieringId);
+    void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchTieringObjects> ev) const {
+        constexpr static const TDuration RetryInterval = TDuration::Seconds(1);
+        ActorContext().Schedule(RetryInterval, std::make_unique<IEventHandle>(SelfId(), TieringFetcher, ev.release()));
     }
 
 public:
@@ -146,19 +47,19 @@ public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
             hFunc(NTiers::TEvWatchTieringObjects, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(NActors::TEvents::TEvUndelivered, Handle);
+            hFunc(NTiers::TEvNotifyTieringUpdated, Handle);
+            hFunc(NTiers::TEvNotifyTierUpdated, Handle);
+            hFunc(NTiers::TEvNotifyObjectDeleted, Handle);
+            hFunc(NTiers::TEvObjectResolutionFailed, Handle);
             default:
                 break;
         }
     }
 
     void Bootstrap() {
+        TieringFetcher = Register(new TTieringFetcher(SelfId()));
         Become(&TThis::StateMain);
         AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
@@ -169,98 +70,64 @@ public:
         if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
             AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "secrets");
             SecretsSnapshot = secrets;
-            Owner->TakeSecretsConfig(SecretsSnapshot);
+            UpdateSnapshot();
         } else {
             Y_ABORT_UNLESS(false, "unexpected behaviour");
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        for (auto entry : result->ResultSet) {
-            switch (entry.Status) {
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                    AFL_VERIFY(entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindAbstractObject);
-                    OnPathFetched(entry.TableId.PathId, entry.AbstractObjectInfo->Description.GetType());
-                    break;
-
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                    OnPathNotFound(entry.Path);
-                    break;
-
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-                    OnLookupError(entry.Path);
-                    break;
-
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-                    AFL_VERIFY(false)("entry", entry.ToString());
-            }
-        }
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
-        const auto& describeResult = *ev->Get()->Result;
-        const auto& pathDescription = describeResult.GetPathDescription();
-
-        AFL_VERIFY(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeAbstractObject);
-        AFL_VERIFY(pathDescription.HasAbstractObjectDescription());
-        const auto& abstractObject = pathDescription.GetAbstractObjectDescription();
-        const TString& typeId = abstractObject.GetType();
-        const TString& objectId = abstractObject.GetName();
-
-        if (typeId == NTiers::TTierConfig::GetTypeId()) {
-            OnTierFetched(objectId, DeserializeObject<NTiers::TTierConfig>(abstractObject.GetProperties()));
-        } else if (typeId == NTiers::TTieringRule::GetTypeId()) {
-            OnTieringFetched(objectId, DeserializeObject<NTiers::TTieringRule>(abstractObject.GetProperties()));
-        } else {
-            AFL_VERIFY(false)("type_id", typeId);
-        }
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
-        const auto& record = ev->Get();
-        const TString objectName = TString(ExtractBase(record->Path));
-        switch (record->Key) {
-            case ESchemeObject::TIER:
-                OnTierDeleted(objectName);
-                break;
-            case ESchemeObject::TIERING:
-                OnTieringDeleted(objectName);
-                break;
-            default:
-                AFL_VERIFY(false)("key", record->Key);
-        }
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev) {
-        const auto& record = ev->Get();
-        AFL_WARN(NKikimrServices::TX_TIERING)("event", "scheme object is unavailable")("path", record->Path);
-    }
-
-    void Handle(NTiers::TEvWatchTieringObjects::TPtr& ev) {
-        if (const auto& tierings = ev->Get()->GetTierings(); !tierings.empty()) {
-            InitializeTierings(tierings);
-        }
-        if (const auto& tiers = ev->Get()->GetTiers(); !tiers.empty()) {
-            InitializeTiers(tiers);
-        }
-    }
-
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(SecretsFetcher));
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(static_cast<ui64>(ESchemeObject::TIER)));
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(static_cast<ui64>(ESchemeObject::TIERING)));
         PassAway();
     }
 
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ERROR(NKikimrServices::TX_TIERING)("event", "event undelivered to local service")("reason", ev->Get()->Reason);
+    void Handle(NTiers::TEvWatchTieringObjects::TPtr& ev) {
+        Send(TieringFetcher, ev->Release());
+    }
+
+    void Handle(NTiers::TEvNotifyTierUpdated::TPtr& ev) {
+        Tiers.emplace(ev->Get()->GetId(), ev->Get()->GetConfig());
+        UpdateSnapshot();
+    }
+
+    void Handle(NTiers::TEvNotifyTieringUpdated::TPtr& ev) {
+        Tierings.emplace(ev->Get()->GetId(), ev->Get()->GetConfig());
+        UpdateSnapshot();
+    }
+
+    void Handle(NTiers::TEvNotifyObjectDeleted::TPtr& ev) {
+        switch (ev->Get()->GetObjectType()) {
+            case NTiers::UNKNOWN:
+                AFL_VERIFY(false);
+            case NTiers::TIER:
+                Tiers.erase(ev->Get()->GetObjectId());
+                break;
+            case NTiers::TIERING:
+                Tierings.erase(ev->Get()->GetObjectId());
+                break;
+        }
+        UpdateSnapshot();
+    }
+
+    void Handle(NTiers::TEvObjectResolutionFailed::TPtr& ev) {
+        const TString objectId = ev->Get()->GetObjectId();
+        const bool isTransientError = ev->Get()->GetReason() == NTiers::TEvObjectResolutionFailed::LOOKUP_ERROR;
+        if (isTransientError) {
+            switch (ev->Get()->GetObjectType()) {
+                case NTiers::UNKNOWN:
+                    AFL_VERIFY(false);
+                case NTiers::TIER:
+                    ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchTieringObjects>(std::vector<TString>(), std::vector<TString>({ objectId })));
+                    break;
+                case NTiers::TIERING:
+                    ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchTieringObjects>(std::vector<TString>({ objectId }), std::vector<TString>()));
+                    break;
+            }
+        } else {
+            if (ev->Get()->GetReason() == NTiers::TEvObjectResolutionFailed::NOT_FOUND) {
+                AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_not_found")("type", static_cast<ui64>(ev->Get()->GetObjectType()))("name", objectId);
+            }
+        }
     }
 };
 
@@ -310,28 +177,51 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 }
 }
 
-void TTiersManager::TakeSecretsConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    ALS_INFO(NKikimrServices::TX_TIERING) << "Take secrets config at tablet " << TabletId;
+void TTiersManager::TakeConfigs(NTiers::TConfigsSnapshot snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs: snapshots" << (secrets ? " secrets" : "") << " at tablet " << TabletId;
 
-    for (auto& [tierName, manager] : Managers) {
-        auto tierConfig = Tiers.FindPtr(tierName);
-        // TODO: fix possible data race (verify may be triggered)
-        AFL_VERIFY(tierConfig);
-        manager.Restart(*tierConfig, secrets);
-    }
-
+    Snapshot = snapshot;
     Secrets = secrets;
-    RefreshTieringOnShard();
-}
-
-bool TTiersManager::IsReady() const {
-    for (const auto& [id, config] : Tierings) {
-        if (!HasTieringDependencies(config)) {
-            return false;
+    for (auto itSelf = Managers.begin(); itSelf != Managers.end(); ) {
+        auto it = snapshot.GetTierConfigs().find(itSelf->first);
+        if (it == snapshot.GetTierConfigs().end()) {
+            itSelf->second.Stop();
+            itSelf = Managers.erase(itSelf);
+        } else {
+            itSelf->second.Restart(it->second, Secrets);
+            ++itSelf;
         }
     }
+    for (auto&& i : snapshot.GetTierConfigs()) {
+        auto tierName = i.second.GetTierName();
+        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Take config for tier '" << tierName << "' at tablet " << TabletId;
+        if (Managers.contains(tierName)) {
+            ALS_DEBUG(NKikimrServices::TX_TIERING) << "Ignore tier '" << tierName << "' at tablet " << TabletId;
+            continue;
+        }
+        NTiers::TManager localManager(TabletId, TabletActorId, i.second);
+        auto itManager = Managers.emplace(tierName, std::move(localManager)).first;
+        itManager->second.Start(Secrets);
+    }
+
+    HasCompleteData = ValidateDependencies();
+
+    if (ShardCallback && TlsActivationContext) {
+        ShardCallback(TActivationContext::AsActorContext());
+    }
+}
+
+bool TTiersManager::ValidateDependencies() const {
+    for (const auto& [id, config] : Snapshot.GetTableTierings()) {
+        for (const auto& interval : config.GetIntervals()) {
+            if (!Snapshot.GetTierById(interval.GetTierName())) {
+                return false;
+            }
+        }
+        return true;
+    }
     for (const auto& [pathId, tieringId] : PathIdTiering) {
-        if (!Tierings.contains(tieringId)) {
+        if (!Snapshot.GetTieringById(tieringId)) {
             return false;
         }
     }
@@ -369,88 +259,34 @@ const NTiers::TManager* TTiersManager::GetManagerOptional(const TString& tierId)
 }
 
 THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
-    AFL_VERIFY(IsReady());
     THashMap<ui64, NKikimr::NOlap::TTiering> result;
+    AFL_VERIFY(IsReady());
+    auto& tierConfigs = Snapshot.GetTierConfigs();
     for (auto&& i : PathIdTiering) {
-        auto* tieringRule = Tierings.FindPtr(i.second);
-        AFL_VERIFY(tieringRule);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
-        NOlap::TTiering tiering = tieringRule->BuildOlapTiers();
-        for (auto& [name, tier] : tiering.GetTierByName()) {
-            AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
-            auto* tierConfig = Tiers.FindPtr(name);
-            AFL_VERIFY(tierConfig);
-            tier->SetSerializer(NTiers::ConvertCompression(tierConfig->GetCompression()));
+        auto* tieringRule = Snapshot.GetTieringById(i.second);
+        if (tieringRule) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
+            NOlap::TTiering tiering = tieringRule->BuildOlapTiers();
+            for (auto& [name, tier] : tiering.GetTierByName()) {
+                AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
+                auto it = tierConfigs.find(name);
+                if (it != tierConfigs.end()) {
+                    tier->SetSerializer(NTiers::ConvertCompression(it->second.GetCompression()));
+                }
+            }
+            result.emplace(i.first, std::move(tiering));
+        } else {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "not_found");
         }
-        result.emplace(i.first, std::move(tiering));
     }
     return result;
 }
 
-void TTiersManager::TakeTieringConfig(const TString& tieringId, NTiers::TTieringRule config) {
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Take config for tiering rule '" << tieringId << "' at tablet " << TabletId;
-
-    {
-        std::vector<TString> uninitializedTiers;
-        for (const auto& interval : config.GetIntervals()) {
-            if (!Tiers.contains(interval.GetTierName())) {
-                uninitializedTiers.emplace_back(interval.GetTierName());
-            }
-        }
-        if (!uninitializedTiers.empty()) {
-            TActivationContext::AsActorContext().Send(
-                Actor->SelfId(), new NTiers::TEvWatchTieringObjects({}, { std::move(uninitializedTiers) }));
-        }
-    }
-
-    Tierings.emplace(tieringId, std::move(config));
-    RefreshTieringOnShard();
-}
-
-void TTiersManager::TakeTierConfig(const TString& tierName, NTiers::TTierConfig config) {
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Take config for tier '" << tierName << "' at tablet " << TabletId;
-
-    auto findManager = Managers.find(tierName);
-    if (findManager != Managers.end()) {
-        findManager->second.Restart(config, Secrets);
-    } else {
-        NTiers::TManager localManager(TabletId, TabletActorId, config);
-        auto itManager = Managers.emplace(tierName, std::move(localManager)).first;
-        itManager->second.Start(Secrets);
-    }
-
-    Tiers.emplace(tierName, std::move(config));
-    RefreshTieringOnShard();
-}
-
-void TTiersManager::EraseTier(const TString& tierName) {
-    Tiers.erase(tierName);
-    if (auto findManager = Managers.find(tierName); findManager != Managers.end()) {
-        findManager->second.Stop();
-        Managers.erase(findManager);
-    }
-}
-
-void TTiersManager::EraseTiering(const TString& tieringId) {
-    Tierings.erase(tieringId);
-}
-
-void TTiersManager::OnTierResolutionFailure(const TString& tierName) {
-    if (IsTierInUse(tierName)) {
-        ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchTieringObjects>(std::vector<TString>(), std::vector<TString>({ tierName })));
-    }
-}
-
-void TTiersManager::OnTieringResolutionFailure(const TString& tieringId) {
-    if (IsTieringInUse(tieringId)) {
-        ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchTieringObjects>(std::vector<TString>({ tieringId }), std::vector<TString>()));
-    }
-}
-
 void TTiersManager::EnablePathId(const ui64 pathId, const TString& tieringId) {
     PathIdTiering.emplace(pathId, tieringId);
-    if (!Tierings.contains(tieringId)) {
+    if (!Snapshot.GetTieringById(tieringId)) {
         TActivationContext::AsActorContext().Send(Actor->SelfId(), new NTiers::TEvWatchTieringObjects({ tieringId }, {}));
+        HasCompleteData = false;
     }
 }
 
@@ -466,9 +302,4 @@ TActorId TTiersManager::GetActorId() const {
     }
 }
 
-void TTiersManager::ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchTieringObjects> ev) const {
-    constexpr static const TDuration RetryInterval = TDuration::Seconds(1);
-    TActivationContext::AsActorContext().Schedule(RetryInterval,
-        std::make_unique<IEventHandle>(TActivationContext::AsActorContext().SelfID, Actor->SelfId(), ev.release()));
-}
 }

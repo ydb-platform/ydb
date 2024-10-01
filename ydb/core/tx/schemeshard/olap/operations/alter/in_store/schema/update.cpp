@@ -1,5 +1,7 @@
 #include "update.h"
+
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
+#include <ydb/core/tx/tiering/rule/object.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -46,9 +48,21 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
         }
         // TODO: incapsulate in a function
         {
-            const TString& tiering = ttl.GetData().GetUseTiering();
-            if (TPath::Resolve(tiering, context.GetSSOperationContext()->SS)) {
-                return TConclusionStatus::Fail("Unknown tiering: " + tiering);
+            const TPath tieringPath =
+                TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), context.GetSSOperationContext()->SS)
+                    .Dive(ttl.GetData().GetUseTiering());
+            {
+                TPath::TChecker checks = tieringPath.Check();
+                checks.NotEmpty()
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsAbstractObject()
+                    .NotUnderOperation();
+                if (!checks) {
+                    return TConclusionStatus::Fail("Can't set tiering: " + checks.GetError());
+                }
             }
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();

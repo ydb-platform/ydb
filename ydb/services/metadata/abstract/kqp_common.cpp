@@ -12,7 +12,7 @@ TString IClassBehaviour::GetStorageTableDirectory() const {
 }
 
 TString IClassBehaviour::GetStorageTablePath() const {
-    return "/" + AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + GetInternalStorageTablePath();
+    return AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + GetInternalStorageTablePath();
 }
 
 TString IClassBehaviour::GetStorageHistoryTablePath() const {
@@ -20,7 +20,7 @@ TString IClassBehaviour::GetStorageHistoryTablePath() const {
     if (!internalTablePath) {
         return "";
     }
-    return "/" + AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + internalTablePath;
+    return AppData()->TenantName + "/" + NMetadata::NProvider::TServiceOperator::GetPath() + "/" + internalTablePath;
 }
 
 NInitializer::IInitializationBehaviour::TPtr IClassBehaviour::GetInitializer() const {

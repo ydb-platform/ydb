@@ -1,6 +1,5 @@
 #include "checker.h"
 
-#include <ydb/core/tx/tiering/rule/ss_checker.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
 namespace NKikimr::NColumnShard::NTiers {
@@ -12,7 +11,8 @@ void TTierPreprocessingActor::StartChecker() {
     auto g = PassAwayGuard();
     if (const TString* serializedConfig = Settings.ReadFeature(TTierConfig::TDecoder::TierConfig)) {
         NKikimrSchemeOp::TStorageTierConfig config;
-        if (!config.ParseFromString(*serializedConfig)) {
+        if (!::google::protobuf::TextFormat::ParseFromString(*serializedConfig, &config)) {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "config_deserialization_failed")("config", *serializedConfig);
             Controller->OnPreprocessingProblem("Can't deserialize tier config");
             return;
         }

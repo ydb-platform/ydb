@@ -14,6 +14,10 @@ enum EEvents {
     EvTimeout,
     EvTiersManagerReadyForUsage,
     EvWatchTieringObjects,
+    EvNotifyTierUpdated,
+    EvNotifyTieringUpdated,
+    EvNotifyObjectDeleted,
+    EvObjectResolutionFailed,
     EvEnd
 };
 

@@ -392,6 +392,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+        case NKikimrSchemeOp::ESchemeOpCreateAbstractObject:
             return true;
         default:
             return false;

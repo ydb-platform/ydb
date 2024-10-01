@@ -22,6 +22,7 @@ private:
     }
 
     NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request) const {
+        AFL_DEBUG(NKikimrServices::KQP_GATEWAY)("event", "propose_modify_abstract_object")("request", request->Record.DebugString());
         auto schemePromise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
         const bool failOnExist = request->Record.GetTransaction().GetModifyScheme().GetFailOnExist();
         const bool successOnNotExist = request->Record.GetTransaction().GetModifyScheme().GetSuccessOnNotExist();
@@ -70,13 +71,13 @@ private:
 
 public:
     void OnPreprocessingFinished(NYql::TObjectSettingsImpl settings) override {
-        auto makeRequestResult = MakeRequest(settings);
-        if (makeRequestResult.IsFail()) {
-            Promise.SetValue(TYqlConclusionStatus::Fail(makeRequestResult.GetErrorMessage()));
+        auto makeRequest = MakeRequest(settings);
+        if (makeRequest.IsFail()) {
+            Promise.SetValue(TYqlConclusionStatus::Fail(makeRequest.GetErrorMessage()));
             return;
         }
 
-        auto future = SendSchemeRequest(makeRequestResult.MutableResult().Release());
+        auto future = SendSchemeRequest(makeRequest.MutableResult().Release());
         future.Subscribe([promise = Promise](NThreading::TFuture<TYqlConclusionStatus> f) mutable {
             promise.SetValue(f.GetValueSync());
         });

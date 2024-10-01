@@ -1074,6 +1074,7 @@ void TPathDescriber::DescribeAbstractObject(TPathId pathId, TPathElement::TPtr p
 
     auto entry = Result->Record.MutablePathDescription()->MutableAbstractObjectDescription();
     entry->SetName(pathEl->Name);
+    entry->SetType(abstractObjectInfo->Object->GetObjectManager()->GetTypeId());
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(abstractObjectInfo->AlterVersion);
     const auto manager = abstractObjectInfo->Object->GetObjectManager();

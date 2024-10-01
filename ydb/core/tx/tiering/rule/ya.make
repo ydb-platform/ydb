@@ -4,8 +4,6 @@ SRCS(
     manager.cpp
     object.cpp
     GLOBAL behaviour.cpp
-    ss_checker.cpp
-    GLOBAL ss_fetcher.cpp
 )
 
 PEERDIR(

@@ -102,13 +102,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
-    if (auto fallbackSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetFallbackTiersSnapshot()) {
-        for (const auto& [id, config] : fallbackSnapshot->GetTierConfigs()) {
-            Tiers->TakeTierConfig(id, config);
-        }
-        for (const auto& [id, config] : fallbackSnapshot->GetTableTierings()) {
-            Tiers->TakeTieringConfig(id, config);
-        }
+    if (auto fallbackSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetTiersSnapshotOverride()) {
+        Tiers->TakeConfigs(std::move(*fallbackSnapshot), nullptr);
     }
 
     OnTieringModified();

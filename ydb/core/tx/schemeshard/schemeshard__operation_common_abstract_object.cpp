@@ -40,10 +40,10 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
 }
 
 bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TString& typeId) {
-    const TString& abstractObjectsDir = GetBehaviourVerified(typeId)->GetStorageTableDirectory();
+    const TString& abstractObjectsDir = GetBehaviourVerified(typeId)->GetStorageTablePath();
     if (parentPath.PathString() != abstractObjectsDir) {
-        result->SetError(
-            NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << typeId << " objects shoud be placed in " << abstractObjectsDir);
+        result->SetError(NKikimrScheme::EStatus::StatusSchemeError,
+            TStringBuilder() << typeId << " objects shoud be placed in " << abstractObjectsDir << ", got " << parentPath.PathString());
         return false;
     }
 

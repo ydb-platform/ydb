@@ -763,6 +763,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             FileStoreInfo.Drop();
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
+            AbstractObjectInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1268,6 +1269,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(FileStoreInfo);
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
+            DESCRIPTION_PART(AbstractObjectInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1899,6 +1901,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.FileStoreInfo = FileStoreInfo;
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
+            entry.AbstractObjectInfo = AbstractObjectInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,

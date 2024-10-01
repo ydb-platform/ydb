@@ -50,7 +50,7 @@ public:
     }
     void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, NColumnShard::NTiers::TConfigsSnapshot snapshot);
 
-    virtual std::optional<NColumnShard::NTiers::TConfigsSnapshot> GetFallbackTiersSnapshot() const override {
+    virtual std::optional<NColumnShard::NTiers::TConfigsSnapshot> GetTiersSnapshotOverride() const override {
         return TiersSnapshot;
     }
 };

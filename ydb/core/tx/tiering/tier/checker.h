@@ -2,7 +2,6 @@
 #include "object.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tiering/rule/ss_fetcher.h>
 #include <ydb/core/tx/tiering/snapshot.h>
 
 #include <ydb/services/metadata/abstract/common.h>

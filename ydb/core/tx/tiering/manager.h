@@ -5,6 +5,7 @@
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/tiering/rule/object.h>
+#include <ydb/core/tx/tiering/snapshot.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -18,20 +19,6 @@
 
 namespace NKikimr::NColumnShard {
 namespace NTiers {
-
-class TEvWatchTieringObjects: public TEventLocal<TEvWatchTieringObjects, EvWatchTieringObjects> {
-private:
-    using TTierings = std::vector<TString>;
-    using TTiers = std::vector<TString>;
-    YDB_READONLY_DEF(TTierings, Tierings);
-    YDB_READONLY_DEF(TTiers, Tiers);
-
-public:
-    TEvWatchTieringObjects(std::vector<TString> tierings, std::vector<TString> tiers)
-        : Tierings(std::move(tierings))
-        , Tiers(std::move(tiers)) {
-    }
-};
 
 NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto);
 NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto);
@@ -69,16 +56,14 @@ private:
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
     TActor* Actor = nullptr;
-    std::unordered_map<ui64, TString> PathIdTiering;
     TManagers Managers;
-
-    TMutex Mutex;
-    using TTiers = THashMap<TString, NTiers::TTierConfig>;
-    using TTierings = THashMap<TString, NTiers::TTieringRule>;
+    std::unordered_map<ui64, TString> PathIdTiering;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
-    YDB_READONLY_DEF(TTiers, Tiers);
-    YDB_READONLY_DEF(TTierings, Tierings);
+    NTiers::TConfigsSnapshot Snapshot;
+    bool HasCompleteData = true;
 
+
+private:
     void RefreshTieringOnShard() const {
         if (!IsReady()) {
             AFL_INFO(NKikimrServices::TX_TIERING)("event", "skip_refresh_tiering_on_shard")("reason", "not_ready");
@@ -89,36 +74,7 @@ private:
         }
     }
 
-    bool HasTieringDependencies(const NTiers::TTieringRule& config) const {
-        for (const auto& interval : config.GetIntervals()) {
-            if (!Tiers.contains(interval.GetTierName())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool IsTieringInUse(const TString& tieringId) const {
-        for (const auto& [pathId, tiering] : PathIdTiering) {
-            if (tiering == tieringId) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool IsTierInUse(const TString& tierName) const {
-        for (const auto& [tieringId, tiering] : Tierings) {
-            for (const auto& interval : tiering.GetIntervals()) {
-                if (interval.GetTierName() == tierName) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchTieringObjects> ev) const;
+    bool ValidateDependencies() const;
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
@@ -132,35 +88,18 @@ public:
     THashMap<ui64, NOlap::TTiering> GetTiering() const;
     void EnablePathId(const ui64 pathId, const TString& tieringId);
     void DisablePathId(const ui64 pathId);
-
-    void TakeSecretsConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-    void TakeTieringConfig(const TString& tieringId, NTiers::TTieringRule config);
-    void TakeTierConfig(const TString& tierName, NTiers::TTierConfig config);
-    void EraseTier(const TString& tierName);
-    void EraseTiering(const TString& tieringId);
-    void OnTierResolutionFailure(const TString& tierName);
-    void OnTieringResolutionFailure(const TString& tieringId);
-
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << "{TIERS:{";
-        for (const auto& [id, config] : Tiers) {
-            sb << id << ';';
-        }
-        sb << "}; TIERINGS:{";
-        for (const auto& [id, config] : Tierings) {
-            sb << id << ';';
-        }
-        sb << "}; SECRETS:" << Secrets->SerializeToString() << '}';
-        return sb;
+    void TakeConfigs(NTiers::TConfigsSnapshot tiering, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    bool IsReady() const {
+        return HasCompleteData;
     }
 
-    bool IsReady() const;
+    TString DebugString() {
+        return Snapshot.DebugString();
+    }
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop(const bool needStopActor);
     virtual const std::map<TString, NTiers::TManager>& GetManagers() const override {
-        AFL_VERIFY(IsReady());
         return Managers;
     }
     virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;

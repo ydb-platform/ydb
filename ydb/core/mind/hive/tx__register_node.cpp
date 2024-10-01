@@ -23,7 +23,7 @@ public:
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (node.Local != Local) {
-            TInstant now = TInstant::Now();
+            TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());
             node.ActualizeNodeStatistics(now);
             for (const auto& t : node.Tablets) {

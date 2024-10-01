@@ -322,6 +322,7 @@ public:
                     // That was not persisted to avoid issues with downgrades
                     node.Down = true;
                 }
+                BLOG_TRACE("node " << nodeId << " has " << node.Down << " / " << node.BecomeUpOnRestart);
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -750,8 +751,9 @@ public:
 
         size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
+        TInstant now = TActivationContext::Now();
         for (auto itNode = Self->Nodes.begin(); itNode != Self->Nodes.end();) {
-            if (itNode->second.CanBeDeleted()) {
+            if (itNode->second.CanBeDeleted(now)) {
                 ++numDeletedNodes;
                 auto restrictionsRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Range(itNode->first).Select();
                 while (!restrictionsRowset.EndOfSet()) {

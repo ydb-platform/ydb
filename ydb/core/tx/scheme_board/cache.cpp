@@ -1016,7 +1016,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
-            Sort(partitioning.begin(), partitioning.end(), [schema](const auto& lhs, const auto& rhs) {
+            Sort(partitioning.begin(), partitioning.end(), [&schema](const auto& lhs, const auto& rhs) {
                 Y_ABORT_UNLESS(lhs.Range && rhs.Range);
                 Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
 

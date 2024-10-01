@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Any, Optional
 import yatest.common
 import json
 import os
@@ -37,7 +37,7 @@ class YdbCliHelper:
 
     class WorkloadRunResult:
         def __init__(self):
-            self.stats: dict[str, dict[str, any]] = {}
+            self.stats: dict[str, dict[str, Any]] = {}
             self.query_out: Optional[str] = None
             self.stdout: Optional[str] = None
             self.stderr: Optional[str] = None
@@ -53,35 +53,26 @@ class YdbCliHelper:
 
     class WorkloadProcessor:
         def __init__(self,
-                     type: WorkloadType,
+                     worload_type: WorkloadType,
                      db_path: str,
                      query_num: int,
                      iterations: int,
                      timeout: float,
                      check_cannonical: bool):
+            def _get_output_path(ext: str) -> str:
+                return yatest.common.work_path(f'q{query_num}.{ext}')
+
             self.result = YdbCliHelper.WorkloadRunResult()
-            self.type = type
+            self.worload_type = worload_type
             self.db_path = db_path
             self.query_num = query_num
             self.iterations = iterations
             self.timeout = timeout
             self.check_cannonical = check_cannonical
             self._nodes_info: dict[str, dict[str, int]] = {}
-
-        def _get_output_path(self, ext: str) -> str:
-            return yatest.common.work_path(f'q{self.query_num}.{ext}')
-
-        @property
-        def _plan_path(self) -> str:
-            return self._get_output_path('plan')
-
-        @property
-        def _qout_path(self) -> str:
-            return self._get_output_path('out')
-
-        @property
-        def _json_path(self) -> str:
-            return self._get_output_path('json')
+            self._plan_path = _get_output_path('plan')
+            self._query_output_path = _get_output_path('out')
+            self._json_path = _get_output_path('json')
 
         def _add_error(self, msg: Optional[str]):
             if msg is not None and len(msg) > 0:
@@ -151,8 +142,8 @@ class YdbCliHelper:
                     self._add_error('There is diff in query results')
 
         def _load_query_out(self) -> None:
-            if (os.path.exists(self._qout_path)):
-                with open(self._qout_path, 'r') as r:
+            if (os.path.exists(self._query_output_path)):
+                with open(self._query_output_path, 'r') as r:
                     self.result.query_out = r.read()
 
         @staticmethod
@@ -181,9 +172,9 @@ class YdbCliHelper:
             cmd = YdbCliHelper.get_cli_command() + [
                 '-e', YdbCluster.ydb_endpoint,
                 '-d', f'/{YdbCluster.ydb_database}',
-                'workload', str(self.type), '--path', self.db_path, 'run',
+                'workload', str(self.worload_type), '--path', self.db_path, 'run',
                 '--json', self._json_path,
-                '--output', self._qout_path,
+                '--output', self._query_output_path,
                 '--executer', 'generic',
                 '--include', str(self.query_num),
                 '--iterations', str(self.iterations),
@@ -199,14 +190,14 @@ class YdbCliHelper:
 
         def _exec_cli(self) -> None:
             try:
-                exec: yatest.common.process._Execution = yatest.common.process.execute(self._get_cmd(), wait=False, check_exit_code=False)
-                exec.wait(check_exit_code=False, timeout=self.timeout)
-                self._process_returncode(exec.returncode, exec.stderr.decode('utf-8', 'ignore'))
+                execution: yatest.common.process._Execution = yatest.common.process.execute(self._get_cmd(), wait=False, check_exit_code=False)
+                execution.wait(check_exit_code=False, timeout=self.timeout)
+                self._process_returncode(execution.returncode, execution.stderr.decode('utf-8', 'replace'))
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
-                self._process_returncode(0, exec.stderr.decode('utf-8'))
+                self._process_returncode(0, execution.stderr.decode('utf-8', 'replace'))
                 self._add_error(f'Timeout {self.timeout}s expeared.')
-            self.result.stdout = exec.stdout.decode('utf-8', 'ignore')
-            self.result.stderr = exec.stderr.decode('utf-8', 'ignore')
+            self.result.stdout = execution.stdout.decode('utf-8', 'replace')
+            self.result.stderr = execution.stderr.decode('utf-8', 'replace')
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
@@ -226,6 +217,6 @@ class YdbCliHelper:
             return self.result
 
     @staticmethod
-    def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
+    def workload_run(worload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100., check_cannonical: bool = False) -> YdbCliHelper.WorkloadRunResult:
-        return YdbCliHelper.WorkloadProcessor(type, path, query_num, iterations, timeout, check_cannonical).process()
+        return YdbCliHelper.WorkloadProcessor(worload_type, path, query_num, iterations, timeout, check_cannonical).process()

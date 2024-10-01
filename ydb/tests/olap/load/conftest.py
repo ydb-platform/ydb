@@ -14,6 +14,7 @@ class LoadSuiteBase:
     workload_type: WorkloadType = None
     timeout: float = 1800.
     refference: str = ''
+    check_cannonical = False
 
     @property
     def suite(self) -> str:
@@ -47,7 +48,7 @@ class LoadSuiteBase:
             query_num_param.mode = allure.parameter_mode.HIDDEN.value
         start_time = time()
         result = YdbCliHelper.workload_run(
-            path=path, query_num=query_num, iterations=self.iterations, type=self.workload_type, timeout=self.timeout
+            path=path, query_num=query_num, iterations=self.iterations, type=self.workload_type, timeout=self.timeout, check_cannonical=self.check_cannonical
         )
         allure_test_description(self.suite, test, refference_set=self.refference, start_time=start_time, end_time=time())
         stats = result.stats.get(test)

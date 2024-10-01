@@ -57,13 +57,15 @@ class YdbCliHelper:
                      db_path: str,
                      query_num: int,
                      iterations: int,
-                     timeout: float):
+                     timeout: float,
+                     check_cannonical: bool):
             self.result = YdbCliHelper.WorkloadRunResult()
             self.type = type
             self.db_path = db_path
             self.query_num = query_num
             self.iterations = iterations
             self.timeout = timeout
+            self.check_cannonical = check_cannonical
             self._nodes_info: dict[str, dict[str, int]] = {}
 
         def _get_output_path(self, ext: str) -> str:
@@ -145,6 +147,8 @@ class YdbCliHelper:
                     if q not in self.result.stats:
                         self.result.stats[q] = {}
                     self.result.stats[q][signal['sensor']] = signal['value']
+                if self.result.stats.get(f'Query{self.query_num:02d}', {}).get("DiffsCount", 0) > 0:
+                    self._add_error('There is diff in query results')
 
         def _load_query_out(self) -> None:
             if (os.path.exists(self._qout_path)):
@@ -189,6 +193,8 @@ class YdbCliHelper:
             query_preffix = get_external_param('query-prefix', '')
             if query_preffix:
                 cmd += ['--query-settings', query_preffix]
+            if self.check_cannonical:
+                cmd.append('--check-cannonical')
             return cmd
 
         def _exec_cli(self) -> None:
@@ -221,5 +227,5 @@ class YdbCliHelper:
 
     @staticmethod
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
-                     timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
-        return YdbCliHelper.WorkloadProcessor(type, path, query_num, iterations, timeout).process()
+                     timeout: float = 100., check_cannonical: bool = False) -> YdbCliHelper.WorkloadRunResult:
+        return YdbCliHelper.WorkloadProcessor(type, path, query_num, iterations, timeout, check_cannonical).process()

@@ -108,6 +108,7 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
                   .IsTheSameDomain(firstPath);
 
             if (!checks) {
+                // Y_ABORT("%s, %s", srcPath.PathString().c_str(), checks.GetError().c_str());
                 return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
             }
         }

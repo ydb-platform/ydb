@@ -1235,6 +1235,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeResourcePool(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeBackupCollection:
+            DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:

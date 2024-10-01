@@ -33,7 +33,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
-        desc.SetDstPath(JoinPath({targetPathStr, item.GetPath().substr(1, item.GetPath().size() - 1)}));
+        // desc.SetDstPath(JoinPath({targetPathStr, item.GetPath().substr(1, item.GetPath().size() - 1)}));
+        desc.SetDstPath(targetPathStr);
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);

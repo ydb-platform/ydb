@@ -381,6 +381,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                Y_ABORT("parent: %s, %s", parent.PathString().c_str(), checks.GetError().c_str());
                 return result;
             }
         }
@@ -409,6 +410,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                Y_ABORT("srcPath: %s", srcPath.PathString().c_str());
                 return result;
             }
         }
@@ -454,6 +456,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                Y_ABORT("dstPath: %s", dstPath.PathString().c_str());
                 return result;
             }
         }
@@ -733,6 +736,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsCommonSensePath(); //forbid copy impl index tables directly
 
         if (!checks) {
+            Y_ABORT("%s", srcPath.PathString().c_str());
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }

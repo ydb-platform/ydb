@@ -69,10 +69,12 @@ public:
 namespace NKikimr::NSchemeShard {
 
 ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response) {
+    Y_ABORT(":(");
     return new TReject(id, std::move(response));
 }
 
 ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message) {
+    Y_ABORT("%s", message.c_str());
     return new TReject(id, status, message);
 }
 

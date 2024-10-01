@@ -50,15 +50,15 @@ jobs:
         run: |
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash", "binary": "ydb"}]')
             echo "Matrix after adding linux: $MATRIX"
           fi
           if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash", "binary": "ydb"}]')
             echo "Matrix after adding darwin-amd: $MATRIX"
           fi
           if [ "${{ inputs.build-windows }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash", "binary": "ydb.exe"}]')
             echo "Matrix after adding windows: $MATRIX"
           fi
 
@@ -102,7 +102,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.os }}-binary
-        path: ydb/apps/ydb/ydb
+        path: ydb/apps/ydb/${{ matrix.binary }}
         if-no-files-found: error
         retention-days: 1
 
@@ -148,7 +148,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-binary
-          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned/
 
       - name: Print resulting file hierarchy
         run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"

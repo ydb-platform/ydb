@@ -149,7 +149,7 @@ runs:
       shell: bash
       run: |
         export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
-        echo "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
+        echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
     - name: ya build and test

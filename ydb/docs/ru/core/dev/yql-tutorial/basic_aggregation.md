@@ -27,6 +27,4 @@ ORDER BY
     series_id,
     season_id
 ;
-
-COMMIT;
 ```

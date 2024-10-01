@@ -1,8 +1,8 @@
 PRAGMA ydb.OptimizerHints = 
 '
-    JoinAlgo(R S Grace) 
-    Card(R # 1) 
-    Card(R S # 10e6)
+    JoinType(R S Shuffle) 
+    Rows(R # 1) 
+    Rows(R S # 10e6)
 ';
 
 SELECT *

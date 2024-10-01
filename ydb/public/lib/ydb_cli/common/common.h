@@ -23,7 +23,11 @@ namespace NConsoleClient {
     const TString HomeDir = GetHomeDir();
 #endif
 
+// Print 'Try "--help" option for more info'
 class TMisuseException : public yexception {};
+
+// Print command help
+class TMisuseWithHelpException : public TMisuseException {};
 
 class TProfileConfig {
 public:

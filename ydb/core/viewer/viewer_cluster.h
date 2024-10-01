@@ -486,6 +486,29 @@ private:
             for (const TString& role : node.SystemState.GetRoles()) {
                 (*ClusterInfo.MutableMapNodeRoles())[role]++;
             }
+            for (const auto& poolStat : systemState.GetPoolStats()) {
+                TString poolName = poolStat.GetName();
+                NKikimrWhiteboard::TSystemStateInfo_TPoolStats* targetPoolStat = nullptr;
+                for (NKikimrWhiteboard::TSystemStateInfo_TPoolStats& ps : *ClusterInfo.MutablePoolStats()) {
+                    if (ps.GetName() == poolName) {
+                        targetPoolStat = &ps;
+                        break;
+                    }
+                }
+                if (targetPoolStat == nullptr) {
+                    targetPoolStat = ClusterInfo.AddPoolStats();
+                    targetPoolStat->SetName(poolName);
+                }
+                double poolUsage = targetPoolStat->GetUsage() * targetPoolStat->GetThreads();
+                poolUsage += poolStat.GetUsage() * poolStat.GetThreads();
+                ui32 poolThreads = targetPoolStat->GetThreads() + poolStat.GetThreads();
+                if (poolThreads != 0) {
+                    double threadUsage = poolUsage / poolThreads;
+                    targetPoolStat->SetUsage(threadUsage);
+                    targetPoolStat->SetThreads(poolThreads);
+                }
+                ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + poolStat.GetUsage() * poolStat.GetThreads());
+            }
         }
 
         for (auto& [tabletId, tabletState] : mergedTabletState) {

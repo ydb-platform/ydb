@@ -81,7 +81,7 @@ public:
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
-        settings.AddColumnTypes("UInt64");
+        settings.AddColumnTypes("Uint64");
         settings.AddColumnTypes("String");
         if (!emptyPredicate) {
             settings.SetPredicate("WHERE true");
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
         PQWrite(data, topicName);
 
-        ExpectSessionError(ReadActorId1, "Failed to unwrap empty optional");
+        ExpectSessionError(ReadActorId1, "DB::ParsingException: Cannot parse input: expected '{' before: 'not json': (at row 1)");
         StopSession(ReadActorId1, source);
     }
 

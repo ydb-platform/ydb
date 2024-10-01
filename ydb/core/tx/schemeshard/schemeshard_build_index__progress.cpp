@@ -34,10 +34,10 @@ static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
         return "Initiating";
     case TIndexBuildInfo::EState::Filling:
         return "Filling";
-    case TIndexBuildInfo::EState::DropTmp:
-        return "DropTmp";
-    case TIndexBuildInfo::EState::CreateTmp:
-        return "CreateTmp";
+    case TIndexBuildInfo::EState::DropBuild:
+        return "DropBuild";
+    case TIndexBuildInfo::EState::CreateBuild:
+        return "CreateBuild";
     case TIndexBuildInfo::EState::Applying:
         return "Applying";
     case TIndexBuildInfo::EState::Unlocking:
@@ -292,7 +292,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropTmpPropose(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ASSERT(buildInfo.IsBuildVectorIndex());
@@ -308,7 +308,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropTmpPropose(
 
     using namespace NTableIndex::NTableVectorKmeansTreeIndex;
     TString name = PostingTable;
-    const char* suffix = buildInfo.KMeans.Level % 2 == 0 ? TmpPostingTableSuffix0 : TmpPostingTableSuffix1;
+    const char* suffix = buildInfo.KMeans.Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
     name.append(suffix);
 
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
@@ -317,7 +317,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropTmpPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTmpPropose(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ASSERT(buildInfo.IsBuildVectorIndex());
@@ -347,7 +347,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTmpPropose(
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
-    const char* suffix = buildInfo.KMeans.Level % 2 == 0 ? TmpPostingTableSuffix0 : TmpPostingTableSuffix1;
+    const char* suffix = buildInfo.KMeans.Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
     op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
@@ -664,7 +664,7 @@ public:
             } else {
                 if (buildInfo.IsBuildVectorIndex()) {
                     Y_ASSERT(buildInfo.KMeans.NeedsAnotherLevel());
-                    ChangeState(BuildId, TIndexBuildInfo::EState::DropTmp);
+                    ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
                 } else {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 }
@@ -764,7 +764,7 @@ public:
                     }
                     if (buildInfo.KMeans.NeedsAnotherLevel()) {
                         AskToScheduleBilling(buildInfo);
-                        ChangeState(BuildId, TIndexBuildInfo::EState::DropTmp);
+                        ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
                         Progress(BuildId);
                         break;
                     }
@@ -780,12 +780,12 @@ public:
 
             break;
         }
-        case TIndexBuildInfo::EState::DropTmp:
+        case TIndexBuildInfo::EState::DropBuild:
             Y_ASSERT(buildInfo.IsBuildVectorIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), DropTmpPropose(Self, buildInfo), 0, ui64(BuildId));
+                Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
@@ -798,16 +798,16 @@ public:
                 Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
                 Self->PersistBuildIndexApplyTxDone(db, buildInfo);
 
-                ChangeState(BuildId, TIndexBuildInfo::EState::CreateTmp);
+                ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 Progress(BuildId);
             }
             break;
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::CreateBuild:
             Y_ASSERT(buildInfo.IsBuildVectorIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), CreateTmpPropose(Self, buildInfo), 0, ui64(BuildId));
+                Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
@@ -1050,8 +1050,8 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1202,8 +1202,8 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1281,8 +1281,8 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1458,8 +1458,8 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1537,8 +1537,8 @@ public:
             Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
             break;
         }
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -1704,8 +1704,8 @@ public:
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
         }
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
@@ -1818,8 +1818,8 @@ public:
                 Self->PersistBuildIndexInitiateTxId(db, buildInfo);
             }
             break;
-        case TIndexBuildInfo::EState::DropTmp:
-        case TIndexBuildInfo::EState::CreateTmp:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:

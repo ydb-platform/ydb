@@ -77,11 +77,13 @@ bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorIn
         }
 
         error.Code = TStatus::DISALLOW_TEMP;
-        const TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        error.Reason = TReason(
+            TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
-            << ". Down: " << DumpVDisksInfo(Down, info);
-        error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
+            << ". Down: " << DumpVDisksInfo(Down, info),
+            TReason::EType::TooManyUnavailableVDisks
+        );
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -151,11 +153,13 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
         }
 
         error.Code = TStatus::DISALLOW_TEMP;
-        const TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        error.Reason = TReason(
+            TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
-            << ". Down: " << DumpVDisksInfo(Down, info);
-        error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
+            << ". Down: " << DumpVDisksInfo(Down, info),
+            TReason::EType::TooManyUnavailableVDisks
+        );
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -193,22 +197,26 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
 
     if (DataCenterDisabledNodes.size() > 2) {
         error.Code = TStatus::DISALLOW_TEMP;
-        const TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        error.Reason = TReason(
+            TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Number of data centers with unavailable vdisks: " << DataCenterDisabledNodes.size()
             << ". Locked: " << DumpVDisksInfo(Locked, info)
-            << ". Down: " << DumpVDisksInfo(Down, info);
-        error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
+            << ". Down: " << DumpVDisksInfo(Down, info),
+            TReason::EType::TooManyUnavailableVDisks
+        );
         error.Deadline = defaultDeadline;
         return false;
     }
 
     error.Code = TStatus::DISALLOW_TEMP;
-    const TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+    error.Reason = TReason(
+        TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
         << ": too many unavailable vdisks"
         << ". Locked: " << DumpVDisksInfo(Locked, info)
-        << ". Down: " << DumpVDisksInfo(Down, info);
-    error.Reason = TReason(message, TReason::EType::TooManyUnavailableVDisks);
+        << ". Down: " << DumpVDisksInfo(Down, info),
+        TReason::EType::TooManyUnavailableVDisks
+    );
     error.Deadline = defaultDeadline;
 
     return false;

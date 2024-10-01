@@ -714,14 +714,15 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         case MODE_MAX_AVAILABILITY:
             if (restartRings + lockedRings > 1) {
                 error.Code = TStatus::DISALLOW_TEMP;
-                TString message = TStringBuilder() 
-                    << "Too many unavailable state storage rings"
+                error.Reason = TReason(
+                    TStringBuilder() << "Too many unavailable state storage rings"
                     << ". Restarting rings: "
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
                     << ". Temporary (for a 2 minutes) locked rings: "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
-                    << ". Maximum allowed number of unavailable rings for this mode: " << 1;
-                error.Reason = TReason(message, TReason::EType::TooManyUnavailableStateStorageRings);
+                    << ". Maximum allowed number of unavailable rings for this mode: " << 1,
+                    TReason::EType::TooManyUnavailableStateStorageRings
+                );
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -729,15 +730,16 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         case MODE_KEEP_AVAILABLE:
             if (restartRings + lockedRings + disabledRings > (nToSelect - 1) / 2) {
                 error.Code = TStatus::DISALLOW_TEMP;
-                TString message = TStringBuilder()
-                    << "Too many unavailable state storage rings"
+                error.Reason = TReason(
+                    TStringBuilder() << "Too many unavailable state storage rings"
                     << ". Restarting rings: "
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
                     << ". Temporary (for a 2 minutes) locked rings: "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Disabled rings: " << disabledRings
-                    << ". Maximum allowed number of unavailable rings for this mode: " << (nToSelect - 1) / 2;
-                error.Reason = TReason(message, TReason::EType::TooManyUnavailableStateStorageRings);
+                    << ". Maximum allowed number of unavailable rings for this mode: " << (nToSelect - 1) / 2,
+                    TReason::EType::TooManyUnavailableStateStorageRings
+                );
                 error.Deadline = defaultDeadline;
                 return false;
             }
@@ -765,11 +767,8 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
-        const auto& tabletNodes = ClusterInfo->SysNodesCheckers[tabletType];
-        auto result = tabletNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode);
-        if (!result.IsSuccess()) {
+        if (!ClusterInfo->SysNodesCheckers[tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
-            error.Reason = result.GetReason();
             error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
         }
@@ -782,27 +781,23 @@ bool TCms::TryToLockNode(const TAction& action,
                          const TActionOptions& opts,
                          const TNodeInfo& node,
                          TErrorInfo& error) const
-{   
+{
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    auto result = ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode);
-    if (!result.IsSuccess()) {
+    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = result.GetReason();
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
     }
-    
-    if (node.Tenant && opts.TenantPolicy != NONE) {
-        const auto& tenantNodes = ClusterInfo->TenantNodesChecker[node.Tenant];
-        auto result = tenantNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode);
-        if (!result.IsSuccess()) {
-            error.Code = TStatus::DISALLOW_TEMP;
-            error.Reason = result.GetReason();
-            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-            return false;
-        }
+
+    if (node.Tenant
+        && opts.TenantPolicy != NONE
+        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason))
+    {
+        error.Code = TStatus::DISALLOW_TEMP;
+        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+        return false;
     }
 
     return true;

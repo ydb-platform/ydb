@@ -27,47 +27,6 @@ public:
         NODE_STATE_DOWN /* "Down" */
     };
 
-    class TTryToLockResult {
-    public:
-        static TTryToLockResult Success() {
-            return TTryToLockResult(true);
-        }
-
-        static TTryToLockResult Fail(const TReason &reason) {
-            return TTryToLockResult(false, reason);
-        }
-
-        static TTryToLockResult Fail(TReason::EType type, const TString& msg) {
-            return Fail(TReason(msg, type));
-        }
-
-        static TTryToLockResult Fail(const TString& msg) {
-            return Fail(TReason(msg));
-        }
-
-        bool IsSuccess() const {
-            return IsSuccess_;
-        }
-
-        const TReason& GetReason() const {
-            return Reason;
-        }
-
-    private:
-        TTryToLockResult(bool isSuccess, const TReason &reason)
-            : IsSuccess_(isSuccess)
-            , Reason(reason)
-        {}
-
-        explicit TTryToLockResult(bool isSuccess)
-            : IsSuccess_(isSuccess)
-        {}
-
-    private:
-        bool IsSuccess_ = false;
-        const TReason Reason;
-    };
-
 protected:
     static ENodeState NodeState(NKikimrCms::EState state);
 
@@ -81,7 +40,7 @@ public:
     virtual void LockNode(ui32 nodeId) = 0;
     virtual void UnlockNode(ui32 nodeId) = 0;
 
-    virtual TTryToLockResult TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const = 0;
+    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const = 0;
 };
 
 /**
@@ -142,7 +101,7 @@ public:
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    TTryToLockResult TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
@@ -190,7 +149,7 @@ public:
     {
     }
 
-    TTryToLockResult TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const override final;
 };
 
 } // namespace NKikimr::NCms

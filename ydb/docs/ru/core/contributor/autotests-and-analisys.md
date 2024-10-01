@@ -5,16 +5,16 @@
 С историей выполнения тестов можно ознакомиться следующими путями
 {% list tabs %}
 
-- Через дашборд 
+- Через дашборд
 
-  Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
+Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
 
   * Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
-
 
 - Через отчет в PR
 
   * Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
+
     * Для FAIL и MUTED тестов появляется столбец "history" содержащий статус последних 5 запусков этого теста в poscommit проверках
     * В контекстном меню теста выберите `Open test history`
 

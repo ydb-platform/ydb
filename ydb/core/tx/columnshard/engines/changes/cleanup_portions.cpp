@@ -1,5 +1,6 @@
 #include "cleanup_portions.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/common/log.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -25,6 +26,14 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
         p.RemoveFromDatabase(context.DBWrapper);
         p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
         pathIds.emplace(p.GetPathId());
+        context.DB->OnCommit([self, portion = p.GetPortion(), pathId = p.GetPathId(), schema = p.GetSchemaVersionVerified(), db = context.DB]() {
+            TEMPLOG("Removing portion from cleanup");
+            ui32 refCount = self->TablesManager.VersionCounts.VersionRemoveRef(portion, pathId, schema);
+            if (refCount == 0) {
+                TEMPLOG("Ref count is set to 0 for version " << schema << " need to delete");
+                self->TablesManager.RemoveUnusedSchemaVersion(db, schema);
+            }
+        });
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);

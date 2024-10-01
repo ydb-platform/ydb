@@ -7,6 +7,8 @@
 #include "columnshard_private_events.h"
 #include "tables_manager.h"
 
+#include "common/log.h"
+
 #include "blobs_action/events/delete_blobs.h"
 #include "bg_tasks/events/local.h"
 #include "transactions/tx_controller.h"
@@ -17,6 +19,7 @@
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/manager.h"
+#include "engines/version_counts.h"
 
 #include "export/events/events.h"
 
@@ -45,6 +48,8 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/abstract/common.h>
 
+#include <util/generic/string.h>
+
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
@@ -53,6 +58,13 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
+class TDbWrapper;
+class TColumnEngineForLogs;
+class TBlobsRemovingResult;
+
+namespace NNormalizer::NBrokenBlobs {
+class TNormalizerResult;
+}
 
 namespace NReader {
 class TTxScan;
@@ -185,6 +197,12 @@ class TColumnShard
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
+
+    friend class NOlap::TDbWrapper;
+    friend class NOlap::TColumnEngineForLogs;
+    friend class NOlap::TBlobsRemovingResult;
+    friend class NOlap::NNormalizer::NBrokenBlobs::TNormalizerResult;
+    friend class TTablesManager;
 
     class TStoragesManager;
     friend class TTxController;

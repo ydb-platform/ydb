@@ -21,7 +21,7 @@ public:
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
-        
+
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
@@ -156,7 +156,7 @@ INormalizerTask::TPtr TNormalizer::BuildTask(std::vector<std::shared_ptr<TPortio
     return std::make_shared<TBrokenBlobsTask>(std::move(blobIds), std::move(portionByBlobId), schemas);
 }
 
- TConclusion<bool> TNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
+TConclusion<bool> TNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
     return true;
 }
 

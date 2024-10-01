@@ -54,6 +54,7 @@ public:
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
     virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
+    virtual void OnCommit(std::function<void()>&&) {};
 };
 
 class TDbWrapper : public IDbWrapper {
@@ -88,6 +89,10 @@ public:
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;
 
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override;
+
+    virtual void OnCommit(std::function<void()>&& callback) override {
+        Database.OnCommit(callback);
+    }
 
 private:
     NTable::TDatabase& Database;

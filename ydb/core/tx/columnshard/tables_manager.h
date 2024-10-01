@@ -6,6 +6,7 @@
 #include "engines/column_engine.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/base/row_version.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -149,6 +150,11 @@ private:
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
+
+public:
+    TVersionCounts VersionCounts;
+    TVersionToKey VersionToKey;
+
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
@@ -244,6 +250,7 @@ public:
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
+    void RemoveUnusedSchemaVersion(NTable::TDatabase* database, ui64 version);
     void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);

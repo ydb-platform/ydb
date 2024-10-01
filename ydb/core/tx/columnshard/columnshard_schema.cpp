@@ -1,7 +1,14 @@
 #include "columnshard_schema.h"
 #include "transactions/tx_controller.h"
+#include "columnshard_impl.h"
+
+#include "common/log.h"
 
 namespace NKikimr::NColumnShard {
+
+ui64 GetPlanStep(const NOlap::TInsertTableRecordLoadContext& constructor) {
+    return constructor.GetRecType() == Schema::EInsertTableIds::Committed ? constructor.GetPlanStep() : 0;
+}
 
 bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, NOlap::TInsertTableAccessor& insertTable, const TInstant& /*loadTime*/) {
     auto rowset = db.Table<InsertTable>().Select();
@@ -12,7 +19,10 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
     while (!rowset.EndOfSet()) {
         NOlap::TInsertTableRecordLoadContext constructor;
         constructor.ParseFromDatabase(rowset);
+        ui64 planStep = GetPlanStep(constructor);
 
+        TEMPLOG("Loaded schema version " << constructor.GetSchemaVersion() << " planstep " << planStep << " txid " << constructor.GetWriteTxId() << " dedup id " << constructor.GetDedupId() << " rec type " << (ui32)constructor.GetRecType());
+        insertTable.VersionCounts->VersionAddRef(TInsertKey(planStep, constructor.GetWriteTxId(), constructor.GetPathId(), constructor.GetDedupId(), (ui8)constructor.GetRecType()), constructor.GetSchemaVersion());
         switch (constructor.GetRecType()) {
             case Schema::EInsertTableIds::Inserted:
                 insertTable.AddInserted(constructor.BuildInsertedOrAborted(dsGroupSelector), true);

@@ -193,6 +193,14 @@ public:
         ShardingVersion = version;
     }
 
+    bool HasSchemaVersion() const {
+        return SchemaVersion.has_value();
+    }
+
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion.value();
+    }
+
     void SetRemoveSnapshot(const TSnapshot& snap) {
         AFL_VERIFY(!RemoveSnapshot);
         if (snap.Valid()) {

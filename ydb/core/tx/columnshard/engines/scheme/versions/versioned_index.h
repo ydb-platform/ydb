@@ -6,6 +6,24 @@ namespace NKikimr::NOlap {
 
 class IDbWrapper;
 
+class TSchemaKey {
+public:
+    ui64 PlanStep;
+    ui64 TxId;
+    ui32 Id;
+
+public:
+    TSchemaKey() = default;
+
+    TSchemaKey(ui32 id, ui64 planStep, ui64 txId)
+        : PlanStep(planStep)
+        , TxId(txId)
+        , Id(id)
+    {
+    }
+};
+
+
 class TGranuleShardingInfo {
 private:
     YDB_READONLY_DEF(NSharding::TGranuleShardingLogicContainer, ShardingInfo);
@@ -31,6 +49,9 @@ class TVersionedIndex {
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
+
+public:
+    std::optional<ui64> LastNotDeletedVersion;
 
 public:
     ISnapshotSchema::TPtr GetLastCriticalSchema() const {
@@ -108,8 +129,12 @@ public:
         return PrimaryKey;
     }
 
-    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    bool RemoveVersion(ui64 version);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo, NIceDb::TNiceDb* database, THashMap<ui64, std::vector<TSchemaKey>>& vesionToKey);
 
     bool LoadShardingInfo(IDbWrapper& db);
+
+private:
+    void RemoveVersionNoCheck(ui64 version);
 };
 }   // namespace NKikimr::NOlap

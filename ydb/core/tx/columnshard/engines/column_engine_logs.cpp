@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -25,28 +26,32 @@
 #include <concepts>
 
 namespace NKikimr::NOlap {
-
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, TVersionCounts* versionCounts, TVersionToKey* versionToKey, NIceDb::TNiceDb* database)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
+    , VersionCounts(versionCounts)
+    , VersionToKey(versionToKey)
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, schema);
+    RegisterSchemaVersion(snapshot, schema, database);
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema)
+    const TSnapshot& snapshot, TIndexInfo&& schema, TVersionCounts* versionCounts, TVersionToKey* versionToKey, NIceDb::TNiceDb* database)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+    , VersionCounts(versionCounts)
+    , VersionToKey(versionToKey)
+{
     ActualizationController = std::make_shared<NActualizer::TController>();
-    RegisterSchemaVersion(snapshot, std::move(schema));
+    RegisterSchemaVersion(snapshot, std::move(schema), database);
 }
 
 const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const {
@@ -129,7 +134,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo, NIceDb::TNiceDb* database) {
     bool switchOptimizer = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
@@ -137,7 +142,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
     }
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
-    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
+    auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo), database, *VersionToKey);
     if (isCriticalScheme) {
         if (!ActualizationStarted) {
             ActualizationStarted = true;
@@ -156,11 +161,11 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb* database) {
     std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager, SchemaObjectsCache);
     AFL_VERIFY(indexInfoOptional);
     NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
-    RegisterSchemaVersion(snapshot, std::move(indexInfo));
+    RegisterSchemaVersion(snapshot, std::move(indexInfo), database);
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -207,6 +212,9 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+            if (portion.HasSchemaVersion()) {
+                VersionCounts->VersionAddRef(portion.GetPortionIdVerified(), portion.GetPathId(), portion.GetSchemaVersion());
+            }
         })) {
             return false;
         }

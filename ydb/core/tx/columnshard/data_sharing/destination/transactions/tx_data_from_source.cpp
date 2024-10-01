@@ -1,10 +1,12 @@
 #include "tx_data_from_source.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/log.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
+    TEMPLOG("SaveToDatabase from TTxDataFromSource");
     using namespace NKikimr::NColumnShard;
     TDbWrapper dbWrapper(txc.DB, nullptr);
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
@@ -22,6 +24,9 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
             p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            txc.DB.OnCommit([self = Self, portion = p.GetPortion(), pathId = p.GetPathId(), schema = p.GetSchemaVersionVerified()]() {
+                self->TablesManager.VersionCounts.VersionAddRef(portion, pathId, schema);
+            });
         }
     }
     NIceDb::TNiceDb db(txc.DB);

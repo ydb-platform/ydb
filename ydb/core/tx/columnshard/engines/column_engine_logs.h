@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "column_engine.h"
+#include "version_counts.h"
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
@@ -81,8 +82,8 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema);
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, TVersionCounts* versionCounts, TVersionToKey* versionToKey, NIceDb::TNiceDb* database);
+    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, TVersionCounts* versionCounts, TVersionToKey* versionToKey, NIceDb::TNiceDb* database);
 
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
 
@@ -121,8 +122,8 @@ public:
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
 
-    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info, NIceDb::TNiceDb* database) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb* database) override;
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter) const override;
 
@@ -188,6 +189,8 @@ private:
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
+    TVersionCounts* VersionCounts;
+    TVersionToKey* VersionToKey;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
 
@@ -200,6 +203,10 @@ private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType, const TPortionInfo* exPortionInfo = nullptr) const;
+
+    bool RemoveSchemaVersion(ui64 version) override {
+        return VersionedIndex.RemoveVersion(version);
+    }
 };
 
 }   // namespace NKikimr::NOlap

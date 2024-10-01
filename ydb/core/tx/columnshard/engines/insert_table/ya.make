@@ -16,6 +16,8 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
     ydb/core/tablet_flat
+    ydb/core/tx/columnshard/data_sharing/protos
+    ydb/core/tx/columnshard/blobs_action/protos
 )
 
 END()

@@ -8,6 +8,10 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
+namespace NKikimr::NColumnShard {
+class TVersionCounts;
+}
+
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
 class IDbWrapper;
@@ -25,6 +29,11 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TInsertTableAccessor(NColumnShard::TVersionCounts* versionCounts = nullptr)
+        : VersionCounts(versionCounts)
+    {
+    }
+
     void ErasePath(const ui64 pathId) {
         Summary.ErasePath(pathId);
     }
@@ -84,6 +93,9 @@ public:
     bool IsOverloadedByCommitted(const ui64 pathId) const {
         return Summary.IsOverloaded(pathId);
     }
+
+public:
+    NColumnShard::TVersionCounts* VersionCounts;
 };
 
 class TInsertTable: public TInsertTableAccessor {
@@ -92,6 +104,12 @@ private:
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
+    TInsertTable(NColumnShard::TVersionCounts* versionCounts = nullptr)
+        : TInsertTableAccessor(versionCounts)
+    {
+    }
+
+
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 

@@ -1,5 +1,6 @@
 #include "portion_info.h"
 #include "constructor.h"
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>

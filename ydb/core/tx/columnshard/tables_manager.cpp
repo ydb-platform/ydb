@@ -153,6 +153,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            auto& key = VersionToKey[info.GetSchema().GetVersion()];
+            key.emplace_back(id, version.GetPlanStep(), version.GetTxId());
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
@@ -178,9 +180,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 "version", schemaInfo.GetSchema().GetVersion());
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
-                    TabletId, StoragesManager, preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema());
+                    TabletId, StoragesManager, preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema(), &VersionCounts, &VersionToKey, &db);
             } else {
-                PrimaryIndex->RegisterSchemaVersion(preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema());
+                PrimaryIndex->RegisterSchemaVersion(preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema(), &db);
             }
             it = preset.MutableVersionsById().erase(it);
         }
@@ -272,6 +274,21 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
+void TTablesManager::RemoveUnusedSchemaVersion(NTable::TDatabase* database, ui64 version) {
+    auto iter = VersionToKey.find(version);
+    AFL_VERIFY(iter != VersionToKey.end());
+    NIceDb::TNiceDb db(*database);
+    bool removed = false;
+    if (PrimaryIndex) {
+        removed = PrimaryIndex->RemoveSchemaVersion(version);
+    }
+    if (removed) {
+        for (auto& key: iter->second) {
+            db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.PlanStep, key.TxId).Delete();
+        }
+    }
+}
+
 void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
     Y_ABORT_UNLESS(SchemaPresetsIds.contains(presetId));
 
@@ -283,8 +300,10 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
 
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (versionInfo.HasSchema()) {
+        auto& key = VersionToKey[versionInfo.GetSchema().GetVersion()];
+        key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
         if (!PrimaryIndex) {
-            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema);
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema, &VersionCounts, &VersionToKey, &db);
             for (auto&& i : Tables) {
                 PrimaryIndex->RegisterTable(i.first);
             }
@@ -292,7 +311,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
                 PrimaryIndex->OnTieringModified(manager, Ttl, {});
             }
         } else {
-            PrimaryIndex->RegisterSchemaVersion(version, schema);
+            PrimaryIndex->RegisterSchemaVersion(version, schema, &db);
         }
         for (auto& columnName : Ttl.TtlColumns()) {
             PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);

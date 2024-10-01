@@ -1556,20 +1556,9 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     class TFormat : public TBoxedValue {
     public:
-        class TFactory : public TBoxedValue {
-        public:
-            explicit TFactory(TSourcePosition pos)
-                : Pos_(pos)
-            {}
-
-        private:
-            TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
-                return TUnboxedValuePod(new TFormat(args[0], Pos_));
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-            const TSourcePosition Pos_;
-        };
+        explicit TFormat(TSourcePosition pos)
+            : Pos_(pos)
+        {}
 
         static const TStringRef& Name() {
             static auto name = TStringRef::Of("Format");
@@ -1587,23 +1576,32 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             }
 
             auto resourceType = builder.Resource(TMResourceName);
+            auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
 
-            builder.Args()->Add(resourceType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-            builder.RunConfig<char*>().Returns<char*>();
+            auto stringType = builder.SimpleType<char*>();
+            auto optionalStringType = builder.Optional()->Item(stringType).Build();
+
+            auto boolType = builder.SimpleType<bool>();
+            auto optionalBoolType = builder.Optional()->Item(boolType).Build();
+
+            auto args = builder.Args();
+            args->Add(stringType);
+            args->Add(optionalBoolType).Name("AlwaysWriteFractionalSeconds");
+            args->Done();
+            builder.OptionalArgs(1);
+            builder.Returns(builder.Callable(1)->Arg(optionalResourceType).Returns(optionalStringType).Build());
 
             if (!typesOnly) {
-                builder.Implementation(new TFormat::TFactory(builder.GetSourcePosition()));
+                builder.Implementation(new TFormat(builder.GetSourcePosition()));
             }
+
+            builder.IsStrict();
 
             return true;
         }
 
     private:
-        const TSourcePosition Pos_;
-        const TUnboxedValue Format_;
-        std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_;
-
-        size_t ReservedSize_;
+        using TPrintersList = std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>>;
 
         struct TDataPrinter {
             const std::string_view Data;
@@ -1614,46 +1612,17 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             }
         };
 
-    private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-        {
-            try {
-                EMPTY_RESULT_ON_EMPTY_ARG(0);
-                const auto value = args[0];
-
-                auto& builder = valueBuilder->GetDateBuilder();
-
-                auto result = valueBuilder->NewStringNotFilled(ReservedSize_);
-                auto pos = result.AsStringRef().Data();
-                ui32 size = 0U;
-
-                for (const auto& printer : Printers_) {
-                    if (const auto plus = printer(pos, value, builder)) {
-                        size += plus;
-                        pos += plus;
-                    }
-                }
-
-                if (size < ReservedSize_) {
-                    result = valueBuilder->SubString(result.Release(), 0U, size);
-                }
-
-                return result;
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
+            bool alwaysWriteFractionalSeconds = false;
+            if (auto val = args[1]) {
+                alwaysWriteFractionalSeconds = val.Get<bool>();
             }
-        }
 
-        TFormat(const TUnboxedValuePod& runConfig, TSourcePosition pos)
-            : Pos_(pos)
-            , Format_(runConfig)
-        {
-            const std::string_view formatView(Format_.AsStringRef());
+            const std::string_view formatView(args[0].AsStringRef());
             auto dataStart = formatView.begin();
             size_t dataSize = 0U;
-            ReservedSize_ = 0U;
+            size_t reservedSize = 0U;
+            TPrintersList printers;
 
             for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) {
                 if (*ptr != '%') {
@@ -1662,8 +1631,8 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 }
 
                 if (dataSize) {
-                    Printers_.emplace_back(TDataPrinter{std::string_view(&*dataStart, dataSize)});
-                    ReservedSize_ += dataSize;
+                    printers.emplace_back(TDataPrinter{std::string_view(&*dataStart, dataSize)});
+                    reservedSize += dataSize;
                     dataSize = 0U;
                 }
 
@@ -1674,70 +1643,73 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 switch (*ptr) {
                 case '%': {
                     static constexpr size_t size = 1;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) {
                         *out = '%';
                         return size;
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'Y': {
                     static constexpr size_t size = 4;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetYear(value), out);
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'm': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetMonth(value), out);
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'd': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetDay(value), out);
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'H': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetHour(value), out);
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'M': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetMinute(value), out);
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'S':
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([alwaysWriteFractionalSeconds](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         constexpr size_t size = 2;
-                        if (const auto microsecond = GetMicrosecond(value)) {
+                        if (const auto microsecond = GetMicrosecond(value); microsecond || alwaysWriteFractionalSeconds) {
                             out += PrintNDigits<size>::Do(GetSecond(value), out);
                             *out++ = '.';
                             constexpr size_t msize = 6;
-                            return size + 1U + PrintNDigits<msize, false>::Do(microsecond, out);
+                            auto addSz = alwaysWriteFractionalSeconds ?
+                                PrintNDigits<msize, true>::Do(microsecond, out) :
+                                PrintNDigits<msize, false>::Do(microsecond, out);
+                            return size + 1U + addSz;
                         }
                         return PrintNDigits<size>::Do(GetSecond(value), out);
                     });
-                    ReservedSize_ += 9;
+                    reservedSize += 9;
                     break;
 
                 case 'z': {
                     static constexpr size_t size = 5;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
                         auto timezoneId = GetTimezoneId(value);
                         if (TTMStorage::IsUniversal(timezoneId)) {
                             std::memcpy(out, "+0000", size);
@@ -1757,21 +1729,21 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                         out += PrintNDigits<2U>::Do(shift % 60U, out);
                         return size;
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'Z':
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         const auto timezoneId = GetTimezoneId(value);
                         const auto tzName = NUdf::GetTimezones()[timezoneId];
                         std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
                         return tzName.size();
                     });
-                    ReservedSize_ += MAX_TIMEZONE_NAME_LEN;
+                    reservedSize += MAX_TIMEZONE_NAME_LEN;
                     break;
                 case 'b': {
                     static constexpr size_t size = 3;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         static constexpr std::string_view mp[] {
                             "Jan",
                             "Feb",
@@ -1791,11 +1763,11 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                         std::memcpy(out, mp[month - 1].data(), size);
                         return size;
                     });
-                    ReservedSize_ += size;
+                    reservedSize += size;
                     break;
                 }
                 case 'B': {
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                    printers.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         static constexpr std::string_view mp[] {
                             "January",
                             "February",
@@ -1816,7 +1788,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                         std::memcpy(out, monthFullName.data(), monthFullName.size());
                         return monthFullName.size();
                     });
-                    ReservedSize_ += 9U; // MAX_MONTH_FULL_NAME_LEN
+                    reservedSize += 9U; // MAX_MONTH_FULL_NAME_LEN
                     break;
                 }
                 default:
@@ -1827,10 +1799,62 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             }
 
             if (dataSize) {
-                Printers_.emplace_back(TDataPrinter{std::string_view(dataStart, dataSize)});
-                ReservedSize_ += dataSize;
+                printers.emplace_back(TDataPrinter{std::string_view(dataStart, dataSize)});
+                reservedSize += dataSize;
             }
+
+            return TUnboxedValuePod(new TImpl(Pos_, std::move(printers), reservedSize));
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
+
+        class TImpl : public TBoxedValue {
+        public:
+            TUnboxedValue Run(
+                const IValueBuilder* valueBuilder,
+                const TUnboxedValuePod* args) const override
+            {
+                try {
+                    EMPTY_RESULT_ON_EMPTY_ARG(0);
+                    const auto value = args[0];
+
+                    auto& builder = valueBuilder->GetDateBuilder();
+
+                    auto result = valueBuilder->NewStringNotFilled(ReservedSize_);
+                    auto pos = result.AsStringRef().Data();
+                    ui32 size = 0U;
+
+                    for (const auto& printer : Printers_) {
+                        if (const auto plus = printer(pos, value, builder)) {
+                            size += plus;
+                            pos += plus;
+                        }
+                    }
+
+                    if (size < ReservedSize_) {
+                        result = valueBuilder->SubString(result.Release(), 0U, size);
+                    }
+
+                    return result;
+                } catch (const std::exception& e) {
+                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                }
+            }
+
+            TImpl(TSourcePosition pos, TPrintersList&& printers, size_t reservedSize)
+                : Pos_(pos)
+                , Printers_(printers)
+                , ReservedSize_(reservedSize)
+            {}
+
+        private:
+            const TSourcePosition Pos_;
+
+            TPrintersList Printers_;
+            size_t ReservedSize_;
+        };
+
+        const TSourcePosition Pos_;
     };
 
     template<size_t Digits>

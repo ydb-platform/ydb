@@ -31,6 +31,7 @@ struct TTopicSessionMetrics {
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
+        ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
     }
 
     ~TTopicSessionMetrics() {
@@ -41,6 +42,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
 };
 
 struct TEvPrivate {
@@ -54,6 +56,7 @@ struct TEvPrivate {
         EvDataAfterFilteration,
         EvDataFiltered,
         EvPrintState,
+        EvReconnectSession,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
@@ -61,6 +64,7 @@ struct TEvPrivate {
     // Events
     struct TEvPqEventsReady : public NActors::TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
+    struct TEvReconnectSession : public NActors::TEventLocal<TEvReconnectSession, EvReconnectSession> {};
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
@@ -135,6 +139,8 @@ private:
         const TString& LogPrefix;    
     };
 
+    bool InflightReconnect = false;
+    TDuration ReconnectPeriod;
     const TString TopicPath;
     NActors::TActorId RowDispatcherActorId;
     ui32 PartitionId;
@@ -193,6 +199,7 @@ private:
 
     void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataParsed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
@@ -354,6 +361,15 @@ void TTopicSession::CreateTopicSession() {
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
         SubscribeOnNextEvent();
     }
+
+    if (!InflightReconnect) {
+        Y_UNUSED(TDuration::TryParse(sourceParams.GetReconnectPeriod(), ReconnectPeriod));
+        if (ReconnectPeriod != TDuration::Zero()) {
+            Metrics.ReconnectRate->Inc();
+            Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+        }
+        InflightReconnect = true;
+    }
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
@@ -366,6 +382,20 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
+}
+
+void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
+    Metrics.ReconnectRate->Inc();
+    TInstant minTime = GetMinStartingMessageTimestamp();
+    LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, Path " << TopicPath
+        << ", StartingMessageTimestamp " << minTime
+        << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+    if (ReadSession) {
+        ReadSession->Close(TDuration::Zero());
+        ReadSession.reset();
+    }
+    CreateTopicSession();
+    Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {

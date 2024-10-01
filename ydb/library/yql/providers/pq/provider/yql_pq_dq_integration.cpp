@@ -234,6 +234,8 @@ public:
                         srcDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == SharedReading) {
                         sharedReading = FromString<bool>(Value(setting));
+                    } else if (name == ReconnectPeriod) {
+                        srcDesc.SetConsumerName(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -356,6 +358,7 @@ public:
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
 
         

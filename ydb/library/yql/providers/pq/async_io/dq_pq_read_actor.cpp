@@ -74,6 +74,7 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvSourceDataReady = EvBegin,
+        EvReconnectSession,
 
         EvEnd
     };
@@ -83,6 +84,7 @@ struct TEvPrivate {
     // Events
 
     struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
+    struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
 };
 
 } // namespace
@@ -98,6 +100,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
+            ReconnectRate = task->GetCounter("ReconnectRate", true);
         }
 
         ~TMetrics() {
@@ -110,6 +113,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
     };
 
 public:
@@ -139,6 +143,7 @@ public:
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
     {
+        Y_UNUSED(TDuration::TryParse(SourceParams.GetReconnectPeriod(), ReconnectPeriod));
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
         TPqMetaExtractor fieldsExtractor;
         for (const auto& fieldName : SourceParams.GetMetadataFields()) {
@@ -209,6 +214,7 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+        hFunc(TEvPrivate::TEvReconnectSession, Handle);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -220,6 +226,17 @@ private:
         Metrics.InFlyAsyncInputData->Set(1);
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
+        SRC_LOG_D("SessionId: " << GetSessionId() << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
+        Metrics.ReconnectRate->Inc();
+        if (ReadSession) {
+            ReadSession->Close(TDuration::Zero());
+            ReadSession.reset();
+        }
+
+        Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
     }
 
     // IActor & IDqComputeActorAsyncInput
@@ -258,6 +275,12 @@ private:
 
         const auto now = TInstant::Now();
         MaybeScheduleNextIdleCheck(now);
+
+        if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
+            Metrics.ReconnectRate->Inc();
+            Schedule(ReconnectPeriod, new TEvPrivate::TEvSourceDataReady());
+            InflightReconnect = true;
+        }
 
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
@@ -565,6 +588,8 @@ private:
     };
 
 private:
+    bool InflightReconnect = false;
+    TDuration ReconnectPeriod;
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;

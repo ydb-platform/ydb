@@ -37,6 +37,7 @@ message TDqPqTopicSource {
     repeated string ColumnTypes = 13;
     string Predicate = 14;
     bool SharedReading = 15;
+    string ReconnectPeriod = 16; // disabled by default, example of a parameter: 5m
 }
 
 message TDqPqTopicSink {

@@ -326,7 +326,8 @@ message TPqClusterConfig {
     optional bool AddBearerToToken = 11; // whether to use prefix "Bearer " in token
     optional string DatabaseId = 12;
     repeated TAttr Settings = 100;
-    optional bool SharedReading = 101; 
+    optional bool SharedReading = 101;
+    optional string ReconnectPeriod = 102; // disabled by default, example of a parameter: 5m
 }
 
 message TPqGatewayConfig {

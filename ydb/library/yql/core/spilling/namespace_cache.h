@@ -34,8 +34,8 @@ struct TBaseTask {
     ui32 ObjId; // Identifier of the object
     ui32 SessionId; // Identifier of the session for this task
     TString Name; // Name of the object or stream
-    ui32 StreamBufId; // Id of the object inside the stream (0, 1, 2, ...)
-    TAtomicSharedPtr<TBuffer> Buf; // Data to save or load
+    ui32 StreamRopeId; // Id of the object inside the stream (0, 1, 2, ...)
+    TAtomicSharedPtr<TRope> Rope; // Data to save or load
     EProcessingStatus ProcessingStatus = EProcessingStatus::Added; // Contains current status of task processing stage
 };
 
@@ -100,7 +100,7 @@ struct TMetaFileAttributes {
 class TNamespaceCache {
 public:
     // Adds required spilling data to save queue
-    NThreading::TFuture<TOperationResults> Save(const TString& objName,  TBuffer && buf, ui32 sessionId, bool isStream = false );
+    NThreading::TFuture<TOperationResults> Save(const TString& objName,  TRope && rope, ui32 sessionId, bool isStream = false );
 
     // Loads data from namespace cache or long term storage
     NThreading::TFuture<TLoadOperationResults> Load(const TString& name, ui32 sessionId, EObjectsLifetime objLifetime = EObjectsLifetime::DeleteAfterLoad, bool isStream = false, ui32 streamId = 0 );

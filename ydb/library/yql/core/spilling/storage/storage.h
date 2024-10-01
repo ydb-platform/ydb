@@ -3,6 +3,7 @@
 #include <library/cpp/threading/future/async.h>
 #include <ydb/library/yql/core/spilling/interface/spilling.h>
 #include <util/system/datetime.h>
+#include <util/generic/buffer.h>
 
 namespace NYql {
 namespace NSpilling {
@@ -21,7 +22,7 @@ enum class EOperationType {
     TimeMark = 3,       // Add timemark to estimate timing of operations in meta file
     StreamAdd = 4,      // Add new stream sequence
     StreamDelete = 5,   // Deletes stream sequence
-    StreamBufAdd = 6,   // Adding new stream buffer
+    StreamRopeAdd = 6,  // Adding new stream rope
     SessionDelete = 7,  // Deletes session and all objects associated with session
 }; 
 
@@ -80,10 +81,10 @@ public:
     virtual TString GetName() = 0;  // Returns full name of the file
     virtual bool IsLocked() = 0;    // True when file is locked
     virtual ui64 Reserve(ui32 size) = 0; // Reserves size bytes for writing, returns file offset
-    virtual void Write(ui32 offset, const char * data, ui32 bytes) = 0;
+    virtual void Write(ui32 offset, const void* data, ui32 bytes) = 0;
     virtual void Seek(ui32 offset) = 0;
     // Reads up to 1 GB without retrying, returns -1 on error
-    virtual i32 Read(ui32 offset, char* buf, ui32 len) = 0;
+    virtual i32 Read(ui32 offset, void* buf, ui32 len) = 0;
     virtual void Delete() = 0; // Deletes spill file
     virtual ~ISpillFile() = default;
 };

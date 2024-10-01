@@ -7,7 +7,7 @@
 
 - Через дашборд
 
-Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
+  Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
 
   * Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
@@ -56,7 +56,7 @@
 `DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"`
 token in yav by name `ydb-sa-1_cloud_token`
 
-Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c0bb1ad0a8d9c9cf475922c98c1916a8/tpcc/ydb/insert\_tpcc\_results.py](https://github.com/ydb-platform/benchhelpers/blob/82495e35c0bb1ad0a8d9c9cf475922c98c1916a8/tpcc/ydb/insert_tpcc_results.py)
+Пример загрузки данных [https://github.com/ydb-platform/benchhelpers/blob/82495e35c0bb1ad0a8d9c9cf475922c98c1916a8/tpcc/ydb/insert\_tpcc\_results.py](https://github.com/ydb-platform/benchhelpers/blob/82495e35c0bb1ad0a8d9c9cf475922c98c1916a8/tpcc/ydb/insert_tpcc_results.py)
 
 {% endcut %}
 
@@ -95,15 +95,15 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 
 1. Добавьте issue в проект [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D). Для доступа к проекту требуется быть членом одной из [команд](https://github.com/orgs/ydb-platform/teams) {{ ydb-short-name }}
 1. Установите `Status` на `Muted`
-1. Установите поле `владелец` на имя команды (см. issue для имени владельца). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
+1. Установите поле `owner` = `%team_name%` (нарпример, на скриншоте: `Owner: TEAM:@ydb-platform/qp` имя команды `qp`). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
 1. Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) в новой вкладке и отредактируйте его.
 1. Скопируйте строку под `Add line to muted_ya.txt` (например, как на скриншоте, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) и добавьте ее в [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt), в какую часть файла добавлять не имеет значения.
 1. Отредактируйте имя ветки куда хотите внести изменение, например, замените `{username}-patch-1` на `mute/{username}`. Это требуется только для того, чтобы проверка на имя ветки разрешила влитие
 1. Создайте PR - скопируйте имя PR из имени issue.
 1. Скопируйте описание issue в PR, сохраните строку `Не для changelog (запись в changelog не требуется)`.
-1. Проверить, что в комментарии появилось сообщение ![Muted new %N% tests](https://storage.yandexcloud.net/ydb-public-images/muted_new.png)
+1. Проверить, что в комментарии появилось сообщение `Muted new %N% tests` ![Muted new %N% tests](https://storage.yandexcloud.net/ydb-public-images/muted_new.png)
 1. По ссылке проверить, что список тестов соответствует ожидаемому
-1. Получите "Approve" от члена команды владельца теста в PR
+1. Получите "Approve" от члена команды owner'a теста в PR
 1. Влить.
 1. Свяжите Issue и PR (поле "Development" в issue и PR)
 1. Сообщите команде владельца теста о новых отключениях - в личном сообщении или в общем чате (с упоминанием ответственного за команду)
@@ -146,7 +146,7 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 1. Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr).
 1. Выполните разделы **[Отключить Нестабильный Тест](#mute-flaky)** и **[Тест больше не Flaky - включаем (un-mute)](#unmute-flaky)** один раз в день или по требованию.
 
-## Отключение (mute) нестабильных тестов {#mute-flaky}
+### Отключение (mute) нестабильных тестов {#mute-flaky}
 
 Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr)
 

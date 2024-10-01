@@ -45,7 +45,28 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     // Y_ABORT("%s", modifyScheme.DebugString().c_str());
 
-    return CreateConsistentCopyTables(opId, modifyScheme, context);
+    auto res = CreateConsistentCopyTables(opId, modifyScheme, context);
+
+    // FIXME(+active) it is impossible to combine two datashard ops, we have to write new one
+    // if (bc->Properties.HasIncrementalBackupConfig()) {
+    //     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
+    //         NKikimrSchemeOp::TModifyScheme tx2;
+
+    //         tx2.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateContinuousBackup);
+    //         tx2.SetInternal(true);
+    //         auto& cb = *tx2.MutableCreateContinuousBackup();
+    //         cb.SetTableName(item.GetPath());
+    //         cb.MutableContinuousBackupDescription();
+
+    //         auto res2 = CreateNewContinuousBackup(opId, tx2, context, res);
+
+    //         if (!res2) {
+    //             return res;
+    //         }
+    //     }
+    // }
+
+    return res;
 }
 
 }  // namespace NKikimr::NSchemeShard

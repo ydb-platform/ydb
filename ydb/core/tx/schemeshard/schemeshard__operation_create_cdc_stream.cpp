@@ -564,7 +564,8 @@ public:
                 if (InitialScan) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
                 } else {
-                    checks.NotUnderOperation();
+                    checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
+                    // checks.NotUnderOperation();
                 }
             }
 
@@ -867,6 +868,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
 {
     const auto tablePath = workingDirPath.Child(tableName);
     if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
+        // Y_ABORT("'%s' '%s' '%s'", workingDirPath.PathString().c_str(), tableName.c_str(), streamName.c_str());
         return reject;
     }
 

@@ -15,7 +15,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+bool CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup);
 
     LOG_D("CreateNewContinuousBackup"
@@ -23,13 +23,16 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
         << ", tx# " << tx.ShortDebugString());
 
     const auto acceptExisted = !tx.GetFailOnExist();
-    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    const auto& cbOp = tx.GetCreateContinuousBackup();
-    const auto& tableName = cbOp.GetTableName();
+    // const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    const auto workingDirPath = TPath::Resolve("/Root", context.SS);
+    // const auto& cbOp = tx.GetCreateContinuousBackup();
+    // const auto& tableName = cbOp.GetTableName();
+    const TString tableName = "table";
 
     const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
-        return {std::get<ISubOperation::TPtr>(checksResult)};
+        result = {std::get<ISubOperation::TPtr>(checksResult)};
+        return false;
     }
 
     const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
@@ -41,11 +44,13 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        return false;
     }
 
     if (!context.SS->CheckLocks(tablePath.Base()->PathId, tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+        result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+        return false;
     }
 
     TVector<TString> boundaries;
@@ -66,10 +71,16 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
     streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
-    TVector<ISubOperation::TPtr> result;
-
     NCdc::DoCreateStream(result, createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false);
     NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, acceptExisted);
+
+    return true;
+}
+
+TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
+    CreateNewContinuousBackup(opId, tx, context, result);
 
     return result;
 }

@@ -872,10 +872,10 @@ struct TEvPQ {
     };
 
     struct TEvTxCommit : public TEventLocal<TEvTxCommit, EvTxCommit> {
-        TEvTxCommit(ui64 step, ui64 txId, const TMessageGroupsPtr& explicitMessageGroups)
+        TEvTxCommit(ui64 step, ui64 txId, TMessageGroupsPtr explicitMessageGroups = nullptr)
             : Step(step)
             , TxId(txId)
-            , ExplicitMessageGroups(explicitMessageGroups)
+            , ExplicitMessageGroups(std::move(explicitMessageGroups))
         {
         }
 

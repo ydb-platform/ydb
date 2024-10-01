@@ -87,6 +87,11 @@ jobs:
       run: |
         uname -a
         cat ydb/apps/ydb/version.txt
+        
+    - name: Prepare Microsoft Visual Studio environment for windows
+      if: ${{ matrix.os == 'windows' }}
+      shell: cmd
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
       
     - name: Build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}

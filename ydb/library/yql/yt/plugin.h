@@ -28,6 +28,7 @@ public:
     NYson::TYsonString DqManagerConfig;
     NYson::TYsonString FileStorageConfig;
     NYson::TYsonString OperationAttributes;
+    NYson::TYsonString Libraries;
 
     TString YTTokenPath;
 

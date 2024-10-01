@@ -20,6 +20,6 @@ class TestClickbench(ClickbenchBase):
     refference: str = 'CH.60'
 
 
-class TestClickbenchCannonical(ClickbenchBase):
+class TestClickbenchCanonical(ClickbenchBase):
     iterations: int = 1
-    check_cannonical = True
+    check_canonical = True

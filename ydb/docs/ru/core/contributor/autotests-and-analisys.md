@@ -41,11 +41,11 @@
 
 ### Как собирается история тестов
 
-Факт запуска автотестов и статусы выполнения собираются в GitHub Action скриптом [upload_tests_results.py](.github/scripts/analytics/upload_tests_results.py)
+Факт запуска автотестов и статусы выполнения собираются в GitHub Action скриптом [upload_tests_results.py](../../../../../.github/scripts/analytics/upload_tests_results.py)
 
   * Запускается для каждого запуска тестов во всех типах проверок (Nightly, PR-Check, Postcommit)
 
-Аналитика (стабильность, срезы по дням, определение owner'a тестов etc) собирается в GitHub Action через workflow [Collect-analytics-run](https://github.com/ydb-platform/ydb/blob/main/.github/workflows/collect_analytics.yml)
+Аналитика (стабильность, срезы по дням, определение owner'a тестов etc) собирается в GitHub Action через workflow [Collect-analytics-run](../../../../..//.github/workflows/collect_analytics.yml)
 
   * Выполняется каждый час
 
@@ -101,8 +101,8 @@ token in yav by name `ydb-sa-1_cloud_token`
 1. Добавьте issue в проект [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D). Для доступа к проекту требуется быть членом одной из [команд](https://github.com/orgs/ydb-platform/teams) {{ ydb-short-name }}
 1. Установите `Status` на `Muted`
 1. Установите поле `owner` = `%team_name%` (нарпример, на скриншоте: `Owner: TEAM:@ydb-platform/qp` имя команды `qp`). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
-1. Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) в новой вкладке и отредактируйте его.
-1. Скопируйте строку под `Add line to muted_ya.txt` (например, как на скриншоте, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) и добавьте ее в [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt), в какую часть файла добавлять не имеет значения.
+1. Откройте [muted_ya.txt](../../../../../.github/config/muted_ya.txt) в новой вкладке и отредактируйте его.
+1. Скопируйте строку под `Add line to muted_ya.txt` (например, как на скриншоте, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) и добавьте ее в [muted_ya.txt](../../../../../.github/config/muted_ya.txt), в какую часть файла добавлять не имеет значения.
 1. Отредактируйте имя ветки куда хотите внести изменение, например, замените `{username}-patch-1` на `mute/{username}`. Это требуется только для того, чтобы проверка на имя ветки разрешила влитие
 1. Создайте PR - скопируйте имя PR из имени issue.
 1. Скопируйте описание issue в PR, сохраните строку `Не для changelog (запись в changelog не требуется)`.
@@ -130,7 +130,7 @@ token in yav by name `ydb-sa-1_cloud_token`
 
 ### Как включить тест (un-mute) {#how-to-unmute}
 
-1. Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
+1. Откройте [muted_ya.txt](../../../../../.github/config/muted_ya.txt)
 1. Нажмите "Edit" и удалите строку теста
 1. Сохраните изменения (Отредактируйте ветку для слияния, например, замените `{username}-patch-1` на `mute/{username}`)
 1. Отредактируйте имя PR как `Unmute {имя теста}`

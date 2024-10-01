@@ -558,6 +558,7 @@ message TEvStartKqpTasksRequest {
 
     optional double PoolMaxCpuShare = 12;
     optional double QueryCpuShare = 16;
+    optional double ResourceWeight = 17;
 }
 
 message TEvStartKqpTasksResponse {

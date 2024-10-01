@@ -84,6 +84,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         
         // insert, not commited
         auto userData1 = std::make_shared<TUserData>(tableId, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
+        insertTable.RegisterPathInfo(tableId);
         bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData1));
         UNIT_ASSERT(ok);
 

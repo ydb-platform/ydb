@@ -688,7 +688,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            LOG_STORAGE_DEBUG(context, "taskId " << taskId <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
+                            LOG_STORAGE_DEBUG(context, "taskId " << (taskId ? ToString(taskId.value()) : "(empty maybe)") <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
                         }
                     }
                     catch (const std::exception& e) {

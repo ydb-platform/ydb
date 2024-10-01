@@ -1809,7 +1809,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result993 = pqClient.DescribeTopic("/Root/topic-993-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result993.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / 1_MB);
         }
 
         {
@@ -2155,12 +2155,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result0.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
 
             auto result1 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result1.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
-            UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
         }
 
         {
@@ -2183,9 +2183,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     initialTopicDescription.GetRetentionPeriod().MilliSeconds(),
                     resultingTopicDescription.GetRetentionPeriod().MilliSeconds()
             );
-            UNIT_ASSERT_VALUES_EQUAL(
-                    initialTopicDescription.GetRetentionStorageMb(),
-                    resultingTopicDescription.GetRetentionStorageMb()
+            UNIT_ASSERT(
+                initialTopicDescription.GetRetentionStorageMb() == resultingTopicDescription.GetRetentionStorageMb()
             );
         }
 

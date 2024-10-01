@@ -1324,7 +1324,7 @@ public:
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
         }
-        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId) {
+        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId && txCtx->HasTableWrite) {
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
@@ -1598,8 +1598,15 @@ public:
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
         const auto& msg = *ev->Get();
 
-        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName();
-        LOG_W(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId);
+        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName()
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
+
+        if (!QueryState || !QueryState->TxCtx || QueryState->TxCtx->BufferActorId != ev->Sender) {
+            LOG_W(logMsg <<  ": Old error, current bufferActor=" << QueryState->TxCtx->BufferActorId);
+            return;
+        } else {
+            LOG_W(logMsg);
+        }
 
         TString reason = TStringBuilder() << msg.Message << "; " << msg.SubIssues.ToString();
 
@@ -2118,13 +2125,14 @@ public:
         if (QueryState->TxCtx) {
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
-            QueryState->TxCtx->Finish();
-
             QueryState->TxCtx->TxManager.reset();
+
             if (QueryState->TxCtx->BufferActorId) {
                 Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
                 QueryState->TxCtx->BufferActorId = {};
             }
+
+            QueryState->TxCtx->Finish();
         }
     }
 

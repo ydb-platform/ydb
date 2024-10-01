@@ -72,7 +72,6 @@ namespace {
                 protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
             }
         } else if (prepareSettings.ArbiterColumnShard == shardId) {
-            Y_ABORT_UNLESS(false);
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
             for (const ui64 sendingShardId : prepareSettings.SendingShards) {
                 protoLocks->AddSendingShards(sendingShardId);
@@ -81,7 +80,6 @@ namespace {
                 protoLocks->AddReceivingShards(receivingShardId);
             }
         } else {
-            Y_ABORT_UNLESS(false);
             protoLocks->SetArbiterColumnShard(*prepareSettings.ArbiterColumnShard);
             protoLocks->AddSendingShards(*prepareSettings.ArbiterColumnShard);
             protoLocks->AddReceivingShards(*prepareSettings.ArbiterColumnShard);
@@ -294,7 +292,7 @@ public:
     }
 
     void UpdateShards() {
-        // Maybe there are better ways to initialize shards...
+        // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
             TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
             TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::WRITE);
@@ -335,7 +333,7 @@ public:
                 hFunc(TEvPrivate::TEvTerminate, Handle);
             }
         } catch (const yexception& e) {
-            CA_LOG_E(e.what());
+            CA_LOG_W(e.what());
         }
     }
 
@@ -384,11 +382,12 @@ public:
         entry.ShowPrivatePath = true;
         request->ResultSet.emplace_back(entry);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
+        //Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        YQL_ENSURE(!SchemeRequest || InconsistentTx);
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
 
@@ -677,19 +676,6 @@ public:
             }());
 
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            if (Mode != EMode::WRITE) {
-                CA_LOG_D("ERROR HERE TEST MODE" << static_cast<int>(Mode) << " Got completed result TxId=" << ev->Get()->Record.GetTxId()
-                    << ", TabletId=" << ev->Get()->Record.GetOrigin()
-                    << ", Cookie=" << ev->Cookie
-                    << ", Locks=" << [&]() {
-                        TStringBuilder builder;
-                        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                            builder << lock.ShortDebugString();
-                        }
-                        return builder;
-                    }());
-                Y_ABORT_UNLESS(false);
-            }
             Y_ABORT_UNLESS(Mode == EMode::WRITE);
             if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                 YQL_ENSURE(TxManager->BrokenLocks());
@@ -776,7 +762,9 @@ public:
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
         evWrite->Record.SetTxMode(isPrepare
-            ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE //NKikimrDataEvents::TEvWrite::MODE_PREPARE
+            ? (TxManager->IsVolatile()
+                ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
+                : NKikimrDataEvents::TEvWrite::MODE_PREPARE)
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
         if (isImmediateCommit) {
@@ -838,7 +826,6 @@ public:
             CA_LOG_D("Retry failed: not found ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
             return;
         }
-        Y_ABORT_UNLESS(false);
 
         CA_LOG_D("Retry ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
         SendDataToShard(shardId);
@@ -1071,7 +1058,6 @@ private:
 
     void PassAway() override {
         WriteTableActor->Terminate();
-        //TODO: wait for writer actors?
         TActorBootstrapped<TKqpDirectWriteActor>::PassAway();
     }
 
@@ -1288,8 +1274,6 @@ public:
         ProcessAckQueue();
 
         if (State == EState::FLUSHING) {
-            //Y_ABORT_UNLESS(DataQueues.empty());
-            //Y_ABORT_UNLESS(AckQueue.empty());
             bool isEmpty = true;
             for (auto& [_, info] : WriteInfos) {
                 isEmpty = isEmpty && info.WriteTableActor->IsReady() && info.WriteTableActor->IsEmpty();
@@ -1338,20 +1322,22 @@ public:
 
     void ProcessAckQueue() {
         while (!AckQueue.empty()) {
-            //const auto& item = AckQueue.front();
-            //if (GetTotalFreeSpace() >= item.DataSize) {
+            const auto& item = AckQueue.front();
+            if (GetTotalFreeSpace() >= item.DataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
                 CA_LOG_D("ProcessAckQueue ACK" << AckQueue.front().ForwardActorId);
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
-            //} else {
-            //    return;
-            //}
+            } else {
+                Y_ABORT_UNLESS(false);
+                return;
+            }
         }
     }
 
     void ProcessWrite() {
+        // TODO: early flush
         //Y_ABORT_UNLESS(GetTotalFreeSpace() <= 0);
         const bool needToFlush = /*GetTotalFreeSpace() <= 0*/ false
             || State == EState::FLUSHING
@@ -1447,7 +1433,9 @@ public:
             }
             auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isRollback
                 ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
-                : NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE); //NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+                : (TxManager->IsVolatile()
+                    ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
+                    : NKikimrDataEvents::TEvWrite::MODE_PREPARE));
 
             if (isRollback) {
                 FillEvWriteRollback(evWrite.get(), shardId, TxManager);
@@ -1546,9 +1534,6 @@ public:
     }
 
     void PassAway() override {
-        if (State != EState::FINISHED) {
-            Rollback();
-        }
         for (auto& [_, queue] : DataQueues) {
             while (!queue.empty()) {
                 auto& message = queue.front();
@@ -1871,12 +1856,18 @@ public:
     }
 
     void ReplyErrorAndDie(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        CA_LOG_E(message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString());
-        Send(SessionActorId, new TEvKqpBuffer::TEvError{
-            message,
-            statusCode,
-            subIssues,
-        });
+        CA_LOG_E(message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString() << ". sessionActorId=" << SessionActorId << ". isRollback=" << (State == EState::ROLLINGBACK));
+     
+        Y_ABORT_UNLESS(!HasError);
+        HasError = true;
+        if (State != EState::ROLLINGBACK) {
+            // Rollback can't finish with error
+            Send(SessionActorId, new TEvKqpBuffer::TEvError{
+                message,
+                statusCode,
+                subIssues,
+            });
+        }
         PassAway();
     }
 
@@ -1904,6 +1895,7 @@ private:
     THashMap<TTableId, TWriteInfo> WriteInfos;
 
     EState State;
+    bool HasError = false;
     THashMap<TTableId, std::queue<TBufferWriteMessage>> DataQueues;
 
     struct TAckMessage {

@@ -1093,6 +1093,9 @@ public:
     }
 
     void BeforePartitioningChanged() {
+        if (!Settings.Inconsistent) {
+            return;
+        }
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
             auto& writeInfo = WriteInfos.at(token);
             if (writeInfo.Serializer) {
@@ -1106,6 +1109,9 @@ public:
     }
 
     void AfterPartitioningChanged() {
+        if (!Settings.Inconsistent) {
+            return;
+        }
         if (!WriteInfos.empty()) {
             ShardsInfo.Close();
             ReshardData();
@@ -1386,6 +1392,7 @@ private:
     }
 
     void ReshardData() {
+        YQL_ENSURE(!Settings.Inconsistent);
         for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             for (size_t index = 0; index < shardInfo.Size(); ++index) {
                 const auto& batch = shardInfo.GetBatch(index);

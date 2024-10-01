@@ -197,6 +197,8 @@ public:
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
         YQL_ENSURE(!Locks.HasLocks());
+        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
 

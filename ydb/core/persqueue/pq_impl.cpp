@@ -134,7 +134,6 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
         (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
     }
 
-    PQ_LOG_I(">>>>> CreateExplicitMessageGroups DATA=" << partitionsData.ShortDebugString());
     for (const auto& p : partitionsData.GetPartition()) {
         for (const auto& g : p.GetMessageGroup()) {
             auto& group = (*explicitMessageGroups)[g.GetId()];
@@ -714,7 +713,6 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ApplyNewConfig(NewConfig, ctx);
     ClearNewConfig();
 
-    PQ_LOG_I(">>>>> ApplyNewConfigAndReply");
     auto explicitMessageGroups = CreateExplicitMessageGroups(BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig(),
                                                          PartitionsDataConfigTx ? *PartitionsDataConfigTx : NKikimrPQ::TPartitions());
 
@@ -1846,7 +1844,6 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
     write->SetValue(str);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 
-    PQ_LOG_I(">>>>> AddCmdWriteConfig");
     auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData);
 
     TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);

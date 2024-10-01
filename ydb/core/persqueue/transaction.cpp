@@ -59,7 +59,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
         WriteId = GetWriteId(tx);
     }
 
-    PartitionsData = tx.GetPartitions(); // TODO use move?
+    PartitionsData = std::move(tx.GetPartitions());
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -243,7 +243,6 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, const NKikimrP
 void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
-    PQ_LOG_I(">>>>> Received DATA=" << event.Data.ShortDebugString());
 
     UpdatePartitionsData(PartitionsData, event.Data);
 

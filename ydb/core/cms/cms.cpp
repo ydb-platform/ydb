@@ -405,6 +405,12 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                     || error.Code == TStatus::ERROR_TEMP)
                     response.SetDeadline(error.Deadline.GetValue());
             }
+
+            if (!allowPartial)
+                break;
+
+            if (schedule)
+                scheduled.AddActions()->CopyFrom(action);
         }
     }
     ClusterInfo->RollbackLocks(point);

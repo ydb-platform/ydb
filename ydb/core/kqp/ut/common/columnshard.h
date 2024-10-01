@@ -32,7 +32,7 @@ public:
     public:
         TString BuildQuery() const;
 
-        TColumnSchema& SetType(NScheme::TTypeInfo typeInfo);
+        TColumnSchema& SetType(const NScheme::TTypeInfo& typeInfo);
     };
 
     using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;

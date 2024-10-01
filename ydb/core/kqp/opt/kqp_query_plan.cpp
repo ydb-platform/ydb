@@ -1117,7 +1117,7 @@ private:
                     auto olapFilter = TExprBase(maybeOlapFilter).Cast<TKqpOlapFilter>();
 
                     TOperator op;
-                    op.Properties["Name"] = "F";
+                    op.Properties["Name"] = "Filter";
                     
                     op.Properties["Predicate"] = OlapStr(olapFilter.Condition().Ptr());
 

@@ -86,13 +86,13 @@ token in yav by name `ydb-sa-1_cloud_token`
 
   Откройте дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
 
-  1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  
+  1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению
   1. Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
   ![img](https://storage.yandexcloud.net/ydb-public-images/Test_history_dash.png)
 
 - Через отчет в PR
 
-  Откройте [отчет в PR](suggest-change.md#test-results) 
+  Откройте [отчет в PR](suggest-change.md#test-results)
 
   1. В контекстном меню теста выберите `Create mute issue` ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
 

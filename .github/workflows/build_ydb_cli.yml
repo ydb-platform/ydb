@@ -94,9 +94,12 @@ jobs:
       shell: cmd
       run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -o ./
     
-    - name: Build unix binary with ya make
-      if: ${{ matrix.os != 'windows' }}
-      run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no
+    - name: Create fake file
+      run: echo "test" > ydb/apps/ydb/ydb
+
+#    - name: Build unix binary with ya make
+#      if: ${{ matrix.os != 'windows' }}
+#      run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no
 
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4
@@ -164,5 +167,5 @@ jobs:
           cd ..
 
       - name: Upload to S3
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket=${{ inputs.s3_dns_host_bucket }} --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="${{ inputs.s3_dns_host_bucket }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
       

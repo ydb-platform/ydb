@@ -95,7 +95,6 @@ token in yav by name `ydb-sa-1_cloud_token`
   Откройте [отчет в PR](suggest-change.md#test-results) 
 
   1. В контекстном меню теста выберите `Create mute issue`
-
   ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
 
 {% endlist %}

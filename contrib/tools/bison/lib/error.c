@@ -1,5 +1,5 @@
 /* Error handler for noninteractive utilities
-   Copyright (C) 1990-1998, 2000-2007, 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 1990-1998, 2000-2007, 2009-2020 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    This program is free software: you can redistribute it and/or modify
@@ -86,7 +86,7 @@ extern void __error_at_line (int status, int errnum, const char *file_name,
 # undef putc
 # define putc(c, fp) _IO_putc (c, fp)
 
-# include <bits/libc-lock.h>
+# error #include <bits/libc-lock.h>
 
 #else /* not _LIBC */
 
@@ -119,7 +119,7 @@ int strerror_r (int errnum, char *buf, size_t buflen);
 #  endif
 # endif
 
-#define program_name getprogname ()
+# define program_name getprogname ()
 
 # if GNULIB_STRERROR_R_POSIX || HAVE_STRERROR_R || defined strerror_r
 #  define __strerror_r strerror_r

@@ -145,14 +145,21 @@ public:
     const TMaybe<TPartitionConsumerStats>& GetPartitionConsumerStats() const;
     const TMaybe<TPartitionLocation>& GetPartitionLocation() const;
 
+    const TMaybe<TString>& GetFromBound() const;
+    const TMaybe<TString>& GetToBound() const;
+
 private:
     ui64 PartitionId_;
     bool Active_;
     TVector<ui64> ChildPartitionIds_;
     TVector<ui64> ParentPartitionIds_;
+
     TMaybe<TPartitionStats> PartitionStats_;
     TMaybe<TPartitionConsumerStats> PartitionConsumerStats_;
     TMaybe<TPartitionLocation> PartitionLocation_;
+
+    TMaybe<TString> FromBound_;
+    TMaybe<TString> ToBound_;
 };
 
 struct TAlterPartitioningSettings;
@@ -207,11 +214,11 @@ class TPartitioningSettings {
 public:
     TPartitioningSettings() : MinActivePartitions_(0), MaxActivePartitions_(0), PartitionCountLimit_(0), AutoPartitioningSettings_(){}
     TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
-    TPartitioningSettings(ui64 minActivePartitions, ui64 maxActivePartitions, TAutoPartitioningSettings autoscalingSettings = {})
+    TPartitioningSettings(ui64 minActivePartitions, ui64 maxActivePartitions, TAutoPartitioningSettings autoPartitioning = {})
         : MinActivePartitions_(minActivePartitions)
         , MaxActivePartitions_(maxActivePartitions)
         , PartitionCountLimit_(0)
-        , AutoPartitioningSettings_(autoscalingSettings)
+        , AutoPartitioningSettings_(autoPartitioning)
  {
     }
 
@@ -457,6 +464,11 @@ struct TConsumerSettings {
 
     TConsumerSettings& SetSupportedCodecs(const TVector<ECodec>& codecs) {
         SupportedCodecs_ = codecs;
+        return *this;
+    }
+
+    TConsumerSettings& SetImportant(bool isImportant) {
+        Important_ = isImportant;
         return *this;
     }
 

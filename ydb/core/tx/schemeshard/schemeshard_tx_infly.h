@@ -137,6 +137,7 @@ struct TTxState {
         item(TxCreateResourcePool, 91) \
         item(TxDropResourcePool, 92) \
         item(TxAlterResourcePool, 93) \
+        item(TxRestoreIncrementalBackupAtTable, 94) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -423,6 +424,7 @@ struct TTxState {
         case TxAlterView:
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
+        case TxRestoreIncrementalBackupAtTable:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -495,6 +497,7 @@ struct TTxState {
         case TxCopySequence:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
+        case TxRestoreIncrementalBackupAtTable:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -602,6 +605,7 @@ struct TTxState {
         case TxCreateView:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
+        case TxRestoreIncrementalBackupAtTable:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -739,6 +743,14 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateResourcePool: return TxCreateResourcePool;
             case NKikimrSchemeOp::ESchemeOpAlterResourcePool: return TxAlterResourcePool;
             case NKikimrSchemeOp::ESchemeOpDropResourcePool: return TxDropResourcePool;
+            case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropExternalTable: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpCreateColumnBuild: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropContinuousBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup: return TxInvalid;
             default: return TxInvalid;
         }
     }

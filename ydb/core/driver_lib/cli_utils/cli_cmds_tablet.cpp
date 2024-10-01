@@ -2,6 +2,8 @@
 #include "cli_cmds.h"
 
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/public/api/grpc/draft/ydb_tablet_v1.grpc.pb.h>
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -83,69 +85,100 @@ public:
     }
 };
 
-class TClientCommandTabletExec : public TClientCommandBase {
+template<class TRequest, class TResponse>
+class TClientCommandTabletCommon {
+protected:
+    int RunTabletCommon(TClientCommand::TConfig& config) {
+        grpc::ClientContext context;
+        if (auto token = AcquireSecurityToken(config)) {
+            context.AddMetadata("x-ydb-auth-ticket", *token);
+        }
+        auto channel = NYdbGrpc::CreateChannelInterface(CommandConfig.ClientConfig);
+        auto stub = Ydb::Tablet::V1::TabletService::NewStub(channel);
+        if (NClient::TKikimr::DUMP_REQUESTS) {
+            Cerr << "<-- " << TypeName<TRequest>() << "\n" << Request.DebugString();
+        }
+        auto status = Send(context, stub);
+        if (!status.ok()) {
+            Cerr << "ERROR: " << int(status.error_code()) << " " << status.error_message() << Endl;
+            return 1;
+        }
+        if (NClient::TKikimr::DUMP_REQUESTS) {
+            Cerr << "--> " << TypeName<TResponse>() << "\n" << Response.DebugString();
+        }
+        if (Response.status() != Ydb::StatusIds::SUCCESS) {
+            Cerr << "ERROR: " << Response.status() << Endl;
+            for (const auto& issue : Response.issues()) {
+                Cerr << issue.message() << Endl;
+            }
+            return 1;
+        }
+        return 0;
+    }
+
+    virtual grpc::Status Send(
+        grpc::ClientContext& context,
+        const std::unique_ptr<Ydb::Tablet::V1::TabletService::Stub>& stub) = 0;
+
+protected:
+    TRequest Request;
+    TResponse Response;
+};
+
+class TClientCommandTabletExec
+    : public TClientCommandBase
+    , public TClientCommandTabletCommon<
+        Ydb::Tablet::ExecuteTabletMiniKQLRequest,
+        Ydb::Tablet::ExecuteTabletMiniKQLResponse>
+{
 public:
     TClientCommandTabletExec()
         : TClientCommandBase("execute", { "exec" })
     {
     }
 
-    TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL> Request;
     TString Program;
-    TString Params;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.Opts->AddLongOption("follower", "connect to follower").NoArgument();
-        config.Opts->AddLongOption("json-ui64-as-string", "json output ui64 as string").NoArgument();
-        config.Opts->AddLongOption("json-binary-as-base64", "json output binary data in base64").NoArgument();
-        config.SetFreeArgsNum(1, 2);
+        config.Opts->AddLongOption("dry-run", "test changes without applying").NoArgument();
+        config.SetFreeArgsNum(1, 1);
         SetFreeArgTitle(0, "<PROGRAM>", "Program to execute");
-        SetFreeArgTitle(1, "<PARAMS>", "Parameters of the program");
     }
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
         Program = GetMiniKQL(config.ParseResult->GetFreeArgs().at(0));
-        if (config.ParseResult->GetFreeArgCount() > 1)
-            Params = GetMiniKQL(config.ParseResult->GetFreeArgs().at(1));
 
-        Request = new NMsgBusProxy::TBusTabletLocalMKQL;
-        Request->Record.SetTabletID(config.TabletId);
-        auto* pgm = Request->Record.MutableProgram();
-        if (IsMiniKQL(Program)) {
-            pgm->MutableProgram()->SetText(Program);
-        } else {
-            pgm->MutableProgram()->SetBin(Program);
-        }
-
-        if (!Params.empty()) {
-            if (IsMiniKQL(Params)) {
-                pgm->MutableParams()->SetText(Params);
-            } else {
-                pgm->MutableParams()->SetBin(Params);
-            }
-        }
-
-        Request->Record.SetConnectToFollower(config.ParseResult->Has("follower"));
-        config.JsonUi64AsText = config.ParseResult->Has("json-ui64-as-string");
-        config.JsonBinaryAsBase64 = config.ParseResult->Has("json-binary-as-base64");
+        Request.set_tablet_id(config.TabletId);
+        Request.set_program(Program);
+        Request.set_dry_run(config.ParseResult->Has("dry-run"));
     }
 
     virtual int Run(TConfig& config) override {
-        return MessageBusCall(config, Request);
+        return RunTabletCommon(config);
+    }
+
+    virtual grpc::Status Send(
+        grpc::ClientContext& context,
+        const std::unique_ptr<Ydb::Tablet::V1::TabletService::Stub>& stub) override
+    {
+        return stub->ExecuteTabletMiniKQL(&context, Request, &Response);
     }
 };
 
-class TClientCommandTabletKill : public TClientCommand {
+class TClientCommandTabletKill
+    : public TClientCommand
+    , public TClientCommandTabletCommon<
+        Ydb::Tablet::RestartTabletRequest,
+        Ydb::Tablet::RestartTabletResponse>
+{
 public:
     TClientCommandTabletKill()
         : TClientCommand("kill")
     {
     }
-
-    TAutoPtr<NMsgBusProxy::TBusTabletKillRequest> Request;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -154,31 +187,40 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        Request = new NMsgBusProxy::TBusTabletKillRequest;
-        Request->Record.SetTabletID(config.TabletId);
+        Request.set_tablet_id(config.TabletId);
     }
 
     virtual int Run(TConfig& config) override {
-        return MessageBusCall(config, Request);
+        return RunTabletCommon(config);
+    }
+
+    virtual grpc::Status Send(
+        grpc::ClientContext& context,
+        const std::unique_ptr<Ydb::Tablet::V1::TabletService::Stub>& stub) override
+    {
+        return stub->RestartTablet(&context, Request, &Response);
     }
 };
 
-class TClientCommandTabletSchemeTx : public TClientCommand {
+class TClientCommandTabletSchemeTx
+    : public TClientCommand
+    , public TClientCommandTabletCommon<
+        Ydb::Tablet::ChangeTabletSchemaRequest,
+        Ydb::Tablet::ChangeTabletSchemaResponse>
+{
 public:
     TClientCommandTabletSchemeTx()
         : TClientCommand("scheme-tx", { "scheme" })
     {
     }
 
-    TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> Request;
     TString SchemeChanges;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.Opts->AddLongOption("follower",     "connect to follower");
-        config.Opts->AddLongOption("dry-run",   "test changes without applying");
+        config.Opts->AddLongOption("dry-run", "test changes without applying").NoArgument();
         config.SetFreeArgsNum(1, 1);
-        SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes to apply");
+        SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes json to apply");
     }
 
     virtual void Parse(TConfig& config) override {
@@ -186,20 +228,20 @@ public:
 
         SchemeChanges = config.ParseResult->GetFreeArgs().at(0);
 
-        Request = new NMsgBusProxy::TBusTabletLocalSchemeTx;
-        Request->Record.SetTabletID(config.TabletId);
-        auto* schemeChanges = Request->Record.MutableSchemeChanges();
-        if (!google::protobuf::TextFormat::ParseFromString(SchemeChanges, schemeChanges)) {
-            ythrow TWithBackTrace<yexception>() << "Invalid scheme changes protobuf passed";
-        }
-
-        if (config.ParseResult->Has("follower"))
-            Request->Record.SetConnectToFollower(true);
-        Request->Record.SetDryRun(config.ParseResult->Has("dry-run"));
+        Request.set_tablet_id(config.TabletId);
+        Request.set_schema_changes(SchemeChanges);
+        Request.set_dry_run(config.ParseResult->Has("dry-run"));
     }
 
     virtual int Run(TConfig& config) override {
-        return MessageBusCall(config, Request);
+        return RunTabletCommon(config);
+    }
+
+    virtual grpc::Status Send(
+        grpc::ClientContext& context,
+        const std::unique_ptr<Ydb::Tablet::V1::TabletService::Stub>& stub) override
+    {
+        return stub->ChangeTabletSchema(&context, Request, &Response);
     }
 };
 

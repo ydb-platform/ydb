@@ -27,7 +27,7 @@ TTL doesn't guarantee that the item will be deleted exactly at `expiration_time`
 Data is deleted by the *Background Removal Operation* (*BRO*), consisting of two stages:
 
 1. Checking the values in the TTL column.
-1. Deleting expired data.
+2. Deleting expired data.
 
 The *BRO* has the following properties:
 
@@ -42,17 +42,21 @@ The *BRO* has the following properties:
 ## Limitations {#restrictions}
 
 * The TTL column must be of one of the following types:
-   * `Date`.
-   * `Datetime`.
-   * `Timestamp`.
-   * `Uint32`.
-   * `Uint64`.
-   * `DyNumber`.
+
+  * `Date`.
+  * `Datetime`.
+  * `Timestamp`.
+  * `Uint32`.
+  * `Uint64`.
+  * `DyNumber`.
+
 * The value in the TTL column with a numeric type (`Uint32`, `Uint64`, or `DyNumber`) is interpreted as a [Unix time]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %} value. The following units are supported (set in the TTL settings):
-   * Seconds.
-   * Milliseconds.
-   * Microseconds.
-   * Nanoseconds.
+
+  * Seconds.
+  * Milliseconds.
+  * Microseconds.
+  * Nanoseconds.
+
 * You can't specify multiple TTL columns.
 * You can't delete the TTL column. However, if this is required, you should first [disable TTL](#disable) for the table.
 
@@ -72,29 +76,29 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 - YQL
 
-   ```yql
-   ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON created_at);
-   ```
+  ```yql
+  ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON created_at);
+  ```
 
 - CLI
 
-   ```bash
-   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column created_at --expire-after 3600 mytable
-   ```
+  ```bash
+  $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column created_at --expire-after 3600 mytable
+  ```
 
 {% if oss == true %}
 
 - C++
 
-   ```c++
-   session.AlterTable(
-       "mytable",
-       TAlterTableSettings()
-           .BeginAlterTtlSettings()
-               .Set("created_at", TDuration::Hours(1))
-           .EndAlterTtlSettings()
-   );
-   ```
+  ```c++
+  session.AlterTable(
+    "mytable",
+    TAlterTableSettings()
+      .BeginAlterTtlSettings()
+        .Set("created_at", TDuration::Hours(1))
+      .EndAlterTtlSettings()
+  );
+  ```
 
 {% endif %}
 
@@ -110,9 +114,9 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 - Python
 
-   ```python
-   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
-   ```
+  ```python
+  session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
+  ```
 
 {% endlist %}
 
@@ -134,23 +138,23 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 - CLI
 
-   ```bash
-   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at --expire-after 3600 --unit seconds mytable
-   ```
+  ```bash
+  $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at --expire-after 3600 --unit seconds mytable
+  ```
 
 {% if oss == true %}
 
 - C++
 
-   ```c++
-   session.AlterTable(
-       "mytable",
-       TAlterTableSettings()
-           .BeginAlterTtlSettings()
-               .Set("modified_at", TTtlSettings::EUnit::Seconds, TDuration::Hours(1))
-           .EndAlterTtlSettings()
-   );
-   ```
+  ```c++
+  session.AlterTable(
+    "mytable",
+    TAlterTableSettings()
+      .BeginAlterTtlSettings()
+        .Set("modified_at", TTtlSettings::EUnit::Seconds, TDuration::Hours(1))
+      .EndAlterTtlSettings()
+  );
+  ```
 
 {% endif %}
 
@@ -166,9 +170,9 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 - Python
 
-   ```python
-   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
-   ```
+  ```python
+  session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
+  ```
 
 {% endlist %}
 
@@ -180,31 +184,31 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - YQL
 
-   ```yql
-   CREATE TABLE `mytable` (
-       id Uint64,
-       expire_at Timestamp,
-       PRIMARY KEY (id)
-   ) WITH (
-       TTL = Interval("PT0S") ON expire_at
-   );
-   ```
+  ```yql
+  CREATE TABLE `mytable` (
+    id Uint64,
+    expire_at Timestamp,
+    PRIMARY KEY (id)
+  ) WITH (
+    TTL = Interval("PT0S") ON expire_at
+  );
+  ```
 
 {% if oss == true %}
 
 - C++
 
-   ```c++
-   session.CreateTable(
-       "mytable",
-       TTableBuilder()
-           .AddNullableColumn("id", EPrimitiveType::Uint64)
-           .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
-           .SetPrimaryKeyColumn("id")
-           .SetTtlSettings("expire_at")
-           .Build()
-   );
-   ```
+  ```c++
+  session.CreateTable(
+    "mytable",
+    TTableBuilder()
+      .AddNullableColumn("id", EPrimitiveType::Uint64)
+      .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
+      .SetPrimaryKeyColumn("id")
+      .SetTtlSettings("expire_at")
+      .Build()
+  );
+  ```
 
 {% endif %}
 
@@ -222,16 +226,16 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - Python
 
-   ```python
-   session.create_table(
-       'mytable',
-       ydb.TableDescription()
-       .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-       .with_column(ydb.Column('expire_at', ydb.OptionalType(ydb.DataType.Timestamp)))
-       .with_primary_key('id')
-       .with_ttl(ydb.TtlSettings().with_date_type_column('expire_at'))
-   )
-   ```
+  ```python
+  session.create_table(
+    'mytable',
+    ydb.TableDescription()
+      .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
+      .with_column(ydb.Column('expire_at', ydb.OptionalType(ydb.DataType.Timestamp)))
+      .with_primary_key('id')
+      .with_ttl(ydb.TtlSettings().with_date_type_column('expire_at'))
+  )
+  ```
 
 {% endlist %}
 
@@ -241,29 +245,29 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - YQL
 
-   ```yql
-   ALTER TABLE `mytable` RESET (TTL);
-   ```
+  ```yql
+  ALTER TABLE `mytable` RESET (TTL);
+  ```
 
 - CLI
 
-   ```bash
-   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
-   ```
+  ```bash
+  $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
+  ```
 
 {% if oss == true %}
 
 - C++
 
-   ```c++
-   session.AlterTable(
-       "mytable",
-       TAlterTableSettings()
-           .BeginAlterTtlSettings()
-               .Drop()
-           .EndAlterTtlSettings()
-   );
-   ```
+  ```c++
+  session.AlterTable(
+    "mytable",
+    TAlterTableSettings()
+      .BeginAlterTtlSettings()
+        .Drop()
+      .EndAlterTtlSettings()
+  );
+  ```
 
 {% endif %}
 
@@ -277,9 +281,9 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - Python
 
-   ```python
-   session.alter_table('mytable', drop_ttl_settings=True)
-   ```
+  ```python
+  session.alter_table('mytable', drop_ttl_settings=True)
+  ```
 
 {% endlist %}
 
@@ -291,18 +295,18 @@ The current TTL settings can be obtained from the table description:
 
 - CLI
 
-   ```bash
-   $ {{ ydb-cli }} -e <endpoint> -d <database> scheme describe mytable
-   ```
+  ```bash
+  $ {{ ydb-cli }} -e <endpoint> -d <database> scheme describe mytable
+  ```
 
 {% if oss == true %}
 
 - C++
 
-   ```c++
-   auto desc = session.DescribeTable("mytable").GetValueSync().GetTableDescription();
-   auto ttl = desc.GetTtlSettings();
-   ```
+  ```c++
+  auto desc = session.DescribeTable("mytable").GetValueSync().GetTableDescription();
+  auto ttl = desc.GetTtlSettings();
+  ```
 
 {% endif %}
 
@@ -318,9 +322,9 @@ The current TTL settings can be obtained from the table description:
 
 - Python
 
-   ```python
-   desc = session.describe_table('mytable')
-   ttl = desc.ttl_settings
-   ```
+  ```python
+  desc = session.describe_table('mytable')
+  ttl = desc.ttl_settings
+  ```
 
 {% endlist %}

@@ -22,6 +22,11 @@ public:
 
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline explicit TBlockItem(T value);
+
+    inline explicit TBlockItem(NYql::NDecimal::TInt128 value) {
+        *reinterpret_cast<NYql::NDecimal::TInt128*>(&Raw) = value;
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+    }
     
     inline explicit TBlockItem(IBoxedValuePtr&& value) {
         Raw.Resource.Meta = static_cast<ui8>(EMarkers::Boxed);
@@ -59,6 +64,19 @@ public:
         Raw.Halfs[1] = high;
     }
 
+    inline static TBlockItem Embedded(const TStringRef& value) {
+        UDF_VERIFY(value.Size() <= sizeof(TRawEmbeddedValue::Buffer));
+
+        TBlockItem v;
+        v.Raw.Embedded.Size = value.Size();
+        v.Raw.Embedded.Meta = static_cast<ui8>(EMarkers::Embedded);
+        if (v.Raw.Embedded.Size) {
+            std::memcpy(v.Raw.Embedded.Buffer, value.Data(), v.Raw.Embedded.Size);
+        }
+
+        return v;
+    }
+
     inline ui64 Low() const {
         return Raw.Halfs[0];
     }
@@ -73,6 +91,14 @@ public:
 
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T Get() const;
+
+    inline NYql::NDecimal::TInt128 GetInt128() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
+        auto v = *reinterpret_cast<const NYql::NDecimal::TInt128*>(&Raw);
+        const auto p = reinterpret_cast<ui8*>(&v);
+        p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
+        return v;
+    }
 
     // TODO: deprecate AsTuple() in favor of GetElements()
     inline const TBlockItem* AsTuple() const {

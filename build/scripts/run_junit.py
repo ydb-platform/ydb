@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -12,6 +13,30 @@ def on_shutdown(s, f):
     raise SignalInterruptionError()
 
 
+def mkdir_p(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+def _resolve_tmpdir_to_ram_drive_path(args):
+    java_io_tmpdir_arg = '-Djava.io.tmpdir='
+    for i, arg in enumerate(args):
+        if arg.startswith(java_io_tmpdir_arg) and arg.split('=')[-1] == "${YA_TEST_JAVA_TMP_DIR}":
+            try:
+                with open(os.environ['YA_TEST_CONTEXT_FILE']) as afile:
+                    context = json.load(afile)
+                ram_tmpdir = context['runtime']['ram_drive_path']
+            except Exception as e:
+                ram_tmpdir = os.path.join(os.getcwd(), 'tests_tmp_dir')
+                msg = "Warning: temp dir on ram drive was requested but ram drive path couldn't be obtained "
+                msg += 'from context file due to error {!r}. '.format(e)
+                msg += 'Temp dir in cwd will be used instead: {}\n'.format(ram_tmpdir)
+                sys.stderr.write(msg)
+                mkdir_p(ram_tmpdir)
+            args[i] = java_io_tmpdir_arg + ram_tmpdir
+            return
+
+
 def main():
     args = sys.argv[1:]
 
@@ -21,6 +46,8 @@ def main():
     jar_binary = args[args.index('--jar-binary') + 1]
     java_bin_dir = os.path.dirname(jar_binary)
     jstack_binary = os.path.join(java_bin_dir, 'jstack.exe' if sys.platform == 'win32' else 'jstack')
+
+    _resolve_tmpdir_to_ram_drive_path(args)
 
     if not os.path.exists(jstack_binary):
         sys.stderr.write("jstack is missing: {}\n".format(jstack_binary))

@@ -27,8 +27,14 @@ NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const
     return result;
 }
 
-bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) {
+bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& /*proto*/) {
     return true;
+}
+
+std::shared_ptr<arrow::RecordBatch> TConstructor::DoConstruct(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+    NArrow::NAccessor::TSparsedArray sparsed(*columnData, externalInfo.GetDefaultValue());
+    return sparsed.GetRecordBatchVerified();
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSparsed

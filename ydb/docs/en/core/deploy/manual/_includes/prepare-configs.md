@@ -7,6 +7,7 @@ Prepare a configuration file for {{ ydb-short-name }}:
    * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/stable-23-3/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-data center cluster consisting of 3 nodes.
 
 1. In the `host_configs` section, specify all disks and their types on each cluster node. Possible disk types:
+
    * ROT: Rotational, HDD.
    * SSD: SSD or NVMe.
 
@@ -18,7 +19,7 @@ Prepare a configuration file for {{ ydb-short-name }}:
      host_config_id: 1
    ```
 
-1. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`:
+2. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`:
 
    ```json
    hosts:
@@ -42,12 +43,12 @@ Prepare a configuration file for {{ ydb-short-name }}:
        rack: '1'
    ```
 
-1. Under `blob_storage_config`, edit the FQDNs of all the nodes accommodating your static storage group:
+3. Under `blob_storage_config`, edit the FQDNs of all the nodes accommodating your static storage group:
 
    * For the `mirror-3-dc` scheme, specify FQDNs for nine nodes.
    * For the `block-4-2` scheme, specify FQDNs for eight nodes.
 
-1. Enable user authentication (optional).
+4. Enable user authentication (optional).
 
    If you plan to use authentication and user access differentiation features in the {{ ydb-short-name }} cluster, add the following parameters to the `domains_config` section:
 

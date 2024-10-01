@@ -28,7 +28,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
-ISubOperation::TPtr DropIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId) {
+ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, bool& rejected) {
     TPath implTable = index.Child(name);
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
@@ -41,8 +41,10 @@ ISubOperation::TPtr DropIndexImplTable(TOperationContext& context, const TPath& 
         .NotUnderDeleting()
         .NotUnderOperation();
     if (!checks) {
-        return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        rejected = true;
+        return CreateReject(nextId, checks.GetStatus(), checks.GetError());
     }
+    rejected = false;
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
     auto operation = transaction.MutableDrop();
     operation->SetName(name);
@@ -65,7 +67,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         *finalize.MutableLockGuard() = tx.GetLockGuard();
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
-        op->SetSnapshotTxId(config.GetSnaphotTxId()); // TODO: fix spelling error in flat_scheme_op.proto first
+        op->SetSnapshotTxId(config.GetSnapshotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
@@ -92,8 +94,13 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
-            if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
-                result.push_back(DropIndexImplTable(context, index, nextId, partId, indexImplTableName, indexChildItems.second));
+            if (NTableIndex::IsBuildImplTable(indexImplTableName)) {
+                bool rejected = false;
+                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, rejected);
+                if (rejected) {
+                    return {std::move(op)};
+                }
+                result.push_back(std::move(op));
             } else {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
             }
@@ -118,7 +125,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         *finalize.MutableLockGuard() = tx.GetLockGuard();
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
-        op->SetSnapshotTxId(config.GetSnaphotTxId());
+        op->SetSnapshotTxId(config.GetSnapshotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
 
         if (!indexName.empty()) {
@@ -143,7 +150,12 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
-            result.push_back(DropIndexImplTable(context, index, nextId, partId, indexChildItems.first, indexChildItems.second));
+            bool rejected = false;
+            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, rejected);
+            if (rejected) {
+                return {std::move(op)};
+            }
+            result.push_back(std::move(op));
         }
     }
 

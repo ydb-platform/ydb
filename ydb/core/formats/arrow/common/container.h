@@ -1,11 +1,10 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-
-#include <ydb/core/formats/arrow/modifier/schema.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
+#include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
@@ -24,14 +23,14 @@ public:
 
 class TGeneralContainer {
 private:
-    YDB_READONLY_DEF(std::optional<ui64>, RecordsCount);
+    std::optional<ui64> RecordsCount;
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
     void Initialize();
 public:
     TGeneralContainer(const ui32 recordsCount);
 
-    ui32 GetRecordsCountVerified() const {
+    ui32 GetRecordsCount() const {
         AFL_VERIFY(RecordsCount);
         return *RecordsCount;
     }
@@ -73,6 +72,8 @@ public:
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data);
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
+
+    void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
 
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);

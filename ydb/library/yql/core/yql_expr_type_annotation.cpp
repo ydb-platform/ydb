@@ -181,6 +181,21 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
             return IGraphTransformer::TStatus::Repeat;
         }
+    } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Resource) {
+        const auto from = sourceType.Cast<TResourceExprType>()->GetTag();
+        const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
+        if (from == "DateTime2.TM" && to == "DateTime2.TM64") {
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "DateTime2.Convert", TNodeFlags::Default)
+                    .Seal()
+                    .Add(1, std::move(node))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        }
     } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Data) {
         const auto fromSlot = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
@@ -232,8 +247,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
-
-        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && to == "DateTime2.TM") {
+        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && (to == "DateTime2.TM" || to == "DateTime2.TM64")) {
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -3126,12 +3140,20 @@ bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
     return IsWideBlockType(*itemType);
 }
 
-bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types,
+    bool reportUnspported)
+{
     if (!types.ArrowResolver) {
         return false;
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    IArrowResolver::TUnsupportedTypeCallback onUnsupportedType;
+    if (reportUnspported) {
+        onUnsupportedType  = [&types](const auto& typeKindOrSlot) {
+            std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+        };
+    }
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }

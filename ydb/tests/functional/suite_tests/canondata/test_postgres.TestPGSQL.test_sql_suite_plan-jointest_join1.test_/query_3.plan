@@ -43,7 +43,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "i = i",
+                                                "Condition": "J2_TBL.i = J1_TBL.i",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
@@ -179,7 +179,10 @@
                 ],
                 "Subplan Name": "CTE precompute_0_0"
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

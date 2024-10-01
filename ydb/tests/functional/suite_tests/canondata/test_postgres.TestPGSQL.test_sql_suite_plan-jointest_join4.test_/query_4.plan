@@ -78,7 +78,7 @@
                                                 "TopSortBy": "row.name"
                                             },
                                             {
-                                                "Condition": "a = a.code",
+                                                "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 17
@@ -98,7 +98,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 13,
                                                         "Plans": [
                                                             {
@@ -110,7 +110,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "code = a",
+                                                                                "Condition": "a.code = b_grp.a",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 10
@@ -130,7 +130,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 6,
                                                                                         "Plans": [
                                                                                             {
@@ -207,7 +207,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 9,
                                                                                         "Plans": [
                                                                                             {
@@ -250,7 +250,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 16,
                                                         "Plans": [
                                                             {
@@ -291,7 +291,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

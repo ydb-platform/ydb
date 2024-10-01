@@ -36,7 +36,7 @@
 Получите список фоновых операций построение индекса для таблицы `series`:
 
 ```bash
-ydb -p quickstart operation list \
+{{ ydb-cli }} -p quickstart operation list \
   buildindex
 ```
 

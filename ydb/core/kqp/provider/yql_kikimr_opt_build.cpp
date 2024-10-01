@@ -887,23 +887,23 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     TNodeOnNodeOwnedMap replaces;
     std::unordered_set<std::string> pgDynTables = {"pg_tables", "tables", "pg_class"};
-    std::unordered_map<const NYql::TExprNode*, TString> tableNames;
-    VisitExpr(node.Ptr(), [&replaces, &tableNames, &pgDynTables](const TExprNode::TPtr& input) -> bool {
+    VisitExpr(node.Ptr(), [&replaces, &pgDynTables](const TExprNode::TPtr& input) -> bool {
         if (input->IsCallable("PgTableContent")) {
             TPgTableContent content(input);
             if (pgDynTables.contains(content.Table().StringValue())) {
                 replaces[input.Get()] = nullptr;
-                tableNames[input.Get()] = content.Table().StringValue();
             }
         }
         return true;
     });
     if (!replaces.empty()) {
-        for (auto& [key, _] : replaces) {
+        for (auto& [input, _] : replaces) {
+            TPgTableContent content(input);
+
             TExprNode::TPtr path = ctx.NewCallable(
                 node.Pos(),
                 "String",
-                { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/" << tableNames[key]) }
+                { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/" << content.Table().StringValue()) }
             );
             auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
             auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
@@ -923,10 +923,21 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                 .Build()
             .Done().Ptr();
 
+
             auto readData = Build<TCoRight>(ctx, node.Pos())
                 .Input(ydbSysTableRead)
             .Done().Ptr();
-            replaces[key] = readData;
+
+            if (auto v = content.Columns().Maybe<TCoVoid>()) {
+                replaces[input] = readData;
+            } else {
+                auto extractMembers = Build<TCoExtractMembers>(ctx, node.Pos())
+                    .Input(readData)
+                    .Members(content.Columns().Ptr())
+                .Done().Ptr();
+
+                replaces[input] = extractMembers;
+            }
         }
         ctx.Step
             .Repeat(TExprStep::ExprEval)

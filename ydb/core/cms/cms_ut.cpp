@@ -1808,9 +1808,94 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckRejectRequest("user", request3.GetRequestId());
     }
 
+    Y_UNIT_TEST(AllVDisksEvictionInRack)
+    {
+        auto opts = TTestEnvOpts(8)
+            .WithSentinel()
+            .WithNodeLocationCallback([](ui32 nodeId) {
+                NActorsInterconnect::TNodeLocation location;
+                location.SetRack(ToString(nodeId / 2 + 1));
+                return TNodeLocation(location); // Node = [0, 1, 2, 3, 4, 5, 6, 7]
+                                                // Rack = [1, 1, 2, 2, 3, 3, 4, 4]
+            });
+        TCmsTestEnv env(opts);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
+        // Evict all VDisks from rack 1
+        auto request1 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP // ok, waiting for move VDisks
+        );
+        auto request2 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP // ok, waiting for move VDisks
+        );
+
+        // Check that FAULTY BSC requests are sent
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0), env.GetNodeId(1) }, NKikimrBlobStorage::FAULTY);
+
+        // "Move" VDisks from rack 1
+        auto& node1 = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node1.VDisksMoved = true;
+        node1.VDiskStateInfo.clear();
+        auto& node2 = TFakeNodeWhiteboardService::Info[env.GetNodeId(1)];
+        node2.VDisksMoved = true;
+        node2.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
+        auto permission2 = env.CheckRequest("user", request2.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
+        env.CheckDonePermission("user", permission2.GetPermissions(0).GetId());
+    }
+
+    Y_UNIT_TEST(DisabledEvictVDisks)
+    {
+        auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
+        // Make transition faster for tests purposes
+        auto cmsConfig = env.GetCmsConfig();
+        cmsConfig.MutableSentinelConfig()->SetDefaultStateLimit(1);
+        env.SetCmsConfig(cmsConfig);
+
+        // Evict VDisks
+        auto request = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP // ok, waiting for move VDisks
+        );
+     
+        // Check that FAULTY BSC request is sent
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+
+        // Disable VDisks eviction
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(cmsConfig);
+
+        // Check that ACTIVE BSC request is sent
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::ACTIVE);
+
+        // Check that CMS returns ERROR when VDisks eviction is disabled
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::ERROR, 0);
+
+        // Enable VDisks eviction again
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(cmsConfig);
+
+        // Check that FAULTY BSC request is sent again
+        env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+    }
+
     Y_UNIT_TEST(EmergencyDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1839,7 +1924,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(ScheduledEmergencyDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1871,7 +1956,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(WalleRequestDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1899,7 +1984,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(ScheduledWalleRequestDuringRollingRestart)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1930,7 +2015,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(EnableCMSRequestPrioritiesFeatureFlag)
     {
-        TCmsTestEnv env(8);
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutEnableCMSRequestPriorities());
         // Start rolling restart with specified priority
         auto rollingRestart = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::WRONG_REQUEST,
@@ -1943,7 +2028,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(SamePriorityRequest)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -1973,7 +2058,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(SamePriorityRequest2)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Start rolling restart
         auto rollingRestart = env.CheckPermissionRequest
@@ -2003,7 +2088,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(PriorityRange)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         const TString expectedReason = "Priority value is out of range";
         
@@ -2024,7 +2109,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(WalleTasksDifferentPriorities)
     {
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCMSRequestPriorities());
+        TCmsTestEnv env(8);
 
         // Without node limits
         NKikimrCms::TCmsConfig config;

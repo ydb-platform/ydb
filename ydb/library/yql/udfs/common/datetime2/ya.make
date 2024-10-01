@@ -8,7 +8,7 @@ ELSE()
     YQL_UDF_YDB(datetime2_udf)
     YQL_ABI_VERSION(
         2
-        37
+        40
         0
     )
     SRCS(
@@ -26,4 +26,5 @@ ENDIF()
 
 RECURSE_FOR_TESTS(
     test
+    test_bigdates
 )

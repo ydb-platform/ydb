@@ -62,18 +62,24 @@ private:
     TString DatabasePath; 
 };
 
+void EscapeBackslashes(TString& value) {
+    SubstGlobal(value, "\\", "\\\\");
+}
+
 }
 
 TString EscapeString(const TString& value,
                      const TString& enclosingSeq,
                      const TString& replaceWith) {
     auto escapedValue = value;
+    EscapeBackslashes(escapedValue);
     SubstGlobal(escapedValue, enclosingSeq, replaceWith);
     return escapedValue;
 }
 
 TString EscapeString(const TString& value, char enclosingChar) {
     auto escapedValue = value;
+    EscapeBackslashes(escapedValue);
     SubstGlobal(escapedValue,
                 TString{enclosingChar},
                 TStringBuilder{} << '\\' << enclosingChar);

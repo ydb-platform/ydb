@@ -1,4 +1,5 @@
 #include "line_reader.h"
+#include "yql_highlight.h"
 
 #include <util/generic/string.h>
 #include <util/system/file.h>
@@ -92,13 +93,19 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
         return completions;
     };
 
+    auto highlighter_callback = [](const auto& text, auto& colors) {
+        return YQLHighlight(YQLHighlight::ColorSchema::Monaco()).Apply(text, colors);
+    };
+
     Rx.set_completion_callback(completion_callback);
+    Rx.set_highlighter_callback(highlighter_callback);
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
     Rx.set_complete_on_empty(false);
     Rx.set_word_break_characters(WordBreakCharacters.data());
     Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });
+    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { return replxx::Replxx::ACTION_RESULT::BAIL; });
     auto commit_action = [&](char32_t code) {
         return Rx.invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
     };

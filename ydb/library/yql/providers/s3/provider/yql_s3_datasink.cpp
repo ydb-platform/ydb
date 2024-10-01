@@ -90,12 +90,19 @@ private:
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& write, TExprContext& ctx) override {
         const TS3Write w(write);
         auto settings = write->Tail().ChildrenList();
+
+        TExprNode::TPtr format = ExtractFormat(settings);
+        if (!format) {
+            ctx.AddError(TIssue(ctx.GetPosition(write->Pos()), "Missing format - please use WITH FORMAT when writing into S3"));
+            return nullptr;
+        }
+
         return Build<TS3WriteObject>(ctx, w.Pos())
                 .World(w.World())
                 .DataSink(w.DataSink())
                 .Target<TS3Target>()
                     .Path(write->Child(2U)->Head().Tail().HeadPtr())
-                    .Format(ExtractFormat(settings))
+                    .Format(std::move(format))
                     .Settings(ctx.NewList(w.Pos(), std::move(settings)))
                     .Build()
                 .Input(write->ChildPtr(3))

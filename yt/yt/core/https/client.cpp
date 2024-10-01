@@ -89,6 +89,15 @@ public:
         return Underlying_->StartPut(url, headers);
     }
 
+    TFuture<IResponsePtr> Request(
+        EMethod method,
+        const TString& url,
+        const std::optional<TSharedRef>& body,
+        const THeadersPtr& headers) override
+    {
+        return Underlying_->Request(method, url, body, headers);
+    }
+
 private:
     const IClientPtr Underlying_;
 };

@@ -35,6 +35,8 @@ void TDqManagerConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.Parameter("use_ipv4", &TThis::UseIPv4)
         .Default(false);
+    registrar.Parameter("address_resolver", &TThis::AddressResolver)
+        .Default();
 
     registrar.Parameter("yt_backends", &TThis::YtBackends)
         .NonEmpty();
@@ -237,6 +239,7 @@ void TDqManager::Start()
             rmOptions.UploadPrefix = rmOptions.YtBackend.GetUploadPrefix() + "/bin/" + ToString(GetProgramCommitId());
             rmOptions.Counters = MetricsRegistry_->GetSensors()->GetSubgroup("counters", "ytrm")->GetSubgroup("ytname", rmOptions.YtBackend.GetClusterName());
             rmOptions.ForceIPv4 = Config_->UseIPv4;
+            rmOptions.AddressResolverConfig = ConvertToYsonString(Config_->AddressResolver, EYsonFormat::Text);
             ActorSystem_->Register(CreateResourceManager(rmOptions, Coordinator_));
         }
         rmOptions.UploadPrefix = rmOptions.YtBackend.GetUploadPrefix();

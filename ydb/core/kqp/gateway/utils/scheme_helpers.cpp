@@ -88,6 +88,7 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
         columnDesc.SetNotNull(columnIt->second.NotNull);
     }
     NKikimrExternalSources::TGeneral general;
+    general.set_location(settings.Location);
     auto& attributes = *general.mutable_attributes();
     for (const auto& [key, value]: settings.SourceTypeParameters) {
         attributes.insert({key, value});

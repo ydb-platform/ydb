@@ -1,5 +1,7 @@
 PROGRAM(openssl)
 
+VERSION(1.1.1t)
+
 LICENSE(
     OpenSSL AND
     Public-Domain

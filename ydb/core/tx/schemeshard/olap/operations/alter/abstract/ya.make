@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/accessor
     ydb/core/protos
     ydb/library/actors/wilson
+    ydb/library/formats/arrow
 )
 
 YQL_LAST_ABI_VERSION()

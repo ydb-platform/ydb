@@ -144,6 +144,51 @@ print the number 22250738585072012 three times:
   std::cout << "parsed the number "<< i << std::endl;
 ```
 
+## Behavior of result_out_of_range
+
+When parsing floating-point values, the numbers can sometimes be too small (e.g., `1e-1000`) or
+too large (e.g., `1e1000`). The C language established the precedent that these small values are out of range.
+In such cases, it is customary to parse small values to zero and large
+values to infinity. That is the behaviour of the C language (e.g., `stdtod`). That is the behaviour followed by the fast_float library.
+
+
+
+Specifically, we follow Jonathan Wakely's interpretation of the standard:
+
+> In any case, the resulting value is one of at most two floating-point values closest to the value of the string matching the pattern.
+
+It is also the approach taken by the [Microsoft C++ library](https://github.com/microsoft/STL/blob/62205ab155d093e71dd9588a78f02c5396c3c14b/tests/std/tests/P0067R5_charconv/test.cpp#L943-L946).
+
+Hence, we have the following examples:
+
+```cpp
+  double result = -1;
+  std::string str = "3e-1000";
+  auto r = fast_float::from_chars(str.data(), str.data() + str.size(), result);
+  // r.ec == std::errc::result_out_of_range
+  // r.ptr == str.data() + 7
+  // result == 0
+```
+
+
+```cpp
+  double result = -1;
+  std::string str = "3e1000";
+  auto r = fast_float::from_chars(str.data(), str.data() + str.size(), result);
+  // r.ec == std::errc::result_out_of_range
+  // r.ptr == str.data() + 6
+  // result == std::numeric_limits<double>::infinity()
+```
+
+Users who wish for the value to be left unmodified given `std::errc::result_out_of_range` may do so by adding two lines of code:
+
+```cpp
+  double old_result = result; // make copy
+  auto r = fast_float::from_chars(start, end, result);
+  if(r.ec == std::errc::result_out_of_range) { result = old_result; }
+```
+
+
 ## C++20: compile-time evaluation (constexpr)
 
 In C++20, you may use `fast_float::from_chars` to parse strings
@@ -285,18 +330,20 @@ int main() {
 }
 ``````
 
-## Relation With Other Work
+## Users and Related Work
 
 The fast_float library is part of:
 
 - GCC (as of version 12): the `from_chars` function in GCC relies on fast_float.
+- [Chromium](https://github.com/Chromium/Chromium), the engine behind Google Chrome and Microsoft Edge,
 - [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's web browser)
+- [DuckDB](https://duckdb.org)
+- [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times
+- [Google Jsonnet](https://github.com/google/jsonnet)
+- [ClickHouse](https://github.com/ClickHouse/ClickHouse)
 
 
-The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba).
-
-There is a [derived implementation part of AdaCore](https://github.com/AdaCore/VSS).
-
+The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba). There is a [derived implementation part of AdaCore](https://github.com/AdaCore/VSS).
 
 The fast_float library provides a performance similar to that of the [fast_double_parser](https://github.com/lemire/fast_double_parser) library but using an updated algorithm reworked from the ground up, and while offering an API more in line with the expectations of C++ programmers. The fast_double_parser library is part of the [Microsoft LightGBM machine-learning framework](https://github.com/microsoft/LightGBM).
 
@@ -313,9 +360,6 @@ The fast_float library provides a performance similar to that of the [fast_doubl
 - [There is a C# port of the fast_float library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
 
 
-## Users
-
-The fast_float library is used by [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times. It is also used by [ClickHouse](https://github.com/ClickHouse/ClickHouse) and by [Google Jsonnet](https://github.com/google/jsonnet). It is part of GCC (as of GCC 12). It is part of WebKit (Safari).
 
 
 ## How fast is it?
@@ -371,6 +415,16 @@ target_link_libraries(myprogram PUBLIC fast_float)
 
 You should change the `GIT_TAG` line so that you recover the version you wish to use.
 
+You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
+
+```
+CPMAddPackage(
+    NAME fast_float
+    GITHUB_REPOSITORY "fastfloat/fast_float"
+    GIT_TAG v6.1.4)
+```
+
+
 ## Using as single header
 
 The script `script/amalgamate.py` may be used to generate a single header
@@ -381,7 +435,13 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v6.1.1/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.1.6/fast_float.h
+
+## Packages
+
+- The fast_float library is part of the [Conan package manager](https://conan.io/center/recipes/fast_float).
+- It is part of the [brew package manager](https://formulae.brew.sh/formula/fast_float).
+- Some Linux distribution like Fedora include fast_float (e.g., as `fast_float-devel`).
 
 ## RFC 7159
 

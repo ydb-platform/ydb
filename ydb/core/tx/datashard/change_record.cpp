@@ -1,5 +1,6 @@
 #include "change_record.h"
 
+#include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
@@ -16,6 +17,10 @@ void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) cons
     switch (Kind) {
         case EKind::AsyncIndex: {
             Y_ABORT_UNLESS(record.MutableAsyncIndex()->ParseFromArray(Body.data(), Body.size()));
+            break;
+        }
+        case EKind::IncrementalRestore: {
+            Y_ABORT_UNLESS(record.MutableIncrementalRestore()->ParseFromArray(Body.data(), Body.size()));
             break;
         }
         case EKind::CdcDataChange: {
@@ -41,6 +46,7 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
 
     switch (Kind) {
         case EKind::AsyncIndex:
+        case EKind::IncrementalRestore:
         case EKind::CdcDataChange: {
             const auto parsed = ParseBody(Body);
 
@@ -80,6 +86,10 @@ bool TChangeRecord::IsBroadcast() const {
     }
 }
 
+void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
+    return visitor.Visit(*this);
+}
+
 void TChangeRecord::Out(IOutputStream& out) const {
     out << "{"
         << " Order: " << Order
@@ -95,6 +105,25 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " LockId: " << LockId
         << " LockOffset: " << LockOffset
     << " }";
+}
+
+class TDefaultPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
+public:
+    TDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc)
+        : KeyDesc(keyDesc)
+    {
+    }
+
+    void Visit(const TChangeRecord& record) override {
+        SetPartitionId(NChangeExchange::ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey()));
+    }
+
+private:
+    const NKikimr::TKeyDesc& KeyDesc;
+};
+
+NChangeExchange::IPartitionResolverVisitor* CreateDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc) {
+    return new TDefaultPartitionResolver(keyDesc);
 }
 
 }

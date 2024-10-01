@@ -1,5 +1,7 @@
 # Authentication using the metadata service
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [work in progress message](_includes/addition.md) %}
 
 Below are examples of the code for authentication using environment variables in different {{ ydb-short-name }} SDKs.
@@ -16,7 +18,7 @@ Below are examples of the code for authentication using environment variables in
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
+    yc "github.com/ydb-platform/ydb-go-yc-metadata"
   )
 
   func main() {
@@ -24,13 +26,13 @@ Below are examples of the code for authentication using environment variables in
     defer cancel()
     db, err := ydb.Open(ctx,
       os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithMetadataCredentials(ctx),
+      yc.WithCredentials(),
       yc.WithInternalCA(), // append Yandex Cloud certificates
     )
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     ...
   }
   ```
@@ -46,7 +48,7 @@ Below are examples of the code for authentication using environment variables in
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
+    yc "github.com/ydb-platform/ydb-go-yc-metadata"
   )
 
   func main() {
@@ -54,13 +56,13 @@ Below are examples of the code for authentication using environment variables in
     defer cancel()
     nativeDriver, err := ydb.Open(ctx,
       os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithMetadataCredentials(ctx),
+      yc.WithCredentials(),
       yc.WithInternalCA(), // append Yandex Cloud certificates
     )
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -75,12 +77,12 @@ Below are examples of the code for authentication using environment variables in
 
   ```java
   public void work(String connectionString) {
-      AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider(); 
+      AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -146,7 +148,7 @@ Below are examples of the code for authentication using environment variables in
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new MetadataAuthentication()
   ];
 

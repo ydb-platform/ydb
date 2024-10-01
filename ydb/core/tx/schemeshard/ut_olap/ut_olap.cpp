@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -40,7 +41,7 @@ static const TString defaultTableSchema = R"(
 )";
 
 static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
     NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
@@ -557,11 +558,24 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 }
             }
         )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AlterColumns { Name: "comment" DefaultValue: "10" }
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
     }
 
     Y_UNIT_TEST(AlterTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions options;
+        options.EnableTieringInColumnShard(true);
+        TTestEnv env(runtime, options);
         ui64 txId = 100;
 
         TString olapSchema = R"(
@@ -642,8 +656,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         // disable stats batching
@@ -713,7 +727,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, { "timestamp" });
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
                 NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
                 txIds.insert(txId);
             }
@@ -725,17 +739,24 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, { "timestamp" });
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
             NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
             NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
+            Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
         }
 
         {
@@ -745,6 +766,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
         }
 
 #if 0
@@ -761,4 +785,26 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
 #endif
     }
+
+    Y_UNIT_TEST(Decimal) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"_(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Decimal(35,9)" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )_");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+    }    
 }

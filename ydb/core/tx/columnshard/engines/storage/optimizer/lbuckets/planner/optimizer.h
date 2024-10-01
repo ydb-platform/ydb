@@ -19,8 +19,6 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
-static const ui64 SmallPortionDetectSizeLimit = 1 << 20;
-
 TDuration GetCommonFreshnessCheckDuration();
 
 class TSimplePortionsGroupInfo {
@@ -683,7 +681,7 @@ private:
             return;
         }
         MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
-            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60)));
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings());
     }
 public:
     TTaskDescription GetTaskDescription() const {
@@ -941,13 +939,14 @@ public:
         dest.MoveNextBorderTo(*this);
     }
 
-    void Actualize(const TInstant currentInstant) {
+    [[nodiscard]] bool Actualize(const TInstant currentInstant) {
         if (currentInstant < NextActualizeInstant) {
-            return;
+            return false;
         }
         auto gChartsThis = StartModificationGuard();
         NextActualizeInstant = Others.Actualize(currentInstant);
         RebuildOptimizedFeature(currentInstant);
+        return true;
     }
 
     void SplitOthersWith(TPortionsBucket& dest) {
@@ -986,7 +985,11 @@ private:
     }
 
     void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket) {
-        auto it = BucketsByWeight.find(bucket->GetLastWeight());
+        return RemoveBucketFromRating(bucket, bucket->GetLastWeight());
+    }
+
+    void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket, const i64 rating) {
+        auto it = BucketsByWeight.find(rating);
         AFL_VERIFY(it != BucketsByWeight.end());
         AFL_VERIFY(it->second.erase(bucket.get()));
         if (it->second.empty()) {
@@ -1070,9 +1073,7 @@ public:
         if (BucketsByWeight.empty()) {
             return false;
         }
-        if (BucketsByWeight.rbegin()->second.empty()) {
-            return false;
-        }
+        AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
         const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
         return bucketForOptimization->IsLocked(dataLocksManager);
     }
@@ -1089,12 +1090,14 @@ public:
 
     void Actualize(const TInstant currentInstant) {
         RemoveBucketFromRating(LeftBucket);
-        LeftBucket->Actualize(currentInstant);
+        Y_UNUSED(LeftBucket->Actualize(currentInstant));
         AddBucketToRating(LeftBucket);
         for (auto&& i : Buckets) {
-            RemoveBucketFromRating(i.second);
-            i.second->Actualize(currentInstant);
-            AddBucketToRating(i.second);
+            const i64 rating = i.second->GetLastWeight();
+            if (i.second->Actualize(currentInstant)) {
+                RemoveBucketFromRating(i.second, rating);
+                AddBucketToRating(i.second);
+            }
         }
     }
 
@@ -1104,7 +1107,7 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
             Counters->SmallPortions->RemovePortion(portion);
         }
         if (!RemoveBucket(portion)) {
@@ -1146,7 +1149,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
             Counters->SmallPortions->AddPortion(portion);
             AddOther(portion, now);
             return;

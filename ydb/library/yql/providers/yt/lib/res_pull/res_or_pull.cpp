@@ -185,7 +185,7 @@ void TSkiffExecuteResOrPull::WriteValue(const NUdf::TUnboxedValue& value, TType*
     }
 }
 
-bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNode& rec, ui32 tableIndex) {
+bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNode& rec, ui32 /*tableIndex*/) {
     if (!HasCapacity()) {
         Truncated = true;
         return false;

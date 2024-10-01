@@ -53,6 +53,20 @@ namespace NActors {
             std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
         };
 
+        struct TActorSystemSetupConfig {
+            TCpuManagerConfig CpuManagerConfig;
+            TSchedulerConfig SchedulerConfig;
+            bool MonitorStuckActors = false;
+        };
+
+        struct TActorSystemPools {
+            ui32 SystemPoolId = 0;
+            ui32 UserPoolId = 1;
+            ui32 IOPoolId = 2;
+            ui32 BatchPoolId = 3;
+            TMap<TString, ui32> ServicePools = {};
+        };
+
         TTestActorRuntime(THeSingleSystemEnv d);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
@@ -63,28 +77,50 @@ namespace NActors {
         void AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback);
         virtual void Initialize(TEgg);
         void SetupStatsCollectors();
+        void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 
         void SimulateSleep(TDuration duration);
 
         template<class TResult>
-        inline TResult WaitFuture(NThreading::TFuture<TResult> f) {
+        inline TResult WaitFuture(NThreading::TFuture<TResult> f, TDuration simTimeout = TDuration::Max()) {
             if (!f.HasValue() && !f.HasException()) {
                 TDispatchOptions options;
                 options.CustomFinalCondition = [&]() {
                     return f.HasValue() || f.HasException();
                 };
-                options.FinalEvents.emplace_back([&](IEventHandle&) {
-                    return f.HasValue() || f.HasException();
-                });
+                // Quirk: non-empty FinalEvents enables full simulation
+                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
 
-                this->DispatchEvents(options);
+                this->DispatchEvents(options, simTimeout);
 
                 Y_ABORT_UNLESS(f.HasValue() || f.HasException());
             }
 
-            return f.ExtractValue();
+            if constexpr (!std::is_same_v<TResult, void>) {
+                return f.ExtractValue();
+            } else {
+                return f.GetValue();
+            }
+        }
+
+        template<class TCondition>
+        inline void WaitFor(const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
+            if (!condition()) {
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                // Quirk: non-empty FinalEvents enables full simulation
+                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+
+                Cerr << "... waiting for " << description << Endl;
+                this->DispatchEvents(options, simTimeout);
+
+                Y_ABORT_UNLESS(condition(), "Timeout while waiting for %s", description.c_str());
+                Cerr << "... waiting for " << description << " (done)" << Endl;
+            }
         }
 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
@@ -125,5 +161,7 @@ namespace NActors {
         TActorId SleepEdgeActor;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;
+        std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;
+        TActorSystemPools ActorSystemPools;
     };
 } // namespace NActors

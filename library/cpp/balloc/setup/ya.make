@@ -2,6 +2,7 @@ LIBRARY()
 
 NO_UTIL()
 
+
 IF ("${YMAKE}" MATCHES "devtools")
     CFLAGS(-DYMAKE=1)
 ENDIF()

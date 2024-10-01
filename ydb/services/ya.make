@@ -20,5 +20,7 @@ RECURSE(
     persqueue_v1
     rate_limiter
     replication
+    tablet
     ydb
+    ymq
 )

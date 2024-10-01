@@ -74,6 +74,7 @@ public:
 
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless();
+        EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             InitializeWorkloadService();
         }
@@ -101,6 +102,7 @@ public:
 
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
         EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless();
+        EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enanbled");
             InitializeWorkloadService();
@@ -140,6 +142,18 @@ public:
         }
     }
 
+    void Handle(TEvSubscribeOnPoolChanges::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        if (!EnabledResourcePools) {
+            Send(ev->Sender, new TEvUpdatePoolInfo(database, poolId, std::nullopt, std::nullopt));
+            return;
+        }
+
+        LOG_D("Recieved subscription request, Database: " << database << ", PoolId: " << poolId);
+        GetOrCreateDatabaseState(database)->DoSubscribeRequest(std::move(ev));
+    }
+
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
         const TActorId& workerActorId = ev->Sender;
         if (!EnabledResourcePools) {
@@ -155,6 +169,13 @@ public:
     void Handle(TEvCleanupRequest::TPtr& ev) {
         const TString& database = ev->Get()->Database;
         const TString& poolId = ev->Get()->PoolId;
+        const TString& sessionId = ev->Get()->SessionId;
+        if (GetOrCreateDatabaseState(database)->PendingSessionIds.contains(sessionId)) {
+            LOG_D("Finished request with worker actor " << ev->Sender << ", wait for place request, Database: " << database << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
+            GetOrCreateDatabaseState(database)->PendingCancelRequests[sessionId].emplace_back(std::move(ev));
+            return;
+        }
+
         auto poolState = GetPoolState(database, poolId);
         if (!poolState) {
             ReplyCleanupError(ev->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << poolId << " not found");
@@ -162,7 +183,7 @@ public:
         }
 
         LOG_D("Finished request with worker actor " << ev->Sender << ", Database: " << database << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
-        Send(ev->Forward(poolState->PoolHandler));
+        poolState->DoCleanupRequest(std::move(ev));
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -188,11 +209,13 @@ public:
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
+        hFunc(TEvSubscribeOnPoolChanges, Handle);
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
 
-        hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvFetchDatabaseResponse, Handle);
+        hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
         hFunc(TEvPrivate::TEvNodesInfoRequest, Handle);
@@ -204,40 +227,49 @@ public:
         hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
         hFunc(TEvPrivate::TEvCpuLoadResponse, Handle);
         hFunc(TEvPrivate::TEvResignPoolHandler, Handle);
+        hFunc(TEvPrivate::TEvStopPoolHandlerResponse, Handle);
     )
 
 private:
-    void Handle(TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
         GetOrCreateDatabaseState(ev->Get()->Database)->UpdateDatabaseInfo(ev);
+    }
+
+    void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+
+        TActorId poolHandler;
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            LOG_D("Successfully fetched pool " << poolId << ", Database: " << database);
+            poolHandler = GetOrCreatePoolState(database, poolId, ev->Get()->PoolConfig)->PoolHandler;
+        } else {
+            LOG_W("Failed to fetch pool " << poolId << ", Database: " << database << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        }
+
+        GetOrCreateDatabaseState(database)->UpdatePoolInfo(ev, poolHandler);
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
         const auto& event = ev->Get()->Event;
         const TString& database = event->Get()->Database;
+        auto databaseState = GetOrCreateDatabaseState(database);
         if (ev->Get()->DefaultPoolCreated) {
-            GetOrCreateDatabaseState(database)->HasDefaultPool = true;
+            databaseState->HasDefaultPool = true;
         }
 
         const TString& poolId = event->Get()->PoolId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            databaseState->RemovePendingSession(event->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
+                ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
+            });
             ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
             return;
         }
 
         LOG_D("Successfully fetched pool " << poolId << ", Database: " << database << ", SessionId: " << event->Get()->SessionId);
 
-        auto poolState = GetPoolState(database, poolId);
-        if (!poolState) {
-            TString poolKey = GetPoolKey(database, poolId);
-            LOG_I("Creating new handler for pool " << poolKey);
-
-            auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, ev->Get()->PoolConfig, Counters.Counters));
-            poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
-
-            Counters.ActivePools->Inc();
-            ScheduleIdleCheck();
-        }
-
+        auto poolState = GetOrCreatePoolState(database, poolId, ev->Get()->PoolConfig);
         poolState->PendingRequests.emplace(std::move(ev));
         poolState->StartPlaceRequest();
     }
@@ -245,9 +277,19 @@ private:
     void Handle(TEvPrivate::TEvPlaceRequestIntoPoolResponse::TPtr& ev) {
         const TString& database = ev->Get()->Database;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Request placed into pool, Database: " << database << ", PoolId: " << poolId);
+        const TString& sessionId = ev->Get()->SessionId;
+        LOG_T("Request placed into pool, Database: " << database << ", PoolId: " << poolId << ", SessionId: " << sessionId);
 
-        if (auto poolState = GetPoolState(database, poolId)) {
+        auto poolState = GetPoolState(database, poolId);
+        GetOrCreateDatabaseState(database)->RemovePendingSession(sessionId, [this, poolState](TEvCleanupRequest::TPtr event) {
+            if (poolState) {
+                poolState->DoCleanupRequest(std::move(event));
+            } else {
+                ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
+            }
+        });
+
+        if (poolState) {
             poolState->PlaceRequestRunning = false;
             poolState->UpdateHandler();
             poolState->StartPlaceRequest();
@@ -361,10 +403,21 @@ private:
 
         if (auto poolState = GetPoolState(database, poolId)) {
             if (poolState->NewPoolHandler) {
-                Send(*poolState->NewPoolHandler, new TEvPrivate::TEvStopPoolHandler());
+                Send(*poolState->NewPoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
             }
             poolState->NewPoolHandler = ev->Get()->NewHandler;
             poolState->UpdateHandler();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvStopPoolHandlerResponse::TPtr& ev) {
+        const TString& database = ev->Get()->Database;
+        const TString& poolId = ev->Get()->PoolId;
+        LOG_T("Got stop pool handler response, Database: " << database << ", PoolId: " << poolId);
+
+        Counters.ActivePools->Dec();
+        if (auto poolState = GetPoolState(database, poolId)) {
+            poolState->PreviousPoolHandlers.erase(ev->Sender);
         }
     }
 
@@ -412,7 +465,7 @@ private:
         }
         IdleChecksStarted = true;
 
-        Schedule(IDLE_DURATION / 2, new TEvents::TEvWakeup());
+        Schedule(IDLE_DURATION / 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::IdleCheck)));
     }
 
     void RunIdleCheck() {
@@ -421,15 +474,14 @@ private:
         std::vector<TString> poolsToDelete;
         poolsToDelete.reserve(PoolIdToState.size());
         for (const auto& [poolKey, poolState] : PoolIdToState) {
-            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION) {
+            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION && poolState.PendingRequests.empty()) {
                 CpuQuotaManager->CleanupHandler(poolState.PoolHandler);
-                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler(true));
                 poolsToDelete.emplace_back(poolKey);
             }
         }
         for (const auto& poolKey : poolsToDelete) {
             PoolIdToState.erase(poolKey);
-            Counters.ActivePools->Dec();
         }
 
         if (!PoolIdToState.empty()) {
@@ -466,7 +518,7 @@ private:
     }
 
     void ScheduleNodeInfoRequest() const {
-        Schedule(IDLE_DURATION * 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartCpuLoadRequest)));
+        Schedule(IDLE_DURATION * 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartNodeInfoRequest)));
     }
 
     void RunNodeInfoRequest() const {
@@ -492,12 +544,30 @@ private:
         Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
     }
 
-    TDatabaseState* GetOrCreateDatabaseState(const TString& database) {
+    TDatabaseState* GetOrCreateDatabaseState(TString database) {
+        database = CanonizePath(database);
         auto databaseIt = DatabaseToState.find(database);
         if (databaseIt != DatabaseToState.end()) {
             return &databaseIt->second;
         }
         return &DatabaseToState.insert({database, TDatabaseState{.ActorContext = ActorContext(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless}}).first->second;
+    }
+
+    TPoolState* GetOrCreatePoolState(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig) {
+        const auto& poolKey = GetPoolKey(database, poolId);
+        if (auto poolState = GetPoolState(poolKey)) {
+            return poolState;
+        }
+
+        LOG_I("Creating new handler for pool " << poolKey);
+
+        const auto poolHandler = Register(CreatePoolHandlerActor(database, poolId, poolConfig, EnableResourcePoolsCounters ? Counters.Counters : MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        const auto poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
+
+        Counters.ActivePools->Inc();
+        ScheduleIdleCheck();
+
+        return poolState;
     }
 
     TPoolState* GetPoolState(const TString& database, const TString& poolId) {
@@ -525,6 +595,7 @@ private:
 
     bool EnabledResourcePools = false;
     bool EnabledResourcePoolsOnServerless = false;
+    bool EnableResourcePoolsCounters = false;
     bool ServiceInitialized = false;
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
@@ -537,6 +608,10 @@ private:
 };
 
 }  // anonymous namespace
+
+bool IsWorkloadServiceRequired(const NResourcePool::TPoolSettings& config) {
+    return config.ConcurrentQueryLimit != -1 || config.DatabaseLoadCpuThreshold >= 0.0 || config.QueryCancelAfter;
+}
 
 }  // namespace NWorkload
 

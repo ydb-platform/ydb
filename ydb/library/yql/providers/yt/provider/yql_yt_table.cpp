@@ -295,7 +295,18 @@ bool TYtTableStatInfo::Validate(const TExprNode& node, TExprContext& ctx) {
             VALIDATE_FIELD(ModifyTime)
         else
             VALIDATE_FIELD(Revision)
-        else {
+        else if (name->Content() == "SecurityTags") {
+            if (!value->IsList()) {
+                ctx.AddError(TIssue(ctx.GetPosition(value->Pos()),
+                    TStringBuilder() << "Expected list"));
+                return false;
+            }
+            for (const auto& tagAtom : value->Children()) {
+                if (!EnsureAtom(*tagAtom, ctx)) {
+                    return false;
+                }
+            }
+        } else {
             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unsupported table stat option: " << name->Content()));
             return false;
         }
@@ -328,7 +339,12 @@ void TYtTableStatInfo::Parse(TExprBase node) {
             HANDLE_FIELD(ModifyTime)
         else
             HANDLE_FIELD(Revision)
-        else {
+        else if (setting.Name().Value() == "SecurityTags") {
+            SecurityTags = {};
+            for (const auto& tagAtom : setting.Value().Cast<TListBase<TCoAtom>>()) {
+                SecurityTags.emplace(tagAtom.Value());
+            }
+        } else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
         }
 #undef HANDLE_FIELD
@@ -358,6 +374,16 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ;
 
 #undef ADD_FIELD
+
+    if (!SecurityTags.empty()) {
+        statBuilder
+            .Add()
+                .Name()
+                    .Value("SecurityTags")
+                .Build()
+                .Value(ToAtomList(SecurityTags, pos, ctx))
+            .Build();
+    }
 
     return statBuilder.Done();
 }

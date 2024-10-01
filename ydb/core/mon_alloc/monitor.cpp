@@ -300,6 +300,7 @@ namespace NKikimr {
             struct TEvDumpLogStats : public TEventLocal<TEvDumpLogStats, EvDumpLogStats> {};
 
             const TDuration Interval;
+            const TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
             const std::unique_ptr<IAllocMonitor> AllocMonitor;
             const TString FilePathPrefix;
 
@@ -312,8 +313,9 @@ namespace NKikimr {
                 return EActivityType::ACTORLIB_STATS;
             }
 
-            TMemProfMonitor(TDuration interval, std::unique_ptr<IAllocMonitor> allocMonitor, const TString& filePathPrefix)
+            TMemProfMonitor(TDuration interval, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider, std::unique_ptr<IAllocMonitor> allocMonitor, const TString& filePathPrefix)
                 : Interval(interval)
+                , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
                 , AllocMonitor(std::move(allocMonitor))
                 , FilePathPrefix(filePathPrefix)
             {}
@@ -348,6 +350,16 @@ namespace NKikimr {
                     HFunc(TEvDumpLogStats, HandleDump);
                     HFunc(NMon::TEvHttpInfo, HandleHttpInfo);
                 }
+            }
+
+            std::optional<TMemoryUsage> TryGetMemoryUsage() const noexcept {
+                auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
+                if (processMemoryInfo.AnonRss.has_value()) {
+                    return TMemoryUsage{
+                        processMemoryInfo.AnonRss.value(), 
+                        processMemoryInfo.CGroupLimit.value_or(0)};
+                }
+                return {};
             }
 
             void LogMemoryStats(const TActorContext& ctx, size_t limit) noexcept {
@@ -392,7 +404,7 @@ namespace NKikimr {
             void HandleWakeup(const TActorContext& ctx) noexcept {
                 AllocMonitor->Update(Interval);
 
-                std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
+                std::optional<TMemoryUsage> memoryUsage = TryGetMemoryUsage();
                 if (memoryUsage) {
                     LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
                 }
@@ -402,7 +414,7 @@ namespace NKikimr {
 
             void HandleDump(TEvDumpLogStats::TPtr&, const TActorContext& ctx) noexcept {
                 if (IsDangerous) {
-                    std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
+                    std::optional<TMemoryUsage> memoryUsage = TryGetMemoryUsage();
                     if (memoryUsage) {
                         LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, memoryUsage->ToString());
                         LogMemoryStats(ctx, 256);
@@ -426,9 +438,10 @@ namespace NKikimr {
         };
     }
 
-    IActor* CreateMemProfMonitor(TDuration interval, TDynamicCountersPtr counters, const TString& filePathPrefix) {
+    IActor* CreateMemProfMonitor(TDuration interval, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider, TDynamicCountersPtr counters, const TString& filePathPrefix) {
         return new TMemProfMonitor(
             interval,
+            processMemoryInfoProvider,
             CreateAllocMonitor(GetServiceCounters(counters, "utils")),
             filePathPrefix);
     }

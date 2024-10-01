@@ -82,6 +82,12 @@ public:
 
     void Save(NYson::IYsonConsumer* consumer) const;
 
+    // Doesn't call OnBeginMap/OnEndMap.
+    // Can be used to inject extra data into the serialized format
+    // by some kind of wrapper to be parsed in the wrapper
+    // of the |Load| call.
+    void SaveAsMapFragment(NYson::IYsonConsumer* consumer) const;
+
     void Save(IOutputStream* output) const;
 
     IMapNodePtr GetLocalUnrecognized() const;
@@ -178,6 +184,32 @@ protected:
     template <std::default_initializable TStruct>
     static TStruct* GetDefault() noexcept;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, class S>
+concept CYsonStructFieldFor =
+    CYsonStructSource<S> &&
+    requires (
+        T& parameter,
+        S source,
+        bool postprocess,
+        bool setDefaults,
+        const NYPath::TYPath& path,
+        std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    {
+        // NB(arkady-e1ppa): This alias serves no purpose other
+        // than an easy way to grep for every implementation.
+        typename T::TImplementsYsonStructField;
+
+        // For YsonStruct.
+        parameter.Load(
+            source,
+            postprocess,
+            setDefaults,
+            path,
+            recursiveUnrecognizedStrategy);
+    };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -294,9 +326,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj);
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj);
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
 std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T>>& objs);
 template <class T>

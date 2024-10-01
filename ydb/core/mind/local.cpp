@@ -106,10 +106,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     constexpr static TDuration UPDATE_SYSTEM_USAGE_INTERVAL = TDuration::MilliSeconds(1000);
     constexpr static TDuration DRAIN_NODE_TIMEOUT = TDuration::MilliSeconds(15000);
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
+    ui64 UserPoolLimit = 0; // PotentialMaxThreadCount of UserPool
     ui64 MemUsage = 0;
     ui64 MemLimit = 0;
-    ui64 CpuLimit = 0; // PotentialMaxThreadCount of UserPool
     double NodeUsage = 0;
+    double CpuUsage = 0; // Sum of CPU usage in all pools / Number of CPUs
 
     bool SentDrainNode = false;
     bool DrainResultReceived = false;
@@ -275,8 +276,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void FillResourceMaximum(NKikimrTabletBase::TMetrics* record) {
         record->CopyFrom(ResourceLimit);
         if (!record->HasCPU()) {
-            if (CpuLimit != 0) {
-                record->SetCPU(CpuLimit);
+            if (UserPoolLimit != 0) {
+                record->SetCPU(UserPoolLimit);
             }
         }
         if (!record->HasMemory()) {
@@ -587,6 +588,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 record.MutableTotalResourceUsage()->SetMemory(MemUsage);
             }
             record.SetTotalNodeUsage(NodeUsage);
+            record.SetTotalNodeCpuUsage(CpuUsage);
             FillResourceMaximum(record.MutableResourceMaximum());
             NTabletPipe::SendData(ctx, HivePipeClient, event.Release());
             SendTabletMetricsTime = ctx.Now();
@@ -648,10 +650,19 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         const NKikimrWhiteboard::TEvSystemStateResponse& record = ev->Get()->Record;
         if (!record.GetSystemStateInfo().empty()) {
             const NKikimrWhiteboard::TSystemStateInfo& info = record.GetSystemStateInfo(0);
+
+            if (info.HasNumberOfCpus()) {
+                double cpuUsageSum = 0;
+                for (const auto& poolInfo : info.poolstats()) {
+                    cpuUsageSum += poolInfo.usage() * poolInfo.threads();
+                }
+                CpuUsage = cpuUsageSum / info.GetNumberOfCpus();
+            }
+
             if (static_cast<ui32>(info.PoolStatsSize()) > AppData()->UserPoolId) {
                 const auto& poolStats(info.GetPoolStats(AppData()->UserPoolId));
-                CpuLimit = poolStats.limit() * 1'000'000; // microseconds
-                UserPoolUsage = poolStats.usage() * CpuLimit; // microseconds
+                UserPoolLimit = poolStats.limit() * 1'000'000; // microseconds
+                UserPoolUsage = poolStats.usage() * UserPoolLimit; // microseconds
             }
 
             // Note: we use allocated memory because MemoryUsed(AnonRSS) has lag

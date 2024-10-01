@@ -65,7 +65,7 @@ inline NKikimr::NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByVal
 }
 
 inline Datum PointerDatumFromPod(const NKikimr::NUdf::TUnboxedValuePod& value) {
-    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsBoxed().Get()) + 1);
+    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsRawBoxed()) + 1);
 }
 
 inline Datum PointerDatumFromItem(const NKikimr::NUdf::TBlockItem& value) {
@@ -165,5 +165,7 @@ public:
 private:
     std::unique_ptr<TImpl> Impl_;
 };
+
+void RebuildSysCache();
 
 }

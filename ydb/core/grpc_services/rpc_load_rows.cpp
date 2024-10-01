@@ -75,9 +75,12 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::DECIMAL:
-            // TODO
-            return false;
+        case arrow::Type::DECIMAL: {
+            Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+            decimalType->set_precision(22);
+            decimalType->set_scale(9);
+            return true;
+        }
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
         case arrow::Type::FIXED_SIZE_BINARY:

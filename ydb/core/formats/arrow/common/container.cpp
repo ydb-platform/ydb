@@ -2,9 +2,10 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/common/vector_operations.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow {
 
@@ -59,6 +60,11 @@ TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field
     return AddField(f, std::make_shared<NAccessor::TTrivialArray>(data));
 }
 
+void TGeneralContainer::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
+    Schema->DeleteFieldsByIndex(idxs);
+    NUtil::EraseItems(Columns, idxs);
+}
+
 void TGeneralContainer::Initialize() {
     std::optional<ui64> recordsCount;
     AFL_VERIFY(Schema->num_fields() == (i32)Columns.size())("schema", Schema->num_fields())("columns", Columns.size());
@@ -99,10 +105,10 @@ TGeneralContainer::TGeneralContainer(
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table) {
+TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
+    : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
+    , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
     AFL_VERIFY(table);
-    Schema = std::make_shared<NModifier::TSchema>(table->schema());
-    RecordsCount = table->num_rows();
     for (auto&& i : table->columns()) {
         if (i->num_chunks() == 1) {
             Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i->chunk(0)));
@@ -113,10 +119,10 @@ TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table) {
+TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table)
+    : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
+    , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
     AFL_VERIFY(table);
-    Schema = std::make_shared<NModifier::TSchema>(table->schema());
-    RecordsCount = table->num_rows();
     for (auto&& i : table->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
     }

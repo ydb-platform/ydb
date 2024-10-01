@@ -1,6 +1,6 @@
 # Setting up monitoring for a local {{ ydb-short-name }} cluster
 
-This page provides instructions on how to set up monitoring for a local YDB cluster that is deployed using [Quick start](../../quickstart.md).
+This page provides instructions on how to set up monitoring for a local {{ ydb-short-name }} cluster that is deployed using [Quick start](../../quickstart.md).
 
 {{ ydb-short-name }} has multiple system health sensors. Instant sensor values are available in the web interface:
 
@@ -43,6 +43,6 @@ To set up monitoring for a local single-node {{ ydb-short-name }} cluster using 
 1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana and attach it to a running Prometheus instance.
 1. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/) to Grafana.
 
-   To upload dashboards, use the Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) tool or run a [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentication](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, modify the script.
+To upload dashboards, use the Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) tool or run a [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentication](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, modify the script.
 
-   Review the dashboard [metric reference](../../reference/observability/metrics/grafana-dashboards.md).
+Review the dashboard [metric reference](../../reference/observability/metrics/grafana-dashboards.md).

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import os
 import subprocess
@@ -7,6 +8,7 @@ import optparse
 import pipes
 
 import thinlto_cache
+import link_exe
 
 from process_whole_archive_option import ProcessWholeArchiveOption
 from fix_py2_protobuf import fix_py2
@@ -215,6 +217,10 @@ def parse_args():
     parser.add_option('--linker-output')
     parser.add_option('--musl', action='store_true')
     parser.add_option('--dynamic-cuda', action='store_true')
+    parser.add_option('--cuda-architectures',
+                      help='List of supported CUDA architectures, separated by ":" (e.g. "sm_52:compute_70:lto_90a"')
+    parser.add_option('--nvprune-exe')
+    parser.add_option('--objcopy-exe')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
     parser.add_option('--custom-step')
@@ -237,6 +243,10 @@ if __name__ == '__main__':
         cmd = fix_cmd_for_musl(cmd)
     if opts.dynamic_cuda:
         cmd = fix_cmd_for_dynamic_cuda(cmd)
+    else:
+        cuda_manager = link_exe.CUDAManager(opts.cuda_architectures, opts.nvprune_exe)
+        cmd = link_exe.process_cuda_libraries_by_nvprune(cmd, cuda_manager, opts.build_root)
+        cmd = link_exe.process_cuda_libraries_by_objcopy(cmd, opts.build_root, opts.objcopy_exe)
 
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
     thinlto_cache.preprocess(opts, cmd)
@@ -255,8 +265,8 @@ if __name__ == '__main__':
     thinlto_cache.postprocess(opts)
 
     if proc.returncode:
-        print >> sys.stderr, 'linker has failed with retcode:', proc.returncode
-        print >> sys.stderr, 'linker command:', shlex_join(cmd)
+        print('linker has failed with retcode:', proc.returncode, file=sys.stderr)
+        print('linker command:', shlex_join(cmd), file=sys.stderr)
         sys.exit(proc.returncode)
 
     if opts.fix_elf:
@@ -265,8 +275,8 @@ if __name__ == '__main__':
         proc.communicate()
 
         if proc.returncode:
-            print >> sys.stderr, 'fix_elf has failed with retcode:', proc.returncode
-            print >> sys.stderr, 'fix_elf command:', shlex_join(cmd)
+            print('fix_elf has failed with retcode:', proc.returncode, file=sys.stderr)
+            print('fix_elf command:', shlex_join(cmd), file=sys.stderr)
             sys.exit(proc.returncode)
 
     if opts.soname and opts.soname != opts.target:

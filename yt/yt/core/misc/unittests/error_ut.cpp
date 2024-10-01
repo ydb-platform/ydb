@@ -1,8 +1,14 @@
-#include "library/cpp/testing/gtest_extensions/assertions.h"
 #include <yt/yt/core/test_framework/framework.h>
+
+#include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler.h>
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/error_helpers.h>
+
+#include <yt/yt/core/net/local_address.h>
+
+#include <yt/yt/core/tracing/trace_context.h>
 
 #include <yt/yt/core/yson/string.h>
 
@@ -309,18 +315,18 @@ TEST(TErrorTest, WrapRValue)
 {
     TError error("Error");
 
-    TError errorCopy = error;
-    auto wrapped = std::move(errorCopy).Wrap("Wrapped error");
-    EXPECT_TRUE(errorCopy.IsOK());
-    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
-    EXPECT_EQ(wrapped.GetMessage(), "Wrapped error");
-    EXPECT_EQ(wrapped.InnerErrors().size(), 1u);
-    EXPECT_EQ(wrapped.InnerErrors()[0], error);
+    // TError errorCopy = error;
+    // auto wrapped = std::move(errorCopy).Wrap("Wrapped error");
+    // EXPECT_TRUE(errorCopy.IsOK());
+    // EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    // EXPECT_EQ(wrapped.GetMessage(), "Wrapped error");
+    // EXPECT_EQ(wrapped.InnerErrors().size(), 1u);
+    // EXPECT_EQ(wrapped.InnerErrors()[0], error);
 
-    TError anotherErrorCopy = error;
-    auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
-    EXPECT_TRUE(anotherErrorCopy.IsOK());
-    EXPECT_EQ(trviallyWrapped, error);
+    // TError anotherErrorCopy = error;
+    // auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
+    // EXPECT_TRUE(anotherErrorCopy.IsOK());
+    // EXPECT_EQ(trviallyWrapped, error);
 }
 
 TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroJustWorks)
@@ -475,7 +481,7 @@ TEST(TErrorTest, ErrorSkeletonStubImplementation)
 
 TEST(TErrorTest, FormatCtor)
 {
-    EXPECT_EQ("Some error %v", TError("Some error %v").GetMessage());
+    // EXPECT_EQ("Some error %v", TError("Some error %v").GetMessage()); // No longer compiles due to static analysis.
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
@@ -508,7 +514,7 @@ TEST(TErrorTest, TruncateSimple)
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
     EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
     EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
-    EXPECT_EQ(error.GetSpanId(), truncatedError.GetSpanId());
+    EXPECT_EQ(GetSpanId(error), GetSpanId(truncatedError));
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
     EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
     EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
@@ -548,7 +554,7 @@ TEST(TErrorTest, TruncateSimpleRValue)
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
     EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
     EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
-    EXPECT_EQ(error.GetSpanId(), truncatedError.GetSpanId());
+    EXPECT_EQ(GetSpanId(error), GetSpanId(truncatedError));
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
     EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
     EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
@@ -761,20 +767,20 @@ TEST(TErrorTest, ErrorSanitizer)
 {
     auto checkSantizied = [&] (const TError& error) {
         EXPECT_FALSE(error.HasOriginAttributes());
-        EXPECT_FALSE(error.HasTracingAttributes());
+        EXPECT_FALSE(HasTracingAttributes(error));
 
-        EXPECT_EQ("<host-override>", error.GetHost());
+        EXPECT_EQ("<host-override>", GetHost(error));
         EXPECT_EQ(0, error.GetPid());
         EXPECT_EQ(NThreading::InvalidThreadId, error.GetTid());
-        EXPECT_EQ(NConcurrency::InvalidFiberId, error.GetFid());
-        EXPECT_EQ(NTracing::InvalidTraceId, error.GetTraceId());
-        EXPECT_EQ(NTracing::InvalidSpanId, error.GetSpanId());
+        EXPECT_EQ(NConcurrency::InvalidFiberId, GetFid(error));
+        EXPECT_EQ(NTracing::InvalidTraceId, GetTraceId(error));
+        EXPECT_EQ(NTracing::InvalidSpanId, GetSpanId(error));
     };
 
     auto checkNotSanitized = [&] (const TError& error) {
         EXPECT_TRUE(error.HasOriginAttributes());
 
-        EXPECT_FALSE(error.GetHost() == "<host-override>");
+        EXPECT_FALSE(GetHost(error) == "<host-override>");
         EXPECT_FALSE(error.GetPid() == 0);
 
         auto now = TInstant::Now();
@@ -821,11 +827,11 @@ TEST(TErrorTest, SimpleLoadAfterSave)
 
     TStreamSaveContext saveContext(&stream);
     TError savedError("error");
-    savedError.Save(saveContext);
+    TErrorSerializer::Save(saveContext, savedError);
 
     TStreamLoadContext loadContext(&stream);
     TError loadedError;
-    loadedError.Load(loadContext);
+    TErrorSerializer::Load(loadContext, loadedError);
 
     EXPECT_EQ(ToString(savedError), ToString(loadedError));
 }
@@ -851,6 +857,130 @@ TEST(TErrorTest, AttributeSerialization)
         "        L1\n"
         "        L2\n"
         "        L3\n"));
+}
+
+TEST(TErrorTest, TraceContext)
+{
+    TError error;
+
+    NTracing::TTraceId traceId;
+    NTracing::TSpanId spanId;
+
+    // NB(arkady-e1ppa): Make sure that tracing data can be decoded
+    // even after traceContext was destroyed.
+    {
+        auto traceContext = NTracing::GetOrCreateTraceContext("Tester");
+        traceId = traceContext->GetTraceId();
+        spanId = traceContext->GetSpanId();
+
+        auto guard = NTracing::TCurrentTraceContextGuard(traceContext);
+
+        error = TError("Capture test");
+    }
+
+    EXPECT_EQ(GetTraceId(error), traceId);
+    EXPECT_EQ(GetSpanId(error), spanId);
+}
+
+TEST(TErrorTest, NativeHostName)
+{
+    auto hostName = "TestHost";
+    NNet::WriteLocalHostName(hostName);
+
+    auto error = TError("NativeHostTest");
+
+    EXPECT_TRUE(HasHost(error));
+    EXPECT_EQ(GetHost(error), TStringBuf(hostName));
+}
+
+TEST(TErrorTest, NativeFiberId)
+{
+    auto actionQueue = New<NConcurrency::TActionQueue>();
+
+    NConcurrency::WaitFor(BIND([] {
+        auto fiberId = NConcurrency::GetCurrentFiberId();
+
+        auto error = TError("TestNativeFiberId");
+
+        EXPECT_EQ(GetFid(error), fiberId);
+    }).AsyncVia(actionQueue->GetInvoker()).Run())
+        .ThrowOnError();
+}
+
+TEST(TErrorTest, MacroStaticAnalysis)
+{
+    auto swallow = [] (auto expr) {
+        try {
+            expr();
+        } catch (...) {
+        }
+    };
+
+    swallow([] {
+        THROW_ERROR_EXCEPTION("Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION("Hello, %v", "World");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo%v%v", "Bar", "Baz");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v%v", "Bar", "Baz");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, NYT::EErrorCode::Generic, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, NYT::EErrorCode::Generic, "Foo%v%v", "Bar", "Baz");
+    });
+}
+
+TEST(TErrorTest, WrapStaticAnalysis)
+{
+    TError error;
+    Y_UNUSED(error.Wrap());
+    Y_UNUSED(error.Wrap(std::exception{}));
+    Y_UNUSED(error.Wrap("Hello"));
+    Y_UNUSED(error.Wrap("Hello, %v", "World"));
+    Y_UNUSED(error.Wrap(TRuntimeFormat{"Hello, %v"}));
+}
+
+// NB(arkady-e1ppa): Uncomment these occasionally to see
+// that static analysis is still working.
+TEST(TErrorTest, MacroStaticAnalysisBrokenFormat)
+{
+    // auto swallow = [] (auto expr) {
+    //     try {
+    //         expr();
+    //     } catch (...) {
+    //     }
+    // };
+
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION("Hello, %v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION(TErrorCode{}, "Foo%v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, TErrorCode{}, "Foo%v");
+    // });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

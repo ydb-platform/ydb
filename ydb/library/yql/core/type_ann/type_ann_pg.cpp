@@ -307,9 +307,9 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
     if (isResolved) {
         auto procId = FromString<ui32>(input->Child(1)->Content());
         const auto& proc = NPg::LookupProc(procId, argTypes);
-        if (proc.Name != name) {
+        if (!AsciiEqualsIgnoreCase(proc.Name, name)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got:" << proc.Name));
+                TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got: " << proc.Name));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -368,16 +368,59 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             const auto procOrType = NPg::LookupProcWithCasts(TString(name), argTypes);
             auto children = input->ChildrenList();
             if (const auto* procPtr = std::get_if<const NPg::TProcDesc*>(&procOrType)) {
-                auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString((*procPtr)->ProcId));
+                const auto& proc = *(*procPtr);
+                auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
                 children.insert(children.begin() + 1, idNode);
 
-                const auto& fargTypes = (*procPtr)->ArgTypes;
+                const auto& fargTypes = proc.ArgTypes;
                 for (size_t i = 0; i < argTypes.size(); ++i) {
-                    auto targetType = (i >= fargTypes.size()) ? (*procPtr)->VariadicType : fargTypes[i];
+                    auto targetType = (i >= fargTypes.size()) ? proc.VariadicType : fargTypes[i];
                     if (IsCastRequired(argTypes[i], targetType)) {
                         children[i+3] = WrapWithPgCast(std::move(children[i+3]), targetType, ctx.Expr);
                     }
                 }
+
+                if (argTypes.size() < fargTypes.size()) {
+                    YQL_ENSURE(fargTypes.size() - argTypes.size() <= proc.DefaultArgs.size());
+                    for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
+                        const auto& value = proc.DefaultArgs[i + proc.DefaultArgs.size() - fargTypes.size()];
+                        TExprNode::TPtr defNode;
+                        if (!value) {
+                            defNode = ctx.Expr.NewCallable(input->Pos(), "Null", {});
+                        } else {
+                            defNode = ctx.Expr.Builder(input->Pos())
+                                .Callable("PgConst")
+                                    .Atom(0, *value)
+                                    .Callable(1, "PgType")
+                                        .Atom(0, NPg::LookupType(fargTypes[i]).Name)
+                                    .Seal()
+                                .Seal()
+                                .Build();
+                        }
+                        children.insert(children.end(), defNode);
+                    }
+                }
+
+                if (proc.Lang == NPg::LangSQL) {
+                    if (!proc.ExprNode) {
+                        throw yexception() << "Function " << proc.Name << " has no implementation";
+                    }
+
+                    // substibute by lambda
+                    YQL_ENSURE(proc.ExprNode->IsLambda());
+                    YQL_ENSURE(proc.ExprNode->Head().ChildrenSize() == fargTypes.size());
+                    TNodeOnNodeOwnedMap deepClones;
+                    YQL_ENSURE(NPg::GetSqlLanguageParser());
+                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, true, false);
+                    TNodeOnNodeOwnedMap replaces;
+                    for (ui32 i = 0; i < fargTypes.size(); ++i) {
+                        replaces[lambda->Head().Child(i)] = children[i + 3];
+                    }
+
+                    output = ctx.Expr.ReplaceNodes(lambda->TailPtr(), replaces);
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+
                 output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
             } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {
                 output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx.Expr);
@@ -1802,7 +1845,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                             }
                         }
 
-                        if (x.Order && x.Order->IsDuplicated(TString(node->Tail().Content()))) {
+                        if (x.Order && x.Order->IsDuplicatedIgnoreCase(TString(node->Tail().Content()))) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
                                     TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
                                 isError = true;

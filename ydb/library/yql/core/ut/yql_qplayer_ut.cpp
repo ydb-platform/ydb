@@ -54,6 +54,7 @@ struct TRunSettings {
     THashMap<TString, TString> Tables;
     TMaybe<TString> ParametersYson;
     THashMap<TString, TString> StaticFiles, DynamicFiles;
+    bool ChangeTime = false;
 };
 
 TUserDataTable MakeUserTables(const THashMap<TString, TString>& map) {
@@ -91,7 +92,7 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
     }
     TExprContext::TFreezeGuard freezeGuard(modulesCtx);
 
-    TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
+    TProgramFactory factory(!runSettings.ChangeTime, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
     factory.SetModules(moduleResolver);
 
@@ -280,5 +281,12 @@ SELECT State FROM plato.WalkFolders(``, $postHandler AS PostHandler);
             runSettings.Tables = tables;
             CheckProgram(s, runSettings);
         });
+    }
+
+    Y_UNIT_TEST(EvaluateNow) {
+        auto s = "select EvaluateExpr(CurrentUtcDate())";
+        TRunSettings runSettings;
+        runSettings.ChangeTime = true;
+        CheckProgram(s, runSettings);
     }
 }

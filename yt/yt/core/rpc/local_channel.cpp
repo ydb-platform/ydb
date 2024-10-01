@@ -34,7 +34,7 @@ static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TString EndpointDescription = "<local>";
+static const std::string EndpointDescription = "<local>";
 static const IAttributeDictionaryPtr EndpointAttributes =
     ConvertToAttributes(BuildYsonStringFluently()
         .BeginMap()
@@ -51,7 +51,7 @@ public:
         : Server_(std::move(server))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription;
     }
@@ -133,9 +133,9 @@ public:
         return 0;
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
-        return GetNullMemoryUsageTracker();
+        return MemoryUsageTracker_;
     }
 
 private:
@@ -143,6 +143,7 @@ private:
     using TSessionPtr = TIntrusivePtr<TSession>;
 
     const IServerPtr Server_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -164,7 +165,7 @@ private:
             }
         }
 
-        const TString& GetEndpointDescription() const override
+        const std::string& GetEndpointDescription() const override
         {
             return EndpointDescription;
         }
@@ -179,7 +180,7 @@ private:
             return {};
         }
 
-        const TString& GetEndpointAddress() const override
+        const std::string& GetEndpointAddress() const override
         {
             static const TString EmptyAddress;
             return EmptyAddress;

@@ -40,7 +40,7 @@
 
 - Исходный код
 
-  {% include notitle [docker](_includes/server/source_code.md) %}
+  {% include notitle [source_code](_includes/server/source_code.md) %}
 
 {% endlist %}
 

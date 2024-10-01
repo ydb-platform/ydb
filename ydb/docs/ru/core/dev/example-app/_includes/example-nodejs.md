@@ -27,7 +27,7 @@ await driver.tableClient.withSession(async (session) => {
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `Session.createTable()`:
+Для создания строковых таблиц используется метод `Session.createTable()`:
 
 ```ts
 async function createTables(session: Session, logger: Logger) {
@@ -108,7 +108,9 @@ async function createTables(session: Session, logger: Logger) {
 }
 ```
 
-С помощью метода `Session.describeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+Метод `Session.createTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `Session.executeQuery()`, который выполняет YQL-запросы.
+
+Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом `Session.describeTable()`:
 
 ```ts
 async function describeTable(session: Session, tableName: string, logger: Logger) {
@@ -200,9 +202,9 @@ async function selectPrepared(session: Session, data: ThreeIds[], logger: Logger
 ```ts
 async function executeScanQueryWithParams(session: Session, logger: Logger): Promise<void> {
     const query = `
-        ${SYNTAX_V1}        
+        ${SYNTAX_V1}
         DECLARE $value AS Utf8;
-        
+
         SELECT key
         FROM ${TABLE}
         WHERE value = $value;`;

@@ -12,6 +12,7 @@ $z0_1_35 = cast("0.1" as decimal(35,2));
 $z1_2_35 = cast("1.2" as decimal(35,2));
 $z0_05_35 = cast("0.05" as decimal(35,2));
 $z0_9_35 = cast("0.9" as decimal(35,2));
+$z0_95_35 = cast("0.95" as decimal(35,2));
 $z1_1_35 = cast("1.1" as decimal(35,2));
 $z0_5_35 = cast("0.5" as decimal(35,2));
 $z100_35 = cast(100 as decimal(35,2));

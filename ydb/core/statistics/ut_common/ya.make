@@ -6,10 +6,10 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/hooks/testing
     ydb/core/testlib
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
-

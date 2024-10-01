@@ -10,12 +10,14 @@
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
+#include <util/stream/format.h>
 
 #include "kqp_resource_estimation.h"
 
 #include <array>
 #include <bitset>
 #include <functional>
+#include <utility>
 
 
 namespace NKikimr {
@@ -55,6 +57,11 @@ struct TKqpResourcesRequest {
 
 class TTxState;
 
+class TMemoryResourceCookie : public TAtomicRefCount<TMemoryResourceCookie> {
+public:
+    std::atomic<bool> SpillingPercentReached{false};
+};
+
 class TTaskState : public TAtomicRefCount<TTaskState> {
     friend TTxState;
 
@@ -65,6 +72,8 @@ public:
     ui64 ExternalDataQueryMemory = 0;
     ui64 ResourceBrokerTaskId = 0;
     ui32 ExecutionUnits = 0;
+    TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
+    TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
 
 public:
 
@@ -78,6 +87,11 @@ public:
         resources.Memory = releaseScanQueryMemory;
         resources.ExternalMemory = releaseExternalDataQueryMemory;
         return resources;
+    }
+
+    bool IsReasonableToStartSpilling() {
+        return (PoolMemoryCookie && PoolMemoryCookie->SpillingPercentReached.load())
+            || (TotalMemoryCookie && TotalMemoryCookie->SpillingPercentReached.load());
     }
 
     TKqpResourcesRequest FreeResourcesRequest() const {
@@ -101,30 +115,60 @@ public:
     const ui64 TxId;
     const TInstant CreatedAt;
     TIntrusivePtr<TKqpCounters> Counters;
+    const TString PoolId;
+    const double MemoryPoolPercent;
+    const TString Database;
+
 private:
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
+    std::atomic<ui64> TxMaxAllocation = 0;
+    std::atomic<ui64> TxFailedAllocation = 0;
 
 public:
-    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters)
+    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
+        const TString& database)
         : TxId(txId)
         , CreatedAt(now)
         , Counters(std::move(counters))
+        , PoolId(poolId)
+        , MemoryPoolPercent(memoryPoolPercent)
+        , Database(database)
     {}
 
+    std::pair<TString, TString> MakePoolId() const {
+        return std::make_pair(Database, PoolId);
+    }
+
     TString ToString() const {
-        return TStringBuilder() << "TxResourcesInfo{ "
+        auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
-            << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
-            << ", extra allocations " << TxScanQueryMemory.load()
-            << ", execution units: " << TxExecutionUnits.load()
+            << ", Database: " << Database;
+
+        if (!PoolId.empty()) {
+            res << ", PoolId: " << PoolId
+                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent > 0 ? MemoryPoolPercent : 100);
+        }
+
+        res << ", tx initially granted memory: " << HumanReadableSize(TxExternalDataQueryMemory.load(), SF_BYTES)
+            << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
+            << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocation.load(), SF_BYTES)
+            << ", tx largest failed memory allocation: " << HumanReadableSize(TxFailedAllocation.load(), SF_BYTES)
+            << ", tx total execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }";
+
+        return res;
     }
 
     ui64 GetExtraMemoryAllocatedSize() {
         return TxScanQueryMemory.load();
+    }
+
+    void AckFailedMemoryAlloc(ui64 memory) {
+        ui64 maxAlloc = TxFailedAllocation.load();
+        while(maxAlloc < memory && !TxFailedAllocation.compare_exchange_weak(maxAlloc, memory));
     }
 
     void Released(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
@@ -141,6 +185,9 @@ public:
         TxScanQueryMemory.fetch_sub(resources.Memory);
         taskState->ScanQueryMemory -= resources.Memory;
         Counters->RmMemory->Sub(resources.Memory);
+
+        ui64 maxAlloc = TxMaxAllocation.load();
+        while(maxAlloc < resources.Memory && !TxMaxAllocation.compare_exchange_weak(maxAlloc, resources.Memory));
 
         TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
         taskState->ExecutionUnits -= resources.ExecutionUnits;
@@ -202,6 +249,13 @@ struct TKqpLocalNodeResources {
     std::array<ui64, EKqpMemoryPool::Count> Memory;
 };
 
+struct TPlannerPlacingOptions {
+    ui64 MaxNonParallelTasksExecutionLimit = 8;
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000;
+    ui64 MaxNonParallelTopStageExecutionLimit = 1;
+    bool PreferLocalDatacenterExecution = true;
+};
+
 /// per node singleton with instant API
 class IKqpResourceManager : private TNonCopyable {
 public:
@@ -211,6 +265,7 @@ public:
 
     virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
 
+    virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 

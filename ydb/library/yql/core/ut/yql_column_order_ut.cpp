@@ -9,12 +9,6 @@ using namespace NYql;
 
 Y_UNIT_TEST_SUITE(TYqlColumnOrder) {
 
-    Y_UNIT_TEST(ColumnOrderIgnoreCase) {
-        TColumnOrder order;
-        UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a");
-        UNIT_ASSERT_EQUAL(order.AddColumn("A"), "A_generated_2");
-    }
-
     Y_UNIT_TEST(ColumnOrderShrink) {
         TColumnOrder order;
         UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a");
@@ -30,6 +24,13 @@ Y_UNIT_TEST_SUITE(TYqlColumnOrder) {
         UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a_generated_2");
         UNIT_ASSERT_EQUAL(order.AddColumn("a_generated_2"), "a_generated_2_generated_2");
         UNIT_ASSERT_EQUAL(order.AddColumn("a_generated_2_generated_2"), "a_generated_2_generated_2_generated_2");
+    }
+
+    Y_UNIT_TEST(ColumnOrderCaseSensetive) {
+        TColumnOrder order;
+        UNIT_ASSERT_EQUAL(order.AddColumn("a"), "a");
+        UNIT_ASSERT_EQUAL(order.AddColumn("A"), "A");
+        UNIT_ASSERT_EQUAL(order.IsDuplicatedIgnoreCase("a"), true);
     }
 
     Y_UNIT_TEST(ColumnOrderGeneratedMatchOverVectorCtor) {

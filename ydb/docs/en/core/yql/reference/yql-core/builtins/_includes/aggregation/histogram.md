@@ -54,23 +54,22 @@ The Distance, Weight, and Ward algorithms differ in the formulas that combine tw
 
 Difference between Adaptive and Block:
 
-<blockquote>Contrary to adaptive histogram, block histogram doesn't rebuild bins after each point is added. Instead, it accumulates points and if the amount of points overflows specified limits, it shrinks all the points at once to produce a histogram. Indeed, there exist two limits and two shrinkage operations:
+> Contrary to adaptive histogram, block histogram doesn't rebuild bins after each point is added. Instead, it accumulates points and if the amount of points overflows specified limits, it shrinks all the points at once to produce a histogram. Indeed, there exist two limits and two shrinkage operations:
+>
+> 1. FastGreedyShrink is fast but coarse. It is used to shrink from upper limit to intermediate limit (override FastGreedyShrink to set specific behaviour).
+> 2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in 34constuctor)
+> While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
 
-1. FastGreedyShrink is fast but coarse. It is used to shrink from upper limit to intermediate limit (override FastGreedyShrink to set specific behaviour).
-2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in 34constuctor)
-While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
-
-</blockquote>
 {% endif %}
 
 ### If you need an accurate histogram
 
-1. You can use the aggregate functions described below with fixed bucket grids: [LinearHistogram](#linearhistogram) or [LogarithmicHistogram](#logarithmichistogram).
+1. You can use the aggregate functions described below with fixed bucket grids: [LinearHistogram](#linearhistogram) or [LogarithmicHistogram](#linearhistogram).
 2. You can calculate the bucket number for each row and apply to it [GROUP BY](../../../syntax/group_by.md).
 
-When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](#aggregateby) argument.
+When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](../../aggregation.md#aggregateby) argument.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -110,7 +109,7 @@ The format of the result is totally similar to [adaptive histograms](#histogram)
 
 If the spread of input values is uncontrollably large, we recommend that you specify the minimum and maximum values to prevent potential failures due to high memory consumption.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT

@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(TierDraftsGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
         auto settings = TKikimrSettings()
@@ -47,10 +47,31 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
     }
 
+    Y_UNIT_TEST(TestRemoveTableBeforeIndexation) {
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
+        csController->SetIndexWriteControllerEnabled(false);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+        auto tableClient = kikimr.GetTableClient();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        TTypedLocalHelper("Utf8", kikimr).ExecuteSchemeQuery("DROP TABLE `/Root/olapStore/olapTable`;");
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->WaitIndexation(TDuration::Seconds(5));
+        csController->WaitCompactions(TDuration::Seconds(5));
+    }
+
     Y_UNIT_TEST(TierDraftsGCWithRestart) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
@@ -133,7 +154,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
     Y_UNIT_TEST(WriteDeleteCleanGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
@@ -176,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
-        csController->SetReadTimeoutClean(TDuration::Zero());
+        csController->SetOverrideReadTimeoutClean(TDuration::Zero());
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         {
             const TInstant start = TInstant::Now();

@@ -170,7 +170,7 @@ public:
     explicit TColumnOrder(const TVector<TString>& order);
     TString AddColumn(const TString& name);
 
-    bool IsDuplicated(const TString& name) const;
+    bool IsDuplicatedIgnoreCase(const TString& name) const;
 
     void Shrink(size_t remain);
 
@@ -213,6 +213,7 @@ public:
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
+    THashMap<TString, uint64_t> UseCountLcase_;
     // (name, generated_name)
     TVector<TOrderedItem> Order_;
 };
@@ -279,8 +280,43 @@ struct TUdfCachedInfo {
     bool IsStrict = false;
 };
 
+const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
+const TString NowKey = "Now";
+const TString RandomKey = "Random";
+const TString RandomNumberKey = "RandomNumber";
+const TString RandomUuidKey = "RandomUuid";
+
+template <typename T>
+inline TString SerializeBinary(const T& value) {
+    return TString((const char*)&value, sizeof(T));
+}
+
+template <typename T>
+inline T DeserializeBinary(const TString& value) {
+    return *(const T*)value.Data();
+}
+
+template <typename T>
+inline TString GetRandomKey();
+
+template <>
+inline TString GetRandomKey<ui64>() {
+    return RandomNumberKey;
+}
+
+template <>
+inline TString GetRandomKey<double>() {
+    return RandomKey;
+}
+
+template <>
+inline TString GetRandomKey<TGUID>() {
+    return RandomUuidKey;
+}
+
 struct TTypeAnnotationContext: public TThrRefBase {
-    THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
+    THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
+    THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSourceMap;
@@ -334,6 +370,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    THashMap<TString, size_t> NoBlockRewriteCallableStats;
+    THashMap<TString, size_t> NoBlockRewriteTypeStats;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
     TFileStoragePtr FileStorage;
@@ -349,6 +387,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     bool StreamLookupJoin = false;
+    ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -364,17 +403,41 @@ struct TTypeAnnotationContext: public TThrRefBase {
     T GetRandom() const noexcept;
 
     template <typename T>
-    T GetCachedRandom() noexcept {
+    T GetCachedRandom() {
         auto& cached = std::get<std::optional<T>>(CachedRandom);
         if (!cached) {
-            cached = GetRandom<T>();
+            if (QContext.CanRead()) {
+                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, GetRandomKey<T>()}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                cached = DeserializeBinary<T>(item->Value);
+            } else {
+                cached = GetRandom<T>();
+                if (QContext.CanWrite()) {
+                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, GetRandomKey<T>()}, SerializeBinary<T>(*cached)).GetValueSync();
+                }
+            }
         }
         return *cached;
     }
 
-    ui64 GetCachedNow() noexcept {
+    ui64 GetCachedNow() {
         if (!CachedNow) {
-            CachedNow = TimeProvider->Now().GetValue();
+            if (QContext.CanRead()) {
+                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, NowKey}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                CachedNow = DeserializeBinary<ui64>(item->Value);
+            } else {
+                CachedNow = TimeProvider->Now().GetValue();
+                if (QContext.CanWrite()) {
+                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                }
+            }
         }
         return *CachedNow;
     }
@@ -425,22 +488,37 @@ struct TTypeAnnotationContext: public TThrRefBase {
     void Reset();
 
     /**
+     * Helper method to check statistics in type annotation context
+     */
+    bool ContainsStats(const TExprNode* input) {
+        return StatisticsMap.contains(input ? input->UniqueId() : 0);
+    }
+
+    /**
      * Helper method to fetch statistics from type annotation context
      */
     std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
-        return StatisticsMap.Value(input, std::shared_ptr<TOptimizerStatistics>(nullptr));
+        return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 
     /**
      * Helper method to set statistics in type annotation context
      */
     void SetStats(const TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats) {
-        StatisticsMap[input] = stats;
+        StatisticsMap[input ? input->UniqueId() : 0] = stats;
     }
 
     bool IsBlockEngineEnabled() const {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
+
+    void IncNoBlockCallable(TStringBuf callableName);
+    void IncNoBlockType(const TTypeAnnotationNode& type);
+    void IncNoBlockType(ETypeAnnotationKind kind);
+    void IncNoBlockType(NUdf::EDataSlot slot);
+
+    TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
+    TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 };
 
 template <> inline

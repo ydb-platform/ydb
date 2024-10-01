@@ -1,6 +1,6 @@
 /* Grammar reduction for Bison.
 
-   Copyright (C) 1988-1989, 2000-2003, 2005-2015, 2018-2019 Free
+   Copyright (C) 1988-1989, 2000-2003, 2005-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 
 /* Reduce the grammar: Find and eliminate unreachable terminals,
@@ -39,21 +39,21 @@
 #include "reduce.h"
 #include "symtab.h"
 
-/* Set of all nonterminals whose language is not empty.  */
+/* Set of nonterminals whose language is not empty.  */
 static bitset N;
 
-/* Set of all rules which have no useless nonterminals in their RHS.  */
+/* Set of rules that have no useless nonterminals in their RHS.  */
 static bitset P;
 
-/* Set of all accessible symbols.  */
+/* Set of accessible symbols.  */
 static bitset V;
 
 /* Set of symbols used to define rule precedence (so they are
    'useless', but no warning should be issued).  */
 static bitset V1;
 
-unsigned nuseless_productions;
-unsigned nuseless_nonterminals;
+int nuseless_productions;
+int nuseless_nonterminals;
 
 #define bitset_swap(Lhs, Rhs)                   \
   do {                                          \
@@ -81,9 +81,11 @@ useful_production (rule_number r, bitset N0)
 }
 
 
-/*---------------------------------------------------------.
-| Remember that rules are 1-origin, symbols are 0-origin.  |
-`---------------------------------------------------------*/
+/*-----------------------------------------------------------------.
+| Compute N, the set of nonterminals whose language is not empty.  |
+|                                                                  |
+| Remember that rules are 1-origin, symbols are 0-origin.          |
+`-----------------------------------------------------------------*/
 
 static void
 useless_nonterminals (void)
@@ -91,7 +93,7 @@ useless_nonterminals (void)
   /* N is set as built.  Np is set being built this iteration. P is
      set of all productions which have a RHS all in N.  */
 
-  bitset Np = bitset_create (nvars, BITSET_FIXED);
+  bitset Np = bitset_create (nnterms, BITSET_FIXED);
 
   /* The set being computed is a set of nonterminals which can derive
      the empty string or strings consisting of all terminals. At each
@@ -158,9 +160,9 @@ inaccessable_symbols (void)
   bitset Pp = bitset_create (nrules, BITSET_FIXED);
 
   /* If the start symbol isn't useful, then nothing will be useful. */
-  if (bitset_test (N, accept->content->number - ntokens))
+  if (bitset_test (N, acceptsymbol->content->number - ntokens))
     {
-      bitset_set (V, accept->content->number);
+      bitset_set (V, acceptsymbol->content->number);
 
       while (1)
         {
@@ -186,20 +188,20 @@ inaccessable_symbols (void)
 
   /* These tokens (numbered 0, 1, and 2) are internal to Bison.
      Consider them useful. */
-  bitset_set (V, endtoken->content->number);   /* end-of-input token */
+  bitset_set (V, eoftoken->content->number);   /* end-of-input token */
   bitset_set (V, errtoken->content->number);   /* error token */
   bitset_set (V, undeftoken->content->number); /* some undefined token */
 
   bitset_free (P);
   P = Pp;
 
-  unsigned nuseful_productions = bitset_count (P);
+  int nuseful_productions = bitset_count (P);
   nuseless_productions = nrules - nuseful_productions;
 
-  unsigned nuseful_nonterminals = 0;
+  int nuseful_nonterminals = 0;
   for (symbol_number i = ntokens; i < nsyms; ++i)
     nuseful_nonterminals += bitset_test (V, i);
-  nuseless_nonterminals = nvars - nuseful_nonterminals;
+  nuseless_nonterminals = nnterms - nuseful_nonterminals;
 
   /* A token that was used in %prec should not be warned about.  */
   for (rule_number r = 0; r < nrules; ++r)
@@ -248,10 +250,7 @@ reduce_grammar_tables (void)
 
   /* Adjust NRITEMS.  */
   for (rule_number r = nrules; r < nrules + nuseless_productions; ++r)
-    {
-      int length = rule_rhs_length (&rules[r]);
-      nritems -= length + 1;
-  }
+    nritems -= rule_rhs_length (&rules[r]) + 1;
 }
 
 
@@ -264,7 +263,7 @@ symbol_number *nterm_map = NULL;
 static void
 nonterminals_reduce (void)
 {
-  nterm_map = xnmalloc (nvars, sizeof *nterm_map);
+  nterm_map = xnmalloc (nnterms, sizeof *nterm_map);
   /* Map the nonterminals to their new index: useful first, useless
      afterwards.  Kept for later report.  */
   {
@@ -285,7 +284,7 @@ nonterminals_reduce (void)
 
   /* Shuffle elements of tables indexed by symbol number.  */
   {
-    symbol **symbols_sorted = xnmalloc (nvars, sizeof *symbols_sorted);
+    symbol **symbols_sorted = xnmalloc (nnterms, sizeof *symbols_sorted);
     for (symbol_number i = ntokens; i < nsyms; ++i)
       symbols[i]->content->number = nterm_map[i - ntokens];
     for (symbol_number i = ntokens; i < nsyms; ++i)
@@ -302,11 +301,11 @@ nonterminals_reduce (void)
       for (item_number *rhsp = rules[r].rhs; 0 <= *rhsp; ++rhsp)
         if (ISVAR (*rhsp))
           *rhsp = symbol_number_as_item_number (nterm_map[*rhsp - ntokens]);
-    accept->content->number = nterm_map[accept->content->number - ntokens];
+    acceptsymbol->content->number = nterm_map[acceptsymbol->content->number - ntokens];
   }
 
   nsyms -= nuseless_nonterminals;
-  nvars -= nuseless_nonterminals;
+  nnterms -= nuseless_nonterminals;
 }
 
 
@@ -321,7 +320,7 @@ reduce_output (FILE *out)
     {
       fprintf (out, "%s\n\n", _("Nonterminals useless in grammar"));
       for (int i = 0; i < nuseless_nonterminals; ++i)
-        fprintf (out, "   %s\n", symbols[nsyms + i]->tag);
+        fprintf (out, "    %s\n", symbols[nsyms + i]->tag);
       fputs ("\n\n", out);
     }
 
@@ -333,7 +332,7 @@ reduce_output (FILE *out)
           if (!b)
             fprintf (out, "%s\n\n", _("Terminals unused in grammar"));
           b = true;
-          fprintf (out, "   %s\n", symbols[i]->tag);
+          fprintf (out, "    %s\n", symbols[i]->tag);
         }
     if (b)
       fputs ("\n\n", out);
@@ -369,7 +368,7 @@ reduce_grammar (void)
 {
   /* Allocate the global sets used to compute the reduced grammar */
 
-  N = bitset_create (nvars, BITSET_FIXED);
+  N = bitset_create (nnterms, BITSET_FIXED);
   P =  bitset_create (nrules, BITSET_FIXED);
   V = bitset_create (nsyms, BITSET_FIXED);
   V1 = bitset_create (nsyms, BITSET_FIXED);
@@ -378,23 +377,23 @@ reduce_grammar (void)
   inaccessable_symbols ();
 
   /* Did we reduce something? */
-  if (!nuseless_nonterminals && !nuseless_productions)
-    return;
+  if (nuseless_nonterminals || nuseless_productions)
+    {
+      reduce_print ();
 
-  reduce_print ();
+      if (!bitset_test (N, acceptsymbol->content->number - ntokens))
+        complain (&startsymbol_loc, fatal,
+                  _("start symbol %s does not derive any sentence"),
+                  startsymbol->tag);
 
-  if (!bitset_test (N, accept->content->number - ntokens))
-    complain (&startsymbol_location, fatal,
-              _("start symbol %s does not derive any sentence"),
-              startsymbol->tag);
-
-  /* First reduce the nonterminals, as they renumber themselves in the
-     whole grammar.  If you change the order, nonterms would be
-     renumbered only in the reduced grammar.  */
-  if (nuseless_nonterminals)
-    nonterminals_reduce ();
-  if (nuseless_productions)
-    reduce_grammar_tables ();
+      /* First reduce the nonterminals, as they renumber themselves in the
+         whole grammar.  If you change the order, nonterms would be
+         renumbered only in the reduced grammar.  */
+      if (nuseless_nonterminals)
+        nonterminals_reduce ();
+      if (nuseless_productions)
+        reduce_grammar_tables ();
+    }
 
   if (trace_flag & trace_grammar)
     {
@@ -402,7 +401,7 @@ reduce_grammar (void)
 
       fprintf (stderr, "reduced %s defines %d terminals, %d nonterminals"
                ", and %d productions.\n",
-               grammar_file, ntokens, nvars, nrules);
+               grammar_file, ntokens, nnterms, nrules);
     }
 }
 

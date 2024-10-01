@@ -21,7 +21,11 @@ def jsons_are_equal(lhs: str, rhs: str) -> bool:
 
 
 def assert_rows_equal(expected: List, actual: List):
-    assert len(expected) == len(actual)
+    assert len(expected) == len(actual), (
+        f'Columns amount mismatch expected: {len(expected)} actual: {len(actual)}',
+        expected,
+        actual,
+    )
 
     for i in range(len(expected)):
         if type(expected[i]) is float:

@@ -51,6 +51,7 @@ SRCS(
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto
+    counters_node_broker.proto
     counters_pq.proto
     counters_replication.proto
     counters_schemeshard.proto
@@ -92,6 +93,7 @@ SRCS(
     long_tx_service.proto
     maintenance.proto
     memory_controller_config.proto
+    memory_stats.proto
     metrics.proto
     minikql_engine.proto
     mon.proto
@@ -144,10 +146,12 @@ SRCS(
     tx_sequenceshard.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
+    yql_translation_settings.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
     ydb/library/actors/protos
@@ -168,7 +172,7 @@ PEERDIR(
     ydb/library/ydb_issue/proto
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/columnshard/engines/protos
-    ydb/core/formats/arrow/protos
+    ydb/library/formats/arrow/protos
     ydb/core/tx/columnshard/common/protos
 )
 

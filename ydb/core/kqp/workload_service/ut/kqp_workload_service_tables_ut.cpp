@@ -70,25 +70,24 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
             CanonizePath({ydb->GetSettings().DomainName_, ".metadata/workload_manager"})
         ).GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 3);
     }
 
     Y_UNIT_TEST(TestTablesIsNotCreatingForUnlimitedPool) {
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(-1)
-            .QueueSize(10)
+            .QueryMemoryLimitPercentPerNode(50)
             .Create();
 
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
 
         // Check that there is no .metadata folder
         auto listResult = ydb->GetSchemeClient().ListDirectory(
-            CanonizePath(ydb->GetSettings().DomainName_)
+            CanonizePath({ydb->GetSettings().DomainName_, ".metadata", "workload_manager"})
         ).GetValue(FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".resource_pools");
-        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[1].Name, ".sys");
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, "pools");
     }
 
     Y_UNIT_TEST(TestPoolStateFetcherActor) {

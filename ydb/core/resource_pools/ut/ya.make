@@ -7,6 +7,7 @@ PEERDIR(
 )
 
 SRCS(
+    resource_pool_classifier_settings_ut.cpp
     resource_pool_settings_ut.cpp
 )
 

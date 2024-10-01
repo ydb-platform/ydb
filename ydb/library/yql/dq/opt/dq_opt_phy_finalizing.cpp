@@ -388,7 +388,7 @@ TVector<TExpr> CollectNodes(const TExprNode::TPtr& input) {
     return result;
 }
 
-bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consumers, TNodeSet& visited) {
+bool GatherConsumersImpl(const TExprNode& node, TParentsMultiMap& consumers, TNodeSet& visited) {
     if (!visited.emplace(&node).second) {
         return true;
     }
@@ -454,7 +454,7 @@ bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consume
     return true;
 }
 
-bool GatherConsumers(const TExprNode& root, TNodeMap<TNodeMultiSet>& consumers) {
+bool GatherConsumers(const TExprNode& root, TParentsMultiMap& consumers) {
     TNodeSet visited;
     return GatherConsumersImpl(root, consumers, visited);
 }
@@ -469,7 +469,7 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
     // YQL_CLOG(TRACE, CoreDq) << "-- replicate query: " << NCommon::ExprToPrettyString(ctx, *input);
     // YQL_CLOG(TRACE, CoreDq) << "-- replicate query: " << input->Dump();
 
-    TNodeMap<TNodeMultiSet> consumersMap;
+    TParentsMultiMap consumersMap;
     if (!GatherConsumers(*input, consumersMap)) {
         return IGraphTransformer::TStatus::Ok;
     }

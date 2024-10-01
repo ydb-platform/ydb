@@ -22,7 +22,7 @@ struct TCertAndKey {
 
 struct TProps {
     long SecondsValid = 0;
-    std::string Coutry; // C
+    std::string Country; // C
     std::string State; // ST
     std::string Location; // L
     std::string Organization; // O

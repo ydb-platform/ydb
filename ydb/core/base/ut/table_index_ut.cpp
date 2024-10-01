@@ -15,32 +15,35 @@ Y_UNIT_TEST_SUITE (TableIndex) {
         auto type = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1", "DATA2"}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"PK1", "PK2"}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {"DATA3"}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         {
             const TTableColumns Table2{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {"PK"}};
 
             UNIT_ASSERT(IsCompatibleIndex(type, Table2, {{NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {}}, explain));
-            UNIT_ASSERT(explain.empty());
+            UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
             UNIT_ASSERT(IsCompatibleIndex(type, Table2, {{"DATA"}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}}, explain));
-            UNIT_ASSERT(explain.empty());
+            UNIT_ASSERT_STRINGS_EQUAL(explain, "");
         }
         {
             const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}};
 
             UNIT_ASSERT(IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
-            UNIT_ASSERT(explain.empty());
+            UNIT_ASSERT_STRINGS_EQUAL(explain, "");
         }
+
+        UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"PK2"}, {}}, explain));
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
     }
 
     Y_UNIT_TEST (NotCompatibleSecondaryIndex) {
@@ -71,8 +74,8 @@ Y_UNIT_TEST_SUITE (TableIndex) {
         UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{}, {}}, explain));
         UNIT_ASSERT_STRINGS_EQUAL(explain, "should be at least single index key column");
 
-        UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"PK2"}, {}}, explain));
-        UNIT_ASSERT_STRINGS_EQUAL(explain, "index keys are prefix of table keys");
+        UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"PK2", "PK1"}, {}}, explain));
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "index keys shouldn't be table keys");
     }
 
     Y_UNIT_TEST (CompatibleVectorIndex) {
@@ -80,16 +83,16 @@ Y_UNIT_TEST_SUITE (TableIndex) {
         auto type = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {"DATA3"}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"PK1"}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {"DATA1"}}, explain));
-        UNIT_ASSERT(explain.empty());
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
     }
 
     Y_UNIT_TEST (NotCompatibleVectorIndex) {
@@ -118,16 +121,16 @@ Y_UNIT_TEST_SUITE (TableIndex) {
             const TTableColumns Table2{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {"PK"}};
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, "index key column shouldn't have a reserved name: -parent");
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{"DATA"}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, "index data column shouldn't have a reserved name: -parent");
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
         }
         {
             const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}};
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, "table key column shouldn't have a reserved name: -parent");
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
         }
     }
 }

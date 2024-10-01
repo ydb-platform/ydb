@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <util/digest/numeric.h>
 #include <util/generic/vector.h>
@@ -89,6 +90,8 @@ public:
     }
 
     virtual const arrow::compute::ScalarKernel& GetArrowKernel() const = 0;
+    virtual std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const = 0;
+    virtual bool IsPolymorphic() const = 0;
 
     virtual ~TKernel() = default;
 };

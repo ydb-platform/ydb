@@ -48,7 +48,7 @@ struct TTestMetricConsumer
         if (name == "sensor") {
             Name = value;
         } else {
-            Labels.emplace_back(TString(name) + "=" + value);
+            Labels.push_back(TString(name) + "=" + value);
         }
     }
 

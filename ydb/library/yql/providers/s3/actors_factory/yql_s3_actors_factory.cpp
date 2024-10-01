@@ -45,7 +45,8 @@ namespace NYql::NDq {
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& factoryConfig = {},
-            ::NMonitoring::TDynamicCounterPtr counters = nullptr) override {
+            ::NMonitoring::TDynamicCounterPtr counters = nullptr,
+            bool allowLocalFiles = false) override {
 
             Y_UNUSED(factory);
             Y_UNUSED(credentialsFactory);
@@ -53,6 +54,7 @@ namespace NYql::NDq {
             Y_UNUSED(retryPolicy);
             Y_UNUSED(factoryConfig);
             Y_UNUSED(counters);
+            Y_UNUSED(allowLocalFiles);
         }
     };
 

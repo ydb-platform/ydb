@@ -124,6 +124,7 @@ message TDqConfig {
         optional bool EnforceJobUtc = 33;
         optional TSpillingSettings SpillingSettings = 38;
         optional TDiskRequest DiskRequest = 39;
+        optional bool EnforceJobYtIsolation = 40;
     }
 
     repeated TYtBackend YtBackends = 5;

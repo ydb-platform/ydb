@@ -948,6 +948,8 @@ public:
             const NUdf::TType* dictType,
             ui32 flags) const;
 
+    NUdf::IListValueBuilder::TPtr NewList() const;
+
     NUdf::TUnboxedValuePod Cloned(const NUdf::TUnboxedValuePod& it) const;
     NUdf::TUnboxedValuePod Reversed(const NUdf::TUnboxedValuePod& it) const;
 

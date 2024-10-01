@@ -12,12 +12,13 @@
 
   * Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
+
 - Через отчет в PR
 
-  * Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
+  Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
 
-    * Для FAIL и MUTED тестов появляется столбец "history" содержащий статус последних 5 запусков этого теста в poscommit проверках
-    * В контекстном меню теста выберите `Open test history`
+  * Для FAIL и MUTED тестов появляется столбец "history" содержащий статус последних 5 запусков этого теста в poscommit проверках
+  * В контекстном меню теста выберите `Open test history`
 
 {% endlist %}
 
@@ -87,7 +88,7 @@ token in yav by name `ydb-sa-1_cloud_token`
   1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
   1. Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
 
-- Через отчет PR
+- Через отчет в PR
 
   1. Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
   1. В контекстном меню теста выберите `Create mute issue`

@@ -896,7 +896,8 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 
 void TColumnShard::SetupCleanupUnusedSchemaVersions() {
     auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    if (primaryIndex.MutableVersionCounts().IsEmpty()) {
+    ui64 lastVersion = primaryIndex.GetVersionedIndex().GetLastSchemaVersion();
+    if (primaryIndex.MutableVersionCounts().IsEmpty(lastVersion)) {
         return;
     }
     Execute(new TTxSchemaVersionsCleanup(this));
@@ -1233,27 +1234,26 @@ TDuration TColumnShard::GetMaxReadStaleness() {
     return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean();
 }
 
-void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db) {
+void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui64>& removedSchemaVersions) {
     auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
     ui64 lastVersion = primaryIndex.GetVersionedIndex().GetLastSchemaVersion();
     primaryIndex.MutableVersionCounts().EnumerateVersionsToErase([&](ui64 version, auto& key) {
         if (version != lastVersion) {
             LOG_S_DEBUG("Removing schema version from db " << version << " tablet id " << TabletID());
-            RemovedSchemaVersions.insert(version);
+            removedSchemaVersions.insert(version);
             table.Key(key.Id, key.PlanStep, key.TxId).Delete();
         }
     });
 }
 
-void TColumnShard::CompleteSchemaVersionsCleanup() {
+void TColumnShard::CompleteSchemaVersionsCleanup(const THashSet<ui64>& removedSchemaVersions) {
     auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    for (ui64 version: RemovedSchemaVersions) {
+    for (ui64 version: removedSchemaVersions) {
         LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << TabletID());
         primaryIndex.RemoveSchemaVersion(version);
         primaryIndex.MutableVersionCounts().VersionsToErase.erase(version);
     }
-    RemovedSchemaVersions.clear();
 }
 
 }

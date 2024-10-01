@@ -49,8 +49,8 @@ public:
         return count;
     }
 
-    bool IsEmpty() const {
-        return VersionsToErase.empty();
+    bool IsEmpty(ui64 lastVersion) const {
+        return VersionsToErase.empty() || ((VersionsToErase.size() == 1) && (*VersionsToErase.begin() == lastVersion));
     }
 
     template<class Processor>

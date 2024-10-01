@@ -15,6 +15,9 @@ public:
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_CLEANUP_SCHEMA_VERSIONS; }
+
+private:
+    THashSet<ui64> VersionsToRemove;
 };
 
 }

@@ -21,7 +21,16 @@ public:
         , Type(type)
     {}
 
+    TReason(const char* message, EType type = EType::Unspecified)
+        : Message(message)
+        , Type(type)
+    {}
+
     TReason() = default;
+
+    operator TString() const {
+        return Message;
+    }
 
     TString GetMessage() const {
         return Message;

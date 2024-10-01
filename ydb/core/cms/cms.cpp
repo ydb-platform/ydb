@@ -605,7 +605,7 @@ bool TCms::CheckActionRestartServices(const TAction &action,
         return false;
 
     if (!services) {
-        error.Code = TStatus::WRONG_REQUEST;
+        error.Code =  TStatus::WRONG_REQUEST;
         error.Reason = "Empty services list";
         return false;
     }
@@ -2157,7 +2157,7 @@ bool TCms::CheckNotification(const TNotification &notification,
 
         if (!IsValidNotificationAction(action, time, error, ctx)) {
             resp.MutableStatus()->SetCode(error.Code);
-            resp.MutableStatus()->SetReason(error.Reason.GetMessage());
+            resp.MutableStatus()->SetReason(error.Reason);
             break;
         }
     }

@@ -40,9 +40,9 @@ bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId
 
 template<typename TFrom, typename TTo>
 inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {
-    const auto& results = from.GetResults();
+    const auto& results = from.GetYdbResults();
     for (const auto& result : results) {
-        ConvertKqpQueryResultToDbResult(result, to->add_result_sets());
+        to->add_result_sets()->CopyFrom(result);
     }
 }
 
@@ -80,7 +80,7 @@ public:
     /// Accepts query text
     virtual void Collect(const TString& queryData) = 0;
 
-    virtual bool IsNull() { return false; } 
+    virtual bool IsNull() { return false; }
 
     virtual ~IQueryReplayBackend() {};
 

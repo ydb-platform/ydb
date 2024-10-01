@@ -997,15 +997,15 @@ public:
 
 private:
     static TExprNode::TPtr GetResOrPullResult(const TExprNode& node, const IDataProvider::TFillSettings& fillSettings,
-        const NKikimrMiniKQL::TResult& resultValue, TExprContext& ctx)
+        const Ydb::ResultSet& resultValue, TExprContext& ctx)
     {
         TColumnOrder columnHints(NCommon::GetResOrPullColumnHints(node));
 
         auto protoValue = &resultValue;
         YQL_ENSURE(resultValue.GetArena());
-        if (IsRawKikimrResult(resultValue)) {
-            protoValue = KikimrResultToProto(resultValue, columnHints, fillSettings, resultValue.GetArena());
-        }
+        //if (IsRawKikimrResult(resultValue)) {
+        //    protoValue = KikimrResultToProto(resultValue, columnHints, fillSettings, resultValue.GetArena());
+        //}
 
         YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Custom);
         YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);

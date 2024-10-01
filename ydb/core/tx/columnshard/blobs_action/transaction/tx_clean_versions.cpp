@@ -11,14 +11,14 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     NIceDb::TNiceDb db(txc.DB);
 
-    Self->ExecuteSchemaVersionsCleanup(db);
+    Self->ExecuteSchemaVersionsCleanup(db, VersionsToRemove);
 
     return true;
 }
 void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
     LOG_S_DEBUG("TTxSchemaVersionsCleanup::Complete, tablet id " <<  Self->TabletID());
     TMemoryProfileGuard mpg("TTxSchemaVersionsCleanup::Complete");
-    Self->CompleteSchemaVersionsCleanup();
+    Self->CompleteSchemaVersionsCleanup(VersionsToRemove);
 
 //    Self->BackgroundController.FinishCleanupInsertTable();
 //    Self->SetupCleanupInsertTable();

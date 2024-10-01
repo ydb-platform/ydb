@@ -18,7 +18,7 @@ public:
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
         TTabletId rootHiveId = domainsInfo->GetHive();
-        //bool isRootHive = (rootHiveId == Self->TabletID());
+        bool isRootHive = (rootHiveId == Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -181,7 +181,7 @@ public:
             }
         }
 
-        /*Self->BuildCurrentConfig();
+        Self->BuildCurrentConfig();
         if (Self->CurrentConfig.HasWarmUpEnabled()) {
             Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
         } else {
@@ -191,7 +191,7 @@ public:
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumMemory.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumNetwork.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
-*/
+
         auto owners = db.Table<Schema::TabletOwners>().Select();
         if (!owners.IsReady()) {
             return false;
@@ -201,11 +201,7 @@ public:
             auto end = owners.GetValue<Schema::TabletOwners::End>();
             auto ownerId = owners.GetValue<Schema::TabletOwners::OwnerId>();
 
-            Y_UNUSED(begin);
-            Y_UNUSED(end);
-            Y_UNUSED(ownerId);
-
-           // Self->Keeper.AddOwnedSequence(ownerId, {begin, end});
+           Self->Keeper.AddOwnedSequence(ownerId, {begin, end});
             if (!owners.Next()) {
                 return false;
             }
@@ -217,7 +213,7 @@ public:
             return false;
         }
         while (!sequences.EndOfSet()) {
-           /* auto begin = sequences.GetValue<Schema::Sequences::Begin>();
+            auto begin = sequences.GetValue<Schema::Sequences::Begin>();
             auto end = sequences.GetValue<Schema::Sequences::End>();
             auto next = sequences.GetValue<Schema::Sequences::Next>();
             auto ownerId = sequences.GetValue<Schema::Sequences::OwnerId>();
@@ -238,7 +234,7 @@ public:
                 BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << Self->TabletID());
                 Self->Keeper.AddOwnedSequence(Self->TabletID(), seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
-            }*/
+            }
             // remove after upgrade ^^^^
 
             if (!sequences.Next()) {
@@ -252,12 +248,12 @@ public:
         if (!tabletTypeAllowedMetrics.IsReady())
             return false;
         while (!tabletTypeAllowedMetrics.EndOfSet()) {
-           /* auto type = tabletTypeAllowedMetrics.GetValue<Schema::TabletTypeMetrics::TabletType>();
+            auto type = tabletTypeAllowedMetrics.GetValue<Schema::TabletTypeMetrics::TabletType>();
             auto& allowedMetrics = Self->TabletTypeAllowedMetrics[type];
             allowedMetrics = tabletTypeAllowedMetrics.GetValue<Schema::TabletTypeMetrics::AllowedMetricIDs>();
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCounterFieldNumber) == allowedMetrics.end()) {
                 allowedMetrics.emplace_back(NKikimrTabletBase::TMetrics::kCounterFieldNumber);
-            }*/
+            }
             if (!tabletTypeAllowedMetrics.Next())
                 return false;
         }
@@ -269,7 +265,7 @@ public:
                 return false;
             while (!domainRowset.EndOfSet()) {
                 ++numSubDomains;
-                /*TSubDomainKey key(domainRowset.GetKey());
+                TSubDomainKey key(domainRowset.GetKey());
                 TDomainInfo& domain = Self->Domains.emplace(key, TDomainInfo()).first->second;
                 domain.Path = domainRowset.GetValueOrDefault<Schema::SubDomain::Path>();
                 domain.HiveId = domainRowset.GetValueOrDefault<Schema::SubDomain::HiveId>();
@@ -281,7 +277,7 @@ public:
                 }
                 if (domainRowset.HaveValue<Schema::SubDomain::ServerlessComputeResourcesMode>()) {
                     domain.ServerlessComputeResourcesMode = domainRowset.GetValue<Schema::SubDomain::ServerlessComputeResourcesMode>();
-                }*/
+                }
                 
                 if (!domainRowset.Next())
                     return false;
@@ -296,7 +292,7 @@ public:
                 return false;
             while (!blockedOwnerRowset.EndOfSet()) {
                 ++numBlockedOwners;
-                /*Self->BlockedOwners.emplace(blockedOwnerRowset.GetKey());*/
+                Self->BlockedOwners.emplace(blockedOwnerRowset.GetKey());
                 if (!blockedOwnerRowset.Next())
                     return false;
             }
@@ -310,7 +306,7 @@ public:
                 return false;
             while (!nodeRowset.EndOfSet()) {
                 ++numNodes;
-                /*TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
+                TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
                 node.Down = nodeRowset.GetValue<Schema::Node::Down>();
@@ -346,7 +342,7 @@ public:
                     db.Table<Schema::Node>().Key(nodeId).Delete();
                 } else if (node.IsUnknown() && node.LocationAcquired) {
                     Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
-                }*/
+                }
                 if (!nodeRowset.Next())
                     return false;
             }
@@ -376,7 +372,7 @@ public:
             systemCategory.StickTogetherInDC = true;
         }
 
-        //TTabletId maxTabletId = 0;
+        TTabletId maxTabletId = 0;
 
         {
             size_t numTablets = 0;
@@ -385,7 +381,7 @@ public:
                 return false;
             while (!tabletRowset.EndOfSet()) {
                 ++numTablets;
-                /*TTabletId tabletId = tabletRowset.GetValue<Schema::Tablet::ID>();
+                TTabletId tabletId = tabletRowset.GetValue<Schema::Tablet::ID>();
                 maxTabletId = std::max(maxTabletId, UniqPartFromTabletID(tabletId));
                 TLeaderTabletInfo& tablet = Self->Tablets.emplace(
                             std::piecewise_construct,
@@ -471,7 +467,7 @@ public:
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
-                tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();*/
+                tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())
                     return false;
@@ -488,7 +484,7 @@ public:
 
             while (!tabletChannelRowset.EndOfSet()) {
                 ++numTabletChannels;
-                /*TTabletId tabletId = tabletChannelRowset.GetValue<Schema::TabletChannel::Tablet>();
+                TTabletId tabletId = tabletChannelRowset.GetValue<Schema::TabletChannel::Tablet>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
                     ui32 channelId = tabletChannelRowset.GetValue<Schema::TabletChannel::Channel>();
@@ -508,7 +504,7 @@ public:
                     }
                 } else {
                     ++numMissingTablets;
-                }*/
+                }
                 if (!tabletChannelRowset.Next())
                     return false;
             }
@@ -525,7 +521,7 @@ public:
 
             while (!tabletChannelGenRowset.EndOfSet()) {
                 ++numTabletChannelHistories;
-                /*TTabletId tabletId = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Tablet>();
+                TTabletId tabletId = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Tablet>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
                     ui32 channelId = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Channel>();
@@ -546,7 +542,7 @@ public:
                     }
                 } else {
                     ++numMissingTablets;
-                }*/
+                }
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
@@ -567,7 +563,7 @@ public:
                 return false;
             while (!tabletFollowerGroupRowset.EndOfSet()) {
                 ++numTabletFollowerGroups;
-                /*TTabletId tabletId = tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::TabletID>();
+                TTabletId tabletId = tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::TabletID>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
                     TFollowerGroup& followerGroup = tablet->AddFollowerGroup();
@@ -593,7 +589,7 @@ public:
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();
                 } else {
                     ++numMissingTablets;
-                }*/
+                }
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
@@ -609,7 +605,7 @@ public:
                 return false;
             while (!tabletFollowerRowset.EndOfSet()) {
                 ++numTabletFollowers;
-                /*TTabletId tabletId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::TabletID>();
+                TTabletId tabletId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::TabletID>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
                     TFollowerGroupId followerGroupId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::GroupID>();
@@ -636,7 +632,7 @@ public:
                     follower.InitTabletMetrics();
                 } else {
                     ++numMissingTablets;
-                }*/
+                }
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
@@ -645,7 +641,7 @@ public:
         }
 
         // Compatability: some per-dc followers do not have their datacenter set - try to set it now
-        /*for (auto& [tabletId, tablet] : Self->Tablets) {
+        for (auto& [tabletId, tablet] : Self->Tablets) {
             for (auto& group : tablet.FollowerGroups) {
                 if (!group.FollowerCountPerDataCenter) {
                     continue;
@@ -694,7 +690,7 @@ public:
                     --dcIt->second;
                 }
             }
-        }*/
+        }
 
         {
             size_t numMetrics = 0;
@@ -704,7 +700,7 @@ public:
                 return false;
             while (!metricsRowset.EndOfSet()) {
                 ++numMetrics;
-                /*TTabletId tabletId = metricsRowset.GetValue<Schema::Metrics::TabletID>();
+                TTabletId tabletId = metricsRowset.GetValue<Schema::Metrics::TabletID>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
                     TFollowerId followerId = metricsRowset.GetValue<Schema::Metrics::FollowerID>();
@@ -718,7 +714,7 @@ public:
                     }
                 } else {
                     ++numMissingTablets;
-                }*/
+                }
                 if (!metricsRowset.Next())
                     return false;
             }
@@ -735,7 +731,7 @@ public:
             }
             while (!availabilityRestrictionsRowset.EndOfSet()) {
                 ++numRestrictions;
-                /*TNodeId nodeId = availabilityRestrictionsRowset.GetValue<Schema::TabletAvailabilityRestrictions::Node>();
+                TNodeId nodeId = availabilityRestrictionsRowset.GetValue<Schema::TabletAvailabilityRestrictions::Node>();
                 auto node = Self->FindNode(nodeId);
                 if (node) {
                     auto tabletType = availabilityRestrictionsRowset.GetValue<Schema::TabletAvailabilityRestrictions::TabletType>();
@@ -743,7 +739,7 @@ public:
                     node->TabletAvailabilityRestrictions[tabletType] = maxCount;
                 } else {
                     ++numMissingNodes;
-                }*/
+                }
                 if (!availabilityRestrictionsRowset.Next()) {
                     return false;
                 }
@@ -752,7 +748,7 @@ public:
                         << numMissingNodes << " for missing nodes)");
         }
 
-        /*size_t numDeletedNodes = 0;
+        size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
         for (auto itNode = Self->Nodes.begin(); itNode != Self->Nodes.end();) {
             if (itNode->second.CanBeDeleted()) {
@@ -771,19 +767,19 @@ public:
                 ++itNode;
             }
         }
-        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");*/
+        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
-        //TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
+        TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
         auto operationsRowset = db.Table<Schema::OperationsLog>().All().Reverse().Select();
         if (!operationsRowset.IsReady()) {
             return false;
         }
-        /*if (operationsRowset.IsValid()) {
+        if (operationsRowset.IsValid()) {
             Self->OperationsLogIndex = operationsRowset.GetValue<Schema::OperationsLog::Index>();
-        }*/
+        }
 
-        /*if (isRootHive) {
+        if (isRootHive) {
             if (numSequences == 0) {
                 ui64 freeSequenceIdx = 0;
                 BLOG_D("THive::TTxLoadEverything Self->NextTabletId = " << Self->NextTabletId << " NextTabletId = " << nextTabletId);
@@ -826,7 +822,7 @@ public:
                             .Update<Schema::Sequences::Begin, Schema::Sequences::Next, Schema::Sequences::End>(sequence.Begin, sequence.Next, sequence.End);
                 }
             }
-        }*/
+        }
 
         return true;
     }

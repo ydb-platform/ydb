@@ -908,10 +908,9 @@ public:
         void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
             i64 dataSize = 0;
-            Y_UNUSED(dataSize, maxCount);
-            while (/*BatchesInFlight < maxCount
-                    && */BatchesInFlight < Batches.size()
-                    /*&& dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize()*/) {
+            while (BatchesInFlight < maxCount
+                    && BatchesInFlight < Batches.size()
+                    && dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize) {
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
@@ -1066,7 +1065,6 @@ private:
 class TShardedWriteController : public IShardedWriteController {
 public:
     void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
-        Y_ABORT_UNLESS(!SchemeEntry);
         SchemeEntry = schemeEntry;
         BeforePartitioningChanged();
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
@@ -1081,7 +1079,6 @@ public:
     void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) override {
-            Y_ABORT_UNLESS(!SchemeEntry);
         SchemeEntry = schemeEntry;
         PartitionsEntry = std::move(partitionsEntry);
         BeforePartitioningChanged();
@@ -1096,7 +1093,6 @@ public:
     }
 
     void BeforePartitioningChanged() {
-        return;
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
             auto& writeInfo = WriteInfos.at(token);
             if (writeInfo.Serializer) {
@@ -1110,7 +1106,6 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        return;
         if (!WriteInfos.empty()) {
             ShardsInfo.Close();
             ReshardData();
@@ -1391,7 +1386,6 @@ private:
     }
 
     void ReshardData() {
-        return;
         for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             for (size_t index = 0; index < shardInfo.Size(); ++index) {
                 const auto& batch = shardInfo.GetBatch(index);

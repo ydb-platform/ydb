@@ -87,13 +87,14 @@ jobs:
       run: |
         uname -a
         cat ydb/apps/ydb/version.txt
-      
-    - name: Build windows binary with ya make
+
+    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
+    - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -o ./
     
-    - name: Build binary with ya make
+    - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no
 

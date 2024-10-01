@@ -1721,11 +1721,12 @@ private:
 
         AddReadTableSettings(op, read, readInfo);
 
-        if (read.Maybe<TKqpReadOlapTableRangesBase>()) {
+        if (auto maybeRead = read.Maybe<TKqpReadOlapTableRangesBase>()) {
             op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(table, planNode.StageProto);
+            AddOptimizerEstimates(op, maybeRead.Cast().Process());
+        } else {
+            AddOptimizerEstimates(op, read);
         }
-
-        AddOptimizerEstimates(op, read);
 
         auto readName = GetNameByReadType(readInfo.Type);
         op.Properties["Name"] = readName;
@@ -2386,7 +2387,7 @@ void RemoveStats(NJson::TJsonValue& plan) {
 
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
      static const THashSet<TString> redundantNodes = {
-       "UnionAll",
+        "UnionAll",
         "Broadcast",
         "Map",
         "HashShuffle",

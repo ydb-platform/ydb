@@ -4,14 +4,17 @@
 
 С историей выполнения тестов можно ознакомиться следующими путями
 {% list tabs %}
+
 - Через дашборд 
 
   Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
-  1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+
+  * Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
 
 
 - Через отчет в PR
-  1. Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
+
+  * Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
     * Для FAIL и MUTED тестов появляется столбец "history" содержащий статус последних 5 запусков этого теста в poscommit проверках
     * В контекстном меню теста выберите `Open test history`
 
@@ -34,11 +37,11 @@
   * можно найти в каких PR тест выполнялся и падал
 
 ### Как собирается история тестов
- 
+
 Факт запуска автотестов и статусы выполнения собираются в GitHub Action скриптом [upload_tests_results.py](.github/scripts/analytics/upload_tests_results.py)
 
   * Запускается для каждого запуска тестов во всех типах проверок (Nightly, PR-Check, Postcommit)
-  
+
 Аналитика (стабильность, срезы по дням, определение owner'a тестов etc) собирается в GitHub Action через workflow [Collect-analytics-run](https://github.com/ydb-platform/ydb/blob/main/.github/workflows/collect_analytics.yml)
 
   * Выполняется каждый час
@@ -55,17 +58,18 @@ token in yav by name `ydb-sa-1_cloud_token`
 
 Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c0bb1ad0a8d9c9cf475922c98c1916a8/tpcc/ydb/insert\_tpcc\_results.py](https://github.com/ydb-platform/benchhelpers/blob/82495e35c0bb1ad0a8d9c9cf475922c98c1916a8/tpcc/ydb/insert_tpcc_results.py)
 
- {% endcut %}
+{% endcut %}
 
 ### История тестов в testmo (треуется авторизация)
 
 Каждый раз, когда тесты запускаются {{ ydb-short-name }} CI, их результаты загружаются в [приложение Test History](https://nebius.testmo.net/projects/view/1). В комментарии к результатам тестирования есть ссылка "Test history", ведущая на страницу с соответствующим прогоном в этом приложении.
 
 В "Test history" члены команды {{ ydb-short-name }} могут просматривать тестовые прогоны, выполнять поиск тестов, просматривать логи и сравнивать их между различными тестовыми прогонами. Если какой-либо тест завершается сбоем на некоторой прекоммитной проверке, в его истории можно увидеть, был ли этот сбой вызван данным изменением, или тест был сломан ранее.
-  
+
 ## Выключение и включение тестов CI (mute and un-mute)
 
 Признак автотеста `muted` используется для того, чтобы завершение этого теста статусом "failure"
+
 - не блокировать CI падениями сломанных или нестабильных тестов
 - исключать падения этого автотеста из раздела `FAILED` в отчете о результате прохождения автотестов и переносит его в `MUTED`
 
@@ -75,9 +79,10 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 
 {% list tabs %}
 
-- Через дашборд 
+- Через дашборд
 
   Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
+
   1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
   1. Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
 
@@ -117,7 +122,6 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
       > Pass:52 Fail:3 Mute:0 Skip:0
       >
       > [history](https://datalens.yandex/34xnbsom67hcq?full_name=__in_ydb/core/kqp/ut/olap/KqpOlapAggregations.Aggregation_ResultCountAll_FilterL&full_name=__in_ydb/core/kqp/ut/olap/KqpOlapAggregations.Aggregation_ResultCountT_FilterL)
-
 
 ### Как включить тест (un-mute) {#how-to-unmute}
 

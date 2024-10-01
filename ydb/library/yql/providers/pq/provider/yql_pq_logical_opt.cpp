@@ -9,7 +9,6 @@
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>

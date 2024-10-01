@@ -1,4 +1,5 @@
 RECURSE(
+    client
     examples
     src
 )

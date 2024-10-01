@@ -644,6 +644,26 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Decimal(35,10) for column Key22, but expected Decimal(22,9)"), issues);
         }
 
+        // Bad case: upsert overflowed Decimal(22,9)
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key22").Decimal(TDecimalValue("12345678901234567890.1234567891", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("0", 35, 10))
+                    .AddMember("Value22").Decimal(TDecimalValue("0", 22, 9))
+                    .AddMember("Value35").Decimal(TDecimalValue("0", 35, 10))
+                    .AddMember("ValueInt").Uint64(0)
+                .EndStruct();
+            rows.EndList();
+
+            auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT(!upsertResult.IsSuccess());
+            TString issues = upsertResult.GetIssues().ToString();
+            UNIT_ASSERT_C(issues.Contains("Decimal value is Inf"), issues);
+        }        
+
         // Good case
         {
             NYdb::TValueBuilder rows;

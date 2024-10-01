@@ -1189,7 +1189,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)
 {
     if (vp->Hasnull_flag_value()) {
@@ -1262,7 +1262,25 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
             c = TCell(v.data(), v.size());
             break;
         }
-    case NScheme::NTypeIds::Decimal :
+    case NScheme::NTypeIds::Decimal: {
+        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+        valInPool.first = val.low_128();
+        valInPool.second = val.high_128();
+        if (NYql::NDecimal::MakePair(NYql::NDecimal::Inf()) == valInPool) {
+            err = "Decimal value is Inf";
+            return false;
+        }
+        if (NYql::NDecimal::MakePair(NYql::NDecimal::Err()) == valInPool) {
+            err = "Decimal value is Err";
+            return false;
+        }
+        if (NYql::NDecimal::MakePair(NYql::NDecimal::Nan()) == valInPool) {
+            err = "Decimal value is Nan";
+            return false;
+        }
+        c = TCell((const char*)&valInPool, sizeof(valInPool));
+        break;
+    }
     case NScheme::NTypeIds::Uuid : {
         std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
         valInPool.first = val.low_128();

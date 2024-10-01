@@ -144,20 +144,22 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
-    auto& msg = *ev->Get();
-    
-    for (const auto& lock : msg.GetLocksInfo().Locks) {
+
+    // Release event inside this method - to untrack unused arrow memory with proper TLSAllocState.
+    auto msg = ev->Release();
+
+    for (const auto& lock : msg->GetLocksInfo().Locks) {
         Locks.insert(lock);
     }
-    for (const auto& lock : msg.GetLocksInfo().BrokenLocks) {
+    for (const auto& lock : msg->GetLocksInfo().BrokenLocks) {
         BrokenLocks.insert(lock);
     }
 
     auto guard = TaskRunner->BindAllocator();
-    if (!!msg.GetArrowBatch()) {
-        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes())), msg.GetTabletId(), TaskRunner->GetHolderFactory());
-    } else if (!msg.GetRows().empty()) {
-        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory());
+    if (msg->GetArrowBatch()) {
+        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg->GetArrowBatch(), std::move(msg->MutableDataIndexes())), msg->GetTabletId(), TaskRunner->GetHolderFactory());
+    } else if (!msg->GetRows().empty()) {
+        ScanData->AddData(std::move(msg->MutableRows()), msg->GetTabletId(), TaskRunner->GetHolderFactory());
     }
     if (IsQuotingEnabled()) {
         AcquireRateQuota();

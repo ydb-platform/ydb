@@ -20,9 +20,8 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
-    arrow::io::BufferReader readerStream(buffer);
-    auto reader = TStatusValidator::GetValid(arrow::ipc::RecordBatchStreamReader::Open(&readerStream, options));
+    TStringInputStream stringStream(data);
+    auto reader = TStatusValidator::GetValid(arrow::ipc::RecordBatchStreamReader::Open(&stringStream, options));
 
     std::shared_ptr<arrow::RecordBatch> batch;
     auto readResult = reader->ReadNext(&batch);
@@ -62,10 +61,10 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
-    arrow::io::BufferReader reader(buffer);
+    TStringInputStream stringStream(data);
+
     AFL_TRACE(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", schema->num_fields());
-    auto batchResult = arrow::ipc::ReadRecordBatch(schema, &dictMemo, options, &reader);
+    auto batchResult = arrow::ipc::ReadRecordBatch(schema, &dictMemo, options, &stringStream);
     if (!batchResult.ok()) {
         return batchResult;
     }

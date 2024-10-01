@@ -71,7 +71,7 @@ jobs:
   build-platform-specific-binary:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
-    name: Build YDB CLI for ${{ matrix.os }}
+    name: Build ${{ matrix.os }} YDB CLI binary
     needs: build-matrix
     runs-on: ${{ matrix.runner }}
     defaults:

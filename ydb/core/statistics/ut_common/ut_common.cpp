@@ -67,7 +67,7 @@ TTestEnv::~TTestEnv() {
     Driver->Stop(true);
 }
 
-void CreateDatabase(TTestEnv& env, const TString& databaseName,
+TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount, bool isShared, const TString& poolName)
 {
     auto& runtime = *env.GetServer().GetRuntime();
@@ -102,9 +102,11 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName,
     if (!env.GetServer().GetSettings().UseRealThreads) {
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
+
+    return fullDbName;
 }
 
-void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName) {
+TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName) {
     auto& runtime = *env.GetServer().GetRuntime();
     auto fullDbName = Sprintf("/Root/%s", databaseName.c_str());
 
@@ -127,6 +129,8 @@ void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const 
     if (!env.GetServer().GetSettings().UseRealThreads) {
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
+
+    return fullDbName;
 }
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey, ui64* saTabletId) {
@@ -324,14 +328,14 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
     env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
 
-std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, ui8 tableCount) {
+std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, const TString& fullDbName, ui8 tableCount) {
     auto& runtime = *env.GetServer().GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
 
     std::vector<TTableInfo> ret;
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
         TTableInfo tableInfo;
-        tableInfo.Path = Sprintf("/Root/Database/Table%u", tableId);
+        tableInfo.Path = Sprintf("%s/Table%u", fullDbName.c_str(), tableId);
         tableInfo.ShardIds = GetColumnTableShards(runtime, sender, tableInfo.Path);
         tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
         ret.emplace_back(tableInfo);
@@ -339,25 +343,31 @@ std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, ui8 tableCount) {
     return ret;
 }
 
-std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    CreateDatabase(env, "Database");
+TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto fullDbName = CreateDatabase(env, "Database");
 
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
         CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
     }
 
-    return GatherColumnTablesInfo(env, tableCount);
+    return {
+        .FullDatabaseName = fullDbName,
+        .Tables = GatherColumnTablesInfo(env, fullDbName, tableCount)
+    };
 }
 
-std::vector<TTableInfo> CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    CreateDatabase(env, "Shared", 1, true);
-    CreateServerlessDatabase(env, "Database", "/Root/Shared");
+TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto fullServerlessDbName = CreateDatabase(env, "Shared", 1, true);
+    auto fullDbName = CreateServerlessDatabase(env, "Database", "/Root/Shared");
 
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
         CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
     }
 
-    return GatherColumnTablesInfo(env, tableCount);
+    return {
+        .FullDatabaseName = fullServerlessDbName,
+        .Tables = GatherColumnTablesInfo(env, fullDbName, tableCount)
+    };
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {

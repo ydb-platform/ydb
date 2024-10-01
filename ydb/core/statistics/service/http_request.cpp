@@ -26,6 +26,7 @@ void THttpRequest::Bootstrap() {
     entry.Path = SplitPath(Params[EParamType::PATH]);
     entry.Operation = TNavigate::EOp::OpTable;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+    entry.ShowPrivatePath = true;
     navigate->Cookie = FirstRoundCookie;
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
@@ -36,6 +37,7 @@ void THttpRequest::Bootstrap() {
 void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     std::unique_ptr<TNavigate> navigate(ev->Get()->Request.Release());
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+
     const auto& entry = navigate->ResultSet.front();
 
     if (navigate->Cookie == SecondRoundCookie) {
@@ -63,6 +65,11 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
             HttpReply("Internal error");
             return;
         }
+    }
+
+    if (RequestType == ERequestType::COUNT_MIN_SKETCH_PROBE) {
+        DoRequest(entry);
+        return;
     }
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
@@ -213,8 +220,7 @@ void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
             const auto columnTag = tableInfo.Id;
             const auto typeId = tableInfo.PType.GetTypeId();
             const auto& pathId = entry.TableId.PathId;
-            const auto database = ExtractParent(Params[EParamType::PATH]);
-            Register(CreateLoadStatisticsQuery(SelfId(), TString(database.data(), database.size()), pathId, EStatType::COUNT_MIN_SKETCH, columnTag, typeId));
+            Register(CreateLoadStatisticsQuery(SelfId(), Params[EParamType::DATABASE], pathId, EStatType::COUNT_MIN_SKETCH, columnTag, typeId));
             return;
         }
     }

@@ -29,6 +29,7 @@ public:
     };
 
     enum class EParamType {
+        DATABASE,
         PATH,
         OPERATION_ID,
         COLUMN_NAME,

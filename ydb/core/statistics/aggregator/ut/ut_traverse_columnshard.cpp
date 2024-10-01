@@ -34,7 +34,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         WaitForSavedStatistics(runtime, tableInfo.PathId);
 
@@ -46,7 +47,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseServerlessColumnTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateServerlessDatabaseColumnTables(env, 1, 10)[0];
+        auto databaseInfo = CreateServerlessDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         WaitForSavedStatistics(runtime, tableInfo.PathId);
 
@@ -58,7 +60,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootColumnshard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         WaitForSavedStatistics(runtime, tableInfo.PathId);
@@ -73,7 +76,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         TBlockEvents<TEvTxProxySchemeCache::TEvResolveKeySetResult> block(runtime);
@@ -98,7 +102,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeReqDistribution) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -118,7 +123,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -138,7 +144,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeSave) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -158,7 +165,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletInAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         int observerCount = 0;
@@ -179,7 +187,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionZeroNodes) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvHive::TEvResponseTabletDistribution>(
@@ -224,7 +233,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionAbsentNodes) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvHive::TEvResponseTabletDistribution>(
@@ -261,7 +271,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableAggrStatUnavailableNode) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(
@@ -298,7 +309,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableAggrStatNonLocalTablet) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(

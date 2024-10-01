@@ -65,10 +65,10 @@ private:
 
 Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed = true);
 
-void CreateDatabase(TTestEnv& env, const TString& databaseName,
+TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount = 1, bool isShared = false, const TString& poolName = "hdd1");
 
-void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName);
+TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName);
 
 struct TTableInfo {
     std::vector<ui64> ShardIds;
@@ -77,8 +77,14 @@ struct TTableInfo {
     TPathId PathId;
     TString Path;
 };
-std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
-std::vector<TTableInfo> CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
+
+struct TDatabaseInfo {
+    TString FullDatabaseName;
+    std::vector<TTableInfo> Tables;
+};
+
+TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
+TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 

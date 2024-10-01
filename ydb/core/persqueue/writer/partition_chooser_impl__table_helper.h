@@ -176,13 +176,13 @@ public:
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();
 
-            if (tt.Defined()) { //already got partition
-                auto accessTime = parser.ColumnParser(2).GetOptionalUint64().GetOrElse(0);
+            if (tt.has_value()) { //already got partition
+                auto accessTime = parser.ColumnParser(2).GetOptionalUint64().value_or(0);
                 if (accessTime > AccessTime) { // AccessTime
                     PartitionId_ = *tt;
-                    CreateTime = parser.ColumnParser(1).GetOptionalUint64().GetOrElse(0);
+                    CreateTime = parser.ColumnParser(1).GetOptionalUint64().value_or(0);
                     AccessTime = accessTime;
-                    SeqNo_ = parser.ColumnParser(3).GetOptionalUint64().GetOrElse(0);
+                    SeqNo_ = parser.ColumnParser(3).GetOptionalUint64().value_or(0);
                 }
             }
         }

@@ -167,7 +167,7 @@ public:
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
         type.set_type_id(Ydb::Type::UINT32);
-        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn, type};
+        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentColumn, type};
         (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
         (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn, type};

@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentIdColumn, "Uint32", true, true},
+            {PostingTable_ParentColumn, "Uint32", true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentIdColumn, "Uint32", true, true},
+            {PostingTable_ParentColumn, "Uint32", true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},

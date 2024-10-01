@@ -368,6 +368,27 @@ public:
                 break;
             }
 
+            // FIXME(+active): maybe done
+            case NKqpProto::TKqpSchemeOperation::kBackup: {
+                const auto& modifyScheme = schemeOp.GetBackup();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            // FIXME(+active)
+            case NKqpProto::TKqpSchemeOperation::kBackupIncremental: {
+                const auto& modifyScheme = schemeOp.GetCreateBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            // FIXME(+active)
+            case NKqpProto::TKqpSchemeOperation::kRestore: {
+                const auto& modifyScheme = schemeOp.GetCreateBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

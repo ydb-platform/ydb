@@ -1619,7 +1619,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks,
                                  BuildBackup(
                                      Ctx.Pos(),
-                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
+                                     objectId,
                                      TBackupParameters{
                                          .Incremental = incremental,
                                      },

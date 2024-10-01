@@ -634,6 +634,8 @@ ISubOperation::TPtr CreateAlterBackupCollection(TOperationId id, TTxState::ETxSt
 // Drop
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+// Backup
+TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);

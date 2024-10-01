@@ -1938,6 +1938,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    TStatus HandleBackup(TKiBackup node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());

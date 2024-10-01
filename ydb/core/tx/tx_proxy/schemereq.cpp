@@ -368,6 +368,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableAlterBackupCollection()->MutableName();
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
             return *modifyScheme.MutableDropBackupCollection()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+            return *modifyScheme.MutableBackupBackupCollection()->MutableName();
         }
     }
 
@@ -717,6 +719,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

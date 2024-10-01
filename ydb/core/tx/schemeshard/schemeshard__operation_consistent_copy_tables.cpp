@@ -70,22 +70,22 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
         }
     }
 
-    const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
-        return item.GetIsBackup();
-    });
+    // const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
+    //     return item.GetIsBackup();
+    // });
 
-    const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
-    const auto limit = allForBackup
-        ? Max(limits.MaxObjectsInBackup, limits.MaxConsistentCopyTargets)
-        : limits.MaxConsistentCopyTargets;
+    // const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
+    // const auto limit = allForBackup
+    //     ? Max(limits.MaxObjectsInBackup, limits.MaxConsistentCopyTargets)
+    //     : limits.MaxConsistentCopyTargets;
 
-    if (op.CopyTableDescriptionsSize() > limit) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
-            << "Consistent copy object count limit exceeded"
-                << ", limit: " << limit
-                << ", objects: " << op.CopyTableDescriptionsSize()
-        )};
-    }
+    // if (op.CopyTableDescriptionsSize() > limit) {
+    //     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
+    //         << "Consistent copy object count limit exceeded"
+    //             << ", limit: " << limit
+    //             << ", objects: " << op.CopyTableDescriptionsSize()
+    //     )};
+    // }
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {

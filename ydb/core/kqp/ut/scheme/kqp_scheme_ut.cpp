@@ -7566,6 +7566,27 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `table` (
+                    `test` Uint64,
+                    PRIMARY KEY (`test`)
+                )
+             )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                BACKUP `my_collection`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         // {
         //     auto query = Sprintf(R"(
         //         --!syntax_v1

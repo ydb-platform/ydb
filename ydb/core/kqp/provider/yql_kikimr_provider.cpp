@@ -77,6 +77,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateBackupCollection::CallableName());
         DataSinkNames.insert(TKiAlterBackupCollection::CallableName());
         DataSinkNames.insert(TKiDropBackupCollection::CallableName());
+        DataSinkNames.insert(TKiBackup::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -126,7 +127,8 @@ struct TKikimrData {
             TYdbOperation::ModifyPermission |
             TYdbOperation::CreateBackupCollection |
             TYdbOperation::AlterBackupCollection |
-            TYdbOperation::DropBackupCollection;
+            TYdbOperation::DropBackupCollection |
+            TYdbOperation::Backup;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -438,7 +440,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
-    } else if (tagName == "backupCollection") {
+    } else if (tagName == "backupCollection" || tagName == "backup") {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();

@@ -1546,7 +1546,10 @@ namespace NSQLTranslationV1 {
         const TDropBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
 
-    TNodePtr BuildBackup(TPosition pos, const TString& id,
+    TNodePtr BuildBackup(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TBackupParameters& params,
         const TObjectOperatorContext& context);
     TNodePtr BuildRestore(TPosition pos, const TString& id,

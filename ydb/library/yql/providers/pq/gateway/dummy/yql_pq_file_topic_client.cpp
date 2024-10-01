@@ -69,6 +69,38 @@ private:
     TCondVar CanPop_;
 };
 
+class TLineReader {
+    static constexpr size_t BufSize = 64*1024;
+    std::array<char, BufSize> Buffer_;
+    char* Head_ = Buffer_.data();
+    char* Tail_ = Buffer_.data();
+    TString Pending_;
+public:
+    bool ReadLine(IInputStream& is, TString& ret) {
+        for (;;) {
+            auto eol = std::find(Head_, Tail_, '\n');
+            if (eol != Tail_) {
+                Pending_ += TStringBuf(Head_, eol);
+                if(!Pending_.empty() && Pending_.back() == '\r') {
+                    Pending_.pop_back();
+                }
+                ret = std::move(Pending_);
+                Pending_.clear();
+                Head_ = eol + 1;
+                return true;
+            }
+            Pending_ += TStringBuf(Head_, Tail_);
+            Head_ = Buffer_.data();
+            auto size = is.Read(Head_, Buffer_.size());
+            if (size <= 0) {
+                Tail_ = Head_;
+                return false;
+            }
+            Tail_ = Head_ + size;
+        }
+    }
+};
+
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 
 constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(100);    
@@ -174,8 +206,9 @@ private:
         while (!EventsQ_.IsStopped()) {
             TString rawMsg;
             TVector<TMessage> msgs;
+            TLineReader reader;
 
-            while (size_t read = fi.ReadLine(rawMsg)) {
+            while (reader.ReadLine(fi, rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
                 MsgOffset_++;
             }

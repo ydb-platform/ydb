@@ -216,7 +216,8 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type&
         return true;
     }
     default: {
-        YQL_ENSURE(false, "Unexpected node kind: " << typeNode->GetKind());
+        error = TStringBuilder() << "Unexpected node kind: " << typeNode->GetKind();
+        return false;
     }
     }
 }

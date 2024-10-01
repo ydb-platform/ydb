@@ -1049,6 +1049,7 @@ public:
         if (tx && tx->GetHasEffects() && broken) {
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
                 MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
+            return false;
         }
 
         return true;

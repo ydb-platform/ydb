@@ -25,6 +25,10 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TPathInfo& RegisterPathInfo(const ui64 pathId) {
+        return Summary.RegisterPathInfo(pathId);
+    }
+
     void ErasePath(const ui64 pathId) {
         Summary.ErasePath(pathId);
     }
@@ -64,7 +68,7 @@ public:
             AddBlobLink(data.GetBlobRange().BlobId);
         }
         const ui64 pathId = data.GetPathId();
-        return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
+        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load);
     }
     bool HasPathIdData(const ui64 pathId) const {
         return Summary.HasPathIdData(pathId);

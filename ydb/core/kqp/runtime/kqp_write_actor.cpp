@@ -68,7 +68,6 @@ namespace {
             for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
                 protoLocks->AddReceivingShards(receivingShardId);
             }
-            //Y_ABORT_UNLESS(prepareSettings.Arbiter);
             if (prepareSettings.Arbiter) {
                 protoLocks->SetArbiterShard(*prepareSettings.Arbiter);
             }
@@ -124,7 +123,7 @@ struct IKqpTableWriterCallbacks {
     // EvWrite statuses
     virtual void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) = 0;
     virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
-    virtual void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) = 0;
+    virtual void OnMessageAcknowledged(ui64 dataSize) = 0;
 
     virtual void OnError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues) = 0;
 };
@@ -714,7 +713,7 @@ public:
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
-            Callbacks->OnMessageAcknowledged(ev->Get()->Record.GetOrigin(), SchemeEntry->TableId, result->DataSize, false);
+            Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
 
@@ -1094,8 +1093,7 @@ private:
         AFL_ENSURE(false);
     }
 
-    void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
-        Y_UNUSED(shardId, tableId, hasRead);
+    void OnMessageAcknowledged(ui64 dataSize) override {
         EgressStats.Bytes += dataSize;
         EgressStats.Chunks++;
         EgressStats.Splits++;
@@ -1856,8 +1854,8 @@ public:
         }
     }
 
-    void OnMessageAcknowledged(ui64 shardId, TTableId tableId, ui64 dataSize, bool hasRead) override {
-        Y_UNUSED(dataSize, shardId, tableId, hasRead); // TODO: delete unused
+    void OnMessageAcknowledged(ui64 dataSize) override {
+        Y_UNUSED(dataSize);
         Process();
     }
 

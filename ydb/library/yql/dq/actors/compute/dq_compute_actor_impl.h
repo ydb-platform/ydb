@@ -1361,6 +1361,7 @@ protected:
                         .OutputIndex = outputIndex,
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
+                        .TaskId = Task.GetId(),
                         .TransformOutput = transform.OutputBuffer,
                         .Callback = static_cast<TOutputTransformCallbacks*>(this),
                         .SecureParams = secureParams,

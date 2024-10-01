@@ -597,6 +597,102 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TouchIndexAfterMoveTable(true);
     }
 
+    Y_UNIT_TEST(MoveTableWithSerialTypes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithSerial";
+        TString newTableName = "/Root/TableWithSerialMoved";
+        {
+            auto query = TStringBuilder() << R"(
+                CREATE TABLE `)" << tableName << R"(` (
+                    Key Serial,
+                    Value Int32,
+                    PRIMARY KEY (Key)
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto queryUpsert = TStringBuilder() << R"(
+                INSERT INTO `)" << tableName << R"(` (Value) VALUES (1), (2), (3);
+            )";
+            auto result = session.ExecuteDataQuery(queryUpsert, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto querySelect = TStringBuilder() << R"(
+                SELECT * FROM `)" << tableName << R"(`;
+            )";
+            auto result = session.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"([
+                [1;[1]];[2;[2]];[3;[3]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable(tableName, TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            const auto& tableDescription = describe.GetTableDescription();
+            bool hasSerial = false;
+            for (const auto& column : tableDescription.GetTableColumns()) {
+                if (column.Name == "Key") {
+                    UNIT_ASSERT(column.SequenceDescription.has_value());
+                    hasSerial = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT(hasSerial);
+        }
+        {
+            auto query = TStringBuilder() << R"(
+                ALTER TABLE `)" << tableName << R"(` RENAME TO `)" << newTableName << R"(`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT(!describeResult.IsSuccess());
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable(newTableName, TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            const auto& tableDescription = describe.GetTableDescription();
+            bool hasSerial = false;
+            for (const auto& column : tableDescription.GetTableColumns()) {
+                if (column.Name == "Key") {
+                    UNIT_ASSERT(column.SequenceDescription.has_value());
+                    UNIT_ASSERT(column.SequenceDescription->SetVal.has_value());
+                    UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextValue, 4);
+                    UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextUsed, false);
+                    hasSerial = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT(hasSerial);
+        }
+        {
+            auto queryUpsert = TStringBuilder() << R"(
+                INSERT INTO `)" << newTableName << R"(` (Value) VALUES (4), (5), (6);
+            )";
+            auto result = session.ExecuteDataQuery(queryUpsert, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto querySelect = TStringBuilder() << R"(
+                SELECT * FROM `)" << newTableName << R"(`;
+            )";
+            auto result = session.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"([
+                [1;[1]];[2;[2]];[3;[3]];[4;[4]];[5;[5]];[6;[6]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {
         TKikimrRunner kikimr;
 

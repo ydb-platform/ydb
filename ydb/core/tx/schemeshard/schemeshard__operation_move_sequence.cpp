@@ -496,14 +496,14 @@ public:
         if (!txState->ShardsInProgress.empty()) {
             return false;
         }
-        auto getSequenceResult = ev->Get()->Record;
+        GetSequenceResult = ev->Get()->Record;
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
         for (auto shard : txState->Shards) {
             auto shardIdx = shard.Idx;
             auto currentTabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
             Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
-                txState->TargetPathId, getSequenceResult);
+                txState->TargetPathId, GetSequenceResult);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

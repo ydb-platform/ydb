@@ -1,4 +1,7 @@
-# История тестов {#test_history}
+# Автотесты или их стабильность
+
+## История тестов {#test_history}
+
 С историей выполнения тестов можно ознакомиться следующими путями
 {% list tabs %}
 - Через дашборд 
@@ -14,7 +17,7 @@
 
 {% endlist %}
 
-## Как читать дашборд
+### Как читать дашборд
 
 ![Пример](https://storage.yandexcloud.net/ydb-public-images/history_example.png)
 
@@ -30,19 +33,21 @@
 
   * можно найти в каких PR тест выполнялся и падал
 
-## Как собирается история тестов
+### Как собирается история тестов
  
 Факт запуска автотестов и статусы выполнения собираются в GitHub Action скриптом [upload_tests_results.py](.github/scripts/analytics/upload_tests_results.py)
+
   * Запускается для каждого запуска тестов во всех типах проверок (Nightly, PR-Check, Postcommit)
   
 Аналитика (стабильность, срезы по дням, определение owner'a тестов etc) собирается в GitHub Action через workflow [Collect-analytics-run](https://github.com/ydb-platform/ydb/blob/main/.github/workflows/collect_analytics.yml)
+
   * Выполняется каждый час
 
 {% cut "Данные хранятся в YDB QA Database"  %}
 
 В проекте cloud [ydb-tech-cloud-prod/ydb_qa](https://console.yandex.cloud/folders/b1g0a77t7u7b81f3pu4o) завели [базу](https://console.yandex.cloud/folders/b1g0a77t7u7b81f3pu4o/ydb/databases/etnvsjbk7kh1jc6bbfi8/overview) для хранения результатов запусков тестов, аналитики, скорости сборки etc
 
-**Параметры подключения**
+Параметры подключения
 
 `DATABASE_ENDPOINT = "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135"`
 `DATABASE_PATH = "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"`
@@ -52,13 +57,13 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 
  {% endcut %}
 
-## История тестов в testmo (треуется авторизация)
+### История тестов в testmo (треуется авторизация)
 
 Каждый раз, когда тесты запускаются {{ ydb-short-name }} CI, их результаты загружаются в [приложение Test History](https://nebius.testmo.net/projects/view/1). В комментарии к результатам тестирования есть ссылка "Test history", ведущая на страницу с соответствующим прогоном в этом приложении.
 
 В "Test history" члены команды {{ ydb-short-name }} могут просматривать тестовые прогоны, выполнять поиск тестов, просматривать логи и сравнивать их между различными тестовыми прогонами. Если какой-либо тест завершается сбоем на некоторой прекоммитной проверке, в его истории можно увидеть, был ли этот сбой вызван данным изменением, или тест был сломан ранее.
   
-# Выключение и включение тестов CI (mute and un-mute)
+## Выключение и включение тестов CI (mute and un-mute)
 
 Признак автотеста `muted` используется для того, чтобы завершение этого теста статусом "failure"
 - не блокировать CI падениями сломанных или нестабильных тестов
@@ -66,7 +71,8 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 
 С этим признаком тест должен быть либо удален либо возвращен в CI после починки/стабилизации
 
-## Как найти и отключить тест (mute) {#how-to-mute}
+### Как найти и отключить тест (mute) {#how-to-mute}
+
 {% list tabs %}
 
 - Через дашборд 
@@ -82,7 +88,6 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 
 {% endlist %}
 
-
 1. Добавьте issue в проект [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D). Для доступа к проекту требуется быть членом одной из [команд](https://github.com/orgs/ydb-platform/teams) {{ ydb-short-name }}
 1. Установите `Status` на `Muted`
 1. Установите поле `владелец` на имя команды (см. issue для имени владельца). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
@@ -97,12 +102,15 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 1. Влить.
 1. Свяжите Issue и PR (поле "Development" в issue и PR)
 1. Сообщите команде владельца теста о новых отключениях - в личном сообщении или в общем чате (с упоминанием ответственного за команду)
+
   * Членов команды можно определить перейдя по ссылке Owner
-  * Чат для оповещения - YDV dev in Github , канал General, пример оповещения
-      > мьючу 2 теста ydb/core/kqp/ut/olap/ 
-      > https://github.com/ydb-platform/ydb/pull/9214
+
+  * Чат для оповещения - YDV dev in GitHub , канал General, пример оповещения
+
+      > мьючу 2 теста ydb/core/kqp/ut/olap/
+      > [PR](https://github.com/ydb-platform/ydb/pull/9214)
       >
-      > Owner: TEAM:@ydb-platform/qp
+      > Owner: [TEAM:@ydb-platform/qp](https://github.com/orgs/ydb-platform/teams/qp)
       >
       > Summary history: in window 2024-09-13
       > Success rate 94.54545454545455%
@@ -111,7 +119,7 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
       > [history](https://datalens.yandex/34xnbsom67hcq?full_name=__in_ydb/core/kqp/ut/olap/KqpOlapAggregations.Aggregation_ResultCountAll_FilterL&full_name=__in_ydb/core/kqp/ut/olap/KqpOlapAggregations.Aggregation_ResultCountT_FilterL)
 
 
-## Как включить тест (un-mute) {#how-to-unmute}
+### Как включить тест (un-mute) {#how-to-unmute}
 
 1. Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
 1. Нажмите "Edit" и удалите строку теста
@@ -125,9 +133,9 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 1. Свяжите Issue и PR (поле "Development" в issue и PR)
 1. Переместите issue в статус `Unmuted`
 
-# Нестабильные тесты (Flaky)
+## Нестабильные тесты (Flaky)
 
-## Кто и когда следит за нестабильными тестами
+### Кто и когда следит за нестабильными тестами
 
 Дежурный инженер по CI проверяет нестабильные тесты один раз в каждый рабочий день.
 
@@ -150,7 +158,7 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 1. Выполните шаги из [Как отключить тест (mute)](#how-to-mute)
 
 
-## Тест больше не Flaky - включаем (un-mute) {#unmute-flaky}
+### Тест больше не Flaky - включаем (un-mute) {#unmute-flaky}
 
 1. Откройте дашборд [Flaky](https://datalens.yandex/4un3zdm0zcnyr).
 1. Посмотрите на тесты в таблице "Unmute candidate".
@@ -161,17 +169,17 @@ Upload data example [https://github.com/ydb-platform/benchhelpers/blob/82495e35c
 1. Выполните шаги из [Как включить тест (un-mute)](#how-to-unmute)
 
 
-# Управление отключенными тестами (muted) в команде {#how-to-manage}
+## Управление отключенными тестами (muted) в команде {#how-to-manage}
 
-## Как посмотреть стабильность тестов команды
+### Как посмотреть стабильность тестов команды
 
  Если вы хотите получить больше информации о стабильности вашего теста, посетите [dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=8JQ) (заполните поле `owner`=`{your_team_name}`)
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_1.png)
 ![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_2.png)
 
-## Как найти issue по отключенным (muted) тестам
+### Как найти issue по отключенным (muted) тестам
 
 1. Откройте проект [Mute and Un-mute](https://GitHub.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D)
-1. кликните по метке с именем вашей команды, например muted тесты [для команды qp](https://GitHub.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp) 
+1. кликните по метке с именем вашей команды, например muted тесты [для команды qp](https://GitHub.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp)
 1. Откройте issue `Mute {имя теста}`
 1. Выполните [Как включить(un-mute) тест](#how-to-unmute)

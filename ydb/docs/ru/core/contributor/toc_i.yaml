@@ -1,7 +1,7 @@
 items:
 - name: Работа над изменениями
   href: suggest-change.md
-- name: Автотесты и аналитика стабильности
+- name: Автотесты и их стабильность
   href: autotests-and-analisys.md
 - name: Сборка и тесты Ya
   href: build-ya.md

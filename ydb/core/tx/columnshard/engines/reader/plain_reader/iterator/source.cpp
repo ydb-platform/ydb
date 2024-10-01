@@ -224,9 +224,9 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema->fields())));
         AFL_VERIFY(rBatch)("schema", schema->ToString());
         auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
-        std::set<ui32> columnIdxsToDelete = batchSchema->GetColumnIdxsToDelete(resultSchema);
-        if (!columnIdxsToDelete.empty()) {
-            batch->DeleteFieldsByIndex(batchSchema->ConvertColumnIdxsToIndexes(columnIdxsToDelete));
+        std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);
+        if (!columnIdsToDelete.empty()) {
+            batch->DeleteFieldsByIndex(batchSchema->ConvertColumnIdsToIndexes(columnIdsToDelete));
         }
         TSnapshot ss = TSnapshot::Zero();
         if (CommittedBlob.IsCommitted()) {

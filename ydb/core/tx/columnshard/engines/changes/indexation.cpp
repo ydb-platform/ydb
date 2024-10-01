@@ -104,7 +104,7 @@ public:
             return;
         }
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(data.GetSchemaVersion());
-        std::set<ui32> columnIdxsToDelete = blobSchema->GetColumnIdxsToDelete(ResultSchema);
+        std::set<ui32> columnIdsToDelete = blobSchema->GetColumnIdsToDelete(ResultSchema);
         if (!Schemas.contains(data.GetSchemaVersion())) {
             Schemas.emplace(data.GetSchemaVersion(), blobSchema);
         }
@@ -113,7 +113,7 @@ public:
             filteredIds.emplace_back((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
         }
         for (const auto& filteredId : filteredIds) {
-            if (!columnIdxsToDelete.contains(filteredId)) {
+            if (!columnIdsToDelete.contains(filteredId)) {
                 UsageColumnIds.insert(filteredId);
             }
         }
@@ -247,9 +247,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             auto batchSchema =
                 std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema()->fields()));
             batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
-            std::set<ui32> columnIdxToDelete = blobSchema->GetColumnIdxsToDelete(resultSchema);
-            if (!columnIdxToDelete.empty()) {
-                batch->DeleteFieldsByIndex(blobSchema->ConvertColumnIdxsToIndexes(columnIdxToDelete));
+            std::set<ui32> columnIdsToDelete = blobSchema->GetColumnIdsToDelete(resultSchema);
+            if (!columnIdsToDelete.empty()) {
+                batch->DeleteFieldsByIndex(blobSchema->ConvertColumnIdsToIndexes(columnIdsToDelete));
             }
         }
         IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot(), (ui64)inserted.GetInsertWriteId());

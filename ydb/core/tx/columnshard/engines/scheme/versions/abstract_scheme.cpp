@@ -133,7 +133,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     return batch;
 }
 
-std::set<ui32> ISnapshotSchema::GetColumnIdxsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {
+std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {
     if (targetSchema->GetVersion() == GetVersion()) {
         return {};
     }
@@ -147,7 +147,7 @@ std::set<ui32> ISnapshotSchema::GetColumnIdxsToDelete(const ISnapshotSchema::TPt
     return columnIdxsToDelete;
 }
 
-std::vector<ui32> ISnapshotSchema::ConvertColumnIdxsToIndexes(const std::set<ui32>& idxs) const {
+std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const {
     std::vector<ui32> columnIndexes;
     for (const auto& id : idxs) {
         AFL_VERIFY(HasColumnId(id));

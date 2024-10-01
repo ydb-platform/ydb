@@ -1049,7 +1049,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
 
     auto truncKinds = FilterKinds(kinds);
-    if (truncKinds.Empty()) {
+    if (truncKinds.Empty() && !kinds.Empty()) {
         return;
     }
 

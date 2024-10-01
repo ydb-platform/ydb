@@ -23,27 +23,8 @@ TTableId ParseTableId(const TRuntimeNode& node) {
     return TTableId(ownerId, tableId, sysViewInfo, schemeVersion);
 }
 
-bool StructHoldsPgType(const TStructType& structType, ui32 index) {
-    return (structType.GetMemberType(index)->GetKind() == TType::EKind::Pg);
-}
-
-NScheme::TTypeInfo UnwrapPgTypeFromStruct(const TStructType& structType, ui32 index) {
-    TPgType* type = AS_TYPE(TPgType, structType.GetMemberType(index));
-    return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(type->GetTypeId()));
-}
-
-NScheme::TTypeInfo UnwrapDataTypeFromStruct(const TStructType& structType, ui32 index) {
-    const TDataType* dataType = structType.GetMemberType(index)->GetKind() == TType::EKind::Optional ?
-        AS_TYPE(TDataType, AS_TYPE(TOptionalType, structType.GetMemberType(index))->GetItemType()) :
-        AS_TYPE(TDataType, structType.GetMemberType(index));
-    
-    if (dataType->GetSchemeType() == NScheme::NTypeIds::Decimal) {
-        const TDataDecimalType* dataDecimalType = static_cast<const TDataDecimalType*>(dataType);
-        auto [precision, scale] = dataDecimalType->GetParams();
-        return NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));        
-    } else {
-        return NScheme::TTypeInfo(dataType->GetSchemeType()); 
-    }
+NScheme::TTypeInfo UnwrapTypeInfoFromStruct(const TStructType& structType, ui32 index) {
+    return NScheme::TypeInfoFromMiniKQLType(structType.GetMemberType(index));
 }
 
 } // namespace NKqp

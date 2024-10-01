@@ -32,18 +32,10 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
     for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
         auto name = rowType->GetMemberName(i);
 
-        auto columnType = keyColumns.FindPtr(name);
-        MKQL_ENSURE_S(columnType);
-        if (NKqp::StructHoldsPgType(*rowType, i)) {
-            auto pgTypeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
-            MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetPgTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetPgTypeDesc()),
-                "Key column type mismatch, column: " << name
-            );
-        } else {
-            auto dataTypeId = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
-            MKQL_ENSURE_S(dataTypeId.GetTypeId() == columnType->GetTypeId(), "Key column type mismatch, column: " << name);
-        }
+        const NScheme::TTypeInfo* columnTypeInfo = keyColumns.FindPtr(name);
+        MKQL_ENSURE_S(columnTypeInfo);
+        auto typeInfo = NKqp::UnwrapTypeInfoFromStruct(*rowType, i);
+        MKQL_ENSURE_S(typeInfo == *columnTypeInfo, "Key column type mismatch, column: " << name);
     }
 }
 

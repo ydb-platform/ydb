@@ -21,7 +21,6 @@ SRCS(
 PEERDIR(
     ydb/library/accessor
     ydb/library/actors/core
-    ydb/library/table_creator
     ydb/library/yql/sql/settings
     ydb/public/api/protos
     ydb/core/protos

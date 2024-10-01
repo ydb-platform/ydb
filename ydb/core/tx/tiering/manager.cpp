@@ -91,7 +91,18 @@ public:
     }
 
     void Handle(NTiers::TEvNotifyTieringUpdated::TPtr& ev) {
-        Tierings.emplace(ev->Get()->GetId(), ev->Get()->GetConfig());
+        const auto& config = ev->Get()->GetConfig();
+        {
+            std::vector<TString> uninitializedTiers;
+            for (const auto& interval : config.GetIntervals()) {
+                if (!Tiers.contains(interval.GetTierName())) {
+                    uninitializedTiers.emplace_back(interval.GetTierName());
+                }
+            }
+            Send(TieringFetcher, new NTiers::TEvWatchTieringObjects({}, std::move(uninitializedTiers)));
+        }
+
+        Tierings.emplace(ev->Get()->GetId(), config);
         UpdateSnapshot();
     }
 
@@ -207,8 +218,14 @@ void TTiersManager::TakeConfigs(NTiers::TConfigsSnapshot snapshot, std::shared_p
     HasCompleteData = ValidateDependencies();
 
     if (ShardCallback && TlsActivationContext) {
-        ShardCallback(TActivationContext::AsActorContext());
+        if (IsReady()) {
+            ShardCallback(TActivationContext::AsActorContext());
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_refresh_tiering_on_shard")("reason", "not_ready");
+        }
     }
+
+    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "configs_updated")("snapshot", snapshot.DebugString())("has_complete_data", HasCompleteData);
 }
 
 bool TTiersManager::ValidateDependencies() const {

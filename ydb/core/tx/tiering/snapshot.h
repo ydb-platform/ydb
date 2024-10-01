@@ -32,6 +32,7 @@ public:
         for (const auto& [id, config] : TableTierings) {
             sb << id << ';';
         }
+        sb << '}';
         return sb;
     }
 

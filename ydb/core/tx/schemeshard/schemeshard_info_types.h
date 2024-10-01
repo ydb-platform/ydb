@@ -3430,7 +3430,7 @@ struct TAbstractObjectInfo : TSimpleRefCount<TAbstractObjectInfo> {
     }
 
     template <typename T>
-    const std::shared_ptr<T>& GetAsVerified() const {
+    std::shared_ptr<T> GetAsVerified() const {
         auto converted = std::dynamic_pointer_cast<T>(Object);
         AFL_VERIFY(converted);
         return converted;

@@ -73,7 +73,10 @@ TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(co
     if (oldMetadata) {
         return objectManager->ApplyPatch(oldMetadata, patch.GetResult());
     } else {
-        return objectManager->DeserializeFromRecord(patch.GetResult());
+        if (auto result = objectManager->DeserializeFromRecord(patch.GetResult())) {
+            return result;
+        }
+        return TConclusionStatus::Fail("Can't deserialize object");
     }
 }
 

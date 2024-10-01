@@ -77,6 +77,9 @@ protected:
         return true;
     }
 
+    static bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOlapSchema& schema,
+        const TUpdateInitializationContext& context, IErrorCollector& errors);
+
 public:
 };
 

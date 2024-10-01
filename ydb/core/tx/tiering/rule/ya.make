@@ -12,7 +12,6 @@ PEERDIR(
     ydb/services/metadata/initializer
     ydb/services/metadata/manager
     ydb/services/bg_tasks/abstract
-    ydb/core/tx/schemeshard
 )
 
 YQL_LAST_ABI_VERSION()

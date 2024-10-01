@@ -43,27 +43,8 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
             return patch;
         }
         TSimpleErrorCollector collector;
-        if (!originalSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
+        if (!ValidateTtlSettings(ttl.GetData(), originalSchema, context, collector)) {
             return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
-        }
-        // TODO: incapsulate in a function
-        {
-            const TPath tieringPath =
-                TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), context.GetSSOperationContext()->SS)
-                    .Dive(ttl.GetData().GetUseTiering());
-            {
-                TPath::TChecker checks = tieringPath.Check();
-                checks.NotEmpty()
-                    .NotUnderDomainUpgrade()
-                    .IsAtLocalSchemeShard()
-                    .IsResolved()
-                    .NotDeleted()
-                    .IsAbstractObject()
-                    .NotUnderOperation();
-                if (!checks) {
-                    return TConclusionStatus::Fail("Can't set tiering: " + checks.GetError());
-                }
-            }
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }

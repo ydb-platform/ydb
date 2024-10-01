@@ -64,16 +64,6 @@ private:
 
 
 private:
-    void RefreshTieringOnShard() const {
-        if (!IsReady()) {
-            AFL_INFO(NKikimrServices::TX_TIERING)("event", "skip_refresh_tiering_on_shard")("reason", "not_ready");
-            return;
-        }
-        if (ShardCallback && TlsActivationContext) {
-            ShardCallback(TActivationContext::AsActorContext());
-        }
-    }
-
     bool ValidateDependencies() const;
 
 public:

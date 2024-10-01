@@ -8,17 +8,18 @@
 
 - Через дашборд
 
-  Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
+  Откройте дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
 
-  * Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+  * Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.
 
 
 - Через отчет в PR
 
-  Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
+  Откройте [отчет в PR](suggest-change.md#test-results)
 
-  * Для FAIL и MUTED тестов появляется столбец "history" содержащий статус последних 5 запусков этого теста в poscommit проверках
-  * В контекстном меню теста выберите `Open test history`
+  * Для FAIL и MUTE тестов появляется столбец `history` содержащий статус последних 5 запусков этого теста в postcommit проверках
+  * В контекстном меню теста можно выбрать и `Open test history`
+  ![img](https://storage.yandexcloud.net/ydb-public-images/failed_tests_report.png)
 
 {% endlist %}
 
@@ -83,15 +84,19 @@ token in yav by name `ydb-sa-1_cloud_token`
 
 - Через дашборд
 
-  Дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
+  Откройте дашборд [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4)
 
-  1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+  1. Введите имя или путь теста в поле `full_name contain`, нажмите **Применить** - поиск выполняется по вхождению.  
   1. Нажмите ссылку `Mute`, которая создаст черновик issue в GitHub.
+  ![img](https://storage.yandexcloud.net/ydb-public-images/Test_history_dash.png)
 
 - Через отчет в PR
 
-  1. Откройте отчет в PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
+  Откройте [отчет в PR](suggest-change.md#test-results) 
+
   1. В контекстном меню теста выберите `Create mute issue`
+
+  ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
 
 {% endlist %}
 

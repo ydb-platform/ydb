@@ -1811,7 +1811,6 @@ public:
     const TString& GetId() const;
     bool IsActive() const;
 
-    TAsyncStatus Precommit() const;
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
@@ -1821,6 +1820,8 @@ public:
 
 private:
     TTransaction(const TSession& session, const TString& txId);
+
+    TAsyncStatus Precommit() const;
 
     class TImpl;
 

@@ -373,7 +373,7 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        .NotUnderOperation()
+                        // .NotUnderOperation()
                         .IsCommonSensePath()
                         .IsLikeDirectory();
                 }
@@ -456,7 +456,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                Y_ABORT("dstPath: %s", dstPath.PathString().c_str());
+                Y_ABORT("dstPath: %s, %s", dstPath.PathString().c_str(), checks.GetError().c_str());
                 return result;
             }
         }

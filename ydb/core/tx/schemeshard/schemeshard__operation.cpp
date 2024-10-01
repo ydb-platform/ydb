@@ -88,6 +88,7 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
+    Cerr << "--> Ignite " << request.Record.DebugString() << Endl;
     THolder<TProposeResponse> response = nullptr;
 
     auto selfId = SelfTabletId();
@@ -770,10 +771,14 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         if (tx.GetCreateTable().HasCopyFromTable()) {
-            result.Transactions.push_back(tx);
-            return result;
+            Y_ABORT("%s", tx.DebugString().c_str());
+            // result.Transactions.push_back(tx);
+            // return result;
         }
         targetName = tx.GetCreateTable().GetName();
+        Cerr << Endl;
+        Cerr << "--->" << targetName << Endl;
+        Cerr << Endl;
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         targetName = tx.GetCreatePersQueueGroup().GetName();

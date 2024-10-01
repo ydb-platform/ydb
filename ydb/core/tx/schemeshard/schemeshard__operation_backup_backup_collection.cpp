@@ -15,12 +15,13 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
     modifyScheme.SetInternal(true);
 
-    auto& copyTables = *modifyScheme.MutableCreateConsistentCopyTables()->MutableCopyTableDescriptions();
+    auto& cct = *modifyScheme.MutableCreateConsistentCopyTables();
+    auto& copyTables = *cct.MutableCopyTableDescriptions();
     // Y_ABORT("%s %s", tx.GetWorkingDir().c_str(), tx.GetBackupBackupCollection().GetName().c_str());
     // FIXME(+active)
 
     TString bcPathStr = JoinPath({tx.GetWorkingDir().c_str(), tx.GetBackupBackupCollection().GetName().c_str()});
-    TString targetPathStr = JoinPath({tx.GetWorkingDir().c_str(), tx.GetBackupBackupCollection().GetName().c_str(), "0"});
+    // TString targetPathStr = JoinPath({tx.GetWorkingDir().c_str(), tx.GetBackupBackupCollection().GetName().c_str(), "0"});
 
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
@@ -29,12 +30,14 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     // const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
     // const TString& exportPathName = exportPath.PathString();
 
+    cct.SetDstBasePath(bcPathStr);
+
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
 
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
         // desc.SetDstPath(JoinPath({targetPathStr, item.GetPath().substr(1, item.GetPath().size() - 1)}));
-        desc.SetDstPath(targetPathStr);
+        desc.SetDstPath("0" + item.GetPath());
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);

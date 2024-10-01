@@ -8,8 +8,9 @@
 
 namespace NKikimr::NSchemeShard {
 
-TPath::TChecker::TChecker(const TPath& path)
-    : Path(path)
+TPath::TChecker::TChecker(const TPath& path, const std::source_location location)
+    : Location(location)
+    , Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
 {
@@ -32,7 +33,8 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Status = status;
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error;
+        << ", error: " << error
+        << ", location: " << Location.file_name() << ":" << Location.line();
 
     return *this;
 }
@@ -1102,8 +1104,8 @@ TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     Y_ABORT_UNLESS(IsResolved());
 }
 
-TPath::TChecker TPath::Check() const {
-    return TChecker(*this);
+TPath::TChecker TPath::Check(const std::source_location location) const {
+    return TChecker(*this, location);
 }
 
 bool TPath::IsEmpty() const {
@@ -1527,7 +1529,7 @@ bool TPath::IsCommonSensePath() const {
         // Directories and domain roots are always ok as intermediaries
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
         // Temporarily olap stores are treated like directories
-        ok = ok || (*item)->IsOlapStore();
+        ok = ok || (*item)->IsOlapStore() || (*item)->IsBackupCollection();
         if (!ok) {
             return false;
         }

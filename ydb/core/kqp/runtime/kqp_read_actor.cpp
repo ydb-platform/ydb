@@ -1109,7 +1109,8 @@ public:
                 } else {
                     hasResultColumns = true;
                     stats.AddStatistics(
-                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch()), columnIndex, resultColumnIndex, column.TypeInfo)
+                        // TODO: what block tracking mode to use here?
+                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch(), NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
                     if (column.NotNull) {
                         std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);
@@ -1211,13 +1212,13 @@ public:
                 for (size_t deduplicateColumn = 0; deduplicateColumn < DuplicateCheckColumnRemap.size(); ++deduplicateColumn) {
                     cells[deduplicateColumn] = row[DuplicateCheckColumnRemap[deduplicateColumn]];
                 }
-                TString result = TSerializedCellVec::Serialize(cells); 
+                TString result = TSerializedCellVec::Serialize(cells);
                 if (auto ptr = DuplicateCheckStats.FindPtr(result)) {
                     TVector<NScheme::TTypeInfo> types;
                     for (auto& column : Settings->GetDuplicateCheckColumns()) {
                         types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
                     }
-                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry); 
+                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry);
 
                     TStringBuilder rowMessage;
                     rowMessage << "found duplicate rows from table "
@@ -1229,7 +1230,7 @@ public:
                         << " previous seqNo is " << ptr->SeqNo
                         << " current is " << handle.SeqNo
                         << " previous row number is " << ptr->RowIndex
-                        << " current is " << rowIndex 
+                        << " current is " << rowIndex
                         << " key is " << rowRepr;
                     CA_LOG_E(rowMessage);
                     Counters->RowsDuplicationsFound->Inc();

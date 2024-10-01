@@ -92,6 +92,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , MayRunTasksLocally(args.MayRunTasksLocally)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
+    , BlockTrackingMode(args.BlockTrackingMode)
 {
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
@@ -466,6 +467,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
+        .BlockTrackingMode = BlockTrackingMode
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

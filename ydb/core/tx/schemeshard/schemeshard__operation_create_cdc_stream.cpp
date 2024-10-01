@@ -697,7 +697,7 @@ void DoCreatePqPart(
 
     if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
-        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
         ps->SetMinPartitionCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : 1);
         ps->SetScaleThresholdSeconds(30);

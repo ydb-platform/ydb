@@ -4600,7 +4600,6 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    PQ_LOG_I(">>>>> SendEvProposePartitionConfig");
     auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData);
 
     for (auto& [partitionId, partition] : Partitions) {

@@ -36,54 +36,86 @@ class YdbCliHelper:
             self.svg = svg
 
     class WorkloadRunResult:
-        def __init__(
-            self, stats: dict[str, dict[str, any]] = {}, query_out: Optional[str] = None, stdout: Optional[str] = None, stderr: Optional[str] = None,
-            error_message: Optional[str] = None, plans: Optional[list[YdbCliHelper.QueryPlan]] = None,
-            errors_by_iter: Optional[dict[int, str]] = None, explain_plan: Optional[YdbCliHelper.QueryPlan] = None, traceback: Optional[TracebackType] = None
-        ) -> None:
-            self.stats = stats
-            self.query_out = query_out if str != '' else None
-            self.stdout = stdout if stdout != '' else None
-            self.stderr = stderr if stderr != '' else None
-            self.success = error_message is None
-            self.error_message = '' if self.success else error_message
-            self.plans = plans
-            self.explain_plan = explain_plan
-            self.errors_by_iter = errors_by_iter
-            self.traceback = traceback
+        def __init__(self):
+            self.stats: dict[str, dict[str, any]] = {}
+            self.query_out: Optional[str] = None
+            self.stdout: Optional[str] = None
+            self.stderr: Optional[str] = None
+            self.error_message: str = ''
+            self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
+            self.explain_plan: Optional[YdbCliHelper.QueryPlan] = None
+            self.errors_by_iter: dict[int, str] = {}
+            self.traceback: Optional[TracebackType] = None
 
-    @staticmethod
-    def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
-                     timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
-        def _try_extract_error_message(stderr: str) -> str:
-            result = {}
-            begin_str = f'{query_num}:'
+        @property
+        def success(self) -> bool:
+            return len(self.error_message) == 0
+
+    class WorkloadProcessor:
+        def __init__(self,
+                     type: WorkloadType,
+                     db_path: str,
+                     query_num: int,
+                     iterations: int,
+                     timeout: float):
+            self.result = YdbCliHelper.WorkloadRunResult()
+            self.type = type
+            self.db_path = db_path
+            self.query_num = query_num
+            self.iterations = iterations
+            self.timeout = timeout
+            self._nodes_info: dict[str, dict[str, int]] = {}
+
+        def _get_output_path(self, ext: str) -> str:
+            return yatest.common.work_path(f'q{self.query_num}.{ext}')
+
+        @property
+        def _plan_path(self) -> str:
+            return self._get_output_path('plan')
+
+        @property
+        def _qout_path(self) -> str:
+            return self._get_output_path('out')
+
+        @property
+        def _json_path(self) -> str:
+            return self._get_output_path('json')
+
+        def _add_error(self, msg: Optional[str]):
+            if msg is not None and len(msg) > 0:
+                if len(self.result.error_message) > 0:
+                    self.result.error_message += f'\n\n{msg}'
+                else:
+                    self.result.error_message = msg
+
+        def _process_returncode(self, returncode, stderr: str) -> None:
+            begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
             iter_str = 'iteration '
             begin_pos = stderr.find(begin_str)
-            if begin_pos < 0:
-                return result
-            while True:
-                begin_pos = stderr.find(iter_str, begin_pos)
-                if begin_pos < 0:
-                    return result
-                begin_pos += len(iter_str)
-                end_pos = stderr.find('\n', begin_pos)
-                if end_pos < 0:
-                    iter = int(stderr[begin_pos:])
-                    begin_pos = len(stderr) - 1
-                else:
-                    iter = int(stderr[begin_pos:end_pos])
-                    begin_pos = end_pos + 1
-                end_pos = stderr.find(end_str, begin_pos)
-                if end_pos < 0:
-                    result[iter] = stderr[begin_pos:].strip()
-                else:
-                    result[iter] = stderr[begin_pos:end_pos].strip()
+            if begin_pos >= 0:
+                while True:
+                    begin_pos = stderr.find(iter_str, begin_pos)
+                    if begin_pos < 0:
+                        break
+                    begin_pos += len(iter_str)
+                    end_pos = stderr.find('\n', begin_pos)
+                    if end_pos < 0:
+                        iter = int(stderr[begin_pos:])
+                        begin_pos = len(stderr) - 1
+                    else:
+                        iter = int(stderr[begin_pos:end_pos])
+                        begin_pos = end_pos + 1
+                    end_pos = stderr.find(end_str, begin_pos)
+                    msg = (stderr[begin_pos:] if end_pos < 0 else stderr[begin_pos:end_pos]).strip()
+                    self.result.errors_by_iter[iter] = msg
+                    self._add_error(f'Iteration {iter}: {msg}')
+            if returncode != 0 and len(self.result.errors_by_iter) == 0:
+                self._add_error(f'Invalid return code: {returncode} instead 0.')
 
-        def _load_plans(plan_path: str, name: str) -> YdbCliHelper.QueryPlan:
+        def _load_plan(self, name: str) -> YdbCliHelper.QueryPlan:
             result = YdbCliHelper.QueryPlan()
-            pp = f'{plan_path}.{query_num}.{name}'
+            pp = f'{self._plan_path}.{self.query_num}.{name}'
             if (os.path.exists(f'{pp}.json')):
                 with open(f'{pp}.json') as f:
                     result.plan = json.load(f)
@@ -98,6 +130,28 @@ class YdbCliHelper:
                     result.svg = f.read()
             return result
 
+        def _load_plans(self) -> None:
+            self.result.plans = [self._load_plan(str(i)) for i in range(self.iterations)]
+            self.result.explain_plan = self._load_plan('explain')
+
+        def _load_stats(self):
+            if not os.path.exists(self._json_path):
+                return
+            with open(self._json_path, 'r') as r:
+                json_data = r.read()
+            if json_data:
+                for signal in json.loads(json_data):
+                    q = signal['labels']['query']
+                    if q not in self.result.stats:
+                        self.result.stats[q] = {}
+                    self.result.stats[q][signal['sensor']] = signal['value']
+
+        def _load_query_out(self) -> None:
+            if (os.path.exists(self._qout_path)):
+                with open(self._qout_path, 'r') as r:
+                    self.result.query_out = r.read()
+
+        @staticmethod
         def _get_nodes_info() -> dict[str, dict[str, int]]:
             nodes, _ = YdbCluster.get_cluster_nodes()
             return {
@@ -107,86 +161,65 @@ class YdbCliHelper:
                 for n in nodes
             }
 
-        errors_by_iter = {}
-        try:
-            wait_error = YdbCluster.wait_ydb_alive(300, path)
-            if wait_error is not None:
-                return YdbCliHelper.WorkloadRunResult(error_message=f'Ydb cluster is dead: {wait_error}')
+        def _check_nodes(self):
+            node_errors = []
+            for node, info in self._get_nodes_info().items():
+                if node in self._nodes_info:
+                    if info['start_time'] > self._nodes_info[node]['start_time']:
+                        node_errors.append(f'Node {node} was restarted')
+                    self._nodes_info[node]['processed'] = True
+            for node, info in self._nodes_info.items():
+                if not info.get('processed', False):
+                    node_errors.append(f'Node {node} is down')
+            self._add_error('\n'.join(node_errors))
 
-            nodes_info = _get_nodes_info()
-
-            json_path = yatest.common.work_path(f'q{query_num}.json')
-            qout_path = yatest.common.work_path(f'q{query_num}.out')
-            plan_path = yatest.common.work_path(f'q{query_num}.plan')
+        def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
                 '-e', YdbCluster.ydb_endpoint,
                 '-d', f'/{YdbCluster.ydb_database}',
-                'workload', str(type), '--path', path, 'run',
-                '--json', json_path,
-                '--output', qout_path,
+                'workload', str(self.type), '--path', self.db_path, 'run',
+                '--json', self._json_path,
+                '--output', self._qout_path,
                 '--executer', 'generic',
-                '--include', str(query_num),
-                '--iterations', str(iterations),
-                '--plan', plan_path,
+                '--include', str(self.query_num),
+                '--iterations', str(self.iterations),
+                '--plan', self._plan_path,
                 '--verbose'
             ]
             query_preffix = get_external_param('query-prefix', '')
             if query_preffix:
                 cmd += ['--query-settings', query_preffix]
-            err = None
+            return cmd
+
+        def _exec_cli(self) -> None:
             try:
-                exec: yatest.common.process._Execution = yatest.common.process.execute(cmd, wait=False, check_exit_code=False)
-                exec.wait(check_exit_code=False, timeout=timeout)
-                if exec.returncode != 0:
-                    errors_by_iter = _try_extract_error_message(exec.stderr.decode('utf-8'))
-                    err = '\n\n'.join([f'Iteration {i}: {e}' for i, e in errors_by_iter.items()])
-                    if not err:
-                        err = f'Invalid return code: {exec.returncode} instesd 0.'
+                exec: yatest.common.process._Execution = yatest.common.process.execute(self._get_cmd(), wait=False, check_exit_code=False)
+                exec.wait(check_exit_code=False, timeout=self.timeout)
+                self._process_returncode(exec.returncode, exec.stderr.decode('utf-8', 'ignore'))
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
-                err = f'Timeout {timeout}s expeared.'
+                self._process_returncode(0, exec.stderr.decode('utf-8'))
+                self._add_error(f'Timeout {self.timeout}s expeared.')
+            self.result.stdout = exec.stdout.decode('utf-8', 'ignore')
+            self.result.stderr = exec.stderr.decode('utf-8', 'ignore')
 
-            node_errors = []
-            for node, info in _get_nodes_info().items():
-                if node in nodes_info:
-                    if info['start_time'] > nodes_info[node]['start_time']:
-                        node_errors.append(f'Node {node} was restarted')
-                    nodes_info[node]['processed'] = True
-            for node, info in nodes_info.items():
-                if not info.get('processed', False):
-                    node_errors.append(f'Node {node} is down')
-            if len(node_errors) > 0:
-                if err is None:
-                    err = ''
+        def process(self) -> YdbCliHelper.WorkloadRunResult:
+            try:
+                wait_error = YdbCluster.wait_ydb_alive(300, self.db_path)
+                if wait_error is not None:
+                    self.result.error_message = wait_error
                 else:
-                    err += '\n\n'
-                err += '\n'.join(node_errors)
+                    self._nodes_info = self._get_nodes_info()
+                    self._exec_cli()
+                    self._check_nodes()
+                    self._load_stats()
+                    self._load_query_out()
+                    self._load_plans()
+            except BaseException as e:
+                self._add_error(str(e))
+                self.result.traceback = e.__traceback__
+            return self.result
 
-            stats = {}
-            if (os.path.exists(json_path)):
-                with open(json_path, 'r') as r:
-                    json_data = r.read()
-                if json_data:
-                    for signal in json.loads(json_data):
-                        q = signal['labels']['query']
-                        if q not in stats:
-                            stats[q] = {}
-                        stats[q][signal['sensor']] = signal['value']
-
-            if (os.path.exists(qout_path)):
-                with open(qout_path, 'r') as r:
-                    qout = r.read()
-            plans = [_load_plans(plan_path, str(i)) for i in range(iterations)]
-            explain_plan = _load_plans(plan_path, 'explain')
-
-            return YdbCliHelper.WorkloadRunResult(
-                stats=stats,
-                query_out=qout,
-                plans=plans,
-                explain_plan=explain_plan,
-                stdout=exec.stdout.decode('utf-8', 'ignore'),
-                stderr=exec.stderr.decode('utf-8', 'ignore'),
-                error_message=err,
-                errors_by_iter=errors_by_iter
-            )
-        except BaseException as e:
-            return YdbCliHelper.WorkloadRunResult(error_message=str(e), traceback=e.__traceback__)
+    @staticmethod
+    def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
+                     timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
+        return YdbCliHelper.WorkloadProcessor(type, path, query_num, iterations, timeout).process()

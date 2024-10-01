@@ -325,7 +325,7 @@ namespace {
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
         createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
-        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());  
+        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());
 
         return createSequenceSettings;
     }
@@ -1050,7 +1050,7 @@ private:
             return SyncOk();
         }
 
-        YQL_ENSURE(resultIndex < runResult->Results.size());
+        Y_ABORT_UNLESS(resultIndex < runResult->Results.size());
         auto resultValue = runResult->Results[resultIndex];
         YQL_ENSURE(resultValue);
 
@@ -1744,9 +1744,9 @@ public:
                                 ctx.AddError(
                                     YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
                                         TIssuesIds::KIKIMR_SCHEME_ERROR,
-                                        TStringBuilder() << "Unknown index name: " << indexName));                                
+                                        TStringBuilder() << "Unknown index name: " << indexName));
                                 return SyncError();
-                            }                            
+                            }
                             auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
                             if (indexTablePaths.size() != 1) {
                                 ctx.AddError(
@@ -2413,7 +2413,7 @@ public:
             TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
 
             auto future = Gateway->Analyze(cluster, analyzeSettings);
-            
+
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
                 Y_UNUSED(res);

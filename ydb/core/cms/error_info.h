@@ -54,6 +54,6 @@ struct TErrorInfo {
 
 } // namespace NKikimr::NCms
 
-Y_DECLARE_OUT_SPEC(, NKikimr::NCms::TReason, stream, value) {
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NCms::TReason, stream, value) {
     stream << value.GetMessage();
 }

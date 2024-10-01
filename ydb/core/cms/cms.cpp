@@ -38,6 +38,8 @@ using namespace NKikimrCms;
 
 namespace {
 
+constexpr size_t MAX_ISSUES_TO_STORE = 100;
+
 TAction::TIssue ConvertIssue(const TReason& reason) {
     TAction::TIssue issue;
     switch (reason.GetType()) {
@@ -355,15 +357,10 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         return false;
     };
 
-    
-    // Start from the scratch - old issues are not relevant
-    std::vector<TAction> actions(request.GetActions().begin(), request.GetActions().end());
-    for (auto &action : actions) {
-        action.ClearIssue();
-    }
-
     auto point = ClusterInfo->PushRollbackPoint();
-    for (auto &action : actions) {
+    size_t storedIssues = 0;
+    size_t processedActions = 0;
+    for (const auto &action : request.GetActions()) {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -389,6 +386,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             auto *permission = response.AddPermissions();
             permission->MutableAction()->CopyFrom(action);
+            permission->MutableAction()->ClearIssue();
             permission->SetDeadline(error.Deadline.GetValue());
             AddPermissionExtensions(action, *permission);
 
@@ -396,8 +394,6 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
-
-            action.MutableIssue()->CopyFrom(ConvertIssue(error.Reason));
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
@@ -407,12 +403,23 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                     response.SetDeadline(error.Deadline.GetValue());
             }
 
+            if (schedule) {
+                auto *scheduledAction = scheduled.AddActions();
+                scheduledAction->CopyFrom(action);
+
+                // Limit stored issues to avoid overloading the local database
+                if (storedIssues < MAX_ISSUES_TO_STORE) {
+                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
+                    ++storedIssues;
+                } else {
+                    scheduledAction->ClearIssue();
+                }
+            }
+
             if (!allowPartial)
                 break;
-
-            if (schedule)
-                scheduled.AddActions()->CopyFrom(action);
         }
+        ++processedActions;
     }
     ClusterInfo->RollbackLocks(point);
 
@@ -435,9 +442,18 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     if (schedule && response.GetStatus().GetCode() != TStatus::ALLOW_PARTIAL) {
         if (response.GetStatus().GetCode() == TStatus::DISALLOW_TEMP
             || response.GetStatus().GetCode() == TStatus::ERROR_TEMP)
-            *scheduled.MutableActions() = {actions.begin(), actions.end()};
-        else
+        {   
+            if (!allowPartial) {
+                // Only the first problem action was scheduled during
+                // the actions check loop. Merge it with rest actions.
+                Y_ABORT_UNLESS(scheduled.ActionsSize() == 1);
+                auto problemAction = std::move(*scheduled.MutableActions()->begin());
+                scheduled.MutableActions()->CopyFrom(request.GetActions());
+                *scheduled.MutableActions(processedActions) = std::move(problemAction);
+            }
+        } else {
             scheduled.ClearActions();
+        }
     }
 
     return response.GetStatus().GetCode() == TStatus::ALLOW

@@ -66,7 +66,7 @@ namespace NActors {
         using TActorMap = THashMap<ui64, IActor*>;
 
         struct TExecutionState {
-            enum EState {
+            enum EState : ui32 {
                 // normal states
                 Inactive = 0,
                 Scheduled = 1,
@@ -82,7 +82,7 @@ namespace NActors {
             };
         };
 
-        volatile ui32 ExecutionState;
+        std::atomic<TExecutionState::EState> ExecutionState;
         ui32 Reserved : 4; // never changes, always zero
         ui32 Type : 4; // never changes
         TMailboxActorPack::EType ActorPack : 2;

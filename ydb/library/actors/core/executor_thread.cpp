@@ -592,31 +592,31 @@ namespace NActors {
     // placed here in hope for better compiler optimization
 
     bool TMailboxHeader::MarkForSchedule() {
-        AtomicBarrier();
+        TExecutionState::EState state = ExecutionState.load(std::memory_order_acquire);
+
         for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
             switch (state) {
                 case TExecutionState::Inactive:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::Inactive))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::Scheduled))
                         return true;
                     break;
                 case TExecutionState::Scheduled:
                     return false;
                 case TExecutionState::Leaving:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::LeavingMarked, TExecutionState::Leaving))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::LeavingMarked))
                         return true;
                     break;
                 case TExecutionState::Executing:
                 case TExecutionState::LeavingMarked:
                     return false;
                 case TExecutionState::Free:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::Free))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeScheduled))
                         return true;
                     break;
                 case TExecutionState::FreeScheduled:
                     return false;
                 case TExecutionState::FreeLeaving:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeLeavingMarked, TExecutionState::FreeLeaving))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeLeavingMarked))
                         return true;
                     break;
                 case TExecutionState::FreeExecuting:
@@ -629,14 +629,15 @@ namespace NActors {
     }
 
     bool TMailboxHeader::LockForExecution() {
-        AtomicBarrier(); // strictly speaking here should be AtomicBarrier, but as we got mailboxes from queue - this barrier is already set implicitly and could be removed
+        TExecutionState::EState state = ExecutionState.load(std::memory_order_acquire);
+
         for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
+
             switch (state) {
                 case TExecutionState::Inactive:
                     return false;
                 case TExecutionState::Scheduled:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::Scheduled))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::Executing))
                         return true;
                     break;
                 case TExecutionState::Leaving:
@@ -644,11 +645,11 @@ namespace NActors {
                 case TExecutionState::LeavingMarked:
                     return false;
                 case TExecutionState::Free:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeExecuting, TExecutionState::Free))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeExecuting))
                         return true;
                     break;
                 case TExecutionState::FreeScheduled:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeExecuting, TExecutionState::FreeScheduled))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeExecuting))
                         return true;
                     break;
                 case TExecutionState::FreeLeaving:
@@ -662,9 +663,9 @@ namespace NActors {
     }
 
     bool TMailboxHeader::LockFromFree() {
-        AtomicBarrier();
+        TExecutionState::EState state = ExecutionState.load(std::memory_order_acquire);
+
         for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
             switch (state) {
                 case TExecutionState::Inactive:
                 case TExecutionState::Scheduled:
@@ -673,11 +674,11 @@ namespace NActors {
                 case TExecutionState::LeavingMarked:
                     Y_ABORT();
                 case TExecutionState::Free:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::Free))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::Executing))
                         return true;
                     break;
                 case TExecutionState::FreeScheduled:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::FreeScheduled))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::Executing))
                         return true;
                     break;
                 case TExecutionState::FreeLeaving:
@@ -691,37 +692,37 @@ namespace NActors {
     }
 
     void TMailboxHeader::UnlockFromExecution1() {
-        const ui32 state = AtomicLoad(&ExecutionState);
+        TExecutionState::EState state = ExecutionState.load(std::memory_order_acquire);
+
         if (state == TExecutionState::Executing)
-            AtomicStore(&ExecutionState, (ui32)TExecutionState::Leaving);
+            ExecutionState.store(TExecutionState::Leaving, std::memory_order_release);
         else if (state == TExecutionState::FreeExecuting)
-            AtomicStore(&ExecutionState, (ui32)TExecutionState::FreeLeaving);
+            ExecutionState.store(TExecutionState::FreeLeaving, std::memory_order_release);
         else
             Y_ABORT();
-        AtomicBarrier();
     }
 
     bool TMailboxHeader::UnlockFromExecution2(bool wouldReschedule) {
-        AtomicBarrier();
+        TExecutionState::EState state = ExecutionState.load(std::memory_order_acquire);
+
         for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
             switch (state) {
                 case TExecutionState::Inactive:
                 case TExecutionState::Scheduled:
                     Y_ABORT();
                 case TExecutionState::Leaving:
                     if (!wouldReschedule) {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Inactive, TExecutionState::Leaving))
+                        if (ExecutionState.compare_exchange_strong(state, TExecutionState::Inactive))
                             return false;
                     } else {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::Leaving))
+                        if (ExecutionState.compare_exchange_strong(state, TExecutionState::Scheduled))
                             return true;
                     }
                     break;
                 case TExecutionState::Executing:
                     Y_ABORT();
                 case TExecutionState::LeavingMarked:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::LeavingMarked))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::Scheduled))
                         return true;
                     break;
                 case TExecutionState::Free:
@@ -729,17 +730,17 @@ namespace NActors {
                     Y_ABORT();
                 case TExecutionState::FreeLeaving:
                     if (!wouldReschedule) {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Free, TExecutionState::FreeLeaving))
+                        if (ExecutionState.compare_exchange_strong(state, TExecutionState::Free))
                             return false;
                     } else {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::FreeLeaving))
+                        if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeScheduled))
                             return true;
                     }
                     break;
                 case TExecutionState::FreeExecuting:
                     Y_ABORT();
                 case TExecutionState::FreeLeavingMarked:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::FreeLeavingMarked))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeScheduled))
                         return true;
                     break;
                 default:
@@ -749,26 +750,26 @@ namespace NActors {
     }
 
     bool TMailboxHeader::UnlockAsFree(bool wouldReschedule) {
-        AtomicBarrier();
+        TExecutionState::EState state = ExecutionState.load(std::memory_order_acquire);
+
         for (;;) {
-            const ui32 state = AtomicLoad(&ExecutionState);
             switch (state) {
                 case TExecutionState::Inactive:
                 case TExecutionState::Scheduled:
                     Y_ABORT();
                 case TExecutionState::Leaving:
                     if (!wouldReschedule) {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::Free, TExecutionState::Leaving))
+                        if (ExecutionState.compare_exchange_strong(state, TExecutionState::Free))
                             return false;
                     } else {
-                        if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::Leaving))
+                        if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeScheduled))
                             return true;
                     }
                     break;
                 case TExecutionState::Executing:
                     Y_ABORT();
                 case TExecutionState::LeavingMarked:
-                    if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::LeavingMarked))
+                    if (ExecutionState.compare_exchange_strong(state, TExecutionState::FreeScheduled))
                         return true;
                     break;
                 case TExecutionState::Free:

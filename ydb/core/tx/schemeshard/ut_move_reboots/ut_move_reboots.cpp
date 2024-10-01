@@ -503,7 +503,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
     Y_UNIT_TEST(ReplaceSequence) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            //TPathVersion pathVersion;
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -525,9 +524,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 i64 value = DoNextVal(runtime, "/MyRoot/Table/myseq");
                 UNIT_ASSERT_VALUES_EQUAL(value, 1);
-
-                // pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                //                                  {NLs::PathExist});
             }
 
             t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId,  "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard),
@@ -543,6 +539,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 TestLs(runtime, "/MyRoot/TableMove", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
                 TestLs(runtime, "/MyRoot/TableMove/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+                DoNextVal(runtime, "/MyRoot/Table/myseq", Ydb::StatusIds::SCHEME_ERROR);
 
                 i64 value = DoNextVal(runtime, "/MyRoot/TableMove/myseq");
                 UNIT_ASSERT_VALUES_EQUAL(value, 2);

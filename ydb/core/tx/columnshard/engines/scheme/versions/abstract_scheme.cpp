@@ -150,6 +150,7 @@ std::set<ui32> ISnapshotSchema::GetColumnIdxsToDelete(const ISnapshotSchema::TPt
 std::vector<ui32> ISnapshotSchema::ConvertColumnIdxsToIndexes(const std::set<ui32>& idxs) const {
     std::vector<ui32> columnIndexes;
     for (const auto& id : idxs) {
+        AFL_VERIFY(HasColumnId(id));
         columnIndexes.emplace_back(GetFieldIndex(id));
     }
     return columnIndexes;

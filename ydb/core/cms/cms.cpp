@@ -447,9 +447,12 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                 // Only the first problem action was scheduled during
                 // the actions check loop. Merge it with rest actions.
                 Y_ABORT_UNLESS(scheduled.ActionsSize() == 1);
-                auto problemAction = std::move(*scheduled.MutableActions()->begin());
+                TAction::TIssue issue = std::move(*scheduled.MutableActions()->begin()->MutableIssue());
                 scheduled.MutableActions()->CopyFrom(request.GetActions());
-                *scheduled.MutableActions(processedActions) = std::move(problemAction);
+                for (auto &action : *scheduled.MutableActions()) {
+                    action.ClearIssue();
+                }
+                *scheduled.MutableActions(processedActions)->MutableIssue() = std::move(issue);
             }
         } else {
             scheduled.ClearActions();

@@ -4,6 +4,7 @@
 #include "helpers.h"
 #include "service.h"
 
+#include <atomic>
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
@@ -240,7 +241,9 @@ public:
 
                     const auto& responseMessage = responseMessageOrError.Value();
 
-                    auto remember = ValidateHeaderAndParseRememberOption(responseMessage);
+                    NProto::TResponseHeader header;
+                    YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
+                    bool remember = FromProto<NRpc::EErrorCode>(header.error().code()) != NRpc::EErrorCode::Unavailable;
 
                     if (auto setResponseKeeperPromise = EndRequest(mutationId, responseMessage, remember)) {
                         setResponseKeeperPromise();
@@ -310,16 +313,20 @@ private:
 
         auto pendingIt = PendingResponses_.find(id);
         if (pendingIt != PendingResponses_.end()) {
-            ValidateRetry(id, isRetry);
-
+            if (!isRetry) {
+                THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
+                    << TErrorAttribute("mutation_id", id);
+            }
             YT_LOG_DEBUG("Replying with pending response (MutationId: %v)", id);
             return pendingIt->second;
         }
 
         auto finishedIt = FinishedResponses_.find(id);
         if (finishedIt != FinishedResponses_.end()) {
-            ValidateRetry(id, isRetry);
-
+            if (!isRetry) {
+                THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
+                    << TErrorAttribute("mutation_id", id);
+            }
             YT_LOG_DEBUG("Replying with finished response (MutationId: %v)", id);
             return MakeFuture(finishedIt->second);
         }
@@ -373,23 +380,6 @@ private:
             counter);
     }
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool ValidateHeaderAndParseRememberOption(const TSharedRefArray& responseMessage)
-{
-    NProto::TResponseHeader header;
-    YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
-    return FromProto<EErrorCode>(header.error().code()) != EErrorCode::Unavailable;
-}
-
-void ValidateRetry(TMutationId mutationId, bool isRetry)
-{
-    if (!isRetry) {
-        THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
-             << TErrorAttribute("mutation_id", mutationId);
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -19,13 +19,13 @@ enum ESchemeObject {
     TIERING = 2,
 };
 
-class TEvWatchTieringObjects: public TEventLocal<TEvWatchTieringObjects, NTiers::EvWatchTieringObjects> {
+class TEvWatchSchemeObjects: public TEventLocal<TEvWatchSchemeObjects, NTiers::EvWatchSchemeObjects> {
 private:
     YDB_READONLY_DEF(std::vector<TString>, Tierings);
     YDB_READONLY_DEF(std::vector<TString>, Tiers);
 
 public:
-    TEvWatchTieringObjects(std::vector<TString> tierings, std::vector<TString> tiers)
+    TEvWatchSchemeObjects(std::vector<TString> tierings, std::vector<TString> tiers)
         : Tierings(std::move(tierings))
         , Tiers(std::move(tiers)) {
     }
@@ -231,7 +231,7 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
-            hFunc(NTiers::TEvWatchTieringObjects, Handle);
+            hFunc(NTiers::TEvWatchSchemeObjects, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             default:
@@ -311,7 +311,7 @@ public:
         AFL_WARN(NKikimrServices::TX_TIERING)("event", "scheme object is unavailable")("path", record->Path);
     }
 
-    void Handle(NTiers::TEvWatchTieringObjects::TPtr& ev) {
+    void Handle(NTiers::TEvWatchSchemeObjects::TPtr& ev) {
         if (const auto& tierings = ev->Get()->GetTierings(); !tierings.empty()) {
             InitializeTierings(tierings);
         }

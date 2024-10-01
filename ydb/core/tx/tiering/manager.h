@@ -59,7 +59,7 @@ private:
     TManagers Managers;
     std::unordered_map<ui64, TString> PathIdTiering;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
-    NTiers::TConfigsSnapshot Snapshot;
+    YDB_READONLY_DEF(NTiers::TConfigsSnapshot, Snapshot);
     bool HasCompleteData = true;
 
 

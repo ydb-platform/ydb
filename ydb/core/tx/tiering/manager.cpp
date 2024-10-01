@@ -28,26 +28,15 @@ private:
         Owner->TakeConfigs(NTiers::TConfigsSnapshot(Tiers, Tierings), SecretsSnapshot);
     }
 
-    void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchTieringObjects> ev) const {
+    void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchSchemeObjects> ev) const {
         constexpr static const TDuration RetryInterval = TDuration::Seconds(1);
         ActorContext().Schedule(RetryInterval, std::make_unique<IEventHandle>(SelfId(), TieringFetcher, ev.release()));
-    }
-
-public:
-    TActor(std::shared_ptr<TTiersManager> owner)
-        : Owner(owner)
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
-    {
-
-    }
-    ~TActor() {
-        Owner->Stop(false);
     }
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(NTiers::TEvWatchTieringObjects, Handle);
+            hFunc(NTiers::TEvWatchSchemeObjects, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(NTiers::TEvNotifyTieringUpdated, Handle);
             hFunc(NTiers::TEvNotifyTierUpdated, Handle);
@@ -56,13 +45,6 @@ public:
             default:
                 break;
         }
-    }
-
-    void Bootstrap() {
-        TieringFetcher = Register(new TTieringFetcher(SelfId()));
-        Become(&TThis::StateMain);
-        AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
-        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -81,7 +63,7 @@ public:
         PassAway();
     }
 
-    void Handle(NTiers::TEvWatchTieringObjects::TPtr& ev) {
+    void Handle(NTiers::TEvWatchSchemeObjects::TPtr& ev) {
         Send(TieringFetcher, ev->Release());
     }
 
@@ -99,7 +81,7 @@ public:
                     uninitializedTiers.emplace_back(interval.GetTierName());
                 }
             }
-            Send(TieringFetcher, new NTiers::TEvWatchTieringObjects({}, std::move(uninitializedTiers)));
+            WatchTiers(std::move(uninitializedTiers));
         }
 
         Tierings.emplace(ev->Get()->GetId(), config);
@@ -128,10 +110,10 @@ public:
                 case NTiers::UNKNOWN:
                     AFL_VERIFY(false);
                 case NTiers::TIER:
-                    ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchTieringObjects>(std::vector<TString>(), std::vector<TString>({ objectId })));
+                    ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchSchemeObjects>(std::vector<TString>(), std::vector<TString>({ objectId })));
                     break;
                 case NTiers::TIERING:
-                    ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchTieringObjects>(std::vector<TString>({ objectId }), std::vector<TString>()));
+                    ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchSchemeObjects>(std::vector<TString>({ objectId }), std::vector<TString>()));
                     break;
             }
         } else {
@@ -139,6 +121,32 @@ public:
                 AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_not_found")("type", static_cast<ui64>(ev->Get()->GetObjectType()))("name", objectId);
             }
         }
+    }
+
+public:
+    TActor(std::shared_ptr<TTiersManager> owner)
+        : Owner(owner)
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
+    {
+    }
+
+    void Bootstrap() {
+        TieringFetcher = Register(new TTieringFetcher(SelfId()));
+        Become(&TThis::StateMain);
+        AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
+        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
+    }
+
+    void WatchTiers(std::vector<TString> tiers) {
+        Send(TieringFetcher, new NTiers::TEvWatchSchemeObjects({}, std::move(tiers)));
+    }
+
+    void WatchTierings(std::vector<TString> tierings) {
+        Send(TieringFetcher, new NTiers::TEvWatchSchemeObjects(std::move(tierings), {}));
+    }
+
+    ~TActor() {
+        Owner->Stop(false);
     }
 };
 
@@ -302,7 +310,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
 void TTiersManager::EnablePathId(const ui64 pathId, const TString& tieringId) {
     PathIdTiering.emplace(pathId, tieringId);
     if (!Snapshot.GetTieringById(tieringId)) {
-        TActivationContext::AsActorContext().Send(Actor->SelfId(), new NTiers::TEvWatchTieringObjects({ tieringId }, {}));
+        Actor->WatchTierings({tieringId});
         HasCompleteData = false;
     }
 }

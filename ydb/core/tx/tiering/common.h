@@ -13,7 +13,7 @@ enum EEvents {
     EvSSFetchingProblem,
     EvTimeout,
     EvTiersManagerReadyForUsage,
-    EvWatchTieringObjects,
+    EvWatchSchemeObjects,
     EvNotifyTierUpdated,
     EvNotifyTieringUpdated,
     EvNotifyObjectDeleted,

@@ -257,7 +257,6 @@ public:
                 for (const auto& item : rowSchema->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
                     srcDesc.AddColumnTypes(FormatType(item->GetItemType()));
-                    Cerr << "----------------------------- Added column " << TString(item->GetName()) << " with type " << FormatType(item->GetItemType()) << "\n";
                 }
 
                 NYql::NConnector::NApi::TPredicate predicateProto;

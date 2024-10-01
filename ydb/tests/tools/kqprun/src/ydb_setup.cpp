@@ -649,10 +649,9 @@ TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryM
 
     FillQueryMeta(meta, responseRecord);
 
-    resultSets.reserve(responseRecord.results_size());
-    for (const auto& result : responseRecord.results()) {
-        resultSets.emplace_back();
-        NKikimr::NKqp::ConvertKqpQueryResultToDbResult(result, &resultSets.back());
+    resultSets.reserve(responseRecord.ydbresults_size());
+    for (const auto& result : responseRecord.ydbresults()) {
+        resultSets.emplace_back(result);
     }
 
     return TRequestResult(yqlQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());

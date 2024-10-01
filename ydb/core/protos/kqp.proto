@@ -251,7 +251,7 @@ message TQueryResponseExtraInfo {
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
-    repeated NKikimrMiniKQL.TResult Results = 3;
+    // repeated NKikimrMiniKQL.TResult Results = 3;
     // optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
     reserved 4;
     optional bytes PreparedQuery = 5;
@@ -407,7 +407,7 @@ message TEvPingSessionResponse {
 
 message TEvDataQueryStreamPart {
     optional NActorsProto.TActorId GatewayActorId = 1;
-    repeated NKikimrMiniKQL.TResult Results = 2;
+    repeated Ydb.ResultSet Results = 2;
 };
 
 message TCancelQueryRequest {

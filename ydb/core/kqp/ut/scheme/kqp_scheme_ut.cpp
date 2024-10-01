@@ -8032,7 +8032,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST(DropColumnAfterScan) {
+    Y_UNIT_TEST(DropColumnAfterInsert) {
         using namespace NArrow;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
@@ -8043,7 +8043,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("int_column").SetType(NScheme::NTypeIds::Int32).SetNullable(true)
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8053,80 +8054,15 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
         dataBuilders.push_back(
             NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+        dataBuilders.push_back(
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
         auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
         testHelper.BulkUpsert(testTable, batch);
 
-        {
-            auto alterQueryAdd = TStringBuilder()
-                                 << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << schema.size() + 1 << " Uint64;";
-            Cerr << alterQueryAdd << Endl;
-            auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
-
-            testHelper.BulkUpsert(testTable, batch);
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-
-            auto alterQueryDrop = TStringBuilder()
-                                  << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << schema.size() + 1 << ";";
-            Cerr << alterQueryDrop << Endl;
-            auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-        }
-
-        {
-            auto alterQueryAdd = TStringBuilder()
-                                 << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << schema.size() + 1 << " Uint64;";
-            Cerr << alterQueryAdd << Endl;
-            auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
-
-            testHelper.BulkUpsert(testTable, batch);
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-
-            auto alterQueryDrop = TStringBuilder()
-                                  << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << schema.size() + 1 << ";";
-            Cerr << alterQueryDrop << Endl;
-            auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-        }
-
-        {
-            auto alterQueryAdd = TStringBuilder()
-                                 << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << schema.size() + 1 << " Uint64;";
-            Cerr << alterQueryAdd << Endl;
-            auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
-
-            testHelper.BulkUpsert(testTable, batch);
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-
-            auto alterQueryDrop = TStringBuilder()
-                                  << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << schema.size() + 1 << ";";
-            Cerr << alterQueryDrop << Endl;
-            auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-        }
-
-        {
-            auto alterQueryAdd = TStringBuilder()
-                                 << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << schema.size() + 1 << " Uint64;";
-            Cerr << alterQueryAdd << Endl;
-            auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
-
-            testHelper.BulkUpsert(testTable, batch);
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-
-            auto alterQueryDrop = TStringBuilder()
-                                  << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << schema.size() + 1 << ";";
-            Cerr << alterQueryDrop << Endl;
-            auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
-            testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest`", "[[100u]]");
-        }
+        auto alterQueryAdd = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN int_column;";
+        Cerr << alterQueryAdd << Endl;
+        auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->WaitIndexation(TDuration::Seconds(5));

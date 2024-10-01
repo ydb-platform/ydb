@@ -32,7 +32,7 @@ public:
         return Message;
     }
 
-    TString GetMessage() const {
+    const TString& GetMessage() const {
         return Message;
     }
 

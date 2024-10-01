@@ -517,7 +517,7 @@ public:
                     BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with schema infering");
                     return false;
                 }
-                if (NYql::HasAnySetting(TYtTableBaseInfo::Parse(path.Table())->Settings.Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
+                if (auto table = path.Table().Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
                     BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with overrided schema/columns");
                     return false;
                 }

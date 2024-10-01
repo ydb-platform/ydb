@@ -517,14 +517,9 @@ public:
                     BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with schema infering");
                     return false;
                 }
-                auto info = TYtTableBaseInfo::Parse(path.Table());
-                if (info && info->Settings) {
-                    for (auto &setting: info->Settings.Raw()->Children()) {
-                        if (setting->Child(0)->IsAtom("usercolumns") || setting->Child(0)->IsAtom("userschema")) {
-                            BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with overrided schema/columns");
-                            return false;
-                        }
-                    }
+                if (NYql::HasAnySetting(TYtTableBaseInfo::Parse(path.Table())->Settings.Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with overrided schema/columns");
+                    return false;
                 }
                 if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
                     BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");

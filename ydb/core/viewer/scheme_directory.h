@@ -34,7 +34,7 @@ template<typename LocalRpcType>
 class TSchemeDirectoryRequest : public LocalRpcType {
 protected:
     using TBase = LocalRpcType;
-    using TRequestProtoType = TBase::TRequestProtoType;
+    using TRequestProtoType = typename TBase::TRequestProtoType;
     using TBase::Database;
 
 public:

@@ -94,8 +94,6 @@ public:
         }
 
         AuditContextAppend(Request.Get(), request);
-        NDataIntegrity::LogIntegrityTrails(Request->GetTraceId(), *request, TlsActivationContext->AsActorContext());
-
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
         if (auto scriptRequest = MakeScriptRequest(issues, status)) {
             if (Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), scriptRequest.Release())) {
@@ -114,9 +112,7 @@ private:
         hFunc(NKqp::TEvKqp::TEvScriptResponse, Handle)
     )
 
-    void Handle(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev, const TActorContext& ctx) {
-        NDataIntegrity::LogIntegrityTrails(Request->GetTraceId(), *GetProtoRequest(), ev, ctx);
-
+    void Handle(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
         Ydb::Operations::Operation operation;
         operation.set_id(ev->Get()->OperationId);
         Ydb::Query::ExecuteScriptMetadata metadata;

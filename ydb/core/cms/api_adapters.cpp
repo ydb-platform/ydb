@@ -54,22 +54,23 @@ namespace {
         }
     }
 
-    Ydb::Maintenance::ActionState::ActionReason ConvertReason(NKikimrCms::TAction::EStatus cmsActionStatus) {
-        switch (cmsActionStatus) {
-            case NKikimrCms::TAction::OK:
-                return Ydb::Maintenance::ActionState::ACTION_REASON_OK;
-            case NKikimrCms::TAction::TOO_MANY_UNAVAILABLE_VDISKS:
-                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
-            case NKikimrCms::TAction::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS:
-                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS;
-            case NKikimrCms::TAction::DISABLED_NODES_LIMIT_REACHED:
-                return Ydb::Maintenance::ActionState::ACTION_REASON_DISABLED_NODES_LIMIT_REACHED;
-            case NKikimrCms::TAction::TENANT_DISABLED_NODES_LIMIT_REACHED:
-                return Ydb::Maintenance::ActionState::ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_REACHED;
-            case NKikimrCms::TAction::SYS_TABLETS_NODE_LIMIT_REACHED:
-                return Ydb::Maintenance::ActionState::ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED;
-            case NKikimrCms::TAction::STATUS_UNSPECIFIED:
+    Ydb::Maintenance::ActionState::ActionReason ConvertReason(NKikimrCms::TAction::TIssue::EType cmsActionIssueType) {
+        using EIssueType = NKikimrCms::TAction::TIssue;
+        switch (cmsActionIssueType) {
+            case EIssueType::UNKNOWN:
                 return Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED;
+            case EIssueType::GENERIC:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_GENERIC;
+            case EIssueType::TOO_MANY_UNAVAILABLE_VDISKS:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+            case EIssueType::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS;
+            case EIssueType::DISABLED_NODES_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_DISABLED_NODES_LIMIT_REACHED;
+            case EIssueType::TENANT_DISABLED_NODES_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_REACHED;
+            case EIssueType::SYS_TABLETS_NODE_LIMIT_REACHED:
+                return Ydb::Maintenance::ActionState::ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED;
         }
         return Ydb::Maintenance::ActionState::ACTION_REASON_UNSPECIFIED;
     }
@@ -78,7 +79,8 @@ namespace {
         ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         // FIXME: specify action_uid
         actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
-        actionState.set_reason(ConvertReason(cmsAction.GetStatus()));
+        actionState.set_reason(ConvertReason(cmsAction.GetIssue().GetType()));
+        actionState.set_reason_details(cmsAction.GetIssue().GetMessage());
     }
 
     void ConvertActionUid(const TString& taskUid, const TString& permissionId,

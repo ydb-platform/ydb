@@ -110,14 +110,19 @@ message TAction {
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
   }
 
-  enum EStatus {
-    STATUS_UNSPECIFIED = 0;
-    OK = 1;
-    TOO_MANY_UNAVAILABLE_VDISKS = 2;
-    TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = 3;
-    DISABLED_NODES_LIMIT_REACHED = 4;
-    TENANT_DISABLED_NODES_LIMIT_REACHED = 5;
-    SYS_TABLETS_NODE_LIMIT_REACHED = 6;
+  message TIssue {
+    enum EType {
+      UNKNOWN = 0;
+      GENERIC = 1;
+      TOO_MANY_UNAVAILABLE_VDISKS = 2;
+      TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = 3;
+      DISABLED_NODES_LIMIT_REACHED = 4;
+      TENANT_DISABLED_NODES_LIMIT_REACHED = 5;
+      SYS_TABLETS_NODE_LIMIT_REACHED = 6;
+    }
+
+    optional EType Type = 1;
+    optional string Message = 2;
   }
 
   optional EType Type = 1;
@@ -127,7 +132,7 @@ message TAction {
   optional uint64 Duration = 5;
   // If specified will be expanded to list of hosts.
   optional string Tenant = 6;
-  optional EStatus Status = 7;
+  optional TIssue Issue = 7;
 }
 
 enum ETenantPolicy {

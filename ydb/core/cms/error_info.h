@@ -8,7 +8,7 @@ class TReason {
 public:
     // Must be sync with proto enum
     enum class EType {
-        Unspecified,
+        Generic,
         TooManyUnavailableVDisks,
         TooManyUnavailableStateStorageRings,
         DisabledNodesLimitReached,
@@ -16,12 +16,12 @@ public:
         SysTabletsNodeLimitReached,
     };
 
-    TReason(const TString &message, EType type = EType::Unspecified)
+    TReason(const TString &message, EType type = EType::Generic)
         : Message(message)
         , Type(type)
     {}
 
-    TReason(const char* message, EType type = EType::Unspecified)
+    TReason(const char* message, EType type = EType::Generic)
         : Message(message)
         , Type(type)
     {}
@@ -42,7 +42,7 @@ public:
 
 private:
     TString Message;
-    EType Type = EType::Unspecified;
+    EType Type = EType::Generic;
 }; 
 
 struct TErrorInfo {
@@ -53,3 +53,7 @@ struct TErrorInfo {
 };
 
 } // namespace NKikimr::NCms
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NCms::TReason, stream, value) {
+    stream << value.GetMessage();
+}

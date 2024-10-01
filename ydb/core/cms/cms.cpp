@@ -36,6 +36,36 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
+namespace {
+
+TAction::TIssue ConvertIssue(const TReason& reason) {
+    TAction::TIssue issue;
+    switch (reason.GetType()) {
+        case TReason::EType::Generic:
+            issue.SetType(TAction::TIssue::GENERIC);
+            break;
+        case TReason::EType::TooManyUnavailableVDisks:
+            issue.SetType(TAction::TIssue::TOO_MANY_UNAVAILABLE_VDISKS);
+            break;
+        case TReason::EType::TooManyUnavailableStateStorageRings:
+            issue.SetType(TAction::TIssue::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
+            break;
+        case TReason::EType::DisabledNodesLimitReached:
+            issue.SetType(TAction::TIssue::DISABLED_NODES_LIMIT_REACHED);
+            break;
+        case TReason::EType::TenantDisabledNodesLimitReached:
+            issue.SetType(TAction::TIssue::TENANT_DISABLED_NODES_LIMIT_REACHED);
+            break;
+        case TReason::EType::SysTabletsNodeLimitReached:
+            issue.SetType(TAction::TIssue::SYS_TABLETS_NODE_LIMIT_REACHED);
+            break;
+    }
+    issue.SetMessage(reason.GetMessage());
+    return issue;
+}
+
+} // anonymous namespace
+
 void TCms::DefaultSignalTabletActive(const TActorContext &)
 {
     // must be empty
@@ -325,9 +355,15 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         return false;
     };
 
-    std::vector<TAction> checkedActions;
+    
+    // Start from the scratch - old issues are not relevant
+    std::vector<TAction> actions(request.GetActions().begin(), request.GetActions().end());
+    for (auto &action : actions) {
+        action.ClearIssue();
+    }
+
     auto point = ClusterInfo->PushRollbackPoint();
-    for (const auto &action : request.GetActions()) {
+    for (auto &action : actions) {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -348,14 +384,11 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             prepared = CheckEvictVDisks(action, error);
         }
 
-        auto checkedAction = action;
         if (prepared && CheckAction(action, opts, error, ctx)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
-            checkedAction.SetStatus(TAction::OK);
 
             auto *permission = response.AddPermissions();
-            permission->MutableAction()->CopyFrom(checkedAction);
-            permission->MutableAction()->ClearStatus();
+            permission->MutableAction()->CopyFrom(action);
             permission->SetDeadline(error.Deadline.GetValue());
             AddPermissionExtensions(action, *permission);
 
@@ -363,7 +396,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
-            checkedAction.SetStatus(static_cast<TAction::EStatus>(error.Reason.GetType()));
+            action.MutableIssue()->CopyFrom(ConvertIssue(error.Reason));
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
@@ -373,7 +406,6 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                     response.SetDeadline(error.Deadline.GetValue());
             }
         }
-        checkedActions.push_back(checkedAction);
     }
     ClusterInfo->RollbackLocks(point);
 
@@ -390,32 +422,19 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
     }
 
-    if (schedule) {
-        switch (response.GetStatus().GetCode()) {
-            case TStatus::ALLOW_PARTIAL:
-                RemoveOkActions(checkedActions);
-                scheduled.MutableActions()->Add(checkedActions.begin(), checkedActions.end());
-                break;
-            case TStatus::DISALLOW_TEMP:
-            case TStatus::ERROR_TEMP:
-                scheduled.MutableActions()->Add(checkedActions.begin(), checkedActions.end());
-                break;
-            default:
-                // schedule nothing
-                break;
-        }
+    // Scheduled actions were collected in the actions check loop for partial
+    // permissions only. Process other cases here: schedule all actions on
+    // temporary errors and nothing on other errors.
+    if (schedule && response.GetStatus().GetCode() != TStatus::ALLOW_PARTIAL) {
+        if (response.GetStatus().GetCode() == TStatus::DISALLOW_TEMP
+            || response.GetStatus().GetCode() == TStatus::ERROR_TEMP)
+            *scheduled.MutableActions() = {actions.begin(), actions.end()};
+        else
+            scheduled.ClearActions();
     }
 
     return response.GetStatus().GetCode() == TStatus::ALLOW
         || response.GetStatus().GetCode() == TStatus::ALLOW_PARTIAL;
-}
-
-void TCms::RemoveOkActions(std::vector<TAction>& actions) {
-    auto it = std::remove_if(actions.begin(), actions.end(),
-                             [](const TAction& a) {
-                                return a.GetStatus() == TAction::OK;
-                             });
-    actions.erase(it, actions.end());
 }
 
 bool TCms::IsActionHostValid(const TAction &action, TErrorInfo &error) const
@@ -1504,9 +1523,9 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
     }
 
     for (const auto &action : rec.GetActions()) {
-        if (action.GetStatus() != TAction::STATUS_UNSPECIFIED) {
+        if (action.HasIssue()) {
             return ReplyWithError<TEvCms::TEvPermissionResponse>(
-                ev, TStatus::WRONG_REQUEST, TStringBuilder() << "Specifying the action status is prohibited", ctx);
+                ev, TStatus::WRONG_REQUEST, TStringBuilder() << "Action issue is read-only", ctx);
         }
     }
 

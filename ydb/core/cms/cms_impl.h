@@ -180,8 +180,6 @@ private:
         Reply<TEvRequestPtr>(ev, std::move(response), ctx);
     }
 
-    static void RemoveOkActions(std::vector<NKikimrCms::TAction>& actions);
-
     STFUNC(StateInit) {
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
                   ev->GetTypeRewrite(), ev->ToString().data());

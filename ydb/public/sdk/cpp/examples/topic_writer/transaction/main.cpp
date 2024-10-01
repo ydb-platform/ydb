@@ -22,7 +22,7 @@ int main()
     NYdb::TDriver driver(config);
 
     NYdb::NTable::TTableClient tableClient(driver);
-    auto getTableSessionResult = tableClient.GetSession().GetValueSync();
+    auto getTableSessionResult = tableClient.CreateSession().GetValueSync();
     ThrowOnError(getTableSessionResult);
     auto tableSession = getTableSessionResult.GetSession();
 
@@ -40,5 +40,6 @@ int main()
 
     topicSession->Write(std::move(writeMessage), &transaction);
 
-    transaction.Commit().GetValueSync();
+    auto commitResult = transaction.Commit().GetValueSync();
+    ThrowOnError(commitResult);
 }

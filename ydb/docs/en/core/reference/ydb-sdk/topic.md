@@ -849,6 +849,26 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 {% list tabs %}
 
+- C++
+
+  To write to a topic in a transaction, you must pass a reference to the transaction object to the `Write` method of the writing session:
+
+  ```c++
+    auto getSessionResult = tableClient.GetSession().GetValueSync();
+    ThrowOnError(getSessionResult);
+    auto tableSession = getSessionResult.GetSession();
+
+    auto beginTransactionResult = tableSession.BeginTransaction().GetValueSync();
+    ThrowOnError(beginTransactionResult);
+    auto transaction = beginTransactionResult.GetTransaction();
+
+    NYdb::NTopic::TWriteMessage writeMessage("message");
+
+    topicSession->Write(std::move(writeMessage), transaction);
+    auto commitResult = transaction.Commit().GetValueSync();
+    ThrowOnError(commitResult);
+  ```
+
 - Go
 
   To write to a topic within a transaction, create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter) with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.

@@ -585,13 +585,6 @@ public:
 
         THashSet<ui32> involvedPartitions;
         if (splitMergeEnabled) {
-            /* TODO
-            if (!NKikimr::NPQ::SplitMergeEnabled(tabletConfig) && CDC) {
-                errStr = TStringBuilder() << "Enable of autpartitioning of the topic is unsupported";
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result;
-            }*/
-
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
             };

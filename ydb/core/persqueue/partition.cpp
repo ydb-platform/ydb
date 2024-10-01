@@ -2464,10 +2464,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
 
-    for (const auto& [id, group] : *explicitMessageGroups) {
-        NPQ::TPartitionKeyRange keyRange = group.KeyRange;
-        TSourceIdInfo sourceId(group.SeqNo, 0, ctx.Now(), std::move(keyRange), false);
-        SourceIdStorage.RegisterSourceIdInfo(id, std::move(sourceId), true);
+    if (explicitMessageGroups) {
+        for (const auto& [id, group] : *explicitMessageGroups) {
+            NPQ::TPartitionKeyRange keyRange = group.KeyRange;
+            TSourceIdInfo sourceId(group.SeqNo, 0, ctx.Now(), std::move(keyRange), false);
+            SourceIdStorage.RegisterSourceIdInfo(id, std::move(sourceId), true);
+        }
     }
 
     TopicConverter = topicConverter;

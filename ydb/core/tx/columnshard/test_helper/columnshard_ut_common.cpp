@@ -63,7 +63,7 @@ bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString
     return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
 }
 
-void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap) {
+void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
     auto tx = plan->Record.AddTransactions();
     tx->SetTxId(snap.GetTxId());
@@ -78,7 +78,7 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
     UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
 }
 
-void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
+void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
     auto tx = plan->Record.AddTransactions();
     tx->SetTxId(snap.GetTxId());
@@ -229,7 +229,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, con
     PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, txIds);
 }
 
-void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId) {
+void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId) {
     auto wakeup = std::make_unique<TEvPrivate::TEvPeriodicWakeup>(true);
     ForwardToTablet(runtime, shardId, sender, wakeup.release());
 }
@@ -434,25 +434,20 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
 namespace NKikimr::NColumnShard {
     NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                          const std::vector<NArrow::NTest::TTestColumn>& key) {
-        NOlap::TIndexInfo indexInfo = NOlap::TIndexInfo::BuildDefault();
-
+        THashMap<ui32, NTable::TColumn> columns;
         for (ui32 i = 0; i < ydbSchema.size(); ++i) {
             ui32 id = i + 1;
             auto& name = ydbSchema[i].GetName();
             auto& type = ydbSchema[i].GetType();
 
-            indexInfo.Columns[id] = NTable::TColumn(name, id, type, "");
-            indexInfo.ColumnNames[name] = id;
+            columns[id] = NTable::TColumn(name, id, type, "");
         }
 
+        std::vector<TString> pkNames;
         for (const auto& c : key) {
-            indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[c.GetName()]);
+            pkNames.push_back(c.GetName());
         }
-
-        auto storage = std::make_shared<NOlap::TTestStoragesManager>();
-        storage->Initialize(TInstant::Now().Seconds());
-        indexInfo.SetAllKeys(NOlap::TTestStoragesManager::GetInstance());
-        return indexInfo;
+        return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkNames);
     }
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {

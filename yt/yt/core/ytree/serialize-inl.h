@@ -91,7 +91,7 @@ struct TMapKeyHelper<T, true>
         consumer->OnKeyedItem(FormatEnum(value));
     }
 
-    static void Deserialize(T& value, const TString& key)
+    static void Deserialize(T& value, const std::string& key)
     {
         value = ParseEnum<T>(key);
     }
@@ -105,7 +105,7 @@ struct TMapKeyHelper<T, false>
         consumer->OnKeyedItem(ToString(value));
     }
 
-    static void Deserialize(T& value, const TString& key)
+    static void Deserialize(T& value, const std::string& key)
     {
         value = FromString<T>(key);
     }
@@ -114,12 +114,12 @@ struct TMapKeyHelper<T, false>
 template <>
 struct TMapKeyHelper<TGuid, false>
 {
-    static void Serialize(const TGuid& value, NYson::IYsonConsumer* consumer)
+    static void Serialize(TGuid value, NYson::IYsonConsumer* consumer)
     {
         consumer->OnKeyedItem(ToString(value));
     }
 
-    static void Deserialize(TGuid& value, const TString& key)
+    static void Deserialize(TGuid& value, const std::string& key)
     {
         value = TGuid::FromString(key);
     }

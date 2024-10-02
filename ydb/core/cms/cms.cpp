@@ -505,6 +505,12 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
         return false;
     }
 
+    if (State->Config.SentinelConfig.EvictVDisksStatus.Empty()) {
+        error.Code = TStatus::ERROR;
+        error.Reason = "Evict vdisks is disabled in Sentinel (self heal)";
+        return false;
+    }
+
     switch (action.GetType()) {
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
@@ -2272,8 +2278,13 @@ void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
-        State->EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
-        State->EnableSingleCompositeActionGroup = appConfig.GetFeatureFlags().GetEnableSingleCompositeActionGroup();
+        const auto& featureFlags = appConfig.GetFeatureFlags();
+        if (featureFlags.HasEnableCMSRequestPriorities()) {
+            State->EnableCMSRequestPriorities = featureFlags.GetEnableCMSRequestPriorities();
+        }
+        if (featureFlags.HasEnableSingleCompositeActionGroup()) {
+            State->EnableSingleCompositeActionGroup = featureFlags.GetEnableSingleCompositeActionGroup();
+        }
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {

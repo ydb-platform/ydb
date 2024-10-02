@@ -25,6 +25,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
@@ -118,6 +119,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseRingQueue = 19;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -288,6 +290,9 @@ message TBlobStorageConfig {
         // filled in by config parser, not by user; required for automatic static group creation
         repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
         optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
+
+        // generation of the distconf section; when set, one can automatically apply in-filesystem config
+        optional uint64 Generation = 8;
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
@@ -301,8 +306,29 @@ message TBlobStorageConfig {
         repeated TVDiskPerformanceConfig VDiskTypes = 1;
     };
 
+    message TVDiskBalancingConfig {
+        optional bool EnableSend = 1 [default=false];
+        optional bool EnableDelete = 2 [default=false];
+
+        optional bool BalanceOnlyHugeBlobs = 3 [default=true];
+        optional uint64 JobGranularityUs = 4 [default=1000];
+
+        optional uint64 BatchSize = 5 [default=32];
+        optional uint64 MaxToSendPerEpoch = 6 [default=1000];
+        optional uint64 MaxToDeletePerEpoch = 7 [default=1000];
+
+        optional uint64 ReadBatchTimeoutMs = 8 [default=10000];
+        optional uint64 SendBatchTimeoutMs = 9 [default=10000];
+        optional uint64 RequestBlobsOnMainTimeoutMs = 10 [default=10000];
+        optional uint64 DeleteBatchTimeoutMs = 11 [default=10000];
+        optional uint64 EpochTimeoutMs = 12 [default=60000];
+
+        optional uint64 SecondsToSleepIfNothingToDo = 13 [default=600];
+    }
+
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
+    optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
  }
 
 message TBlobStorageFormatConfig {
@@ -1154,6 +1180,17 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+
+        optional uint64 IncrementalRestoreReadAheadLo = 17 [(ControlOptions) = {
+            Description: "Override for incremental restore readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 IncrementalRestoreReadAheadHi = 18 [(ControlOptions) = {
+            Description: "Override for incremental restore readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1317,15 +1354,51 @@ message TImmediateControlsConfig {
 
     message TDSProxyControls {
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
-            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, actual value is divided by 1000",
+            Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 2000 }];
         optional uint64 PredictedDelayMultiplier = 2 [(ControlOptions) = {
-            Description: "Predicted time of VDisk's response is multiplied by this value divided by 1000",
+            Description: "Predicted time of VDisk's response multiplier, promille",
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 LongRequestThresholdMs = 3 [(ControlOptions) = {
+            Description: "The amount of time (ms) to process DSProxy request, beyond which request is considered long and being reported to log",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 50000 }];
+        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
+            Description: "Delay (ms) between reports of long requests for one handle class",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60000 }];
+        optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
+            Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
+            MinValue: 1,
+            MaxValue: 2,
+            DefaultValue: 2 }];
+    }
+
+    message TPDiskControls {
+        optional uint64 MaxCommonLogChunksHDD = 1 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+        optional uint64 MaxCommonLogChunksSSD = 2 [(ControlOptions) = {
+            Description: "Regulate the maximum of log chunks on the PDisk, setting for SSD, NVME",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 200 }];
+    }
+
+    message TBlobStorageControllerControls {
+        optional uint64 EnableSelfHealWithDegraded = 1 [(ControlOptions) = {
+            Description: "Should SelfHeal automatically process groups that are in DEGRADED status (one step from nonworking)",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     optional TDataShardControls DataShardControls = 1;
@@ -1337,6 +1410,8 @@ message TImmediateControlsConfig {
     optional TVDiskControls VDiskControls = 7;
     optional TTabletControls TabletControls = 8;
     optional TDSProxyControls DSProxyControls = 9;
+    optional TPDiskControls PDiskControls = 10;
+    optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
 };
 
 message TMeteringConfig {
@@ -1504,6 +1579,8 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
+    optional string CutHistoryAllowList = 79 [default = "DataShard"];
 }
 
 message TBlobCacheConfig {
@@ -1550,6 +1627,12 @@ message TColumnShardConfig {
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 GCIntervalMs = 19 [default = 30000];
+    optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
+    optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
+    optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
+    optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
+    optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
 }
 
 message TSchemeShardConfig {
@@ -1854,6 +1937,10 @@ message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
 
+message TShutdownConfig {
+    optional uint32 MinDelayBeforeShutdownSeconds = 1;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1937,6 +2024,8 @@ message TAppConfig {
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
 	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
+    optional TShutdownConfig ShutdownConfig = 84;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

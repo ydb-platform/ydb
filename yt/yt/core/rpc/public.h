@@ -116,6 +116,7 @@ DECLARE_REFCOUNTED_CLASS(TRetryingChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TViablePeerRegistryConfig)
 DECLARE_REFCOUNTED_CLASS(TDynamicChannelPoolConfig)
 DECLARE_REFCOUNTED_CLASS(TServiceDiscoveryEndpointsConfig)
+DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfigBase)
 DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TThrottlingChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TThrottlingChannelDynamicConfig)
@@ -142,7 +143,7 @@ extern const TRealmId NullRealmId;
 using TMutationId = TGuid;
 extern const TMutationId NullMutationId;
 
-extern const TString RootUserName;
+extern const std::string RootUserName;
 
 constexpr int TypicalMessagePartCount = 8;
 

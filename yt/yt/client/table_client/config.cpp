@@ -169,6 +169,9 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("key_prefix_filter", &TThis::KeyPrefixFilter)
         .DefaultNew();
+
+    registrar.Parameter("enable_large_columnar_statistics", &TThis::EnableLargeColumnarStatistics)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -238,7 +241,7 @@ void TKeyPrefixFilterWriterConfig::Register(TRegistrar registrar)
     });
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TDictionaryCompressionConfig::Register(TRegistrar registrar)
 {
@@ -310,7 +313,7 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     });
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
 {
@@ -322,7 +325,7 @@ void TDictionaryCompressionSessionConfig::Register(TRegistrar registrar)
         .Default(64_MB);
 }
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void TBatchHunkReaderConfig::Register(TRegistrar registrar)
 {
@@ -464,6 +467,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);
+    registrar.Parameter("versioned_write_options", &TThis::VersionedWriteOptions)
+        .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
 

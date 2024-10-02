@@ -388,7 +388,7 @@ public:
         struct DomainConfiguration : Table<2> {
             struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Coordinators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TCoordinatorId>; };
-            struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::TimecastBucketsPerMediator; };
+            struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::DefaultTimecastBucketsPerMediator; };
 
             using TKey = TableKey<Version>;
             using TColumns = TableColumns<Version, Coordinators, TimeCastBuckets>;

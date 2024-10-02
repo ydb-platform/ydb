@@ -1,0 +1,31 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "d";
+                    [
+                        "DataType";
+                        "Date"
+                    ]
+                ];
+                [
+                    "dt";
+                    [
+                        "DataType";
+                        "Datetime"
+                    ]
+                ];
+                [
+                    "ts";
+                    [
+                        "DataType";
+                        "Timestamp"
+                    ]
+                ]
+            ]
+        ]
+    }
+}
+

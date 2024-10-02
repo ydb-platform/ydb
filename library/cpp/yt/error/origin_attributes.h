@@ -41,7 +41,7 @@ struct TOriginAttributes
     static constexpr size_t ExtensionDataByteSizeCap = 64;
     using TErasedExtensionData = TErasedStorage<ExtensionDataByteSizeCap>;
 
-    TProcessId Pid;
+    TProcessId Pid = 0;
 
     NThreading::TThreadId Tid;
     TThreadName ThreadName;

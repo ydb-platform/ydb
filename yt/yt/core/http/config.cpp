@@ -14,6 +14,9 @@ void THttpIOConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_redirect_count", &TThis::MaxRedirectCount)
         .Default(0);
 
+    registrar.Parameter("ignore_continue_responses", &TThis::IgnoreContinueResponses)
+        .Default(false);
+
     registrar.Parameter("connection_idle_timeout", &TThis::ConnectionIdleTimeout)
         .Default(TDuration::Minutes(5));
 

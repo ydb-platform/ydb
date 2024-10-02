@@ -15,6 +15,7 @@
 
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
@@ -979,9 +980,9 @@ void TestReadRangeMovies(NKikimrDataEvents::EDataFormat format) {
         {TCell::Make(3u), TCell(s3.data(), s3.size()), TCell::Make(8u)}
     },
     {
-        NScheme::TTypeIdOrder(NScheme::NTypeIds::Uint32),
-        NScheme::TTypeIdOrder(NScheme::NTypeIds::String),
-        NScheme::TTypeIdOrder(NScheme::NTypeIds::Uint32)
+        NScheme::TTypeInfoOrder(NScheme::NTypeIds::Uint32),
+        NScheme::TTypeInfoOrder(NScheme::NTypeIds::String),
+        NScheme::TTypeInfoOrder(NScheme::NTypeIds::Uint32)
     });
 }
 
@@ -2887,6 +2888,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TTestHelper helper(serverSettings);
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
+
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
                 Cerr << "... waiting for " << description << Endl;
@@ -3017,6 +3021,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             .SetUseRealThreads(false);
 
         TTestHelper helper(serverSettings);
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(*helper.Server->GetRuntime());
 
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {

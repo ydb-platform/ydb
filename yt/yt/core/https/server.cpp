@@ -112,7 +112,8 @@ IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
     const IPollerPtr& acceptor,
-    const IInvokerPtr& controlInvoker)
+    const IInvokerPtr& controlInvoker,
+    const IMemoryUsageTrackerPtr& memoryTracker)
 {
     auto sslContext =  New<TSslContext>();
     ApplySslConfig(sslContext, config->Credentials);
@@ -160,7 +161,12 @@ IServerPtr CreateServer(
 
     auto configCopy = CloneYsonStruct(config);
     configCopy->IsHttps = true;
-    auto httpServer = NHttp::CreateServer(configCopy, tlsListener, poller, acceptor);
+    auto httpServer = NHttp::CreateServer(
+        configCopy,
+        tlsListener,
+        poller,
+        acceptor,
+        memoryTracker);
 
     return New<TServer>(std::move(httpServer), std::move(certificateUpdater));
 }

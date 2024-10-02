@@ -33,22 +33,22 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr auto MemoryAllocationTag = "memory_allocation_tag";
-const std::vector<TString> MemoryAllocationTags = {"0", "1", "2", "3", "4", "5", "6", "7"};
+const std::string MemoryAllocationTagKey = "memory_allocation_tag";
+const std::vector<std::string> MemoryAllocationTagValues = {"0", "1", "2", "3", "4", "5", "6", "7"};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <size_t Index>
 Y_NO_INLINE auto BlowHeap()
 {
-    std::vector<TString> data;
+    std::vector<std::string> data;
     for (int i = 0; i < 10240; i++) {
-        data.push_back(TString(1024, 'x'));
+        data.push_back(std::string(1_KB, 'x'));
     }
     return data;
 }
 
-TEST(HeapProfiler, ReadProfile)
+TEST(THeapProfilerTest, ReadProfile)
 {
     absl::SetStackUnwinder(AbslStackUnwinder);
     tcmalloc::MallocExtension::SetProfileSamplingRate(256_KB);
@@ -56,6 +56,7 @@ TEST(HeapProfiler, ReadProfile)
     auto token = tcmalloc::MallocExtension::StartAllocationProfiling();
 
     EnableMemoryProfilingTags();
+
     auto traceContext = TTraceContext::NewRoot("Root");
     TTraceContextGuard guard(traceContext);
 
@@ -64,18 +65,18 @@ TEST(HeapProfiler, ReadProfile)
     auto h0 = BlowHeap<0>();
 
     auto tag = TMemoryTag(1);
-    traceContext->SetAllocationTags({{"user", "second"}, {"sometag", "notmy"}, {MemoryAllocationTag, ToString(tag)}});
-    auto currentTag = traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTag);
+    traceContext->SetAllocationTags({{"user", "second"}, {"sometag", "notmy"}, {MemoryAllocationTagKey, ToString(tag)}});
+    auto currentTag = traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTagKey);
     ASSERT_EQ(currentTag, tag);
 
     auto h1 = BlowHeap<1>();
 
-    traceContext->ClearAllocationTagsPtr();
+    traceContext->SetAllocationTagList(nullptr);
 
     auto h2 = BlowHeap<2>();
     h2.clear();
 
-    auto usage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(tag));
+    auto usage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTagKey, ToString(tag));
     ASSERT_GE(usage, 5_MB);
 
     auto dumpProfile = [] (auto name, auto type) {
@@ -98,124 +99,124 @@ TEST(HeapProfiler, ReadProfile)
     output.Finish();
 }
 
-TEST(HeapProfiler, AllocationTagsWithMemoryTag)
+TEST(THeapProfilerTest, AllocationTagsWithMemoryTag)
 {
     EnableMemoryProfilingTags();
     auto traceContext = TTraceContext::NewRoot("Root");
     TTraceContextGuard guard(traceContext);
 
-    ASSERT_EQ(traceContext->FindAllocationTag<TString>(MemoryAllocationTag), std::nullopt);
-    traceContext->SetAllocationTags({{"user", "first user"}, {MemoryAllocationTag, MemoryAllocationTags[0]}});
-    ASSERT_EQ(traceContext->FindAllocationTag<TString>("user"), "first user");
-    ASSERT_EQ(traceContext->FindAllocationTag<TString>(MemoryAllocationTag), MemoryAllocationTags[0]);
+    ASSERT_EQ(traceContext->FindAllocationTag<std::string>(MemoryAllocationTagKey), std::nullopt);
+    traceContext->SetAllocationTags({{"user", "first user"}, {MemoryAllocationTagKey, MemoryAllocationTagValues[0]}});
+    ASSERT_EQ(traceContext->FindAllocationTag<std::string>("user"), "first user");
+    ASSERT_EQ(traceContext->FindAllocationTag<std::string>(MemoryAllocationTagKey), MemoryAllocationTagValues[0]);
 
-    std::vector<std::vector<TString>> heap;
+    std::vector<std::vector<std::string>> heap;
     heap.push_back(BlowHeap<0>());
 
-    traceContext->SetAllocationTags({{"user", "second user"}, {MemoryAllocationTag, MemoryAllocationTags[1]}});
-    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTag), 1);
+    traceContext->SetAllocationTags({{"user", "second user"}, {MemoryAllocationTagKey, MemoryAllocationTagValues[1]}});
+    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTagKey), 1);
 
     heap.push_back(BlowHeap<1>());
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[0]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[0]);
 
-    auto usage1 = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, MemoryAllocationTags[1]);
+    auto usage1 = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTagKey, MemoryAllocationTagValues[1]);
 
     ASSERT_NEAR(usage1, 12_MB, 8_MB);
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[2]);
-    ASSERT_EQ(traceContext->FindAllocationTag<TString>(MemoryAllocationTag), MemoryAllocationTags[2]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[2]);
+    ASSERT_EQ(traceContext->FindAllocationTag<std::string>(MemoryAllocationTagKey), MemoryAllocationTagValues[2]);
 
     {
         volatile auto h = BlowHeap<2>();
     }
 
-    traceContext->ClearAllocationTagsPtr();
-    ASSERT_EQ(traceContext->FindAllocationTag<TString>(MemoryAllocationTag), std::nullopt);
+    traceContext->SetAllocationTagList(nullptr);
+    ASSERT_EQ(traceContext->FindAllocationTag<std::string>(MemoryAllocationTagKey), std::nullopt);
 
     heap.push_back(BlowHeap<0>());
 
     {
-        auto snapshot = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag);
-        ASSERT_EQ(snapshot[MemoryAllocationTags[1]], usage1);
-        ASSERT_LE(snapshot[MemoryAllocationTags[2]], 1_MB);
+        auto slice = CollectMemoryUsageSnapshot()->GetUsageSlice(MemoryAllocationTagKey);
+        ASSERT_EQ(slice[MemoryAllocationTagValues[1]], usage1);
+        ASSERT_LE(slice[MemoryAllocationTagValues[2]], 1_MB);
     }
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[6]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[6]);
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[3]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[3]);
     heap.push_back(BlowHeap<3>());
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[4]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[4]);
     heap.push_back(BlowHeap<4>());
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[7]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[7]);
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[5]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[5]);
     heap.push_back(BlowHeap<5>());
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[4]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[4]);
     heap.push_back(BlowHeap<4>());
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[7]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[7]);
 
-    traceContext->SetAllocationTagsPtr(nullptr);
+    traceContext->SetAllocationTagList(nullptr);
 
-    auto snapshot = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag);
+    auto slice = CollectMemoryUsageSnapshot()->GetUsageSlice(MemoryAllocationTagKey);
 
     constexpr auto maxDifference = 10_MB;
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[1]], snapshot[MemoryAllocationTags[3]], maxDifference);
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[3]], snapshot[MemoryAllocationTags[5]], maxDifference);
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[1]], snapshot[MemoryAllocationTags[5]], maxDifference);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[1]], slice[MemoryAllocationTagValues[3]], maxDifference);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[3]], slice[MemoryAllocationTagValues[5]], maxDifference);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[1]], slice[MemoryAllocationTagValues[5]], maxDifference);
 
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[4]], 20_MB, 15_MB);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[4]], 20_MB, 15_MB);
 
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[4]], snapshot[MemoryAllocationTags[1]] +  snapshot[MemoryAllocationTags[3]], 2 * maxDifference);
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[4]], snapshot[MemoryAllocationTags[1]] +  snapshot[MemoryAllocationTags[5]], 2 * maxDifference);
-    ASSERT_NEAR(snapshot[MemoryAllocationTags[4]], snapshot[MemoryAllocationTags[3]] +  snapshot[MemoryAllocationTags[5]], 2 * maxDifference);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[4]], slice[MemoryAllocationTagValues[1]] +  slice[MemoryAllocationTagValues[3]], 2 * maxDifference);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[4]], slice[MemoryAllocationTagValues[1]] +  slice[MemoryAllocationTagValues[5]], 2 * maxDifference);
+    ASSERT_NEAR(slice[MemoryAllocationTagValues[4]], slice[MemoryAllocationTagValues[3]] +  slice[MemoryAllocationTagValues[5]], 2 * maxDifference);
 
-    ASSERT_LE(snapshot[MemoryAllocationTags[6]], 1_MB);
-    ASSERT_LE(snapshot[MemoryAllocationTags[7]], 1_MB);
+    ASSERT_LE(slice[MemoryAllocationTagValues[6]], 1_MB);
+    ASSERT_LE(slice[MemoryAllocationTagValues[7]], 1_MB);
 }
 
 template <size_t Index>
 Y_NO_INLINE auto BlowHeap(int64_t megabytes)
 {
-    std::vector<TString> data;
+    std::vector<std::string> data;
     megabytes <<= 10;
     for (int64_t i = 0; i < megabytes; i++) {
-        data.push_back(TString( 1024, 'x'));
+        data.push_back(std::string(1_KB, 'x'));
     }
     return data;
 }
 
-TEST(HeapProfiler, HugeAllocationsTagsWithMemoryTag)
+TEST(THeapProfilerTest, HugeAllocationsTagsWithMemoryTag)
 {
     EnableMemoryProfilingTags();
     auto traceContext = TTraceContext::NewRoot("Root");
     TCurrentTraceContextGuard guard(traceContext);
 
-    std::vector<std::vector<TString>> heap;
+    std::vector<std::vector<std::string>> heap;
 
     heap.push_back(BlowHeap<0>());
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[1]);
-    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTag), 1);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[1]);
+    ASSERT_EQ(traceContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTagKey), 1);
 
     heap.push_back(BlowHeap<1>(100));
 
     {
-        traceContext->SetAllocationTagsPtr(nullptr);
-        auto usage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, MemoryAllocationTags[1]);
+        traceContext->SetAllocationTagList(nullptr);
+        auto usage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTagKey, MemoryAllocationTagValues[1]);
         ASSERT_GE(usage, 100_MB);
         ASSERT_LE(usage, 150_MB);
     }
 
-    traceContext->SetAllocationTag(MemoryAllocationTag, MemoryAllocationTags[2]);
+    traceContext->SetAllocationTag(MemoryAllocationTagKey, MemoryAllocationTagValues[2]);
     heap.push_back(BlowHeap<1>(1000));
 
-    traceContext->SetAllocationTagsPtr(nullptr);
-    auto usage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, MemoryAllocationTags[2]);
+    traceContext->SetAllocationTagList(nullptr);
+    auto usage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTagKey, MemoryAllocationTagValues[2]);
     ASSERT_GE(usage, 1000_MB);
     ASSERT_LE(usage, 1300_MB);
 }

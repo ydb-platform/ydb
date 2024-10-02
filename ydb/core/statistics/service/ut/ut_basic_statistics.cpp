@@ -21,17 +21,13 @@ using namespace NYdb::NScheme;
 namespace {
 
 void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
-    TTableClient client(env.GetDriver());
-    auto session = client.CreateSession().GetValueSync().GetSession();
-
-    auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+    ExecuteYqlScript(env, Sprintf(R"(
         CREATE TABLE `Root/%s/%s` (
             Key Uint64,
             Value Uint64,
             PRIMARY KEY (Key)
         );
-    )", databaseName.c_str(), tableName.c_str())).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    )", databaseName.c_str(), tableName.c_str()));
 
     TStringBuilder replace;
     replace << Sprintf("REPLACE INTO `Root/%s/%s` (Key, Value) VALUES ",
@@ -43,8 +39,7 @@ void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tabl
         replace << Sprintf("(%uu, %uu)", i, i);
     }
     replace << ";";
-    result = session.ExecuteDataQuery(replace, TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    ExecuteYqlScript(env, replace);
 }
 
 void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount) {
@@ -76,7 +71,7 @@ void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId
             break;
         }
 
-        runtime.SimulateSleep(TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(1));
     }
 }
 
@@ -87,15 +82,10 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
     Y_UNIT_TEST(Simple) {
         TTestEnv env(1, 1);
 
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateTable(env, "Database", "Table", 5);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+
+        CreateDatabase(env, "Database");
+        CreateTable(env, "Database", "Table", 5);
 
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
         ValidateRowCount(runtime, 1, pathId, 5);
@@ -104,15 +94,10 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
     Y_UNIT_TEST(TwoNodes) {
         TTestEnv env(1, 2);
 
-        auto init = [&] () {
-            CreateDatabase(env, "Database", 2);
-            CreateTable(env, "Database", "Table", 5);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+
+        CreateDatabase(env, "Database", 2);
+        CreateTable(env, "Database", "Table", 5);
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table");
         ValidateRowCount(runtime, 1, pathId1, 5);
@@ -121,16 +106,12 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
     Y_UNIT_TEST(TwoTables) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateTable(env, "Database", "Table1", 5);
-            CreateTable(env, "Database", "Table2", 6);
-        };
-        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+
+        CreateDatabase(env, "Database");
+        CreateTable(env, "Database", "Table1", 5);
+        CreateTable(env, "Database", "Table2", 6);
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
@@ -140,17 +121,13 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
     Y_UNIT_TEST(TwoDatabases) {
         TTestEnv env(1, 2);
-        auto init = [&] () {
-            CreateDatabase(env, "Database1");
-            CreateDatabase(env, "Database2");
-            CreateTable(env, "Database1", "Table1", 5);
-            CreateTable(env, "Database2", "Table2", 6);
-        };
-        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
+
+        CreateDatabase(env, "Database1", 1, false, "hdd1");
+        CreateDatabase(env, "Database2", 1, false, "hdd2");
+        CreateTable(env, "Database1", "Table1", 5);
+        CreateTable(env, "Database2", "Table2", 6);
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Database1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Database2/Table2");
@@ -160,26 +137,12 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
     Y_UNIT_TEST(Serverless) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Shared");
-        };
-        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
 
-        TPathId domainKey;
-        ResolvePathId(runtime, "/Root/Shared", &domainKey);
-
-        auto init2 = [&] () {
-            CreateServerlessDatabase(env, "Serverless", domainKey);
-            CreateTable(env, "Serverless", "Table", 5);
-        };
-        std::thread init2Thread(init2);
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        init2Thread.join();
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Serverless", "/Root/Shared");
+        CreateTable(env, "Serverless", "Table", 5);
 
         auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table");
         ValidateRowCount(runtime, 1, pathId, 5);
@@ -187,28 +150,14 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
     Y_UNIT_TEST(TwoServerlessDbs) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Shared");
-        };
-        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
 
-        TPathId domainKey;
-        ResolvePathId(runtime, "/Root/Shared", &domainKey);
-
-        auto init2 = [&] () {
-            CreateServerlessDatabase(env, "Serverless1", domainKey);
-            CreateServerlessDatabase(env, "Serverless2", domainKey);
-            CreateTable(env, "Serverless1", "Table1", 5);
-            CreateTable(env, "Serverless2", "Table2", 6);
-        };
-        std::thread init2Thread(init2);
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        init2Thread.join();
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Serverless1", "/Root/Shared");
+        CreateServerlessDatabase(env, "Serverless2", "/Root/Shared");
+        CreateTable(env, "Serverless1", "Table1", 5);
+        CreateTable(env, "Serverless2", "Table2", 6);
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
@@ -218,30 +167,15 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
     Y_UNIT_TEST(TwoServerlessTwoSharedDbs) {
         TTestEnv env(1, 2);
-        auto init = [&] () {
-            CreateDatabase(env, "Shared1");
-            CreateDatabase(env, "Shared2");
-        };
-        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
 
-        TPathId domainKey1, domainKey2;
-        ResolvePathId(runtime, "/Root/Shared1", &domainKey1);
-        ResolvePathId(runtime, "/Root/Shared2", &domainKey2);
-
-        auto init2 = [&] () {
-            CreateServerlessDatabase(env, "Serverless1", domainKey1);
-            CreateServerlessDatabase(env, "Serverless2", domainKey2);
-            CreateTable(env, "Serverless1", "Table1", 5);
-            CreateTable(env, "Serverless2", "Table2", 6);
-        };
-        std::thread init2Thread(init2);
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        init2Thread.join();
+        CreateDatabase(env, "Shared1", 1, true, "hdd1");
+        CreateDatabase(env, "Shared2", 1, true, "hdd2");
+        CreateServerlessDatabase(env, "Serverless1", "/Root/Shared1");
+        CreateServerlessDatabase(env, "Serverless2", "/Root/Shared2");
+        CreateTable(env, "Serverless1", "Table1", 5);
+        CreateTable(env, "Serverless2", "Table2", 6);
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");

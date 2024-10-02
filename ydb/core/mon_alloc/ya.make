@@ -16,8 +16,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/tcmalloc/malloc_extension
-    ydb/library/actors/core
-    ydb/library/actors/prof
+    library/cpp/dwarf_backtrace
     library/cpp/html/pcdata
     library/cpp/lfalloc/alloc_profiler
     library/cpp/lfalloc/dbg_info
@@ -25,6 +24,8 @@ PEERDIR(
     library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/control
+    ydb/library/actors/core
+    ydb/library/actors/prof
     ydb/library/services
 )
 

@@ -16,6 +16,7 @@ private:
     ui64 AllocatedVolume = 0;
     YDB_READONLY(ui64, Identifier, 0);
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY(ui64, ScopeId, 0);
     const std::shared_ptr<TStageFeatures> Stage;
     bool AllocationFailed = false;
 
@@ -25,7 +26,7 @@ public:
             Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
         }
         
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
+        AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
     }
 
     bool IsAllocatable(const ui64 additional) const {
@@ -43,11 +44,11 @@ public:
     }
 
     [[nodiscard]] bool Allocate(const NActors::TActorId& ownerId) {
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
+        AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
         AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
             "allocation_internal_group_id", AllocationInternalGroupId);
         const bool result = Allocation->OnAllocated(
-            std::make_shared<TAllocationGuard>(ProcessId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
+            std::make_shared<TAllocationGuard>(ProcessId, ScopeId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
         if (result) {
             Stage->Allocate(AllocatedVolume);
         } else {
@@ -68,7 +69,7 @@ public:
         }
     }
 
-    TAllocationInfo(const ui64 processId, const ui64 allocationInternalGroupId, const std::shared_ptr<IAllocation>& allocation,
+    TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId, const std::shared_ptr<IAllocation>& allocation,
         const std::shared_ptr<TStageFeatures>& stage);
 };
 

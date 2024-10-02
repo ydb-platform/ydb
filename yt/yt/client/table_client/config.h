@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/chunk_client/config.h>
 
@@ -153,6 +154,8 @@ public:
     i64 MaxDataWeightBetweenBlocks;
 
     double SampleRate;
+
+    bool EnableLargeColumnarStatistics;
 
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
@@ -308,7 +311,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TBatchHunkReaderConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
@@ -431,6 +434,8 @@ public:
 
     ETableSchemaModification SchemaModification;
 
+    TVersionedWriteOptions VersionedWriteOptions;
+
     EOptimizeFor OptimizeFor;
     std::optional<NChunkClient::EChunkFormat> ChunkFormat;
     NChunkClient::EChunkFormat GetEffectiveChunkFormat(bool versioned) const;
@@ -463,7 +468,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TRowBatchReadOptions
 {

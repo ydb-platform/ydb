@@ -136,6 +136,25 @@ void TGetJobSpecCommand::DoExecute(ICommandContextPtr context)
 void TGetJobStderrCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.Limit;
+        })
+        .Optional(/*init*/ true);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "offset",
+        [] (TThis* command) -> auto& {
+            return command->Options.Offset;
+        })
+        .Optional(/*init*/ true);
+}
+
+bool TGetJobStderrCommand::HasResponseParameters() const
+{
+    return true;
 }
 
 void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
@@ -143,8 +162,13 @@ void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
     auto result = WaitFor(context->GetClient()->GetJobStderr(OperationIdOrAlias, JobId, Options))
         .ValueOrThrow();
 
+    ProduceResponseParameters(context, [&] (NYson::IYsonConsumer* consumer) {
+        BuildYsonMapFragmentFluently(consumer)
+            .Item("total_size").Value(result.TotalSize)
+            .Item("end_offset").Value(result.EndOffset);
+    });
     auto output = context->Request().OutputStream;
-    WaitFor(output->Write(result))
+    WaitFor(output->Write(result.Data))
         .ThrowOnError();
 }
 

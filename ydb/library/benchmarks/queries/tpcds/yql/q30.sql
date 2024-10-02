@@ -1,5 +1,6 @@
 {% include 'header.sql.jinja' %}
 
+-- TODO this commit should be reverted upon proper fix for https://github.com/ydb-platform/ydb/issues/7565
 -- NB: Subquerys
 $customer_total_return =
  (select web_returns.wr_returning_customer_sk as ctr_customer_sk
@@ -25,8 +26,8 @@ $avg_total_return_by_state =
        ,c_last_review_date,ctr_total_return
  from $customer_total_return ctr1
      join $avg_total_return_by_state ctr2 on ctr1.ctr_state = ctr2.ctr_state
-     cross join {{customer_address}} as customer_address
      cross join {{customer}} as customer
+     cross join {{customer_address}} as customer_address
  where ctr1.ctr_total_return > $z1_2_35*ctr2.avg_return
        and ca_address_sk = c_current_addr_sk
        and ca_state = 'GA'

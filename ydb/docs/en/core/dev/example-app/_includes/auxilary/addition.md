@@ -1,6 +1,6 @@
 {% note info %}
 
-The article is being updated.
+The article is currently being updated.
 
 {% endnote %}
 

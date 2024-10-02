@@ -10,6 +10,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(0.3.113)
+
 DYNAMIC_LIBRARY_FROM(contrib/libs/libaio/static)
 
 LICENSE_RESTRICTION_EXCEPTIONS(contrib/libs/libaio/static)

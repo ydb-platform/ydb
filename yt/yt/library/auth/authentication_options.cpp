@@ -8,7 +8,7 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAuthenticationOptions TAuthenticationOptions::FromUser(const TString& user, const std::optional<TString>& userTag)
+TAuthenticationOptions TAuthenticationOptions::FromUser(const std::string& user, const std::optional<std::string>& userTag)
 {
     return {
         .User = user,
@@ -24,7 +24,7 @@ TAuthenticationOptions TAuthenticationOptions::FromAuthenticationIdentity(const 
 TAuthenticationOptions TAuthenticationOptions::FromToken(const TString& token)
 {
     return {
-        .Token = token
+        .Token = token,
     };
 }
 
@@ -38,13 +38,13 @@ TAuthenticationOptions TAuthenticationOptions::FromServiceTicketAuth(const IServ
 TAuthenticationOptions TAuthenticationOptions::FromUserTicket(const TString& userTicket)
 {
     return {
-        .UserTicket = userTicket
+        .UserTicket = userTicket,
     };
 }
 
-const TString& TAuthenticationOptions::GetAuthenticatedUser() const
+const std::string& TAuthenticationOptions::GetAuthenticatedUser() const
 {
-    static const TString UnknownUser("<unknown>");
+    static const std::string UnknownUser("<unknown>");
     return User ? *User : UnknownUser;
 }
 

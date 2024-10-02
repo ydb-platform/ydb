@@ -61,7 +61,7 @@ namespace NDetail {
     template <class T>
     inline void WriteSurrogatePair(wchar32 s, T& dest) noexcept;
 
-}
+} // namespace NDetail
 
 inline wchar16* SkipSymbol(wchar16* begin, const wchar16* end) noexcept {
     return begin + W16SymbolSize(begin, end);
@@ -333,7 +333,7 @@ namespace NDetail {
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar16*& dest) noexcept;
 
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar32*& dest) noexcept;
-}
+} // namespace NDetail
 
 //! @return len if robust and position where encoding stopped if not
 template <bool robust, typename TCharType>
@@ -341,7 +341,7 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* last = cur + len;
     TCharType* p = dest;
-#ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
+#ifdef _sse_ // can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
     if (cur + 16 <= last && NX86::CachedHaveSSE41()) {
         ::NDetail::UTF8ToWideImplSSE41(cur, last, p);
     }
@@ -606,7 +606,7 @@ namespace NDetail {
 
 #ifdef _sse2_
     inline bool DoIsStringASCIISSE(const unsigned char* first, const unsigned char* last) {
-        //scalar version for short strings
+        // scalar version for short strings
         if (first + 8 > last) {
             return ::NDetail::DoIsStringASCIISlow(first, last);
         }
@@ -637,9 +637,9 @@ namespace NDetail {
 
         return ::NDetail::DoIsStringASCIISlow(first, last);
     }
-#endif //_sse2_
+#endif // _sse2_
 
-}
+} // namespace NDetail
 
 //! returns @c true if character sequence has no symbols with value greater than 0x7F
 template <typename TChar>

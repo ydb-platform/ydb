@@ -29,7 +29,7 @@ TRequestQueue* TPerUserRequestQueueProvider::GetQueue(const NProto::TRequestHead
     return DoGetQueue(userName);
 }
 
-TRequestQueue* TPerUserRequestQueueProvider::DoGetQueue(const TString& userName)
+TRequestQueue* TPerUserRequestQueueProvider::DoGetQueue(const std::string& userName)
 {
     auto queue = RequestQueues_.FindOrInsert(userName, [&] {
         auto queue = CreateRequestQueue(userName, ThrottlerProfiler_);
@@ -107,7 +107,7 @@ void TPerUserRequestQueueProvider::ReconfigureAllUsers()
     });
 }
 
-void TPerUserRequestQueueProvider::ReconfigureUser(const TString& userName)
+void TPerUserRequestQueueProvider::ReconfigureUser(const std::string& userName)
 {
     if (!ReconfigurationCallback_) {
         return;

@@ -64,6 +64,19 @@ public:
         Raw.Halfs[1] = high;
     }
 
+    inline static TBlockItem Embedded(const TStringRef& value) {
+        UDF_VERIFY(value.Size() <= sizeof(TRawEmbeddedValue::Buffer));
+
+        TBlockItem v;
+        v.Raw.Embedded.Size = value.Size();
+        v.Raw.Embedded.Meta = static_cast<ui8>(EMarkers::Embedded);
+        if (v.Raw.Embedded.Size) {
+            std::memcpy(v.Raw.Embedded.Buffer, value.Data(), v.Raw.Embedded.Size);
+        }
+
+        return v;
+    }
+
     inline ui64 Low() const {
         return Raw.Halfs[0];
     }

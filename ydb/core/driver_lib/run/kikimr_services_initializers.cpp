@@ -5,9 +5,8 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
-#include <ydb/core/actorlib_impl/load_network.h>
 
-#include "ydb/core/audit/audit_log.h"
+#include "ydb/core/audit/audit_log_service.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/config_units.h>
@@ -245,10 +244,13 @@
 
 #include <util/system/hostname.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <aws/core/Aws.h>
+#endif
 
 namespace {
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 struct TAwsApiGuard {
     TAwsApiGuard() {
         Aws::InitAPI(Options);
@@ -261,6 +263,7 @@ struct TAwsApiGuard {
 private:
     Aws::SDKOptions Options;
 };
+#endif
 
 }
 
@@ -771,8 +774,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // TODO(alexvru): pool?
             setup->LocalServices.emplace_back(NInterconnect::MakeLoadResponderActorId(NodeId),
                 TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, systemPoolId));
-
-            //IC_Load::InitializeService(setup, appData, maxNode);
         }
     }
 
@@ -1091,10 +1092,8 @@ void TSharedCacheInitializer::InitializeServices(
     }
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
-
-    if (cfg.HasActivePagesReservationPercent()) {
-        config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
-    }
+    config->ReplacementPolicy = cfg.GetReplacementPolicy();
+    config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
@@ -1421,33 +1420,28 @@ void TBootstrapperInitializer::InitializeServices(
                     TActorSetupCmd(CreateConfiguredTabletBootstrapper(boot), TMailboxType::HTSwap, appData->SystemPoolId)));
             } else {
                 const bool standby = boot.HasStandBy() && boot.GetStandBy();
-                for (const ui32 bootstrapperNode : boot.GetNode()) {
-                    if (bootstrapperNode == NodeId) {
+                if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
+                    TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
 
-                        TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
+                    auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
 
-                        auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
+                    auto tabletSetupInfo = CreateTablet(
+                        TTabletTypes::TypeToStr(tabletType),
+                        info,
+                        appData);
 
-                        auto tabletSetupInfo = CreateTablet(
-                            TTabletTypes::TypeToStr(tabletType),
-                            info,
-                            appData);
+                    TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
+                    bi->Nodes.reserve(boot.NodeSize());
+                    for (ui32 x : boot.GetNode())
+                        bi->Nodes.push_back(x);
+                    if (boot.HasWatchThreshold())
+                        bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
+                    if (boot.HasStartFollowers())
+                        bi->StartFollowers = boot.GetStartFollowers();
 
-                        TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
-
-                        if (boot.NodeSize() != 1) {
-                            bi->OtherNodes.reserve(boot.NodeSize() - 1);
-                            for (ui32 x : boot.GetNode())
-                                if (x != NodeId)
-                                    bi->OtherNodes.push_back(x);
-                            if (boot.HasWatchThreshold())
-                                bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
-                            if (boot.HasStartFollowers())
-                                bi->StartFollowers = boot.GetStartFollowers();
-                        }
-
-                        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBootstrapperID(info->TabletID, bootstrapperNode), TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
-                    }
+                    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                        MakeBootstrapperID(info->TabletID, NodeId),
+                        TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
                 }
             }
         }
@@ -2047,8 +2041,29 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    auto config = appData->MemoryControllerConfig;
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
+    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
+        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
+            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        }
+        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
+            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
+                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
+                }
+            }
+        }
+    };
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {
+        mergeResourceBrokerConfigs(Config.GetBootstrapConfig().GetResourceBroker());
+    }
+    if (Config.HasResourceBrokerConfig()) {
+        mergeResourceBrokerConfigs(Config.GetResourceBrokerConfig());
+    }
+
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
+        Config.GetMemoryControllerConfig(), resourceBrokerSelfConfig,
+        appData->Counters);
     setup->LocalServices.emplace_back(
         NMemory::MakeMemoryControllerId(0),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)
@@ -2763,6 +2778,7 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
     : GlobalObjects(globalObjects)
 {
@@ -2773,6 +2789,7 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
+#endif
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

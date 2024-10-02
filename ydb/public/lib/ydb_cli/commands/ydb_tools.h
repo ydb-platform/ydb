@@ -58,6 +58,7 @@ private:
     bool IsDryRun = false;
     bool RestoreData = true;
     bool RestoreIndexes = true;
+    bool RestoreACL = true;
     bool SkipDocumentTables = false;
     bool SavePartialResult = false;
     TString UploadBandwidth;

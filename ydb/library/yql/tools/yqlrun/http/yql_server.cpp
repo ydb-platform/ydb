@@ -138,7 +138,7 @@ private:
     IOutputStream* Stream;
 };
 
-NSQLTranslation::TTranslationSettings GetTranslationSettings(const THolder<TGatewaysConfig>& gatewaysConfig) {
+NSQLTranslation::TTranslationSettings GetTranslationSettings(const THashSet<TString>& sqlFlags) {
     static const THashMap<TString, TString> clusters = {
         { "plato", TString(YtProviderName) },
         { "plato_rtmr", TString(RtmrProviderName) },
@@ -151,9 +151,7 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(const THolder<TGate
     settings.SyntaxVersion = 1;
     settings.InferSyntaxVersion = true;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
-    if (gatewaysConfig && gatewaysConfig->HasSqlCore()) {
-        settings.Flags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
-    }
+    settings.Flags = sqlFlags;
     return settings;
 }
 
@@ -326,7 +324,7 @@ YQL_ACTION(Parse)
 
         bool parsed = (options & TYqlAction::YqlProgram)
                 ? prg->ParseYql()
-                : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
+                : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
 
         if (parsed) {
             ui32 prettyFlg = TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote;
@@ -353,7 +351,7 @@ YQL_ACTION(Compile)
         TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {}, tmpDir.Name());
         prg->SetParametersYson(parameters);
 
-        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
+        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
         noError = noError && prg->Compile(GetUsername());
 
         if (options & (EOptions::PrintAst | EOptions::PrintExpr)) {
@@ -387,7 +385,7 @@ YQL_ACTION(OptimizeOrValidateFile)
         TTempDir tmpDir;
         TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer, tmpDir.Name());
 
-        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
+        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
 
         prg->SetParametersYson(parameters);
         prg->SetDiagnosticFormat(NYson::EYsonFormat::Pretty);
@@ -462,7 +460,7 @@ YQL_ACTION(FileRun)
         TTempDir tmpDir;
         TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer, tmpDir.Name());
 
-        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
+        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
 
         prg->SetDiagnosticFormat(NYson::EYsonFormat::Pretty);
         prg->SetParametersYson(parameters);
@@ -634,13 +632,14 @@ TAutoPtr<TYqlServer> CreateYqlServer(
         ui64 nextUniqueId,
         TUserDataTable filesMapping,
         THolder<TGatewaysConfig>&& gatewaysConfig,
+        const THashSet<TString>& sqlFlags,
         IModuleResolver::TPtr modules,
         IUdfResolver::TPtr udfResolver,
         TFileStoragePtr fileStorage)
 {
     TAutoPtr<TYqlServer> server = new TYqlServer(
         config, functionRegistry, udfIndex, nextUniqueId,
-        std::move(filesMapping), std::move(gatewaysConfig), modules, udfResolver, fileStorage);
+        std::move(filesMapping), std::move(gatewaysConfig), sqlFlags, modules, udfResolver, fileStorage);
 
     server->RegisterAction<TYqlActionPaste>("/api/yql/paste");
     server->RegisterAction<TYqlActionParse>("/api/yql/parse");

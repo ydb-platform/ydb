@@ -404,10 +404,6 @@ void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race 
             ThrowFatalError("ProducerId != MessageGroupId scenario is currently not supported");
     }
     CompressionExecutor = Settings.CompressionExecutor_;
-    IExecutor::TPtr executor;
-    executor = CreateSyncExecutor();
-    executor->Start();
-    Executor = std::move(executor);
 
     Settings.CompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
@@ -511,13 +507,131 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
+void TWriteSessionImpl::OnTransactionCommit()
+{
+}
+
+TStatus MakeStatus(EStatus code, NYql::TIssues&& issues)
+{
+    return {code, std::move(issues)};
+}
+
+TStatus MakeSessionExpiredError()
+{
+    return MakeStatus(EStatus::SESSION_EXPIRED, {});
+}
+
+TStatus MakeCommitTransactionSuccess()
+{
+    return MakeStatus(EStatus::SUCCESS, {});
+}
+
+std::pair<TString, TString> MakeTransactionId(const TTransaction& tx)
+{
+    return {tx.GetSession().GetId(), tx.GetId()};
+}
+
+void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
+{
+    if (!tx) {
+        return;
+    }
+
+    const TTransactionId txId = MakeTransactionId(*tx);
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    with_lock(txInfo->Lock) {
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
+        txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
+    }
+
+    auto callback = [txInfo]() {
+        with_lock(txInfo->Lock) {
+            txInfo->CommitCalled = true;
+
+            if (txInfo->WriteCount == txInfo->AckCount) {
+                txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+                return txInfo->AllAcksReceived.GetFuture();
+            }
+
+            if (txInfo->IsActive) {
+                return txInfo->AllAcksReceived.GetFuture();
+            }
+
+            return NThreading::MakeFuture(MakeSessionExpiredError());
+        }
+    };
+
+    tx->AddPrecommitCallback(std::move(callback));
+}
+
+void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    auto p = WrittenInTx.find(seqNo);
+    if (p == WrittenInTx.end()) {
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefix() << "OnAck: seqno=" << seqNo << ", txId=?");
+        return;
+    }
+
+    const TTransactionId& txId = p->second;
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    with_lock(txInfo->Lock) {
+        ++txInfo->AckCount;
+
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << txId.second<< ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+
+        if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
+            txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+
+            Txs.erase(txId);
+        }
+    }
+}
+
+auto TWriteSessionImpl::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
+{
+    auto p = Txs.find(txId);
+    if (p == Txs.end()) {
+        TTransactionInfoPtr& txInfo = Txs[txId];
+        txInfo = std::make_shared<TTransactionInfo>();
+        txInfo->Subscribed = false;
+        txInfo->CommitCalled = false;
+        p = Txs.find(txId);
+    }
+    return p->second;
+}
+
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
     with_lock(Lock) {
+        TrySubscribeOnTransactionCommit(message.GetTxPtr());
+
+        ui64 seqNo = GetNextIdImpl(message.SeqNo_);
+
+        if (message.GetTxPtr()) {
+            const auto& txId = MakeTransactionId(*message.GetTxPtr());
+            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+            ++txInfo->WriteCount;
+            WrittenInTx[seqNo] = txId;
+
+            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                     LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId.second << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+        }
+
         CurrentBatch.Add(
-                GetNextIdImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
+                seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
                 message.GetTxPtr()
         );
@@ -983,9 +1097,11 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
 
             for (const auto& ack : batchWriteResponse.acks()) {
                 // TODO: Fill writer statistics
-                ui64 sequenceNumber = ack.seq_no();
+                ui64 msgId = GetIdImpl(ack.seq_no());
 
                 Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
+
+                TrySignalAllAcksReceived(msgId);
 
                 TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
                 if (ack.has_written_in_tx()) {
@@ -1002,7 +1118,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 
                 acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
-                    GetIdImpl(sequenceNumber),
+                    msgId,
                     msgWriteStatus,
                     TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
                         offset,
@@ -1011,7 +1127,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                     writeStat,
                 });
 
-                if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
+                if (CleanupOnAcknowledged(msgId)) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }
@@ -1069,6 +1185,9 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id) {
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
     SentOriginalMessages.pop();
+
+    WrittenInTx.erase(id);
+
     return result;
 }
 
@@ -1168,7 +1287,17 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
     PackedMessagesToSend.emplace(std::move(block));
-    SendImpl();
+
+    if (!SendImplScheduled.exchange(true)) {
+        CompressionExecutor->Post([cbContext = SelfContext]() {
+            if (auto self = cbContext->LockShared()) {
+                self->SendImplScheduled = false;
+                with_lock (self->Lock) {
+                    self->SendImpl();
+                }
+            }
+        });
+    }
     return memoryUsage;
 }
 
@@ -1196,7 +1325,6 @@ void TWriteSessionImpl::ResetForRetryImpl() {
     }
     if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().Id < minId)
         minId = OriginalMessagesToSend.front().Id;
-    MinUnsentId = minId;
     Y_ABORT_UNLESS(PackedMessagesToSend.size() == totalPackedMessages);
     Y_ABORT_UNLESS(OriginalMessagesToSend.size() == totalOriginalMessages);
 }
@@ -1545,10 +1673,22 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
+        CancelTransactions();
     }
+}
+
+void TWriteSessionImpl::CancelTransactions()
+{
+    for (auto& [_, txInfo] : Txs) {
+        txInfo->IsActive = false;
+        if (txInfo->WriteCount != txInfo->AckCount) {
+            txInfo->AllAcksReceived.SetValue(MakeSessionExpiredError());
+        }
+    }
+
+    Txs.clear();
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {

@@ -1,6 +1,8 @@
-#include "schemeshard_impl.h"
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
+
+#include "schemeshard_audit_log.h"
+#include "schemeshard_impl.h"
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -76,13 +78,16 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
         const auto& loginRequest = GetLoginRequest();
         if (loginRequest.ExternalAuth || AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
-            NLogin::TLoginProvider::TLoginUserResponse LoginResponse = Self->LoginProvider.LoginUser(loginRequest);
-            if (LoginResponse.Error) {
-                result->Record.SetError(LoginResponse.Error);
+            NLogin::TLoginProvider::TLoginUserResponse loginResponse = Self->LoginProvider.LoginUser(loginRequest);
+            if (loginResponse.Error) {
+                result->Record.SetError(loginResponse.Error);
             }
-            if (LoginResponse.Token) {
-                result->Record.SetToken(LoginResponse.Token);
+            if (loginResponse.Token) {
+                result->Record.SetToken(loginResponse.Token);
             }
+
+            AuditLogLogin(Request->Get()->Record, result->Record, Self);
+
         } else {
             result->Record.SetError("Login authentication is disabled");
         }

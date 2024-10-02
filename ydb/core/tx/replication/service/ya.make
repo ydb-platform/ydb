@@ -17,6 +17,7 @@ PEERDIR(
 )
 
 SRCS(
+    base_table_writer.cpp
     json_change_record.cpp
     service.cpp
     table_writer.cpp

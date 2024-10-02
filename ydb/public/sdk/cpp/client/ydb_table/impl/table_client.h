@@ -109,9 +109,9 @@ public:
 
     TAsyncBeginTransactionResult BeginTransaction(const TSession& session, const TTxSettings& txSettings,
         const TBeginTxSettings& settings);
-    TAsyncCommitTransactionResult CommitTransaction(const TSession& session, const TTransaction& tx,
+    TAsyncCommitTransactionResult CommitTransaction(const TSession& session, const TString& txId,
         const TCommitTxSettings& settings);
-    TAsyncStatus RollbackTransaction(const TSession& session, const TTransaction& tx,
+    TAsyncStatus RollbackTransaction(const TSession& session, const TString& txId,
         const TRollbackTxSettings& settings);
 
     TAsyncExplainDataQueryResult ExplainDataQuery(const TSession& session, const TString& query,

@@ -150,11 +150,7 @@ struct TTableBucket {
     std::vector<ui32, TMKQLAllocator<ui32>> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces
     std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>>  JoinIds;     // Results of join operations stored as index of tuples in buckets 
                                                                             // of two tables with the same number
-
-    std::vector<ui32, TMKQLAllocator<ui32>> RightIds; // Sorted Ids of right table joined tuples to process full join and exclusion join
-
-    std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
-    std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
+    std::vector<ui32, TMKQLAllocator<ui32>> LeftIds; // Left-side ids missing in other table
 
     std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;  // Hashtable
     ui64 NSlots = 0;  // Hashtable
@@ -167,6 +163,8 @@ struct TTableBucket {
     ui64 TuplesNum = 0;             // Total number of tuples in bucket
     ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
     ui64 KeyIntValsTotalSize = 0;   // Total size of KeyIntVals. Used to correctly calculate StringsOffsets.
+    ui32 SlotSize = 0;
+    bool HashtableMatches = false;
  };
 
 struct TupleData {
@@ -304,11 +302,8 @@ class TTable {
     // Serialized values for interface-based columns
     std::vector<std::vector<char>> IColumnsVals;
 
-    // Current iterator index for NextTuple iterator
+    // Current iterator index for NextJoinedData iterator
     ui64 CurrIterIndex = 0;
-
-    // Index for NextJoinedData iterator
-    ui64 CurrJoinIdsIterIndex = 0;
 
     // Current bucket for iterators
     ui64 CurrIterBucket = 0;
@@ -326,9 +321,6 @@ class TTable {
     // Returns tuple data in td from bucket with id bucketNum.  Tuple id inside bucket is tupleId.
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);
 
-    // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
-    inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
-
     // Adds keys to KeysHashTable, return true if added, false if equal key already added
     inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf::TUnboxedValue * iColumns);
 
@@ -342,8 +334,6 @@ class TTable {
     bool HasMoreRightTuples_ = false; // True if join is not completed, rows from right table are coming
 
     bool IsAny_ = false;  // True if key duplicates need to be removed from table (any join)
-
-    bool Table2Initialized_ = false;    // True when iterator counters for second table already initialized
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 

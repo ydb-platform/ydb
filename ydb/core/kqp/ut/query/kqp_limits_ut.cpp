@@ -1,7 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/core/tablet/resource_broker.h>
 #include <util/random/random.h>
@@ -758,8 +761,16 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         WaitForZeroSessions(counters);
     }
 
-    Y_UNIT_TEST(CancelAfterRoTx) {
-        TKikimrRunner kikimr;
+    void DoCancelAfterRo(bool follower, bool streamLookup, bool dependedRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -769,13 +780,73 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             int maxTimeoutMs = 500;
             bool wasCanceled = false;
 
-            for (int i = 1; i <= maxTimeoutMs; i++) {
-                auto result = session.ExecuteDataQuery(R"(
+            if (follower) {
+                AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                    --!syntax_v1
+                    CREATE TABLE `/Root/OneShardWithFolower` (
+                        Key Uint64,
+                        Text String,
+                        Data Int32,
+                        PRIMARY KEY (Key)
+                    )
+                    WITH (
+                        READ_REPLICAS_SETTINGS = "ANY_AZ:1"
+                    );
+                )").GetValueSync());
+
+                AssertSuccessResult(session.ExecuteDataQuery(R"(
+                    --!syntax_v1
+                    REPLACE INTO `/Root/OneShardWithFolower` (Key, Text, Data) VALUES
+                        (101u, "Value1",  1),
+                        (201u, "Value1",  2),
+                        (301u, "Value1",  3),
+                        (401u, "Value1",  1),
+                        (501u, "Value1",  2),
+                        (601u, "Value1",  3),
+                        (701u, "Value1",  1),
+                        (801u, "Value1",  2),
+                        (102u, "Value2",  3),
+                        (202u, "Value2",  1),
+                        (302u, "Value2",  2),
+                        (402u, "Value2",  3),
+                        (502u, "Value2",  1),
+                        (602u, "Value2",  2),
+                        (702u, "Value2",  3),
+                        (802u, "Value2",  1),
+                        (103u, "Value3",  2),
+                        (203u, "Value3",  3),
+                        (303u, "Value3",  1),
+                        (403u, "Value3",  2),
+                        (503u, "Value3",  3),
+                        (603u, "Value3",  1),
+                        (703u, "Value3",  2),
+                        (803u, "Value3",  3);
+                )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+            }
+
+            const TString q = follower ?
+                (dependedRead ?
+                    TString(R"(
+                        DECLARE $id AS Uint64;
+                        --JOIN with same table to make depended read
+                        SELECT t1.Data as Data, t1.Key as Key, t1.Text as Text FROM `/Root/OneShardWithFolower` as t1
+                            INNER JOIN OneShardWithFolower as t2 ON t1.Key = t2.Key WHERE t1.Text = "Value1" ORDER BY t1.Key;
+                    )"):
+                    TString(R"(
+                        DECLARE $id AS Uint64;
+                        SELECT * FROM `/Root/OneShardWithFolower` WHERE Text = "Value1" ORDER BY Key
+                    )")
+                ):
+                TString(R"(
                     DECLARE $id AS Uint64;
-                    SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
-                )",
-                TTxControl::BeginTx(
-                    TTxSettings::SerializableRW()).CommitTx(),
+                    SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key
+                )");
+
+            const auto txCtrl = follower ? TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx() :
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+
+            for (int i = 1; i <= maxTimeoutMs; i++) {
+                auto result = session.ExecuteDataQuery(q, txCtrl,
                     TExecDataQuerySettings().CancelAfter(TDuration::MilliSeconds(i))
                 ).GetValueSync();
 
@@ -798,6 +869,27 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             UNIT_ASSERT(wasCanceled);
         }
         WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTx) {
+        // false, false has no sense since we use TEvRead to read without followers
+        DoCancelAfterRo(false, true, false);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacy) {
+        DoCancelAfterRo(true, false, false);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacyDependedRead) {
+        DoCancelAfterRo(true, false, true);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookup) {
+        DoCancelAfterRo(true, true, false);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookupDepededRead) {
+        DoCancelAfterRo(true, true, true);
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {
@@ -830,6 +922,120 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
+    }
+
+    /* Scenario:
+        - prepare and run query
+        - observe first EvState event from CA to Executer and replace it with EvAbortExecution
+        - count all EvState events from all CAs
+        - wait for final event EvTxResponse from Executer
+        - expect it to happen strictly after all EvState events
+     */
+    Y_UNIT_TEST(WaitCAsStateOnAbort) {
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TwoShard`;
+            )")).GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+        auto dataQuery = prepareResult.GetQuery();
+
+        bool firstEvState = false;
+        ui32 totalEvState = 0;
+        TActorId executerId;
+        ui32 actorCount = 3; // TODO: get number of actors properly.
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++totalEvState;
+                if (!firstEvState) {
+                    executerId = ev->Recipient;
+                    ev = new IEventHandle(ev->Recipient, ev->Sender,
+                            new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
+                    firstEvState = true;
+                }
+            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
+                UNIT_ASSERT_C(totalEvState == actorCount*2, "Executer sent response before waiting for CAs");
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::MilliSeconds(500));
+        kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
+                && ev.Sender == executerId && totalEvState == actorCount*2;
+        });
+
+        UNIT_ASSERT(runtime.DispatchEvents(opts));
+    }
+
+    /* Scenario:
+        - prepare and run query
+        - observe first EvState event from CA to Executer and replace it with EvAbortExecution
+        - count all EvState events from all CAs
+        - drop final EvState event from last CA
+        - wait for final event EvTxResponse from Executer after timeout poison
+        - expect it to happen strictly after all EvState events
+     */
+    Y_UNIT_TEST(WaitCAsTimeout) {
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TwoShard`;
+            )")).GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+        auto dataQuery = prepareResult.GetQuery();
+
+        bool firstEvState = false;
+        bool timeoutPoison = false;
+        ui32 totalEvState = 0;
+        TActorId executerId;
+        ui32 actorCount = 3; // TODO: get number of actors properly.
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++totalEvState;
+                if (!firstEvState) {
+                    executerId = ev->Recipient;
+                    ev = new IEventHandle(ev->Recipient, ev->Sender,
+                            new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
+                    firstEvState = true;
+                } else {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            } else if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && totalEvState == actorCount*2 &&
+                ev->Sender == executerId && ev->Recipient == executerId)
+            {
+                timeoutPoison = true;
+            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
+                UNIT_ASSERT_C(timeoutPoison, "Executer sent response before waiting for CAs");
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::MilliSeconds(500));
+        kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
+                && ev.Sender == executerId && totalEvState == actorCount*2 && timeoutPoison;
+        });
+
+        UNIT_ASSERT(runtime.DispatchEvents(opts));
     }
 
     Y_UNIT_TEST(ReplySizeExceeded) {

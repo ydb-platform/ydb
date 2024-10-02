@@ -91,8 +91,8 @@ private:
 
 void TPoint::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X_>("x")();
-    registrar.template Field<2, &TThis::Y_>("y")();
+    PHOENIX_REGISTER_FIELD(1, X_)();
+    PHOENIX_REGISTER_FIELD(2, Y_)();
 }
 
 PHOENIX_DEFINE_TYPE(TPoint);
@@ -112,10 +112,9 @@ struct TBaseStruct
 
 void TBaseStruct::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")();
+    PHOENIX_REGISTER_FIELD(1, A)();
 }
 
-PHOENIX_DEFINE_TYPE(TBaseStruct);
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,11 +133,13 @@ struct TDerivedStruct
 void TDerivedStruct::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBaseStruct>();
-    registrar.template Field<1, &TThis::B>("b")();
+    PHOENIX_REGISTER_FIELD(1, B)();
 }
 
-PHOENIX_DEFINE_TYPE(TDerivedStruct);
+PHOENIX_DEFINE_TYPE(TDerivedStruct); // <- TRegisterTypeDescriptor() for BaseStruct is not called yet
 PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(TDerivedStruct);
+
+PHOENIX_DEFINE_TYPE(TBaseStruct);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -157,11 +158,11 @@ struct TPair
 template <class T1, class T2>
 void TPair<T1, T2>::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::First>("first")();
-    registrar.template Field<2, &TThis::Second>("second")();
+    PHOENIX_REGISTER_FIELD(1, First)();
+    PHOENIX_REGISTER_FIELD(2, Second)();
 }
 
-PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (<int, int>));
+PHOENIX_DEFINE_TEMPLATE_TYPE(TPair, (_, _));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -263,10 +264,10 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")();
-    registrar.template Field<2, &TThis::B>("b")
+    PHOENIX_REGISTER_FIELD(1, A)();
+    PHOENIX_REGISTER_FIELD(2, B)
         .SinceVersion(100)();
-    registrar.template Field<3, &TThis::C>("c")
+    PHOENIX_REGISTER_FIELD(3, C)
         .SinceVersion(200)
         .WhenMissing([] (TThis* this_, auto& /*context*/) {
             this_->C = 777;
@@ -326,12 +327,12 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")();
-    registrar.template Field<2, &TThis::B>("b")
+    PHOENIX_REGISTER_FIELD(1, A)();
+    PHOENIX_REGISTER_FIELD(2, B)
         .InVersions([] (int version) {
             return version >= 150 && version <= 250;
         })();
-    registrar.template Field<3, &TThis::C>("c")
+    PHOENIX_REGISTER_FIELD(3, C)
         .InVersions([] (int version) {
             return version >= 100 && version <= 200;
         })
@@ -498,9 +499,9 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")
+    PHOENIX_REGISTER_FIELD(1, A)
         .template Serializer<TSerializer>()();
-    registrar.template Field<2, &TThis::B>("b")();
+    PHOENIX_REGISTER_FIELD(2, B)();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -561,7 +562,7 @@ TEST(TPhoenixTest, YsonDumpablePair)
 {
     TPair<TString, double> p{.First = "hello", .Second = 3.14};
     auto ysonStr = ConvertToYsonString(p);
-    auto canonicalYsonStr = TYsonString(TString("{first=hello;second=3.14}"));
+    auto canonicalYsonStr = TYsonString(TString("{First=hello;Second=3.14}"));
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
@@ -569,7 +570,7 @@ TEST(TPhoenixTest, YsonDumpablePoint)
 {
     TPoint p(123, 456);
     auto ysonStr = ConvertToYsonString(p);
-    auto canonicalYsonStr = TYsonString(TString("{x=123;y=456}"));
+    auto canonicalYsonStr = TYsonString(TString("{X_=123;Y_=456}"));
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
@@ -579,7 +580,7 @@ TEST(TPhoenixTest, YsonDumpableDerived)
     s.A = 123;
     s.B = 456;
     auto ysonStr = ConvertToYsonString(s);
-    auto canonicalYsonStr = TYsonString(TString("{a=123;b=456}"));
+    auto canonicalYsonStr = TYsonString(TString("{A=123;B=456}"));
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
@@ -846,7 +847,7 @@ struct TBase
 
 void TBase::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")();
+    PHOENIX_REGISTER_FIELD(1, A)();
 }
 
 PHOENIX_DEFINE_TYPE(TBase);
@@ -896,8 +897,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("a")();
-    registrar.template Field<2, &TThis::Y>("b")();
+    PHOENIX_REGISTER_FIELD(1, X)();
+    PHOENIX_REGISTER_FIELD(2, Y)();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -912,7 +913,7 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::V>("v")();
+    PHOENIX_REGISTER_FIELD(1, V)();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -951,7 +952,7 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x")();
+    PHOENIX_REGISTER_FIELD(1, X)();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -999,7 +1000,7 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x")();
+    PHOENIX_REGISTER_FIELD(1, X)();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1048,8 +1049,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x")();
-    registrar.template Field<2, &TThis::Y>("y")();
+    PHOENIX_REGISTER_FIELD(1, X)();
+    PHOENIX_REGISTER_FIELD(2, Y)();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1114,7 +1115,7 @@ struct TDerived1
 void TDerived1::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::V>("v")();
+    PHOENIX_REGISTER_FIELD(1, V)();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived1);
@@ -1130,7 +1131,7 @@ struct TDerived2
 void TDerived2::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::V>("v")();
+    PHOENIX_REGISTER_FIELD(1, V)();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived2);
@@ -1170,7 +1171,7 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x")();
+    PHOENIX_REGISTER_FIELD(1, X)();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -1206,8 +1207,8 @@ struct A
 
 void A::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x")();
-    registrar.template Field<2, &TThis::T>("t")();
+    PHOENIX_REGISTER_FIELD(1, X)();
+    PHOENIX_REGISTER_FIELD(2, T)();
 }
 
 PHOENIX_DEFINE_TYPE(A);
@@ -1222,8 +1223,8 @@ struct B
 
 void B::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::Y>("y")();
-    registrar.template Field<2, &TThis::Z>("z")();
+    PHOENIX_REGISTER_FIELD(1, Y)();
+    PHOENIX_REGISTER_FIELD(2, Z)();
 }
 
 PHOENIX_DEFINE_TYPE(B);
@@ -1248,6 +1249,48 @@ TEST(TPhoenixTest, UniquePtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NPolymorphicTemplate {
+
+struct TBase;
+
+template <class T>
+struct TDerived;
+
+struct TBase
+    : public IPersistent
+{
+    virtual void Foo() = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TBase, 0x0f07ba7c);
+};
+
+void TBase::RegisterMetadata(auto&& /*registrar*/)
+{ }
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+template <class T>
+struct TDerived
+    : public TBase
+{
+    void Foo() override
+    { }
+
+    PHOENIX_DECLARE_POLYMORPHIC_TEMPLATE_TYPE(TDerived, 0x8bf17dc9);
+};
+
+template <class T>
+void TDerived<T>::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+}
+
+PHOENIX_DEFINE_TEMPLATE_TYPE(TDerived, (_));
+
+} // namespace NPolymorphicTemplate
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NPolymorphicRawPtr {
 
 struct TBase;
@@ -1269,7 +1312,7 @@ struct TBase
 
 void TBase::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X>("x")();
+    PHOENIX_REGISTER_FIELD(1, X)();
 }
 
 PHOENIX_DEFINE_TYPE(TBase);
@@ -1293,8 +1336,8 @@ struct TDervied
 void TDervied::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase>();
-    registrar.template Field<1, &TThis::Y>("y")();
-    registrar.template Field<2, &TThis::Z>("z")();
+    PHOENIX_REGISTER_FIELD(1, Y)();
+    PHOENIX_REGISTER_FIELD(2, Z)();
 }
 
 PHOENIX_DEFINE_TYPE(TDervied);
@@ -1334,7 +1377,7 @@ struct TBase1
 
 void TBase1::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X1>("x1")();
+    PHOENIX_REGISTER_FIELD(1, X1)();
 }
 
 PHOENIX_DEFINE_TYPE(TBase1);
@@ -1350,7 +1393,7 @@ struct TBase2
 
 void TBase2::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::X2>("x2")();
+    PHOENIX_REGISTER_FIELD(1, X2)();
 }
 
 PHOENIX_DEFINE_TYPE(TBase2);
@@ -1369,8 +1412,8 @@ void TDerived::RegisterMetadata(auto&& registrar)
 {
     registrar.template BaseType<TBase1>();
     registrar.template BaseType<TBase2>();
-    registrar.template Field<1, &TThis::Y>("y")();
-    registrar.template Field<2, &TThis::Z>("z")();
+    PHOENIX_REGISTER_FIELD(1, Y)();
+    PHOENIX_REGISTER_FIELD(2, Z)();
 }
 
 PHOENIX_DEFINE_TYPE(TDerived);
@@ -1466,7 +1509,7 @@ struct S
 
 void S::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")();
+    PHOENIX_REGISTER_FIELD(1, A)();
 }
 
 PHOENIX_DEFINE_TYPE(S);
@@ -1524,7 +1567,7 @@ PHOENIX_DEFINE_TYPE(TOuter::TInner);
 
 void TOuter::TInner::RegisterMetadata(auto&& registrar)
 {
-    registrar.template Field<1, &TThis::A>("a")();
+    PHOENIX_REGISTER_FIELD(1, A)();
 }
 
 } // namespace NPrivateInner
@@ -1532,6 +1575,39 @@ void TOuter::TInner::RegisterMetadata(auto&& registrar)
 TEST(TPhoenixTest, PrivateInner)
 {
     NPrivateInner::TOuter::Test();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSeveralSpecializationsOfOneTemplate {
+
+struct TDerivedFromTemplate
+    : public TPair<double, double>
+{
+    bool operator==(const TDerivedFromTemplate&) const = default;
+
+    PHOENIX_DECLARE_TYPE(TDerivedFromTemplate, 0xf09c298f);
+};
+
+void TDerivedFromTemplate::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TPair<double, double>>();
+}
+
+PHOENIX_DEFINE_TYPE(TDerivedFromTemplate);
+
+} // namespace NSeveralSpecializationsOfOneTemplate
+
+TEST(TPhoenixTest, SeveralSpecializationsOfOneTemplate)
+{
+    using namespace NSeveralSpecializationsOfOneTemplate;
+
+    TDerivedFromTemplate tp1;
+    tp1.First = 1.1;
+    tp1.Second = 2.2;
+
+    auto tp2 = Deserialize<TDerivedFromTemplate>(Serialize(tp1));
+    EXPECT_EQ(tp1, tp2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

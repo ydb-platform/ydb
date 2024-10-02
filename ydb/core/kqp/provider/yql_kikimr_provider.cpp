@@ -235,7 +235,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
             if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
                 type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
             } else {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
+                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
             }
         }
 
@@ -668,7 +668,7 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
         auto actualPgType = valueType->Cast<TPgExprType>();
         YQL_ENSURE(actualPgType);
 
-        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
         if (!typeDesc) {
             return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
         }
@@ -838,7 +838,7 @@ Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::s
         return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
     else if (distance == "euclidean")
         return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-    else 
+    else
         YQL_ENSURE(false, "Wrong index setting distance: " << distance);
 };
 
@@ -998,3 +998,36 @@ TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPo
 }
 
 } // namespace NYql
+
+namespace NSQLTranslation {
+
+void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings) {
+    serializedSettings.SetPathPrefix(settings.PathPrefix);
+    serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
+    serializedSettings.SetAnsiLexer(settings.AnsiLexer);
+    serializedSettings.SetPgParser(settings.PgParser);
+
+    auto* pragmas = serializedSettings.MutablePragmas();
+    pragmas->Clear();
+    pragmas->Add(settings.Flags.begin(), settings.Flags.end());
+}
+
+void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, TTranslationSettings& settings) {
+    #define DeserializeSetting(settingName) \
+        if (serializedSettings.Has##settingName()) { \
+            settings.settingName = serializedSettings.Get##settingName(); \
+        }
+
+        DeserializeSetting(PathPrefix);
+        DeserializeSetting(SyntaxVersion);
+        DeserializeSetting(AnsiLexer);
+        DeserializeSetting(PgParser);
+
+    #undef DeserializeSetting
+
+    // overwrite existing pragmas
+    settings.Flags.clear();
+    settings.Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
+}
+
+}

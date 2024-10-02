@@ -101,11 +101,13 @@ private:
 
 class TUnbufferedWriter : public TWriterBase {
 public:
-    TUnbufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings)
+    TUnbufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings, bool alwaysFlushIndex)
         : TWriterBase(path, writtenAt)
         , Settings_(settings)
+        , AlwaysFlushIndex_(alwaysFlushIndex)
     {
         DataFile_.ConstructInPlace(Path_.GetPath() + ".dat");
+        DataFile_->SetFlushPropagateMode(false);
         DataFile_->Write(&WrittenAt_, sizeof(WrittenAt_));
     }
 
@@ -113,6 +115,7 @@ public:
         if (!Committed_) {
             DataFile_.Clear();
             NFs::Remove(Path_.GetPath() + ".dat");
+            NFs::Remove(Path_.GetPath() + ".idx");
         }
     }
 
@@ -134,6 +137,11 @@ public:
                 if (Settings_.BytesLimit && TotalBytes_ > *Settings_.BytesLimit) {
                     Overflow_ = true;
                 }
+
+                if (!Overflow_ && AlwaysFlushIndex_) {
+                    DataFile_->Flush();
+                    WriteIndex(TotalItems_, TotalBytes_, Checksum_);
+                }
             }
 
             return NThreading::MakeFuture();
@@ -150,13 +158,17 @@ public:
             Committed_ = true;
             DataFile_->Finish();
             DataFile_.Clear();
-            WriteIndex(TotalItems_, TotalBytes_, Checksum_);
+            if (!AlwaysFlushIndex_) {
+                WriteIndex(TotalItems_, TotalBytes_, Checksum_);
+            }
+
             return NThreading::MakeFuture();
         }
     }
 
 private:
     const TQWriterSettings Settings_;
+    const bool AlwaysFlushIndex_;
     TMutex Mutex_;
     TMaybe<TFileOutput> DataFile_;
     ui64 TotalItems_ = 0;
@@ -185,7 +197,7 @@ public:
         if (Settings_.BufferUntilCommit) {
             return std::make_shared<TBufferedWriter>(opPath, writtenAt, writerSettings);
         } else {
-            return std::make_shared<TUnbufferedWriter>(opPath, writtenAt, writerSettings);
+            return std::make_shared<TUnbufferedWriter>(opPath, writtenAt, writerSettings, Settings_.AlwaysFlushIndex);
         }
     }
 
@@ -235,9 +247,9 @@ private:
             Y_ENSURE(totalBytes <= loadedTotalBytes);
         }
 
-        Y_ENSURE(!indexFile.ReadChar(dummy));
         Y_ENSURE(totalBytes == loadedTotalBytes);
         Y_ENSURE(checksum == loadedChecksum);
+        // data file may have extra data
         writer->Commit().GetValueSync();
     }
 

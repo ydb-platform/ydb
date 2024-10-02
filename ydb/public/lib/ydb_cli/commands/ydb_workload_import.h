@@ -35,7 +35,7 @@ private:
     NYdbWorkload::TWorkloadDataInitializer::TPtr Initializer;
     THolder<TProgressBar> Bar;
     TAdaptiveLock Lock;
-    NThreading::TAsyncSemaphore::TPtr InFlightSemaphore;
+    THolder<TFastSemaphore> InFlightSemaphore;
     TAtomic ErrorsCount;
 };
 

@@ -19,6 +19,8 @@
 #include <util/digest/numeric.h>
 #include <util/string/cast.h>
 
+#include <openssl/sha.h>
+
 #include <map>
 #include <unordered_set>
 
@@ -1908,7 +1910,9 @@ namespace {
             case TExprNode::Lambda:
                 {
                     const auto prevFrame = ctx.CurrentFrame;
-                    ctx.CurrentFrame = &ctx.Frames[ctx.LambdaFrames.find(&node)->second];
+                    const auto it = ctx.LambdaFrames.find(&node);
+                    YQL_ENSURE(it != ctx.LambdaFrames.end());
+                    ctx.CurrentFrame = &ctx.Frames[it->second];
                     YQL_ENSURE(node.ChildrenSize() > 0U);
                     const auto& args = node.Head();
                     TSmallVec<TAstNode*> argsChildren;
@@ -1966,7 +1970,7 @@ namespace {
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
             case TExprNode::Argument: {
-                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed"); 
+                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed");
                 auto iter = ctx.FreeArgs.emplace(&node, ctx.FreeArgs.size());
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), ctx.Expr.AppendString("_FreeArg" + ToString(iter.first->second)), pool);
                 break;
@@ -2709,7 +2713,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
     ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
-    ctx.Pool = std::make_unique<TMemoryPool>(4096);
+    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
     VisitNode(root, 0ULL, ctx);
@@ -2952,6 +2956,30 @@ TExprNode::TPtr TExprContext::SwapWithHead(const TExprNode& node) {
     return ChangeChild(node.Head(), 0U, ChangeChild(node, 0U, node.Head().HeadPtr()));
 }
 
+TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConstraints) {
+    const static std::unordered_map<std::string_view, std::function<const TConstraintNode*(TExprContext&, const NYT::TNode&)>> FACTORIES = {
+        {TSortedConstraintNode::Name(),     std::mem_fn(&TExprContext::MakeConstraint<TSortedConstraintNode, const NYT::TNode&>)},
+        {TChoppedConstraintNode::Name(),    std::mem_fn(&TExprContext::MakeConstraint<TChoppedConstraintNode, const NYT::TNode&>)},
+        {TUniqueConstraintNode::Name(),     std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
+        {TDistinctConstraintNode::Name(),   std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
+        {TEmptyConstraintNode::Name(),      std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TVarIndexConstraintNode::Name(),   std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
+        {TMultiConstraintNode::Name(),      std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
+    };
+    TConstraintSet res;
+    YQL_ENSURE(serializedConstraints.IsMap(), "Unexpected node type with serialize constraints: " << serializedConstraints.GetType());
+    for (const auto& [key, node]: serializedConstraints.AsMap()) {
+        auto it = FACTORIES.find(key);
+        YQL_ENSURE(it != FACTORIES.cend(), "Unsupported constraint construction: " << key);
+        try {
+            res.AddConstraint((it->second)(*this, node));
+        } catch (...) {
+            YQL_ENSURE(false, "Error while constructing constraint: " << CurrentExceptionMessage());
+        }
+    }
+    return res;
+}
+
 TNodeException::TNodeException()
     : Pos_()
 {
@@ -3004,14 +3032,22 @@ bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const 
         return false;
     }
 
-    const auto precision = FromString<ui8>(GetParamOne());
+    ui8 precision;
+    if (!TryFromString<ui8>(GetParamOne(), precision)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
+        return false;
+    }
 
     if (!precision || precision > 35) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
         return false;
     }
 
-    const auto scale = FromString<ui8>(GetParamTwo());
+    ui8 scale;
+    if (!TryFromString<ui8>(GetParamTwo(), scale)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal scale: " << GetParamTwo()));
+        return false;
+    }
 
     if (scale > precision) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));
@@ -3641,6 +3677,53 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     std::for_each(argsMap.cbegin(), argsMap.cend(), [&](const TNodeMap<ui32>::value_type& v){ map.emplace(v.first, std::make_pair(0U, v.second)); });
     auto l = &one, r = &two;
     return CompareExpressions(l, r, map, level, visited);
+}
+
+class TCacheKeyBuilder {
+public:
+    TString Process(const TExprNode& root) {
+        SHA256_Init(&Sha);
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        Visit(root);
+        SHA256_Final(hash, &Sha);
+        return TString((const char*)hash, sizeof(hash));
+    }
+
+private:
+    void Visit(const TExprNode& node) {
+        auto [it, inserted] = Visited.emplace(&node, Visited.size());
+        SHA256_Update(&Sha, &it->second, sizeof(it->second));
+        if (!inserted) {
+            return;
+        }
+
+        ui32 type = node.Type();
+        SHA256_Update(&Sha, &type, sizeof(type));
+        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
+            ui32 textLen = node.Content().size();
+            SHA256_Update(&Sha, &textLen, sizeof(textLen));
+            SHA256_Update(&Sha, node.Content().Data(), textLen);
+        }
+
+        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {
+            return;
+        }
+
+        ui32 len = node.ChildrenSize();
+        SHA256_Update(&Sha, &len, sizeof(len));
+        for (const auto& child : node.Children()) {
+            Visit(*child);
+        }
+    }
+
+private:
+    SHA256_CTX Sha;
+    TNodeMap<ui64> Visited;
+};
+
+TString MakeCacheKey(const TExprNode& root) {
+    TCacheKeyBuilder builder;
+    return builder.Process(root);
 }
 
 void GatherParents(const TExprNode& node, TParentsMap& parentsMap) {

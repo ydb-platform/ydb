@@ -103,7 +103,7 @@ TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& c
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
 
 constexpr std::initializer_list<std::string_view> SkippableCallables = {"Unordered", "AssumeSorted", "AssumeUnique", "AssumeDistinct",
-    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce"};
+    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce", "AssumeConstraints"};
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables);
 

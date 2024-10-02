@@ -65,6 +65,7 @@ ansible-playbook ydb_platform.ydb.logs --tags database --limit='<hostname>'
 2. Выберите, логи какого systemd юнита вам нужны. Если вам уже известно название юнита, этот шаг можно пропустить. После входа на сервер с помощью команды `ssh`, созданной на предыдущем шаге, получите список связанных с {{ ydb-short-name }} systemd юнитов, используя `systemctl list-units | grep ydb`. Как правило, там будет один статический узел и несколько динамических узлов.
 
     {% cut "Пример вывода" %}
+
     ```bash
     $ systemctl list-units | grep ydb
     ydb-transparent-hugepages.service                                              loaded active     exited    Configure Transparent Huge Pages (THP)
@@ -72,6 +73,7 @@ ansible-playbook ydb_platform.ydb.logs --tags database --limit='<hostname>'
     ydbd-database-b.service                                                        loaded active     running   YDB dynamic node / database / b
     ydbd-storage.service                                                           loaded active     running   YDB storage node
     ```
+
     {% endcut %}
 
 3. Возьмите название systemd юнита из предыдущего шага и используйте его в следующей команде `journalctl -u <systemd-unit>`, чтобы фактически отобразить логи. Вы можете указать `-u` несколько раз, чтобы отобразить логи нескольких юнитов, а также использовать любые другие аргументы из `man journalctl` для настройки вывода команды.

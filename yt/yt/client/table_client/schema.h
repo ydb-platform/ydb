@@ -122,6 +122,7 @@ public:
     DEFINE_BYREF_RO_PROPERTY(std::optional<ESortOrder>, SortOrder);
     DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Lock);
     DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Expression);
+    DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Materialized);
     DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Aggregate);
     DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Group);
     DEFINE_BYREF_RO_PROPERTY(bool, Required);
@@ -156,6 +157,7 @@ public:
     TColumnSchema& SetSortOrder(std::optional<ESortOrder> value);
     TColumnSchema& SetLock(std::optional<TString> value);
     TColumnSchema& SetExpression(std::optional<TString> value);
+    TColumnSchema& SetMaterialized(std::optional<bool> value);
     TColumnSchema& SetAggregate(std::optional<TString> value);
     TColumnSchema& SetGroup(std::optional<TString> value);
     TColumnSchema& SetRequired(bool value);
@@ -277,6 +279,8 @@ public:
         const std::optional<std::vector<TString>>& columnNames,
         bool discardSortOrder = false) const;
 
+    bool HasMaterializedComputedColumns() const;
+    bool HasNonMaterializedComputedColumns() const;
     bool HasComputedColumns() const;
     bool HasAggregateColumns() const;
     bool HasHunkColumns() const;
@@ -410,7 +414,8 @@ private:
 
     std::shared_ptr<const TColumnInfo> ColumnInfo_;
     int KeyColumnCount_ = 0;
-    bool HasComputedColumns_ = false;
+    bool HasMaterializedComputedColumns_ = false;
+    bool HasNonMaterializedComputedColumns_ = false;
     bool HasAggregateColumns_ = false;
     THunkColumnIds HunkColumnsIds_;
 
@@ -477,6 +482,19 @@ std::vector<TColumnStableName> MapNamesToStableNames(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TNestedColumn
+{
+    TStringBuf NestedTableName;
+    bool IsKey;
+    TStringBuf Aggregate;
+};
+
+std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description);
+
+EValueType GetNestedColumnElementType(const TLogicalType* logicalType);
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateKeyColumns(const TKeyColumns& keyColumns);
 
 void ValidateDynamicTableKeyColumnCount(int count);
@@ -487,12 +505,14 @@ void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted = false,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false);
+    bool allowUnversionedUpdateColumns = false,
+    bool allowTimestampColumns = false);
 
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false);
+    bool allowUnversionedUpdateColumns = false,
+    bool allowTimestampColumns = false);
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
 

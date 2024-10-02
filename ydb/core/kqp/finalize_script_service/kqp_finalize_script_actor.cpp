@@ -19,6 +19,8 @@ namespace NKikimr::NKqp {
 namespace {
 
 class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
+    static constexpr size_t MAX_ARTIFACTS_SIZE_BYTES = 40_MB;
+
 public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
@@ -37,6 +39,14 @@ public:
 
     void CompressScriptArtifacts() const {
         auto& description = Request->Get()->Description;
+
+        TString astTruncateDescription;
+        if (size_t planSize = description.QueryPlan.value_or("").size(); description.QueryAst && description.QueryAst->size() + planSize > MAX_ARTIFACTS_SIZE_BYTES) {
+            astTruncateDescription = TStringBuilder() << "Query artifacts size is " << description.QueryAst->size() + planSize << " bytes (plan + ast), that is larger than allowed limit " << MAX_ARTIFACTS_SIZE_BYTES << " bytes, ast was truncated";
+            size_t toRemove = std::min(description.QueryAst->size() + planSize - MAX_ARTIFACTS_SIZE_BYTES, description.QueryAst->size());
+            description.QueryAst = TruncateString(*description.QueryAst, description.QueryAst->size() - toRemove);
+        }
+
         auto ast = description.QueryAst;
         if (Compressor.IsEnabled() && ast) {
             const auto& [astCompressionMethod, astCompressed] = Compressor.Compress(*ast);
@@ -45,12 +55,15 @@ public:
         }
 
         if (description.QueryAst && description.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
-            NYql::TIssue astTruncatedIssue(TStringBuilder() << "Query ast size is " << description.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was truncated");
+            astTruncateDescription = TStringBuilder() << "Query ast size is " << description.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was truncated";
+            description.QueryAst = TruncateString(*ast, NDataShard::NLimits::MaxWriteValueSize - 1_KB);
+            description.QueryAstCompressionMethod = std::nullopt;
+        }
+
+        if (astTruncateDescription) {
+            NYql::TIssue astTruncatedIssue(astTruncateDescription);
             astTruncatedIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             description.Issues.AddIssue(astTruncatedIssue);
-
-            description.QueryAst = ast->substr(0, NDataShard::NLimits::MaxWriteValueSize - 1_KB) + "...\n(TRUNCATED)";
-            description.QueryAstCompressionMethod = std::nullopt;
         }
     }
 
@@ -221,6 +234,11 @@ private:
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId));
 
         PassAway();
+    }
+
+private:
+    static TString TruncateString(const TString& str, size_t size) {
+        return str.substr(0, std::min(str.size(), size)) + "...\n(TRUNCATED)";
     }
 
 private:

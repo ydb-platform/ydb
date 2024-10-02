@@ -1,29 +1,30 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_trans_queue.h"
-#include "datashard_outreadset.h"
-#include "datashard_pipeline.h"
-#include "datashard_schema_snapshots.h"
-#include "datashard_snapshots.h"
-#include "datashard_s3_downloads.h"
-#include "datashard_s3_uploads.h"
-#include "datashard_user_table.h"
-#include "datashard_repl_offsets.h"
-#include "datashard_repl_offsets_client.h"
-#include "datashard_repl_offsets_server.h"
-#include "datashard_write.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
+#include "conflicts_cache.h"
+#include "datashard_outreadset.h"
+#include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
+#include "datashard_repl_offsets_client.h"
+#include "datashard_repl_offsets_server.h"
+#include "datashard_s3_downloads.h"
+#include "datashard_s3_uploads.h"
+#include "datashard_schema_snapshots.h"
+#include "datashard_snapshots.h"
+#include "datashard_trans_queue.h"
+#include "datashard_user_table.h"
+#include "datashard_write.h"
+#include "incr_restore_scan.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
-#include "volatile_tx.h"
-#include "conflicts_cache.h"
 #include "reject_reason.h"
 #include "scan_common.h"
+#include "volatile_tx.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -253,6 +254,8 @@ class TDataShard
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
     class TTxHandleSafeSampleKScan;
+    class TTxHandleSafeLocalKMeansScan;
+    class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -315,13 +318,14 @@ class TDataShard
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
     template <typename T> friend class TBackupRestoreUnitBase;
+    friend class TCreateIncrementalRestoreSrcUnit;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
-    friend class TAsyncIndexChangeSenderShard;
+    friend class TTableChangeSenderShard;
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
@@ -1324,6 +1328,10 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1390,6 +1398,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1571,6 +1581,15 @@ public:
         return false;
     }
 
+    bool IsIncrementalRestore() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsIncrementalRestore()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
     bool SyncSchemeOnFollower(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx,
@@ -1699,6 +1718,14 @@ public:
 
     ui64 GetTtlReadAheadHiOverride() const {
         return TtlReadAheadHi;
+    }
+
+    ui64 GetIncrementalRestoreReadAheadLoOverride() const {
+        return IncrementalRestoreReadAheadLo;
+    }
+
+    ui64 GetIncrementalRestoreReadAheadHiOverride() const {
+        return IncrementalRestoreReadAheadHi;
     }
 
     bool GetEnableLockedWrites() const {
@@ -1916,7 +1943,7 @@ public:
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     // TODO(ilnaz): remove 'afterMove' after #6541
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0, bool afterMove = false);
-    ui32 GetFreeChangeQueueCapacity(ui64 cookie);
+    ui32 GetFreeChangeQueueCapacity(ui64 cookie) const;
     ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
@@ -2689,7 +2716,7 @@ private:
         { }
     };
 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TMultiMap<TRowVersion, TMediatorDelayedReply> MediatorDelayedReplies;
 
@@ -2729,6 +2756,9 @@ private:
 
     TControlWrapper TtlReadAheadLo;
     TControlWrapper TtlReadAheadHi;
+
+    TControlWrapper IncrementalRestoreReadAheadLo;
+    TControlWrapper IncrementalRestoreReadAheadHi;
 
     TControlWrapper EnableLockedWrites;
     TControlWrapper MaxLockedWritesPerKey;
@@ -3105,6 +3135,8 @@ protected:
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
+            HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
@@ -3144,6 +3176,7 @@ protected:
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
+            HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -3267,7 +3300,13 @@ protected:
             ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
             ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
-            ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get());
+            ev->Record.MutableTableStats()->SetTxRejectedBySpace(
+                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() 
+              + TabletCounters->Cumulative()[COUNTER_PREPARE_DISK_SPACE_EXHAUSTED].Get()
+              + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get()
+              + TabletCounters->Cumulative()[COUNTER_WRITE_DISK_SPACE_EXHAUSTED].Get()
+            );
+
             ev->Record.MutableTableStats()->SetTxCompleteLagMsec(TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Get());
             ev->Record.MutableTableStats()->SetInFlightTxCount(TabletCounters->Simple()[COUNTER_TX_IN_FLY].Get()
                 + TabletCounters->Simple()[COUNTER_IMMEDIATE_TX_IN_FLY].Get());

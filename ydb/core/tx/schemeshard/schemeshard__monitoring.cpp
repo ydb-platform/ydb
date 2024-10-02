@@ -668,13 +668,13 @@ private:
 
                 for (const auto& item : Self->IndexBuilds) {
                     TIndexBuildId buildIndexId = item.first;
-                    const TIndexBuildInfo::TPtr& info = item.second;
+                    const auto& info = *item.second;
 
                     bool print = false;
                     if (forActive) {
-                        print = !info->IsFinished();
+                        print = !info.IsFinished();
                     } else {
-                        print = info->IsFinished();
+                        print = info.IsFinished();
                     }
 
                     if (print) {
@@ -684,7 +684,7 @@ private:
                                     << "&" << TCgi::TabletID.AsCgiParam(Self->TabletID())
                                     << "&" << TCgi::BuildIndexId.AsCgiParam(ui64(buildIndexId))
                                     << "'>" << buildIndexId << "</a>"; }
-                            TABLED() { str << info->State; }
+                            TABLED() { str << info.State; }
                         }
                         str << "\n";
                     }
@@ -697,83 +697,83 @@ private:
         HTML(str) {
             TAG(TH3) {str << "Build index id " << buildIndexId;}
 
-            if (!Self->IndexBuilds.contains(buildIndexId)) {
+            const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(buildIndexId);
+            if (!indexInfoPtr) {
                 PRE() {
                     str << "Unknown Tx\n";
                 }
                 return;
             }
-
-            const TIndexBuildInfo::TPtr& info = Self->IndexBuilds.at(buildIndexId);
+            const auto& info = *indexInfoPtr->Get();
             TAG(TH4) {str << "Fields";}
             PRE () {
-                str << "BuildInfoId:                   " << info->Id << Endl
-                    << "Uid:                           " << info->Uid << Endl
+                str << "BuildInfoId:                   " << info.Id << Endl
+                    << "Uid:                           " << info.Uid << Endl
 
-                    << "CancelRequested:               " << (info->CancelRequested ? "YES" : "NO") << Endl
+                    << "CancelRequested:               " << (info.CancelRequested ? "YES" : "NO") << Endl
 
-                    << "State:                         " << info->State << Endl
-                    << "Issue:                         " << info->Issue << Endl
+                    << "State:                         " << info.State << Endl
+                    << "Issue:                         " << info.Issue << Endl
 
-                    << "Shards.size:                  " << info->Shards.size() << Endl
-                    << "ToUploadShards.size:          " << info->ToUploadShards.size() << Endl
-                    << "DoneShards.size:              " << info->DoneShards.size() << Endl
-                    << "InProgressShards.size:        " << info->InProgressShards.size() << Endl
+                    << "Shards.size:                  " << info.Shards.size() << Endl
+                    << "ToUploadShards.size:          " << info.ToUploadShards.size() << Endl
+                    << "DoneShards.size:              " << info.DoneShardsSize << Endl
+                    << "InProgressShards.size:        " << info.InProgressShards.size() << Endl
 
-                    << "DomainPathId:                  " << LinkToPathInfo(info->DomainPathId) << Endl
-                    << "DomainPath:                    " << TPath::Init(info->DomainPathId, Self).PathString() << Endl
+                    << "DomainPathId:                  " << LinkToPathInfo(info.DomainPathId) << Endl
+                    << "DomainPath:                    " << TPath::Init(info.DomainPathId, Self).PathString() << Endl
 
-                    << "TablePathId:                   " << LinkToPathInfo(info->TablePathId) << Endl
-                    << "TablePath:                     " << TPath::Init(info->TablePathId, Self).PathString() << Endl
+                    << "TablePathId:                   " << LinkToPathInfo(info.TablePathId) << Endl
+                    << "TablePath:                     " << TPath::Init(info.TablePathId, Self).PathString() << Endl
 
-                    << "IndexType:                     " <<  NKikimrSchemeOp::EIndexType_Name(info->IndexType) << Endl
+                    << "IndexType:                     " <<  NKikimrSchemeOp::EIndexType_Name(info.IndexType) << Endl
 
-                    << "IndexName:                     " << info->IndexName << Endl;
+                    << "IndexName:                     " << info.IndexName << Endl;
 
-                    for (const auto& column: info->IndexColumns) {
+                    for (const auto& column: info.IndexColumns) {
                         str << "IndexColumns:          " << column << Endl;
                     }
 
-                str << "Subscribers.size:             " << info->Subscribers.size() << Endl
+                str << "Subscribers.size:             " << info.Subscribers.size() << Endl
 
-                    << "AlterMainTableTxId:            " << info->AlterMainTableTxId << Endl
-                    << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info->AlterMainTableTxStatus) << Endl
-                    << "AlterMainTableTxDone:          " << (info->AlterMainTableTxDone ? "DONE": "not done") << Endl
+                    << "AlterMainTableTxId:            " << info.AlterMainTableTxId << Endl
+                    << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus) << Endl
+                    << "AlterMainTableTxDone:          " << (info.AlterMainTableTxDone ? "DONE": "not done") << Endl
 
-                    << "LockTxId:                      " << info->LockTxId << Endl
-                    << "LockTxStatus:                  " << NKikimrScheme::EStatus_Name(info->LockTxStatus) << Endl
-                    << "LockTxDone                     " << (info->LockTxDone ? "DONE" : "not done") << Endl
+                    << "LockTxId:                      " << info.LockTxId << Endl
+                    << "LockTxStatus:                  " << NKikimrScheme::EStatus_Name(info.LockTxStatus) << Endl
+                    << "LockTxDone                     " << (info.LockTxDone ? "DONE" : "not done") << Endl
 
-                    << "InitiateTxId:                  " << info->InitiateTxId << Endl
-                    << "InitiateTxStatus:              " << NKikimrScheme::EStatus_Name(info->InitiateTxStatus) << Endl
-                    << "InitiateTxDone                 " << (info->InitiateTxDone ? "DONE" : "not done") << Endl
+                    << "InitiateTxId:                  " << info.InitiateTxId << Endl
+                    << "InitiateTxStatus:              " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus) << Endl
+                    << "InitiateTxDone                 " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
 
-                    << "ApplyTxId:                     " << info->ApplyTxId << Endl
-                    << "ApplyTxStatus:                 " << NKikimrScheme::EStatus_Name(info->ApplyTxStatus) << Endl
-                    << "ApplyTxDone                    " << (info->ApplyTxDone ? "DONE" : "not done") << Endl
+                    << "ApplyTxId:                     " << info.ApplyTxId << Endl
+                    << "ApplyTxStatus:                 " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus) << Endl
+                    << "ApplyTxDone                    " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
 
-                    << "UnlockTxId:                    " << info->UnlockTxId << Endl
-                    << "UnlockTxStatus:                " << NKikimrScheme::EStatus_Name(info->UnlockTxStatus) << Endl
-                    << "UnlockTxDone                   " << (info->UnlockTxDone ? "DONE" : "not done") << Endl
+                    << "UnlockTxId:                    " << info.UnlockTxId << Endl
+                    << "UnlockTxStatus:                " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
+                    << "UnlockTxDone                   " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
 
-                    << "SnapshotStep:                  " << info->SnapshotStep << Endl
-                    << "SnapshotTxId:                  " << info->SnapshotTxId << Endl
+                    << "SnapshotStep:                  " << info.SnapshotStep << Endl
+                    << "SnapshotTxId:                  " << info.SnapshotTxId << Endl
 
-                    << "Processed:                     " << info->Processed << Endl
-                    << "Billed:                        " << info->Billed << Endl;
+                    << "Processed:                     " << info.Processed << Endl
+                    << "Billed:                        " << info.Billed << Endl;
 
             }
 
             TVector<NScheme::TTypeInfo> keyTypes;
-            if (Self->Tables.contains(info->TablePathId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(info->TablePathId);
+            if (Self->Tables.contains(info.TablePathId)) {
+                TTableInfo::TPtr tableInfo = Self->Tables.at(info.TablePathId);
                 for (ui32 keyPos: tableInfo->KeyColumnIds) {
                     keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
                 }
             }
 
             {
-                TAG(TH3) {str << "Shards : " << info->Shards.size() << "\n";}
+                TAG(TH3) {str << "Shards : " << info.Shards.size() << "\n";}
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
@@ -789,7 +789,7 @@ private:
                             TABLEH() {str << "Billed";}
                         }
                     }
-                    for (auto item : info->Shards) {
+                    for (auto item : info.Shards) {
                         TShardIdx idx = item.first;
                         const TIndexBuildInfo::TShardStatus& status = item.second;
                         TABLER() {
@@ -820,7 +820,7 @@ private:
                                 }
                             }
                             TABLED() {
-                                str << NKikimrTxDataShard::TEvBuildIndexProgressResponse_EStatus_Name(status.Status);
+                                str << NKikimrIndexBuilder::EBuildStatus_Name(status.Status);
                             }
                             TABLED() {
                                 str << Ydb::StatusIds::StatusCode_Name(status.UploadStatus);
@@ -833,9 +833,6 @@ private:
                             }
                             TABLED() {
                                 str << status.Processed;
-                            }
-                            TABLED() {
-                                str << status.Billed;
                             }
                         }
                         str << "\n";

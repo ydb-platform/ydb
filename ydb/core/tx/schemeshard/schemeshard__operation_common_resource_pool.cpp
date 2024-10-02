@@ -1,6 +1,8 @@
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+
 
 namespace NKikimr::NSchemeShard::NResourcePool {
 
@@ -85,6 +87,17 @@ bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSc
     TString errorStr;
     if (!NResourcePool::Validate(description, errorStr)) {
         result->SetError(NKikimrScheme::StatusSchemeError, errorStr);
+        return false;
+    }
+    return true;
+}
+
+bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info) {
+    try {
+        NKikimr::NResourcePool::TPoolSettings settings(info->Properties.GetProperties());
+        settings.Validate();
+    } catch (...) {
+        result->SetError(NKikimrScheme::StatusSchemeError, CurrentExceptionMessage());
         return false;
     }
     return true;

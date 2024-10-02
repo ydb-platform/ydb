@@ -299,6 +299,7 @@ void RegisterLessOrEqual(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TLessOrEqualOp>(*family);
     AddDateComparisonKernels<TDiffDateLessOrEqualOp>(*family);
+    AddDecimalComparisonKernels<TDecimalLessOrEqual>(*family);
     RegisterStringKernelLessOrEqual(*family);
 
     kernelFamilyMap["LessOrEqual"] = std::move(family);

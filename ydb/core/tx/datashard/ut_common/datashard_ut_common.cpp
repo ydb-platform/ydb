@@ -2003,6 +2003,9 @@ void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cell
     } else if (columnType == "Uint32") {
         ui32 value32 = (ui32)value;
         cells.emplace_back(TCell((const char*)&value32, sizeof(ui32)));
+    } else if (columnType == "Int32") {
+        i32 value32 = (i32)value;
+        cells.push_back(TCell::Make(value32));
     } else if (columnType == "Utf8") {
         stringValues.emplace_back(Sprintf("String_%" PRIu64, value));
         cells.emplace_back(TCell(stringValues.back().c_str(), stringValues.back().size()));

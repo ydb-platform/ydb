@@ -974,8 +974,8 @@ IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TEx
                     tableInfo.RowSpec->CopyTypeOrders(*nativeType);
                 }
                 if (prevRowSpec->IsSorted()) {
-                    tableInfo.RowSpec->CopySortness(*prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
-                    tableInfo.RowSpec->MakeCommonSortness(*prevRowSpec); // Truncated keys with changed types
+                    tableInfo.RowSpec->CopySortness(ctx, *prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    tableInfo.RowSpec->MakeCommonSortness(ctx, *prevRowSpec); // Truncated keys with changed types
                 }
             }
         }
@@ -1419,7 +1419,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         bool sortIsChanged = false;
         for (size_t i = 0; i < rowSpecs.size(); ++i) {
             if (!rowSpecs[i].first) {
-                sortIsChanged = outTable.RowSpec->ClearSortness();
+                sortIsChanged = outTable.RowSpec->ClearSortness(ctx);
                 continue;
             }
             if (0 == i) {
@@ -1433,11 +1433,11 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         ? TYqlRowSpecInfo::ECopySort::Exact
                         : TYqlRowSpecInfo::ECopySort::WithDesc;
                 }
-                sortIsChanged = outTable.RowSpec->CopySortness(*rowSpecs[i].first, mode);
+                sortIsChanged = outTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, mode);
             } else {
-                sortIsChanged = outTable.RowSpec->MakeCommonSortness(*rowSpecs[i].first) || sortIsChanged;
+                sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first) || sortIsChanged;
                 if (rowSpecs[i].second && !sortConstraintEnabled) {
-                    sortIsChanged = outTable.RowSpec->KeepPureSortOnly() || sortIsChanged;
+                    sortIsChanged = outTable.RowSpec->KeepPureSortOnly(ctx) || sortIsChanged;
                 }
             }
         }
@@ -1507,7 +1507,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         .Body("stream")
                         .Done().Ptr();
 
-                    mapOutTable.RowSpec->CopySortness(*rowSpecs[i].first, sortConstraintEnabled ? TYqlRowSpecInfo::ECopySort::WithDesc : TYqlRowSpecInfo::ECopySort::Pure);
+                    mapOutTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, sortConstraintEnabled ? TYqlRowSpecInfo::ECopySort::WithDesc : TYqlRowSpecInfo::ECopySort::Pure);
                     if (sortConstraintEnabled) {
                         TKeySelectorBuilder builder(path.Pos(), ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
                         builder.ProcessRowSpec(*mapOutTable.RowSpec);

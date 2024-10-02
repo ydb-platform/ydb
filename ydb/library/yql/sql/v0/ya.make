@@ -9,10 +9,8 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/issue
     ydb/library/yql/core/issue/protos
-    ydb/library/yql/parser/proto_ast
     ydb/library/yql/parser/proto_ast/collect_issues
     ydb/library/yql/parser/proto_ast/gen/v0
-    ydb/library/yql/parser/proto_ast/gen/v0_proto_split
 )
 
 SRCS(

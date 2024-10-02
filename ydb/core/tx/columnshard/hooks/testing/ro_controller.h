@@ -71,11 +71,11 @@ protected:
         return EOptimizerCompactionWeightControl::Force;
     }
 
-public:
-    virtual TDuration GetOverridenGCPeriod(const TDuration /*def*/) const override {
+    virtual TDuration DoGetOverridenGCPeriod(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
 
+public:
     void WaitCompactions(const TDuration d) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();

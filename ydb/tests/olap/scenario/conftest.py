@@ -19,7 +19,8 @@ class BaseTestSet:
 
     @classmethod
     def setup_class(cls):
-        ScenarioTestHelper(None).remove_path(cls.get_suite_name())
+        if not external_param_is_true('reuse-tables'):
+            ScenarioTestHelper(None).remove_path(cls.get_suite_name())
 
     @classmethod
     def teardown_class(cls):
@@ -27,7 +28,6 @@ class BaseTestSet:
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
 
     def test(self, ctx: TestContext):
-        allure_test_description(ctx.suite, ctx.test)
         start_time = time.time()
         try:
             ctx.executable(self, ctx)
@@ -40,6 +40,7 @@ class BaseTestSet:
                 is_successful=True,
             )
         except pytest.skip.Exception:
+            allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
             raise
         except BaseException:
             ResultsProcessor.upload_results(
@@ -50,7 +51,9 @@ class BaseTestSet:
                 duration=time.time() - start_time,
                 is_successful=False,
             )
+            allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
             raise
+        allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
 
 
 def pytest_generate_tests(metafunc):

@@ -1,5 +1,7 @@
 PY2_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(MIT)
 
 PEERDIR(

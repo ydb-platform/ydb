@@ -35,13 +35,17 @@ public:
         TVector<TString> keyColumns,
         NKikimrServices::EServiceKikimr logService,
         TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
-        bool isSystemUser = false)
+        const TString& database = {},
+        bool isSystemUser = false,
+        TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing())
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
         , LogService(logService)
         , TtlSettings(std::move(ttlSettings))
+        , Database(database)
         , IsSystemUser(isSystemUser)
+        , PartitioningPolicy(std::move(partitioningPolicy))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -71,19 +75,22 @@ public:
 
     void Bootstrap() {
         Become(&TTableCreator::StateFuncCheck);
+        if (!Database) {
+            Database = AppData()->TenantName;
+        }
         CheckTableExistence();
     }
 
     void CheckTableExistence() {
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
-            {PathComponents}
+            {PathComponents}, Database
         ).Release()), IEventHandle::FlagTrackDelivery);
     }
 
     void RunTableRequest() {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *request->Record.MutableTransaction()->MutableModifyScheme();
-        auto pathComponents = SplitPath(AppData()->TenantName);
+        auto pathComponents = SplitPath(Database);
         for (size_t i = 0; i < PathComponents.size() - 1; ++i) {
             pathComponents.emplace_back(PathComponents[i]);
         }
@@ -113,6 +120,11 @@ public:
         if (IsSystemUser) {
             request->Record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
         }
+        if (PartitioningPolicy) {
+            auto* partitioningPolicy = tableDesc->MutablePartitionConfig()->MutablePartitioningPolicy();
+            partitioningPolicy->CopyFrom(*PartitioningPolicy);
+        }
+
         Send(MakeTxProxyID(), std::move(request));
     }
 
@@ -381,7 +393,9 @@ private:
     const TVector<TString> KeyColumns;
     NKikimrServices::EServiceKikimr LogService;
     const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
+    TString Database;
     bool IsSystemUser = false;
+    const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
@@ -414,8 +428,10 @@ THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(cons
     return request;
 }
 
-THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents) {
-    return BuildSchemeCacheNavigateRequest(pathsComponents, AppData()->TenantName, nullptr);
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
+    const TVector<TVector<TString>>& pathsComponents, const TString& database)
+{
+    return BuildSchemeCacheNavigateRequest(pathsComponents, database ? database : AppData()->TenantName, nullptr);
 }
 
 NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, const char* columnType) {
@@ -480,10 +496,13 @@ NActors::IActor* CreateTableCreator(
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
     TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings,
-    bool isSystemUser)
+    const TString& database,
+    bool isSystemUser,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
-        std::move(keyColumns), logService, std::move(ttlSettings), isSystemUser);
+        std::move(keyColumns), logService, std::move(ttlSettings), database,
+        isSystemUser, std::move(partitioningPolicy));
 }
 
 } // namespace NKikimr

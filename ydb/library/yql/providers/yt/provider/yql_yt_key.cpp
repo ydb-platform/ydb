@@ -142,10 +142,6 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
 
         const TExprNode* tableName = nameNode->Child(0);
 
-        if (tableName->Content().empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(tableName->Pos()), "Table name must not be empty"));
-            return false;
-        }
         Path = tableName->Content();
     }
     else if (nameNode->IsCallable(MrTableRangeName) || nameNode->IsCallable(MrTableRangeStrictName)) {

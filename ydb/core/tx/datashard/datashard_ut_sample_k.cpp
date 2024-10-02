@@ -6,20 +6,15 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-template <>
-inline void Out<NKikimrTxDataShard::TEvSampleKResponse::EStatus>(IOutputStream& o, NKikimrTxDataShard::TEvSampleKResponse::EStatus status)
-{
-    o << NKikimrTxDataShard::TEvSampleKResponse::EStatus_Name(status);
-}
-
 namespace NKikimr {
 
-static ui64 sId = 1;
+static std::atomic<ui64> sId = 1;
 
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
@@ -28,7 +23,7 @@ using namespace Tests;
 Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
     static void DoSampleKBad(Tests::TServer::TPtr server, TActorId sender,
                              const TString& tableFrom, const TRowVersion& snapshot, std::unique_ptr<TEvDataShard::TEvSampleKRequest>& ev) {
-        auto id = sId++;
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
         TTableId tableId = ResolveTableId(server, sender, tableFrom);
@@ -62,6 +57,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             rec.SetSnapshotTxId(snapshot.TxId);
             rec.SetSnapshotStep(snapshot.Step);
 
+            rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
             rec.SetSeed(1337);
             if (!rec.HasK()) {
                 rec.SetK(1);
@@ -71,13 +67,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTxDataShard::TEvSampleKResponse::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         }
     }
 
     static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender,
                              const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k) {
-        auto id = sId++;
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
         TTableId tableId = ResolveTableId(server, sender, tableFrom);
@@ -104,6 +100,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.SetSnapshotTxId(snapshot.TxId);
                 rec.SetSnapshotStep(snapshot.Step);
 
+                rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
                 rec.SetSeed(seed);
                 rec.SetK(k);
             };
@@ -115,7 +112,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTxDataShard::TEvSampleKResponse::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE);
 
             const auto& rows = reply->Record.GetRows();
             UNIT_ASSERT(!rows.empty());

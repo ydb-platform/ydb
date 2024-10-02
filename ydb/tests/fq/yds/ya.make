@@ -42,6 +42,7 @@ TEST_SRCS(
     test_recovery_match_recognize.py
     test_recovery_mz.py
     test_restart_query.py
+    test_row_dispatcher.py
     test_select_1.py
     test_select_limit_db_id.py
     test_select_limit.py
@@ -51,10 +52,6 @@ TEST_SRCS(
     test_yds_bindings.py
     test_yq_streaming.py
 )
-
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
-ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)

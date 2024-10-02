@@ -29,7 +29,6 @@ public:
             auto activeStats = (*columnEngineStats)->Active();
             tableStats.SetRowCount(activeStats.Rows);
             tableStats.SetDataSize(activeStats.Bytes);
-            tableStats.SetPartCount(activeStats.Portions);
         }
     }
 
@@ -42,7 +41,6 @@ public:
         auto activeStats = ColumnEngine.GetTotalStats().Active();
         tableStats.SetRowCount(activeStats.Rows);
         tableStats.SetDataSize(activeStats.Bytes);
-        tableStats.SetPartCount(activeStats.Portions);
     }
 };
 

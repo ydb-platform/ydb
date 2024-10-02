@@ -199,9 +199,19 @@ public:
     const NColumnShard::TInsertTableCounters& GetCounters() const {
         return Counters;
     }
-    NKikimr::NOlap::TPathInfo& GetPathInfo(const ui64 pathId);
+    NKikimr::NOlap::TPathInfo& RegisterPathInfo(const ui64 pathId);
     TPathInfo* GetPathInfoOptional(const ui64 pathId);
     const TPathInfo* GetPathInfoOptional(const ui64 pathId) const;
+    TPathInfo& GetPathInfoVerified(const ui64 pathId) {
+        auto* result = GetPathInfoOptional(pathId);
+        AFL_VERIFY(result);
+        return *result;
+    }
+    const TPathInfo& GetPathInfoVerified(const ui64 pathId) const {
+        auto* result = GetPathInfoOptional(pathId);
+        AFL_VERIFY(result);
+        return *result;
+    }
 
     const THashMap<ui64, TPathInfo>& GetPathInfo() const {
         return PathInfo;

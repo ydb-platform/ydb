@@ -174,6 +174,8 @@ public:
     std::optional<std::size_t> Limit;
     ui32 SpaceUsageProblem = 90; // %
 
+    using TGroupSortKey = std::variant<TString, ui64, float, bool>;
+
     struct TPDisk {
         ui32 PDiskId = 0;
         TNodeId NodeId = 0;
@@ -273,7 +275,7 @@ public:
         ui64 Available = 0;
         ui64 Read = 0;
         ui64 Write = 0;
-        ui32 MissingDisks = 0;
+        ui64 MissingDisks = 0;
         ui64 PutTabletLogLatency = 0;
         ui64 PutUserDataLatency = 0;
         ui64 GetFastLatency = 0;
@@ -523,6 +525,30 @@ public:
             }
             return groupName;
         }
+
+        TGroupSortKey GetSortKey(EGroupFields groupBy) const {
+            switch (groupBy) {
+                case EGroupFields::GroupId:
+                case EGroupFields::Erasure:
+                case EGroupFields::PoolName:
+                case EGroupFields::Kind:
+                case EGroupFields::MediaType:
+                case EGroupFields::State:
+                    return GetGroupName(groupBy);
+                case EGroupFields::Usage:
+                    return Usage;
+                case EGroupFields::DiskSpaceUsage:
+                    return DiskSpaceUsage;
+                case EGroupFields::Encryption:
+                    return EncryptionMode;
+                case EGroupFields::MissingDisks:
+                    return MissingDisks;
+                case EGroupFields::Latency:
+                    return PutTabletLogLatency;
+                default:
+                    return TString();
+            }
+        }
     };
 
     using TGroupData = std::vector<TGroup>;
@@ -530,7 +556,42 @@ public:
 
     struct TGroupGroup {
         TString Name;
+        TGroupSortKey SortKey;
         TGroupView Groups;
+
+        // stats
+        float Usage = 0; // avg
+        ui64 Used = 0; // sum
+        ui64 Limit = 0; // sum
+        ui64 Available = 0; // sum
+        ui64 Read = 0; // sum
+        ui64 Write = 0; // sum
+        ui64 PutTabletLogLatency = 0; // max
+        ui64 PutUserDataLatency = 0; // max
+        ui64 GetFastLatency = 0; // max
+        float DiskSpaceUsage = 0; // max
+
+        void CalcStats() {
+            for (TGroup* group : Groups) {
+                Usage += group->Usage;
+                Used += group->Used;
+                Limit += group->Limit;
+                Read += group->Read;
+                Write += group->Write;
+                if (Available) {
+                    Available = std::min(Available, group->Available);
+                } else {
+                    Available = group->Available;
+                }
+                PutTabletLogLatency = std::max(PutTabletLogLatency, group->PutTabletLogLatency);
+                PutUserDataLatency = std::max(PutUserDataLatency, group->PutUserDataLatency);
+                GetFastLatency = std::max(GetFastLatency, group->GetFastLatency);
+                DiskSpaceUsage = std::max(DiskSpaceUsage, group->DiskSpaceUsage);
+            }
+            if (!Groups.empty()) {
+                Usage /= Groups.size();
+            }
+        }
     };
 
     TGroupData GroupData;
@@ -547,8 +608,6 @@ public:
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
-                                                    .set(+EGroupFields::Used)
-                                                    .set(+EGroupFields::Limit)
                                                     .set(+EGroupFields::Latency);
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
@@ -655,6 +714,8 @@ public:
             result = EGroupFields::PDiskId;
         } else if (field == "Latency") {
             result = EGroupFields::Latency;
+        } else if (field == "Available") {
+            result = EGroupFields::Available;
         }
         return result;
     }
@@ -1013,6 +1074,7 @@ public:
                 groupGroups.emplace(gb, GroupGroups.size());
                 groupGroup = &GroupGroups.emplace_back();
                 groupGroup->Name = gb;
+                groupGroup->SortKey = group->GetSortKey(GroupBy);
             } else {
                 groupGroup = &GroupGroups[it->second];
             }
@@ -1031,7 +1093,7 @@ public:
                 case EGroupFields::MediaType:
                 case EGroupFields::State:
                     GroupCollection();
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
                     NeedGroup = false;
                     break;
                 case EGroupFields::Usage:
@@ -1039,7 +1101,7 @@ public:
                 case EGroupFields::MissingDisks:
                 case EGroupFields::Latency:
                     GroupCollection();
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; }, true);
                     NeedGroup = false;
                     break;
                 case EGroupFields::Read:
@@ -2072,10 +2134,37 @@ public:
                 }
             }
         } else {
-            for (const TGroupGroup& groupGroup : GroupGroups) {
+            for (TGroupGroup& groupGroup : GroupGroups) {
                 NKikimrViewer::TStorageGroupGroup& jsonGroupGroup = *json.AddStorageGroupGroups();
                 jsonGroupGroup.SetGroupName(groupGroup.Name);
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());
+                groupGroup.CalcStats();
+                if (FieldsAvailable.test(+EGroupFields::Used)) {
+                    jsonGroupGroup.SetUsed(groupGroup.Used);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Limit)) {
+                    jsonGroupGroup.SetLimit(groupGroup.Limit);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Read)) {
+                    jsonGroupGroup.SetRead(groupGroup.Read);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Write)) {
+                    jsonGroupGroup.SetWrite(groupGroup.Write);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Usage)) {
+                    jsonGroupGroup.SetUsage(groupGroup.Usage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Available)) {
+                    jsonGroupGroup.SetAvailable(groupGroup.Available);
+                }
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                    jsonGroupGroup.SetDiskSpaceUsage(groupGroup.DiskSpaceUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                    jsonGroupGroup.SetLatencyPutTabletLog(groupGroup.PutTabletLogLatency);
+                    jsonGroupGroup.SetLatencyPutUserData(groupGroup.PutUserDataLatency);
+                    jsonGroupGroup.SetLatencyGetFast(groupGroup.GetFastLatency);
+                }
             }
         }
         AddEvent("RenderingResult");

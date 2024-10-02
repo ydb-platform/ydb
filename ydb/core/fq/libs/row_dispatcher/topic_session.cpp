@@ -676,6 +676,7 @@ void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& source
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         Parser = NewJsonParser(
             GetVector(sourceParams.GetColumns()),
+            GetVector(sourceParams.GetColumnTypes()),
             [actorSystem, selfId = SelfId()](ui64 offset, TList<TString>&& value){
                 actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(offset, std::move(value)));
             });

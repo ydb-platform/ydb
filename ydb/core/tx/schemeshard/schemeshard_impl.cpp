@@ -4279,6 +4279,10 @@ ui64 TSchemeShard::GetAliveChildren(TPathElement::TPtr pathEl, const std::option
         Y_ABORT_UNLESS(PathsById.contains(pathId));
         auto childPath = PathsById.at(pathId);
 
+        if (childPath->Dropped()) {
+            continue;
+        }
+
         count += ui64(childPath->PathType == *type);
     }
 

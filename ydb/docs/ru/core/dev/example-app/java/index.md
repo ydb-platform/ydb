@@ -49,6 +49,7 @@ this.retryCtx = SessionRetryContext.create(queryClient).build();
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
+
 Для создания таблиц используется режим транзакции `TxMode.NONE`, который позволяет выполнять схемные запросы:
 
 ```java

@@ -2281,7 +2281,7 @@ void TPDisk::ProcessChunkReadQueue() {
             // Don't add code before the warning!
             //
             Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
-            P_LOG(PRI_NOTICE, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
+            P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
         }
     }
     LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());
@@ -2892,7 +2892,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                  }
             }
             TChunkState &state = ChunkState[ev.ChunkIdx];
-            if (state.OwnerId == OwnerSystem) {
+            if (state.OwnerId != ev.Owner) {
+                err << "Can't write chunkIdx# " << ev.ChunkIdx
+                    << " chunk is owner by another owner."
+                    << " chunk's owner# " << state.OwnerId
+                    << " request's owner# " << ev.Owner;
+                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                delete request;
+                return false;
+            }
+            if (!IsOwnerUser(state.OwnerId)) {
                 err << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk is owned by the system! ownerId# " << ev.Owner;
                 SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);

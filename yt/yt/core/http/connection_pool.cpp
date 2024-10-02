@@ -60,7 +60,7 @@ TFuture<IConnectionPtr> TConnectionPool::Connect(
     {
         auto guard = Guard(SpinLock_);
 
-        while (auto item = Connections_.Extract(address)) {
+        while (auto item = Connections_.TryExtract(address)) {
             if (item->GetIdleTime() < Config_->ConnectionIdleTimeout && item->IsOK()) {
                 auto&& connection = item->Connection;
                 YT_LOG_DEBUG("Connection is extracted from cache (Address: %v, ConnectionId: %v)",

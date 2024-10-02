@@ -36,11 +36,11 @@ private:
         for (std::atomic<bool>& permission : ReportGetPermissions) {
             permission.store(true);
         }
-        Schedule(TDuration::MilliSeconds(ReportingDelayMs.Update(TActivationContext::Now())), new TEvents::TEvWakeup);
+        Schedule(TDuration::MilliSeconds(ReportingDelayMs), new TEvents::TEvWakeup);
     }   
 
 private:
-    TMemorizableControlWrapper ReportingDelayMs;
+    TControlWrapper ReportingDelayMs;
 };
 
 IActor* CreateRequestReportingThrottler(const TControlWrapper& reportingDelayMs) {

@@ -108,8 +108,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TBatchedQueue<TEvBlobStorage::TEvGet::TPtr> BatchedGets[GetHandleClassCount];
     TStackVec<NKikimrBlobStorage::EGetHandleClass, GetHandleClassCount> GetBatchedBucketQueue;
 
-    TMemorizableControlWrapper EnablePutBatching;
-    TMemorizableControlWrapper EnableVPatch;
+    TControlWrapper EnablePutBatching;
+    TControlWrapper EnableVPatch;
 
     TInstant EstablishingSessionStartTime;
 
@@ -122,11 +122,11 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void ProcessInitQueue();
 
     // Acceleration parameters
-    TMemorizableControlWrapper SlowDiskThreshold;
-    TMemorizableControlWrapper PredictedDelayMultiplier;
-    TMemorizableControlWrapper MaxNumOfSlowDisks;
+    TControlWrapper SlowDiskThreshold;
+    TControlWrapper PredictedDelayMultiplier;
+    TControlWrapper MaxNumOfSlowDisks;
 
-    TMemorizableControlWrapper LongRequestThresholdMs;
+    TControlWrapper LongRequestThresholdMs;
 
     TAccelerationParams GetAccelerationParams();
 

@@ -293,7 +293,7 @@ namespace NKikimr {
 
         void PrivateHandle(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx) {
             TInstant now = ctx.Now();
-            if (!EnableVPatch.Update(now)) {
+            if (!EnableVPatch) {
                 ReplyError(NKikimrProto::ERROR, "VPatch is disabled", ev, ctx, TAppData::TimeProvider->Now());
                 return;
             }
@@ -2873,7 +2873,7 @@ namespace NKikimr {
         TActorId BalancingId;
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
-        TMemorizableControlWrapper EnableVPatch;
+        TControlWrapper EnableVPatch;
         THashMap<TLogoBlobID, TActorId> VPatchActors;
 
         std::unordered_map<TString, TSnapshotInfo> Snapshots;

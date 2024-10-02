@@ -112,7 +112,7 @@ namespace NKikimr {
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
-                        .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                        .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs),
                     }),
                     ev->Get()->Deadline
                 );
@@ -226,7 +226,7 @@ namespace NKikimr {
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
-                    .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                    .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs),
                 }),
                 ev->Get()->Deadline
             );
@@ -279,7 +279,7 @@ namespace NKikimr {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = static_cast<bool>(EnableVPatch.Update(TActivationContext::Now()))
+                .UseVPatch = static_cast<bool>(EnableVPatch)
             }),
             ev->Get()->Deadline
         );
@@ -500,7 +500,7 @@ namespace NKikimr {
                             .Stats = PerDiskStats,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs),
                         }),
                         ev->Get()->Deadline
                     );
@@ -523,7 +523,7 @@ namespace NKikimr {
                             .Tactic = tactic,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs),
                         }),
                         TInstant::Max()
                     );
@@ -557,7 +557,6 @@ namespace NKikimr {
         ++*Mon->EventStopPutBatching;
         LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
         BatchedPutRequestCount = 0;
-        EnablePutBatching.Update(TActivationContext::Now());
     }
 
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {

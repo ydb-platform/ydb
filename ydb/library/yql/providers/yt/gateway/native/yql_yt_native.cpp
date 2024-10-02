@@ -4288,6 +4288,8 @@ private:
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+                    execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                    TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -4862,6 +4864,8 @@ private:
             }
 
             if (transform.CanExecuteInternally()) {
+                execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,

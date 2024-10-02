@@ -92,6 +92,7 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
         └──TablePointLookup (ReadRange: ["title (The Work Outing)","series_id (-∞, +∞)","season_id (-∞, +∞)","episode_id (-∞, +∞)"], ReadLimit: 1001, ReadColumns: ["episode_id","season_id","title"], Table: episodes/title_index/indexImplTable)
            Tables: ["episodes/title_index/indexImplTable"]
   ```
+
 - Embedded UI
 
   ![explain_ui](../_assets/explain_with_index_ui.png)

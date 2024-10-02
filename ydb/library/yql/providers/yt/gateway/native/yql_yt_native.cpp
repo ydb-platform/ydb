@@ -3224,7 +3224,7 @@ private:
 
     TFuture<void> DoMerge(TYtMerge merge, const TExecContext<TRunOptions>::TPtr& execCtx) {
         YQL_ENSURE(execCtx->OutTables_.size() == 1);
-        bool forceTransform = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform);
+        bool forceTransform = NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::TransformColGroups);
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
 
@@ -4309,6 +4309,8 @@ private:
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+                    execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                    TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -4906,6 +4908,8 @@ private:
             }
 
             if (transform.CanExecuteInternally()) {
+                execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,

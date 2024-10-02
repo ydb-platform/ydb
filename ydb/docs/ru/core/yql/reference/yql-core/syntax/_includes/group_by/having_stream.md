@@ -4,7 +4,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT STREAM
     key
 FROM my_table

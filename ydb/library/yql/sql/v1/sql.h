@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/parser/lexer_common/hints.h>
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include <ydb/library/yql/parser/proto_ast/common.h>
 #include <ydb/library/yql/public/issue/yql_warning.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>

@@ -1,7 +1,7 @@
 #include "fetching.h"
 #include "source.h"
 
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>

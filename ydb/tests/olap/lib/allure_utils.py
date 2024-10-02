@@ -3,14 +3,17 @@ import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from urllib.parse import urlencode
+from datetime import datetime
 
 
 def allure_test_description(
     suite: str,
     test: str,
+    start_time: float,
+    end_time: float,
     addition_table_strings: dict[str, any] = {},
     attachments: tuple[str, str, allure.attachment_type] = [],
-    refference_set: str = ''
+    refference_set: str = '',
 ):
     def _pretty_str(s):
         return ' '.join(s.split('_')).capitalize()
@@ -32,7 +35,7 @@ def allure_test_description(
             'table_path': YdbCluster.tables_path,
             'monitoring': (
                 f"<a target='_blank' href='https://monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?"
-                f"p.cluster={monitoring_cluster}&p.database=/{test_info['database']}'>link</a>"
+                f"p.cluster={monitoring_cluster}&p.database=/{test_info['database']}&from={int(start_time * 1000)}&to={int(end_time * 1000)}'>link</a>"
             ),
             'coredumps': f"<a target='_blank' href='{core_link}'>link</a>",
             'db_admin': (
@@ -40,6 +43,7 @@ def allure_test_description(
                 f"schema=/{test_info['database']}/{YdbCluster.tables_path}&tenantPage=query"
                 f"&diagnosticsTab=nodes&name=/{test_info['database']}'>link</a>"
             ),
+            'timestamp': datetime.now().strftime('%c'),
         }
     )
     if ResultsProcessor.send_results:

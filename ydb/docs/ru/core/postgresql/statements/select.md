@@ -32,6 +32,7 @@ SELECT CAST('123' AS INTEGER);  -- Преобразует строки в чис
 ## Выборка значений из одного или нескольких столбцов {#select_from}
 
 Для возвращения значений из одного или нескольких столбцов таблицы применяется `SELECT` в следующем виде:
+
 ```sql
 SELECT <column name> , <column name>
 FROM <table name>;
@@ -40,6 +41,7 @@ FROM <table name>;
 Чтобы прочитать все данные из таблицы, например, таблицы `people` – нужно выполнить команду `SELECT * FROM people;`, где  `*` – это оператор выбора данных по всем столбцам. При такой записи будут возвращены все строки из таблицы с данными по всем столбцам.
 
 Вывести столбцы "id", "name" и "lastname" для всех строк таблицы `people` можно так:
+
 ```sql
 SELECT id, name, lastname
 FROM people;
@@ -48,6 +50,7 @@ FROM people;
 ## Ограничение получаемых результатов выборки с помощью WHERE {#select_from_where}
 
 Для выборки только части строк - используется оператор `WHERE` с условиями выборки: `WHERE <column name> <condition> <column value>;`:
+
 ```sql
 SELECT id, name, lastname
 FROM people
@@ -207,7 +210,7 @@ ON people.name = card.card_holder_name AND people.lastname = card.card_holder_la
 
 Результат выполнения SQL запроса с использованием `RIGHT JOIN` без одной записи в левой таблице `people`:
 
-```
+```text
  name   | lastname | social_card_number
 ---------+----------+--------------------
 John    | Doe      |          123456789

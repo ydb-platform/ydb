@@ -263,7 +263,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                                     << Counters.GetWritesMonitor()->DebugString() << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(
-            TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData), snapshotSchema, GetLastTxSnapshot());
+            TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData), snapshotSchema, GetLastTxSnapshot(), Counters.GetCSCounters().WritingCounters);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
@@ -271,7 +271,6 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 class TCommitOperation {
 private:
     const ui64 TabletId;
-    bool HtapFormat = false;
 
 public:
     using TPtr = std::shared_ptr<TCommitOperation>;
@@ -294,25 +293,19 @@ public:
         auto& locks = evWrite.Record.GetLocks();
         auto& lock = evWrite.Record.GetLocks().GetLocks()[0];
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());
-        SendingColumnShards = std::set<ui64>(locks.GetSendingColumnShards().begin(), locks.GetSendingColumnShards().end());
         ReceivingShards = std::set<ui64>(locks.GetReceivingShards().begin(), locks.GetReceivingShards().end());
-        ReceivingColumnShards = std::set<ui64>(locks.GetReceivingColumnShards().begin(), locks.GetReceivingColumnShards().end());
-        HtapFormat = locks.HasArbiterColumnShard();
         if (!ReceivingShards.size() || !SendingShards.size()) {
             ReceivingShards.clear();
             SendingShards.clear();
-        } else if (!HtapFormat) {
+        } else if (!locks.HasArbiterColumnShard()) {
             ArbiterColumnShard = *ReceivingShards.begin();
             if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         } else {
-            if (!ReceivingColumnShards.size() || !SendingColumnShards.size()) {
-                return TConclusionStatus::Fail("empty sending/receiving lists for columnshards is incorrect case");
-            }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
             AFL_VERIFY(ArbiterColumnShard);
-            if (!ReceivingColumnShards.contains(TabletId) && !SendingColumnShards.contains(TabletId)) {
+            if (!ReceivingShards.contains(TabletId) && !SendingShards.contains(TabletId)) {
                 return TConclusionStatus::Fail("shard is incorrect for sending/receiving lists");
             }
         }
@@ -336,30 +329,12 @@ public:
     std::unique_ptr<NColumnShard::TEvWriteCommitSyncTransactionOperator> CreateTxOperator(
         const NKikimrTxColumnShard::ETransactionKind kind) const {
         AFL_VERIFY(ReceivingShards.size());
-        if (HtapFormat) {
-            if (IsPrimary()) {
-                std::set<ui64> fullReceiving = ReceivingShards;
-                fullReceiving.insert(ReceivingColumnShards.begin(), ReceivingColumnShards.end());
-                AFL_VERIFY(fullReceiving.size() + 1 == ReceivingShards.size() + ReceivingColumnShards.size());
-
-                std::set<ui64> fullSending = SendingShards;
-                fullSending.insert(SendingColumnShards.begin(), SendingColumnShards.end());
-                AFL_VERIFY(fullSending.size() + 1 == SendingShards.size() + SendingColumnShards.size());
-
-                return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
-                    TFullTxInfo::BuildFake(kind), LockId, fullReceiving, fullSending);
-            } else {
-                return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
-                    ArbiterColumnShard, ReceivingColumnShards.contains(TabletId));
-            }
+        if (IsPrimary()) {
+            return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
+                TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
         } else {
-            if (IsPrimary()) {
-                return std::make_unique<NColumnShard::TEvWriteCommitPrimaryTransactionOperator>(
-                    TFullTxInfo::BuildFake(kind), LockId, ReceivingShards, SendingShards);
-            } else {
-                return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
-                    ArbiterColumnShard, ReceivingShards.contains(TabletId));
-            }
+            return std::make_unique<NColumnShard::TEvWriteCommitSecondaryTransactionOperator>(TFullTxInfo::BuildFake(kind), LockId,
+                ArbiterColumnShard, ReceivingShards.contains(TabletId));
         }
     }
 
@@ -370,8 +345,6 @@ private:
     YDB_READONLY(ui64, TxId, 0);
     YDB_READONLY_DEF(std::set<ui64>, SendingShards);
     YDB_READONLY_DEF(std::set<ui64>, ReceivingShards);
-    YDB_READONLY_DEF(std::set<ui64>, SendingColumnShards);
-    YDB_READONLY_DEF(std::set<ui64>, ReceivingColumnShards);
     ui64 ArbiterColumnShard = 0;
 };
 
@@ -486,12 +459,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         if (conclusionParse.IsFail()) {
             sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         } else {
-            if (commitOperation->NeedSyncLocks()) {
-                auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
-                if (!lockInfo) {
-                    sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
-                        NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
-                } else {
+            auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
+            if (!lockInfo) {
+                sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            } else {
+                if (commitOperation->NeedSyncLocks()) {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
@@ -504,9 +477,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     } else {
                         Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                     }
+                } else {
+                    Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
                 }
-            } else {
-                Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
             }
         }
         return;
@@ -584,8 +557,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     ui64 lockId = 0;
     if (behaviour == EOperationBehaviour::NoTxWrite) {
         lockId = BuildEphemeralTxId();
-    } else if (behaviour == EOperationBehaviour::InTxWrite) {
-        lockId = record.GetTxId();
     } else {
         lockId = record.GetLockTxId();
     }

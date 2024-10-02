@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`, EXTERNAL_GUARANTEE_EXCLUSIVE_PK=`true`);";
+                "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -332,13 +332,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     FEATURES=`{"column_names" : ["resource_id", "level"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
                 )", StorageId.data()
                 );
-                auto session = tableClient.CreateSession().GetValueSync().GetSession();
-                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-            }
-            {
-                auto alterQuery = TStringBuilder() <<
-                    "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, EXTERNAL_GUARANTEE_EXCLUSIVE_PK=`true`);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());

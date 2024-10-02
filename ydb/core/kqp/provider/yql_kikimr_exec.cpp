@@ -325,7 +325,7 @@ namespace {
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
         createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
-        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());  
+        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());
 
         return createSequenceSettings;
     }
@@ -999,7 +999,7 @@ private:
     static TExprNode::TPtr GetResOrPullResult(const TExprNode& node, const IDataProvider::TFillSettings& fillSettings,
         const NKikimrMiniKQL::TResult& resultValue, TExprContext& ctx)
     {
-        TVector<TString> columnHints(NCommon::GetResOrPullColumnHints(node));
+        TColumnOrder columnHints(NCommon::GetResOrPullColumnHints(node));
 
         auto protoValue = &resultValue;
         YQL_ENSURE(resultValue.GetArena());
@@ -1050,7 +1050,7 @@ private:
             return SyncOk();
         }
 
-        YQL_ENSURE(resultIndex < runResult->Results.size());
+        Y_ABORT_UNLESS(resultIndex < runResult->Results.size());
         auto resultValue = runResult->Results[resultIndex];
         YQL_ENSURE(resultValue);
 
@@ -1374,8 +1374,12 @@ public:
                         auto type = columnType->Cast<TTypeExprType>()->GetType();
                         auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
                         auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-                        auto dataType = actualType->Cast<TDataExprType>();
-                        SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
+
+                        TString error;
+                        if (!SetColumnType(actualType, notNull, *add_column->mutable_type(), error)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), error));
+                            return SyncError();
+                        }
 
                         ::NKikimrIndexBuilder::TColumnBuildSetting* columnBuild = nullptr;
                         bool hasDefaultValue = false;
@@ -1744,9 +1748,9 @@ public:
                                 ctx.AddError(
                                     YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
                                         TIssuesIds::KIKIMR_SCHEME_ERROR,
-                                        TStringBuilder() << "Unknown index name: " << indexName));                                
+                                        TStringBuilder() << "Unknown index name: " << indexName));
                                 return SyncError();
-                            }                            
+                            }
                             auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
                             if (indexTablePaths.size() != 1) {
                                 ctx.AddError(
@@ -2413,7 +2417,7 @@ public:
             TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
 
             auto future = Gateway->Analyze(cluster, analyzeSettings);
-            
+
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
                 Y_UNUSED(res);

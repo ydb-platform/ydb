@@ -20,10 +20,11 @@ View the description of the YQL query command:
 ## Parameters of the subcommand {#options}
 
 #|
-|| **Name** | **Description** ||
+|| Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `-t`, `--type` | Query type.
 Acceptable values:
+
 * `data`: A YQL query that includes [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations; it can be used both to update data in the database and fetch several selections limited to 1,000 rows per selection.
 * `scan`: A YQL query of the [scan](../../concepts/scan_query.md) type. It can only be used to read data from the database. It returns a single selection, but without a limit on the number of records in it. The algorithm of executing a `scan` query on the server is more sophisticated compared to a `data` query. Hence, if you don't need to return more than 1,000 rows, `data` queries are more effective.
 * `scheme`: A YQL query that includes [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) operations.
@@ -33,6 +34,7 @@ Acceptable values:
 * `none`: Do not collect statistics.
 * `basic`: Collect statistics for basic events.
 * `full`: Collect statistics for all events.
+
     Defaults to `none`. ||
 || `-s` | Enable statistics collection in the `basic` mode. ||
 || `--tx-mode` | [Transaction mode](../../concepts/transactions.md#modes) (for `data` queries).
@@ -48,6 +50,7 @@ Possible values:
 
 ||
 |#
+
 ### Working with parameterized queries {#parameterized-query}
 
 {% include [parameterized-query](../../_includes/parameterized-query.md) %}
@@ -69,6 +72,7 @@ Possible values:
 ```
 
 ### Populating the table with data {#examples-upsert}
+
 ```bash
 {{ ydb-cli }} -p quickstart table query execute \
   -q '

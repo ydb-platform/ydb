@@ -1106,6 +1106,26 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(DuplicatedColumns) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SELECT 1 a, '2' a, '1' || '2' a;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetResultSet(0).GetColumnsMeta().size() == 3, "Expected 3 columns");
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_C(result.GetResultSet(0).GetColumnsMeta()[i].Name == "a", TStringBuilder() << "Expected all columns to be named 'a', but got: " << result.GetResultSet(0).GetColumnsMeta()[i].Name);
+        }
+        CompareYson(R"([
+            ["1";"2";"12"]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(ReadPgArray) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         auto binaryStr = NPg::PgNativeBinaryFromNativeText("{1,1}", INT2ARRAYOID).Str;

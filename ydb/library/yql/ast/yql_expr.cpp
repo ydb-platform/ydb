@@ -1910,7 +1910,9 @@ namespace {
             case TExprNode::Lambda:
                 {
                     const auto prevFrame = ctx.CurrentFrame;
-                    ctx.CurrentFrame = &ctx.Frames[ctx.LambdaFrames.find(&node)->second];
+                    const auto it = ctx.LambdaFrames.find(&node);
+                    YQL_ENSURE(it != ctx.LambdaFrames.end());
+                    ctx.CurrentFrame = &ctx.Frames[it->second];
                     YQL_ENSURE(node.ChildrenSize() > 0U);
                     const auto& args = node.Head();
                     TSmallVec<TAstNode*> argsChildren;
@@ -3030,14 +3032,22 @@ bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const 
         return false;
     }
 
-    const auto precision = FromString<ui8>(GetParamOne());
+    ui8 precision;
+    if (!TryFromString<ui8>(GetParamOne(), precision)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
+        return false;
+    }
 
     if (!precision || precision > 35) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
         return false;
     }
 
-    const auto scale = FromString<ui8>(GetParamTwo());
+    ui8 scale;
+    if (!TryFromString<ui8>(GetParamTwo(), scale)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal scale: " << GetParamTwo()));
+        return false;
+    }
 
     if (scale > precision) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));

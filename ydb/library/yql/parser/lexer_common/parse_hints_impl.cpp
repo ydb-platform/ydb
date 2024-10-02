@@ -15,13 +15,13 @@ enum EParseState {
     WANT_WS,
 };
 
-TVector<TSQLHint> ParseSqlHints(NYql::TPosition commentPos, const TStringBuf& comment) {
+TVector<TSQLHint> ParseSqlHints(NYql::TPosition commentPos, const TStringBuf& comment, bool utf8Aware) {
     TVector<TSQLHint> result;
     if (!comment.StartsWith("/*+") && !comment.StartsWith("--+")) {
         return result;
     }
     TSQLHint hint;
-    NYql::TTextWalker commentWalker(commentPos);
+    NYql::TTextWalker commentWalker(commentPos, utf8Aware);
     const size_t len = comment.size();
     EParseState state = EParseState::INITIAL;
     for (size_t i = 0; i < len; ++i) {

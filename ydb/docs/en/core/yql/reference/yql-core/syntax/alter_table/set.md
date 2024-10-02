@@ -3,6 +3,7 @@
 Most parameters of row and column tables in {{ ydb-short-name }}, listed on the [table description]({{ concept_table }}) page, can be modified using the `ALTER` command.
 
 Generally, the command to modify any table parameter looks as follows:
+
 ```sql
 ALTER TABLE table_name SET (key = value);
 ```
@@ -22,6 +23,7 @@ Some table parameters in {{ ydb-short-name }}, listed on the [table description]
 ```sql
 ALTER TABLE table_name RESET (key);
 ```
+
 `key` — the name of the parameter.
 
 For example, such a command will reset (remove) the `TTL` settings for row or column tables:

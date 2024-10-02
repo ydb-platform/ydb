@@ -46,11 +46,21 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         NSharding::IShardingBase::TColumn column;
         column.Id = phyColumn.GetId().GetId();
 
-        if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
+        switch (phyColumn.GetTypeId()) {
+        case NScheme::NTypeIds::Pg: {
+            column.Type = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName(phyColumn.GetTypeParam().GetPgTypeName()));
+            break;
+        }
+        case NScheme::NTypeIds::Decimal: {
+            const auto& decimalProto = phyColumn.GetTypeParam().GetDecimal();
+            NScheme::TDecimalType decimal(decimalProto.precision(), decimalProto.scale());
+            column.Type = NScheme::TTypeInfo(decimal);
+            break;
+        }
+        default: {
             column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
-        } else {
-            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
-                NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
+            break;
+        }
         }
         column.NotNull = phyColumn.GetNotNull();
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();

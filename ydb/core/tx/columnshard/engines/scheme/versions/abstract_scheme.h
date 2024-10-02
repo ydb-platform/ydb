@@ -77,7 +77,8 @@ public:
         const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
+    std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
+    std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;
 };
 
 } // namespace NKikimr::NOlap

@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EIndexAutoChooseMode : int;
@@ -55,9 +56,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     NCommon::TConfSetting<TString, false> OptOverrideStatistics;
-    NCommon::TConfSetting<TString, false> OptCardinalityHints;
-    NCommon::TConfSetting<TString, false> OptJoinAlgoHints;
-    NCommon::TConfSetting<TString, false> OptJoinOrderHints;
+    NCommon::TConfSetting<NYql::TOptimizerHints, false> OptimizerHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -173,6 +172,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
     ui64 DefaultEnableSpillingNodes = 0;
+    bool EnableAntlr4Parser = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

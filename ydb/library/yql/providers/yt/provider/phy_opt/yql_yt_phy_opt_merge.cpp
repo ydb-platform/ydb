@@ -405,7 +405,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
         return node;
     }
 
-    if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks)) {
+    if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::TransformColGroups | EYtSettingType::CombineChunks)) {
         return node;
     }
 
@@ -475,26 +475,47 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ForceTransform(TExprBas
         return node;
     }
 
-    if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform)) {
-        return node;
+    if (!NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform)
+        && NYql::HasSetting(merge.Input().Item(0).Settings().Ref(), EYtSettingType::Sample)) {
+        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform, {}, ctx)));
     }
 
     const auto cluster = merge.DataSink().Cluster().StringValue();
-    const bool hasOutGroup = NYql::HasSetting(merge.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups);
-    const bool lookup = State_->Configuration->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR;
-    const bool enabledColGroup = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable;
-    const bool hasNonTmpInput = AnyOf(merge.Input().Item(0).Paths(), [](const TYtPath& path) {
-        return path.Table().Maybe<TYtTable>() && !NYql::HasSetting(path.Table().Cast<TYtTable>().Settings().Ref(), EYtSettingType::Anonymous);
-    });
-    const bool hasSampling = NYql::HasSetting(merge.Input().Item(0).Settings().Ref(), EYtSettingType::Sample);
+    if (State_->Configuration->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR) {
+        return node;
+    }
 
-    const bool addForceTransform = hasSampling
-        || (!lookup && enabledColGroup != hasOutGroup)
-        || (!lookup && hasOutGroup && hasNonTmpInput)
-    ;
+    TString outGroup;
+    if (auto setting = NYql::GetSetting(merge.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+        outGroup = setting->Tail().Content();
+    }
 
-    if (addForceTransform) {
-        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform, {}, ctx)));
+    std::vector<TString> inputColGroupSpecs;
+    for (const auto& path: merge.Input().Item(0).Paths()) {
+        inputColGroupSpecs.emplace_back();
+        if (auto table = path.Table().Maybe<TYtTable>()) {
+            if (auto tableDesc = State_->TablesData->FindTable(cluster, TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
+                inputColGroupSpecs.back() = tableDesc->ColumnGroupSpec;
+            }
+        } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                inputColGroupSpecs.back() = setting->Tail().Content();
+            }
+        }
+    }
+
+    bool needTransformColGroups = false;
+    if (!outGroup.empty() && AnyOf(inputColGroupSpecs, [&outGroup](const auto& g) { return outGroup != g; })) {
+        needTransformColGroups = true;
+    }
+    if (outGroup.empty() && AnyOf(inputColGroupSpecs, [](const auto& g) { return !g.empty(); })) {
+        needTransformColGroups = true;
+    }
+
+    if (needTransformColGroups && !NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::TransformColGroups)) {
+        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::TransformColGroups, {}, ctx)));
+    } else if (!needTransformColGroups && NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::TransformColGroups)) {
+        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::RemoveSetting(merge.Settings().Ref(), EYtSettingType::TransformColGroups, ctx)));
     }
     return node;
 }

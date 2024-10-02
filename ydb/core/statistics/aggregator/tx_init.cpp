@@ -287,7 +287,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             SA_LOG_W("[" << Self->TabletID() << "] TTxInit::Complete. EnableColumnStatistics=false");
         }
 
-        Self->InitializeStatisticsTable();
+        if (Self->Database) {
+            Self->InitializeStatisticsTable();
+        }
 
         if (Self->TraversalPathId && Self->TraversalStartKey) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);

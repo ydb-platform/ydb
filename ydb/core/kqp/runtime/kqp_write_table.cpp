@@ -18,7 +18,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 DataShardMaxOperationBytes = 8_MB;
-constexpr ui64 ColumnShardMaxOperationBytes = 8_MB;
+constexpr ui64 ColumnShardMaxOperationBytes = 64_MB;
 constexpr ui64 MaxUnshardedBatchBytes = 0_MB;
 
 class IPayloadSerializer : public TThrRefBase {
@@ -61,9 +61,7 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
     result.reserve(inputColumns.size());
     i32 number = 0;
     for (const auto& column : inputColumns) {
-        NScheme::TTypeInfo typeInfo = (column.GetTypeId() == NScheme::NTypeIds::Pg) ?
-            NScheme::TTypeInfo(column.GetTypeId(), NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())) :
-            NScheme::TTypeInfo(column.GetTypeId());
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetTypeId(), column.GetTypeInfo());
         result.emplace_back(
             column.GetName(),
             column.GetId(),

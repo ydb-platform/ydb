@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 #include "checks.h"
 

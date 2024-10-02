@@ -196,10 +196,6 @@ public:
         return &Request;
     }
 
-    google::protobuf::Message* GetRequestMut() override {
-        return &Request;
-    }
-
     void SetFinishAction(std::function<void()>&&) override {}
 
     bool IsClientLost() const override { return false; }
@@ -415,10 +411,6 @@ public:
 protected:
     const NProtoBuf::Message* GetRequest() const override {
         return GetBaseRequest().GetRequest();
-    }
-
-    NProtoBuf::Message* GetRequestMut() override {
-        return GetBaseRequest().GetRequestMut();
     }
 
     TAsyncFinishResult GetFinishFuture() override {

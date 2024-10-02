@@ -5,7 +5,7 @@
 
 ## Примеры
 
-``` yql
+```yql
 $itemType = TypeOf($item);
 SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$itemType>
 ```
@@ -14,7 +14,7 @@ SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$it
 
 ### Сигнатура
 
-```
+```yql
 FormatType(Type)->String
 FormatType(TypeHandle)->String
 ```
@@ -25,7 +25,7 @@ FormatType(TypeHandle)->String
 
 ### Сигнатура
 
-```
+```yql
 FormatTypeDiff(Type, Type)->String
 FormatTypeDiff(TypeHandle, TypeHandle)->String
 
@@ -39,7 +39,7 @@ FormatTypeDiffPretty(TypeHandle, TypeHandle)->String
 
 ### Сигнатура
 
-```
+```yql
 ParseType(String)->Type
 ```
 
@@ -47,7 +47,7 @@ ParseType(String)->Type
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 ```
 
@@ -55,7 +55,7 @@ SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 
 ### Сигнатура
 
-```
+```yql
 TypeOf(<any expression>)->Type
 ```
 
@@ -63,11 +63,11 @@ TypeOf(<any expression>)->Type
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(TypeOf("foo"));  -- String
 ```
 
-``` yql
+```yql
 SELECT FormatType(TypeOf(AsTuple(1, 1u))); -- Tuple<Int32,Uint32>
 ```
 
@@ -75,7 +75,7 @@ SELECT FormatType(TypeOf(AsTuple(1, 1u))); -- Tuple<Int32,Uint32>
 
 ### Сигнатура
 
-```
+```yql
 InstanceOf(Type)->объект типа Type
 ```
 
@@ -85,7 +85,7 @@ InstanceOf можно использовать только в том случа
 
 ### Примеры
 
-``` yql
+```yql
 SELECT InstanceOf(ParseType("Int32")) + 1.0; -- ошибка (Can't execute InstanceOf): результат зависит от (неопределенного) значения InstanceOf
 SELECT FormatType(TypeOf(
     InstanceOf(ParseType("Int32")) +
@@ -97,7 +97,7 @@ SELECT FormatType(TypeOf(
 
 ### Сигнатура
 
-```
+```yql
 DataType(String, [String, ...])->Type
 ```
 
@@ -106,7 +106,7 @@ DataType(String, [String, ...])->Type
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(DataType("Bool")); -- Bool
 SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 ```
@@ -115,14 +115,15 @@ SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 
 ### Сигнатура
 
-```
+```yql
 OptionalType(Type)->опциональный Type
 ```
+
 Добавляет в переданный тип возможность содержать `NULL`.
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 SELECT FormatType(OptionalType(ParseType("List<String?>"))); -- List<String?>?
 ```
@@ -131,7 +132,7 @@ SELECT FormatType(OptionalType(ParseType("List<String?>"))); -- List<String?>?
 
 ### Сигнатура
 
-```
+```yql
 ListType(Type)->тип списка с элементами типа Type
 StreamType(Type)->тип потока с элементами типа Type
 ```
@@ -140,7 +141,7 @@ StreamType(Type)->тип потока с элементами типа Type
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 ```
 
@@ -148,7 +149,7 @@ SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 
 ### Сигнатура
 
-```
+```yql
 DictType(Type, Type)->тип словаря
 ```
 
@@ -156,7 +157,7 @@ DictType(Type, Type)->тип словаря
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(DictType(
     DataType("String"),
     DataType("Double")
@@ -167,7 +168,7 @@ SELECT FormatType(DictType(
 
 ### Сигнатура
 
-```
+```yql
 TupleType(Type, ...)->тип кортежа
 ```
 
@@ -175,7 +176,7 @@ TupleType(Type, ...)->тип кортежа
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(TupleType(
     DataType("String"),
     DataType("Double"),
@@ -187,7 +188,7 @@ SELECT FormatType(TupleType(
 
 ### Сигнатура
 
-```
+```yql
 StructType(Type AS ElementName1, Type AS ElementName2, ...)->тип структуры
 ```
 
@@ -195,7 +196,7 @@ StructType(Type AS ElementName1, Type AS ElementName2, ...)->тип структ
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(StructType(
     DataType("Bool") AS MyBool,
     ListType(DataType("String")) AS StringList
@@ -206,7 +207,7 @@ SELECT FormatType(StructType(
 
 ### Сигнатура
 
-```
+```yql
 VariantType(StructType)->тип варианта над структурой
 VariantType(TupleType)->тип варианта над кортежем
 ```
@@ -215,7 +216,7 @@ VariantType(TupleType)->тип варианта над кортежем
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(VariantType(
   ParseType("Struct<foo:Int32,bar:Double>")
 )); -- Variant<'bar':Double,'foo':Int32>
@@ -225,14 +226,15 @@ SELECT FormatType(VariantType(
 
 ### Сигнатура
 
-```
+```yql
 ResourceType(String)->тип ресурса
 ```
+
 Возвращает тип [ресурса](../../types/special.md) по переданной строковой метке.
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
 ```
 
@@ -240,7 +242,7 @@ SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
 
 ### Сигнатура
 
-```
+```yql
 CallableType(Uint32, Type, [Type, ...])->тип вызываемого значения
 ```
 
@@ -264,50 +266,62 @@ SELECT FormatType(CallableType(
 ## GenericType, UnitType и VoidType {#generictype}
 
 ### Сигнатура
-```
+
+```yql
 GenericType()->тип
 UnitType()->тип
 VoidType()->тип
 ```
+
 Возвращают одноименные [специальные типы данных](../../types/special.md). Аргументов нет, так как они не параметризуются.
 
 ### Примеры
-``` yql
+
+```yql
 SELECT FormatType(VoidType()); -- Void
 ```
 
 ## OptionalItemType, ListItemType и StreamItemType {#optionalitemtype}
 
 ### Сигнатура
-```
+
+```yql
 OptionalItemType(OptionalType)->тип элемента опционального типа
 ListItemType(ListType)->тип элемента списочного типа
 StreamItemType(StreamType)->тип элемента потокового типа
 ```
 
 {% if feature_codegen %} Если этим функциям передается тип, то они выполняют{% else %}Выполняют{% endif %} действие, обратное [OptionalType](#optionaltype), [ListType](#listtype) и [StreamType](#listtype) — возвращают тип элемента по типу соответствующего контейнера.
+
 {% if feature_codegen %}
+
 Если этим функциям передается хендл типа, то выполняют действие, обратное [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle) и [StreamTypeHandle](#list-stream-typehandle) - возвращают хендл типа элемента по хендлу типа соответствующего контейнера.
+
 {% endif %}
 
 ### Примеры
-``` yql
+
+```yql
 SELECT FormatType(ListItemType(
   ParseType("List<Int32>")
 )); -- Int32
 ```
+
 {% if feature_codegen %}
-``` yql
+
+```yql
 SELECT FormatType(ListItemType(
   ParseTypeHandle("List<Int32>")
 )); -- Int32
 ```
+
 {% endif %}
 
 ## DictKeyType и DictPayloadType {#dictkeytype}
 
 ### Сигнатура
-```
+
+```yql
 DictKetType(DictType)->тип ключа словаря
 DictPayloadType(DictType)->тип значения словаря
 ```
@@ -315,7 +329,8 @@ DictPayloadType(DictType)->тип значения словаря
 Возвращают тип ключа или значения по типу словаря.
 
 ### Примеры
-``` yql
+
+```yql
 SELECT FormatType(DictKeyType(
   ParseType("Dict<Int32,String>")
 )); -- Int32
@@ -324,14 +339,16 @@ SELECT FormatType(DictKeyType(
 ## TupleElementType {#tupleelementtype}
 
 ### Сигнатура
-```
+
+```yql
 TupleElementType(TupleType, String)->тип элемента кортежа
 ```
 
 Возвращает тип элемента кортежа по типу кортежа и индексу элемента (индекс с нуля).
 
 ### Примеры
-``` yql
+
+```yql
 SELECT FormatType(TupleElementType(
   ParseType("Tuple<Int32,Double>"), "1"
 )); -- Double
@@ -341,7 +358,7 @@ SELECT FormatType(TupleElementType(
 
 ### Сигнатура
 
-```
+```yql
 StructMemberType(StructType, String)->тип элемента структуры
 ```
 
@@ -349,7 +366,7 @@ StructMemberType(StructType, String)->тип элемента структуры
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(StructMemberType(
   ParseType("Struct<foo:Int32,bar:Double>"), "foo"
 )); -- Int32
@@ -359,7 +376,7 @@ SELECT FormatType(StructMemberType(
 
 ### Сигнатура
 
-```
+```yql
 CallableResultType(CallableType)->тип результата вызываемого значения
 CallableArgumentType(CallableType, Uint32)->тип аругмента вызываемого значения
 ```
@@ -368,7 +385,7 @@ CallableArgumentType(CallableType, Uint32)->тип аругмента вызыв
 
 ### Примеры
 
-``` yql
+```yql
 $callable_type = ParseType("(String,Bool)->Double");
 
 SELECT FormatType(CallableResultType(
@@ -383,18 +400,21 @@ FormatType(CallableArgumentType(
 
 ### Сигнатура
 
-```
+```yql
 VariantUnderlyingType(VariantType)->низлежащий тип варианта
 ```
 
 {% if feature_codegen %}Если этой функции передается тип, то она выполняет{% else %}Выполняет{% endif %} действие, обратное [VariantType](#varianttype) — возвращает низлежащий тип по типу варианта.
+
 {% if feature_codegen %}
+
 Если этой функции передается хендл типа, то она выполняет действие, обратное [VariantTypeHandle](#varianttypehandle) — возвращает хендл низлежащего типа по хендлу типа варианта.
+
 {% endif %}
 
 ### Примеры
 
-``` yql
+```yql
 SELECT FormatType(VariantUnderlyingType(
   ParseType("Variant<foo:Int32,bar:Double>")
 )), -- Struct<'bar':Double,'foo':Int32>
@@ -405,7 +425,7 @@ FormatType(VariantUnderlyingType(
 
 {% if feature_codegen %}
 
-``` yql
+```yql
 SELECT FormatType(VariantUnderlyingType(
   ParseTypeHandle("Variant<foo:Int32,bar:Double>")
 )), -- Struct<'bar':Double,'foo':Int32>
@@ -413,6 +433,7 @@ FormatType(VariantUnderlyingType(
   ParseTypeHandle("Variant<Int32,Double>")
 )); -- Tuple<Int32,Double>
 ```
+
 {% endif %}
 
 {% if feature_codegen %}
@@ -427,40 +448,45 @@ FormatType(VariantUnderlyingType(
 
 #### Сигнатура
 
-```
+```yql
 TypeHandle(Type)->хэндл типа
 ```
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(TypeHandle(TypeOf("foo")));  -- String
 ```
+
 ### EvaluateType
 
 #### Сигнатура
 
-```
+```yql
 EvaluateType(TypeHandle)->тип
 ```
+
 Получение типа из хендла типа, переданного в аргумент. Функция вычисляется до начала основного расчета, как и [EvaluateExpr](../basic.md#evaluate_expr_atom).
 
 #### Примеры
-``` yql
+
+```yql
 SELECT FormatType(EvaluateType(TypeHandle(TypeOf("foo"))));  -- String
 ```
 
 ### ParseTypeHandle
 
 #### Сигнатура
-```
+
+```yql
 ParseTypeHandle(String)->хэндл типа
 ```
+
 Построение хендла типа по строке с его описанием. [Документация по её формату](../../types/type_string.md).
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(ParseTypeHandle("List<Int32>"));  -- List<int32>
 ```
 
@@ -468,7 +494,7 @@ SELECT FormatType(ParseTypeHandle("List<Int32>"));  -- List<int32>
 
 #### Сигнатура
 
-```
+```yql
 TypeKind(TypeHandle)->String
 ```
 
@@ -476,7 +502,7 @@ TypeKind(TypeHandle)->String
 
 #### Примеры
 
-``` yql
+```yql
 SELECT TypeKind(TypeHandle(TypeOf("foo")));  -- Data
 SELECT TypeKind(ParseTypeHandle("List<Int32>"));  -- List
 ```
@@ -485,7 +511,7 @@ SELECT TypeKind(ParseTypeHandle("List<Int32>"));  -- List
 
 #### Сигнатура
 
-```
+```yql
 DataTypeComponents(DataTypeHandle)->List<String>
 ```
 
@@ -493,7 +519,7 @@ DataTypeComponents(DataTypeHandle)->List<String>
 
 #### Примеры
 
-``` yql
+```yql
 SELECT DataTypeComponents(TypeHandle(TypeOf("foo")));  -- ["String"]
 SELECT DataTypeComponents(ParseTypeHandle("Decimal(4,1)"));  -- ["Decimal", "4", "1"]
 ```
@@ -502,14 +528,15 @@ SELECT DataTypeComponents(ParseTypeHandle("Decimal(4,1)"));  -- ["Decimal", "4",
 
 #### Сигнатура
 
-```
+```yql
 DataTypeHandle(List<String>)->хэндл примитивного типа данных
 ```
+
 Построение хендла [примитивного типа данных](../../types/primitive.md) из его названия и параметров, переданных списком в аргумент. Обратная функция - [DataTypeComponents](#datatypecomponents).
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(DataTypeHandle(
     AsList("String")
 )); -- String
@@ -523,7 +550,7 @@ SELECT FormatType(DataTypeHandle(
 
 #### Сигнатура
 
-```
+```yql
 OptionalTypeHandle(TypeHandle)->хэндл опционального типа
 ```
 
@@ -531,7 +558,7 @@ OptionalTypeHandle(TypeHandle)->хэндл опционального типа
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(OptionalTypeHandle(
     TypeHandle(DataType("Bool"))
 )); -- Bool?
@@ -541,14 +568,15 @@ SELECT FormatType(OptionalTypeHandle(
 
 #### Сигнатура
 
-```
+```yql
 PgTypeName(PgTypeHandle)->String
 ```
 
 Получение имени PostgreSQL типа из хендла типа, переданного в аргумент. Обратная функция - [PgTypeHandle](#pgtypehandle).
 
 #### Примеры
-``` yql
+
+```yql
 SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
 ```
 
@@ -556,14 +584,15 @@ SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
 
 #### Сигнатура
 
-```
+```yql
 PgTypeHandle(String)->хендл типа
 ```
 
 Построение хендла типа по имени PostgreSQL типа, переданного в аргумент. Обратная функция - [PgTypeName](#pgtypename).
 
 #### Примеры
-``` yql
+
+```yql
 SELECT FormatType(PgTypeHandle("int4")); -- pgint4
 ```
 
@@ -571,15 +600,16 @@ SELECT FormatType(PgTypeHandle("int4")); -- pgint4
 
 #### Сигнатура
 
-```
+```yql
 ListTypeHandle(TypeHandle)->хэндл списочного типа
 StreamTypeHandle(TypeHandle)->хэндл потокового типа
 ```
+
 Строит хендл типа списка или потока по переданному хендлу типа элемента.
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(ListTypeHandle(
     TypeHandle(DataType("Bool"))
 )); -- List<Bool>
@@ -589,15 +619,16 @@ SELECT FormatType(ListTypeHandle(
 
 #### Сигнатура
 
-```
+```yql
 EmptyListTypeHandle()->хэндл типа пустого списка
 EmptyDictTypeHandle()->хэндл типа пустого словаря
 ```
+
 Строит хендл типа пустого списка или словаря.
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(EmptyListTypeHandle()); -- EmptyList
 ```
 
@@ -605,14 +636,15 @@ SELECT FormatType(EmptyListTypeHandle()); -- EmptyList
 
 #### Сигнатура
 
-```
+```yql
 TupleTypeComponents(TupleTypeHandle)->List<TypeHandle>
 ```
+
 Получение списка хендлов типов элементов из хендла типа кортежа, переданного в аргумент. Обратная функция - [TupleTypeHandle](#tupletypehandle).
 
 #### Примеры
 
-``` yql
+```yql
 SELECT ListMap(
    TupleTypeComponents(
        ParseTypeHandle("Tuple<Int32, String>")
@@ -627,14 +659,15 @@ SELECT ListMap(
 
 #### Сигнатура
 
-```
+```yql
 TupleTypeHandle(List<TypeHandle>)->хэндл типа кортежа
 ```
+
 Построение хендла типа кортежа из хендлов типов элементов, переданных списком в аргумент. Обратная функция - [TupleTypeComponents](#tupletypecomponents).
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(
     TupleTypeHandle(
         AsList(
@@ -649,7 +682,7 @@ SELECT FormatType(
 
 #### Сигнатура
 
-```
+```yql
 StructTypeComponents(StructTypeHandle)->List<Struct<Name:String, Type:TypeHandle>>
 ```
 
@@ -657,7 +690,7 @@ StructTypeComponents(StructTypeHandle)->List<Struct<Name:String, Type:TypeHandle
 
 #### Примеры
 
-``` yql
+```yql
 SELECT ListMap(
     StructTypeComponents(
         ParseTypeHandle("Struct<a:Int32, b:String>")
@@ -675,14 +708,15 @@ SELECT ListMap(
 
 #### Сигнатура
 
-```
+```yql
 StructTypeHandle(List<Struct<Name:String, Type:TypeHandle>>)->хэндл типа структуры
 ```
+
 Построение хендла типа структуры из хендлов типов элементов и имен, переданных списком в аргумент. Обратная функция - [StructTypeComponents](#structtypecomponents).
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(
     StructTypeHandle(
         AsList(
@@ -697,7 +731,7 @@ SELECT FormatType(
 
 #### Сигнатура
 
-```
+```yql
 DictTypeComponents(DictTypeHandle)->Struct<Key:TypeHandle, Payload:TypeHandle>
 ```
 
@@ -705,7 +739,7 @@ DictTypeComponents(DictTypeHandle)->Struct<Key:TypeHandle, Payload:TypeHandle>
 
 #### Примеры
 
-``` yql
+```yql
 $d = DictTypeComponents(ParseTypeHandle("Dict<Int32,String>"));
 
 SELECT
@@ -716,14 +750,16 @@ SELECT
 ### DictTypeHandle
 
 #### Сигнатура
-```
+
+```yql
 DictTypeHandle(TypeHandle, TypeHandle)->хэндл типа словаря
 ```
+
 Построение хендла типа словаря из хендла типа-ключа и хендла типа-значения, переданных в аргументы. Обратная функция - [DictTypeComponents](#dicttypecomponents).
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(
     DictTypeHandle(
         ParseTypeHandle("Int32"),
@@ -736,7 +772,7 @@ SELECT FormatType(
 
 #### Сигнатура
 
-```
+```yql
 ResourceTypeTag(ResourceTypeHandle)->String
 ```
 
@@ -744,7 +780,7 @@ ResourceTypeTag(ResourceTypeHandle)->String
 
 #### Примеры
 
-``` yql
+```yql
 SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 ```
 
@@ -752,7 +788,7 @@ SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 
 #### Сигнатура
 
-```
+```yql
 ResourceTypeHandle(String)->хэндл типа ресурса
 ```
 
@@ -760,7 +796,7 @@ ResourceTypeHandle(String)->хэндл типа ресурса
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(ResourceTypeHandle("foo")); -- Resource<'foo'>
 ```
 
@@ -768,7 +804,7 @@ SELECT FormatType(ResourceTypeHandle("foo")); -- Resource<'foo'>
 
 #### Сигнатура
 
-```
+```yql
 TaggedTypeComponents(TaggedTypeHandle)->Struct<Base:TypeHandle, Tag:String>
 ```
 
@@ -776,7 +812,7 @@ TaggedTypeComponents(TaggedTypeHandle)->Struct<Base:TypeHandle, Tag:String>
 
 #### Примеры
 
-``` yql
+```yql
 $t = TaggedTypeComponents(ParseTypeHandle("Tagged<Int32,foo>"));
 
 SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
@@ -786,7 +822,7 @@ SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
 
 #### Сигнатура
 
-```
+```yql
 TaggedTypeHandle(TypeHandle, String)->хэндл декорированного типа
 ```
 
@@ -794,7 +830,7 @@ TaggedTypeHandle(TypeHandle, String)->хэндл декорированного 
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(TaggedTypeHandle(
     ParseTypeHandle("Int32"), "foo"
 )); -- Tagged<Int32, 'foo'>
@@ -804,7 +840,7 @@ SELECT FormatType(TaggedTypeHandle(
 
 #### Сигнатура
 
-```
+```yql
 VariantTypeHandle(StructTypeHandle)->хэндл типа варианта над структурой
 VariantTypeHandle(TupleTypeHandle)->хэндл типа варианта над кортежем
 ```
@@ -813,7 +849,7 @@ VariantTypeHandle(TupleTypeHandle)->хэндл типа варианта над 
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(VariantTypeHandle(
     ParseTypeHandle("Tuple<Int32, String>")
 )); -- Variant<Int32, String>
@@ -823,7 +859,7 @@ SELECT FormatType(VariantTypeHandle(
 
 #### Сигнатура
 
-```
+```yql
 VoidTypeHandle()->хэндл типа Void
 NullTypeHandle()->хэндл типа Null
 ```
@@ -832,7 +868,7 @@ NullTypeHandle()->хэндл типа Null
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(VoidTypeHandle()); -- Void
 SELECT FormatType(NullTypeHandle()); -- Null
 ```
@@ -841,7 +877,7 @@ SELECT FormatType(NullTypeHandle()); -- Null
 
 #### Сигнатура
 
-```
+```yql
 CallableTypeComponents(CallableTypeHandle)->
 Struct<
     Arguments:List<Struct<
@@ -858,7 +894,7 @@ Struct<
 
 #### Примеры
 
-``` yql
+```yql
 $formatArgument = ($x) -> {
     return AsStruct(
         FormatType($x.Type) as Type,
@@ -890,7 +926,7 @@ SELECT $formatCallable(
 
 #### Сигнатура
 
-```
+```yql
 CallableArgument(TypeHandle, [String, [List<String>]])->Struct<Flags:List<String>,Name:String,Type:TypeHandle>
 ```
 
@@ -904,7 +940,7 @@ CallableArgument(TypeHandle, [String, [List<String>]])->Struct<Flags:List<String
 
 #### Сигнатура
 
-```
+```yql
 CallableTypeHandle(TypeHandle, List<Struct<Flags:List<String>,Name:String,Type:TypeHandle>>, [Uint32, [String]])->хэндл типа вызываемого значения
 ```
 
@@ -919,7 +955,7 @@ CallableTypeHandle(TypeHandle, List<Struct<Flags:List<String>,Name:String,Type:T
 
 #### Примеры
 
-``` yql
+```yql
 SELECT FormatType(
     CallableTypeHandle(
         ParseTypeHandle("String"),
@@ -936,14 +972,15 @@ SELECT FormatType(
 
 #### Сигнатура
 
-```
+```yql
 LambdaArgumentsCount(LambdaFunction)->Uint32
 ```
+
 Получение количества аргументов в лямбда-функции.
 
 #### Примеры
 
-``` yql
+```yql
 SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ; -- 2
 ```
@@ -952,13 +989,15 @@ SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 
 #### Сигнатура
 
-```
+```yql
 LambdaOptionalArgumentsCount(LambdaFunction)->Uint32
 ```
+
 Получение количества опциональных аргументов в лямбда-функции.
 
 #### Примеры
-``` yql
+
+```yql
 SELECT LambdaOptionalArgumentsCount(($x, $y, $z?)->(if($x,$y,$z)))
 ; -- 1
 ```

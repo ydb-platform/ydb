@@ -74,10 +74,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
     AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
     AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
-    AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));
     AddHandler(2, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
-    AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
     AddHandler(2, &TYtMerge::Match, HNDL(ForceTransform));
+    AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
 #undef HNDL
 }
 

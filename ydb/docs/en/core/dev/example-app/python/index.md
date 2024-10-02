@@ -1,10 +1,12 @@
 # Example app in Python
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v2) that is available as part of the {{ ydb-short-name }} [Python SDK](https://github.com/ydb-platform/ydb-python-sdk).
 
 ## Downloading and starting {#download}
 
-The following execution scenario is based on [git](https://git-scm.com/downloads) and [Python3](https://www.python.org/downloads/). Be sure to install the [YDB Python SDK](../../../reference/ydb-sdk/install.md).
+The following execution scenario is based on [git](https://git-scm.com/downloads) and [Python3](https://www.python.org/downloads/). Be sure to install the [{{ ydb-short-name }} Python SDK](../../../reference/ydb-sdk/install.md).
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository and install the necessary Python packages:
 
@@ -409,6 +411,7 @@ The code snippet above outputs the following text to the console:
 The `session.transaction().execute()` method can also be used to execute YQL queries. Unlike `pool.execute_with_retries`, this method allows explicit control of transaction execution by configuring the desired transaction mode using the `TxControl` class.
 
 Available transaction modes:
+
 * `ydb.QuerySerializableReadWrite()` (default);
 * `ydb.QueryOnlineReadOnly(allow_inconsistent_reads=False)`;
 * `ydb.QuerySnapshotReadOnly()`;

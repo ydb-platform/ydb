@@ -5274,8 +5274,8 @@ private:
     void ScanRows(const TString& query) {
         QuerySize = query.Size();
         RowStarts.push_back(0);
-        TPosition position(1, 1);
-        TTextWalker walker(position);
+        TPosition position(0, 1);
+        TTextWalker walker(position, true);
         auto prevRow = position.Row;
         for (ui32 i = 0; i < query.Size(); ++i) {
             walker.Advance(query[i]);
@@ -5852,7 +5852,7 @@ public:
         auto nameNode = ListNodeNth(value->defnames, 0);
         auto name = to_lower(TString(StrVal(nameNode)));
         TString sfunc;
-        ui32 stype;
+        ui32 stype = 0;
         TString combinefunc;
         TString finalfunc;
         TString serialfunc;

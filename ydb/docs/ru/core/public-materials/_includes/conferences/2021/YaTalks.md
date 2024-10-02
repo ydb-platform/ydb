@@ -19,6 +19,7 @@
 В исследовании, которое провела команда Yandex {{ ydb-name }}, рассмотрены аспекты миграции Е-commerce приложения, изначально разработанного для PostgreSQL, на Yandex {{ ydb-name }}. Основная тема исследования — сравнение производительности и стоимости решений на PostgreSQL и {{ ydb-short-name }}.
 
 В докладе показано:
+
 * Что нового в Cloud Functions. Глеб Борисов.
 * Как клиенты облака используют Yandex Database Serverless. [{{ team.kovalenko.name }}]({{ team.kovalenko.profile }}) ({{ team.kovalenko.position }}).
 * Миграция приложения с PostgreSQL на Yandex Database Serverless. Производительность, стоимость, риски. [{{ team.smirnov.name }}]({{ team.smirnov.profile }}) ({{ team.smirnov.position }}).

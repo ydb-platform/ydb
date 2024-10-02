@@ -92,7 +92,7 @@ CREATE TABLE example
 
 Now let's populate our table with some initial data. The simplest way to do this is by using literals.
 
-```yql
+```sql
 INSERT INTO example (key, value)
 VALUES (123, 'hello'),
        (321, 'world');
@@ -100,12 +100,13 @@ VALUES (123, 'hello'),
 
 ### Querying test data
 
-```yql
+```sql
 SELECT COUNT(*) FROM example;
 ```
 
 Output:
-```
+
+```text
  column0
 ---------
        2

@@ -3,7 +3,6 @@
 #include "kqp_partition_helper.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -80,7 +79,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-                hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
+                hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
@@ -153,7 +152,7 @@ private:
         }
     }
 
-    void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+    void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         GetResourcesSnapshot();
     }

@@ -136,7 +136,7 @@ private:
     }
 
     void SendBrokenFlagAck(TColumnShard& owner) {
-        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+        owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
             new TEvPipeCache::TEvForward(
                 new TEvTxProcessing::TEvReadSetAck(0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), 0), ArbiterTabletId, true),
             IEventHandle::FlagTrackDelivery, GetTxId());
@@ -145,7 +145,7 @@ private:
     void SendResult(TColumnShard& owner) {
         NKikimrTx::TReadSetData readSetData;
         readSetData.SetDecision(SelfBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
-        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+        owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
             new TEvPipeCache::TEvForward(new TEvTxProcessing::TEvReadSet(
                                              0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), readSetData.SerializeAsString()),
                 ArbiterTabletId, true),

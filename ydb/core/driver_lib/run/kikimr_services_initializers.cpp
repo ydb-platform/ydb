@@ -1093,10 +1093,7 @@ void TSharedCacheInitializer::InitializeServices(
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
     config->ReplacementPolicy = cfg.GetReplacementPolicy();
-
-    if (cfg.HasActivePagesReservationPercent()) {
-        config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
-    }
+    config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
@@ -1423,33 +1420,28 @@ void TBootstrapperInitializer::InitializeServices(
                     TActorSetupCmd(CreateConfiguredTabletBootstrapper(boot), TMailboxType::HTSwap, appData->SystemPoolId)));
             } else {
                 const bool standby = boot.HasStandBy() && boot.GetStandBy();
-                for (const ui32 bootstrapperNode : boot.GetNode()) {
-                    if (bootstrapperNode == NodeId) {
+                if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
+                    TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
 
-                        TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
+                    auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
 
-                        auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
+                    auto tabletSetupInfo = CreateTablet(
+                        TTabletTypes::TypeToStr(tabletType),
+                        info,
+                        appData);
 
-                        auto tabletSetupInfo = CreateTablet(
-                            TTabletTypes::TypeToStr(tabletType),
-                            info,
-                            appData);
+                    TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
+                    bi->Nodes.reserve(boot.NodeSize());
+                    for (ui32 x : boot.GetNode())
+                        bi->Nodes.push_back(x);
+                    if (boot.HasWatchThreshold())
+                        bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
+                    if (boot.HasStartFollowers())
+                        bi->StartFollowers = boot.GetStartFollowers();
 
-                        TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
-
-                        if (boot.NodeSize() != 1) {
-                            bi->OtherNodes.reserve(boot.NodeSize() - 1);
-                            for (ui32 x : boot.GetNode())
-                                if (x != NodeId)
-                                    bi->OtherNodes.push_back(x);
-                            if (boot.HasWatchThreshold())
-                                bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
-                            if (boot.HasStartFollowers())
-                                bi->StartFollowers = boot.GetStartFollowers();
-                        }
-
-                        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBootstrapperID(info->TabletID, bootstrapperNode), TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
-                    }
+                    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                        MakeBootstrapperID(info->TabletID, NodeId),
+                        TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
                 }
             }
         }

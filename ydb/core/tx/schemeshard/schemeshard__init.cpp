@@ -377,7 +377,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(protoType, typeData));
             typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
         } else {
-            typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+            // Decimal column was created before SchemaTable::ColTypeData was filled with decimal params
+            // So, it's default
+            if (typeId == NScheme::NTypeIds::Decimal) {
+                typeInfoMod.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType::Default());
+            } else {
+                typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+            }
         }
 
         return std::make_tuple(pathId,
@@ -1916,6 +1922,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& view = Self->Views[pathId] = new TViewInfo();
                 view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
                 view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD view->CapturedContext.ParseFromString(
+                    rowset.GetValue<Schema::View::CapturedContext>()
+                );
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
@@ -4378,6 +4387,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Table::CreateTableRequest scheme;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(scheme, rowset.GetValue<Schema::ImportItems::Scheme>()));
                         item.Scheme = scheme;
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::Permissions>()) {
+                        Ydb::Scheme::ModifyPermissionsRequest permissions;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(permissions, rowset.GetValue<Schema::ImportItems::Permissions>()));
+                        item.Permissions = permissions;
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());

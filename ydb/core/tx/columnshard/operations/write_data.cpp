@@ -12,26 +12,43 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
     }
     IncomingData = payload.GetDataFromPayload(proto.GetPayloadIndex());
     if (proto.HasType()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_modification_type")("proto", proto.DebugString());
         auto type = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetType());
         if (!type) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_modification_type")("proto", proto.DebugString());
             return false;
         }
         ModificationType = *type;
     }
 
-    std::vector<ui32> columns;
-    for (auto&& columnId : proto.GetColumnIds()) {
-        columns.emplace_back(columnId);
+    if (proto.HasPayloadSchema()) {
+        PayloadSchema = NArrow::DeserializeSchema(proto.GetPayloadSchema());
+    } else {
+        std::vector<ui32> columns;
+        for (auto&& columnId : proto.GetColumnIds()) {
+            columns.emplace_back(columnId);
+        }
+        if (columns.empty()) {
+            BatchSchema = IndexSchema;
+        } else {
+            BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
+        }
+        if (BatchSchema->GetColumnsCount() != columns.size()) {
+            return false;
+        }
     }
-    BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
     OriginalDataSize = IncomingData.size();
-    return BatchSchema->GetColumnsCount() == columns.size() && !IncomingData.empty();
+    return !!IncomingData;
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
-    auto result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+    std::shared_ptr<arrow::RecordBatch> result;
+    if (PayloadSchema) {
+        result = NArrow::DeserializeBatch(IncomingData, PayloadSchema);
+    } else {
+        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+    }
+        
     IncomingData = "";
     return result;
 }

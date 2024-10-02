@@ -26,11 +26,7 @@ namespace {
 
 NScheme::TTypeInfo BuildTypeInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto) {
     NScheme::TTypeId typeId = static_cast<NScheme::TTypeId>(proto.GetTypeId());
-    if (typeId != NKikimr::NScheme::NTypeIds::Pg) {
-        return NScheme::TTypeInfo(typeId);
-    } else {
-        return NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(proto.GetTypeInfo().GetPgTypeId()));
-    }
+    return NScheme::TypeInfoFromProto(typeId, proto.GetTypeInfo());
 }
 
 using namespace NKikimr::NSequenceProxy;

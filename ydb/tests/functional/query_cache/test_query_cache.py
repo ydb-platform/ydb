@@ -28,7 +28,7 @@ class TestQueryCache(object):
         cls.config.yaml_config["table_service_config"] = {"compile_query_cache_size": QUERY_CACHE_SIZE}
         cls.cluster = kikimr_cluster_factory(configurator=cls.config)
         cls.cluster.start()
-        cls.discovery_endpoint = "%s:%s" % (cls.cluster.nodes[1].hostname, cls.cluster.nodes[1].grpc_port)
+        cls.discovery_endpoint = "%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].grpc_port)
         cls.driver = ydb.Driver(endpoint=cls.discovery_endpoint, database="/Root", credentials=ydb.AnonymousCredentials())
         cls.driver.wait(timeout=5)
         cls.pool = ydb.SessionPool(cls.driver)

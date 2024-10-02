@@ -616,9 +616,6 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
                                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
     const TType tableType = GetTableType();
     ValidateTValueUpsertTable();
-    const NYdb::EBinaryStringEncoding stringEncoding =
-        (settings.Format_ == EDataFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
-            NYdb::EBinaryStringEncoding::Unicode;
 
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
     THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
@@ -635,7 +632,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
         batch.BeginList();
 
         for (auto &line : batchLines) {
-            batch.AddListItem(JsonToYdbValue(line, tableType, stringEncoding));
+            batch.AddListItem(JsonToYdbValue(line, tableType, settings.BinaryStringsEncoding_));
         }
 
         batch.EndList();

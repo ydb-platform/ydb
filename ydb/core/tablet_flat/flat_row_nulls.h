@@ -154,7 +154,7 @@ namespace NTable {
             TStackVec<TType> types;
             types.reserve(order.size());
             for (TOrder typeOrder : order) {
-                types.push_back(NScheme::TTypeInfo(typeOrder.GetTypeId(), typeOrder.GetTypeDesc()));
+                types.push_back(typeOrder.ToTypeInfo());
             }
             return TCellDefaults::Make<TKeyCellDefaults>(types, order, defs);
         }

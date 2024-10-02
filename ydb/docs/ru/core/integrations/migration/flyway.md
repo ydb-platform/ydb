@@ -348,7 +348,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 Результатом исполнения команды `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration info` будет подробная информация о состоянии миграций:
 
-```
+```text
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+
 | Category  | Version | Description               | Type     | Installed On        | State              | Undoable |
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+

@@ -4,7 +4,7 @@ Row number within a [partition](../../../syntax/window.md#partition). No argumen
 
 ### Signature
 
-```text
+```yql
 ROW_NUMBER()->Uint64
 ```
 

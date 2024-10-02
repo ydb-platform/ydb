@@ -22,6 +22,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -446,6 +447,7 @@ enum EMetaSerializationType : ui64 {
 
 struct TViewPersistedData {
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
@@ -1073,7 +1075,7 @@ public:
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull);
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);

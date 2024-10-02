@@ -130,11 +130,6 @@ public:
         return &Request_;
     }
 
-    //! Get mutable pointer to the request's message.
-    NProtoBuf::Message* GetRequestMut() override {
-        return &Request_;
-    }
-
     void Reply(NProtoBuf::Message* proto, ui32 status = 0) override {
         Y_UNUSED(status);
         TResp* resp = dynamic_cast<TResp*>(proto);

@@ -144,6 +144,7 @@ Tags are necessary for partial or complete reuse of configurations from previous
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -151,13 +152,17 @@ config:
     second_entry: 2
     third_entry: 3
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
     second_entry: 100
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -165,6 +170,7 @@ config:
     second_entry: 100
     third_entry: 3
 ```
+
 ||
 |#
 
@@ -177,6 +183,7 @@ config:
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -187,7 +194,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -197,7 +206,9 @@ config:
     - abc: 3
       value: 40
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -209,6 +220,7 @@ config:
     - abc: 3
       value: 40
 ```
+
 ||
 |#
 
@@ -221,6 +233,7 @@ config:
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -231,7 +244,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -239,7 +254,9 @@ config:
     - !remove
       abc: 1
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -247,6 +264,7 @@ config:
     - abc: 2
       value: 10
 ```
+
 ||
 |#
 
@@ -259,6 +277,7 @@ config:
 #|
 || Original configuration | Override | Resulting configuration ||
 ||
+
 ```yaml
 config:
   some_config:
@@ -269,7 +288,9 @@ config:
       value: 20
       another_value: test
 ```
+
 |
+
 ```yaml
 config:
   some_config: !inherit
@@ -279,7 +300,9 @@ config:
     - abc: 3
       value: 40
 ```
+
 |
+
 ```yaml
 config:
   some_config:
@@ -294,6 +317,7 @@ config:
     - abc: 3
       value: 40
 ```
+
 ||
 |#
 

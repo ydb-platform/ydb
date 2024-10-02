@@ -3,7 +3,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
-import "ydb/core/formats/arrow/protos/fields.proto";
+import "ydb/library/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";

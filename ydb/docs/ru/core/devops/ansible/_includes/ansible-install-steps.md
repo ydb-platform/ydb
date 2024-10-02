@@ -42,7 +42,7 @@
 * `configure kernel` – блок задач конфигурирования ядра:
 
   + `configure /etc/modules-load.d dir` - создание директории `/etc/modules-load.d` с правами владельца и группы для пользователя root и разрешениями `0755`.
-  +  `setup conntrack module` - копирование строки `nf_conntrack` в файл `/etc/modules-load.d/conntrack.conf` для загрузки модуля `nf_conntrack` при старте системы.
+  + `setup conntrack module` - копирование строки `nf_conntrack` в файл `/etc/modules-load.d/conntrack.conf` для загрузки модуля `nf_conntrack` при старте системы.
   + `load conntrack module` - загрузка модуля `nf_conntrack` в текущей сессии.
   + `setup sysctl files` - применяет шаблоны для создания конфигурационных файлов в `/etc/sysctl.d/` для различных системных настроек (таких, как настройки безопасности, сети и файловой системы). Список файлов включает `10-console-messages.conf`, `10-link-restrictions.conf` и другие. После выполнения этой задачи отправляется уведомление для применения изменений в настройках ядра.
   + `flush handlers` - вызывает накопленные хендлеры. Будет вызван хендлер  `apply kernel settings`, который выполнит команду `sysctl -p` для применения параметров ядра, указанных в файле `/etc/sysctl.conf` или в других файлах в каталоге `/etc/sysctl.d/`.
@@ -95,7 +95,7 @@
 
 1. [Роль](https://github.com/ydb-platform/ydb-ansible/blob/main/roles/ydbd_dynamic/tasks/main.yaml) `ydbd_dynamic`. Задачи:
 
-*  `check if required variables are defined` – проверка наличия установленных переменных (`ydb_domain`,`ydb_pool_kind`, `ydb_cores_dynamic`, `ydb_brokers`, `ydb_dbname`, `ydb_dynnodes`) и вывод ошибки в случае отсутствия любой из переменных.
+* `check if required variables are defined` – проверка наличия установленных переменных (`ydb_domain`,`ydb_pool_kind`, `ydb_cores_dynamic`, `ydb_brokers`, `ydb_dbname`, `ydb_dynnodes`) и вывод ошибки в случае отсутствия любой из переменных.
 * `create dynamic node configuration file` – создание конфигурационного файла для динамических нод.
 * `create dynamic node systemd unit` – создание сервиса для systemd динамических нод. После выполнения задачи отправляется уведомление для перезапуска службы `systemd`.
 * `flush handlers` – выполнение накопившихся хендлеров. Будет выполнен рестарт `systemd`.

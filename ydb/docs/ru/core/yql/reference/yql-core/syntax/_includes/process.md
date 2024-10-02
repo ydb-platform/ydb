@@ -42,12 +42,13 @@
 ## Примеры
 
 {% if process_command != "PROCESS STREAM" %}
-``` yql
+
+```yql
 PROCESS my_table
 USING MyUdf::MyProcessor(value)
 ```
 
-``` yql
+```yql
 $udfScript = @@
 def MyFunc(my_list):
     return [(int(x.key) % 2, x) for x in my_list]
@@ -65,7 +66,7 @@ SELECT * FROM $i;
 SELECT * FROM $j;
 ```
 
-``` yql
+```yql
 $udfScript = @@
 def MyFunc(stream):
     for r in stream:
@@ -81,6 +82,7 @@ PROCESS my_table1, my_table2 USING $udf(TableRows());
 ```
 
 {% else %}
+
 ```yql
 
 -- лямбда функция принимает примитивный тип и возвращает структуру с тремя одинаковыми полями
@@ -93,7 +95,7 @@ PROCESS STREAM Input USING $f(value) WHERE cast(subkey as int) > 3;
 
 ```
 
-``` yql
+```yql
 -- лямбда функция принимает тип `Struct<key:String, subkey:String, value:String>`
 -- и возвращает аналогичную структуру, добавив некий суффикс к каждому полю
 
@@ -104,7 +106,7 @@ $f = ($r) -> {
 PROCESS STREAM Input USING $f(TableRow());
 ```
 
-``` yql
+```yql
 -- лямбда функция принимает запись типа `Struct<...>`
 -- и возвращает список из двух одинаковых элементов
 $f1 = ($x) -> {
@@ -120,6 +122,6 @@ $f2 = ($x) -> {
 $p = (PROCESS STREAM Input USING $f2(TableRows()));
 
 SELECT STREAM * FROM $p;
-
 ```
+
 {% endif %}

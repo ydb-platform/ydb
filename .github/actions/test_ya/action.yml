@@ -302,6 +302,9 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
+          # generate test_bloat
+          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT

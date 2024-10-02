@@ -51,7 +51,6 @@ def _remove_less_then_threshold(tree, threshold, fix_size_threshold):
 
     tree["children"] = new_children
     if fix_size_threshold:
-        print(new_size + self_size)
         tree["size"] = new_size + self_size
 
 def _intify_size(tree):

@@ -20,7 +20,7 @@ import tree_map
 THRESHOLD = 5  # sec
 
 
-def process(junit_path):
+def generate(junit_path, output_dir):
     tree = ET.parse(junit_path)
     root = tree.getroot()
 
@@ -49,7 +49,43 @@ def process(junit_path):
         ("testsuite", "Test Suite", "#8DA0CB"),
         ("testcase", "Test Case", "#FC8D62"),
     ]
-    tree_map.generate_tree_map_html("/home/maxim-yurchuk/test_bloat", tree_paths, unit_name="sec", factor=1.0, types=types, threshold=500, fix_size_threshold=True)
+    tree_map.generate_tree_map_html(
+        output_dir, 
+        tree_paths, 
+        unit_name="sec", 
+        factor=1.0, 
+        types=types, 
+        threshold=THRESHOLD, 
+        fix_size_threshold=True
+    )
 
 
-process("junit.xml")
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="""A tool for analyzing tests time\n
+
+To use it run ya make with '--junit <path>' and junit file will be generated"""
+    )
+    parser.add_argument(
+        "-j",
+        "--junit",
+        required=True,
+        help="Path to junit.xml",
+    )
+    parser.add_argument(
+        "-o",
+        "--output_dir",
+        required=False,
+        default="test_bloat",
+        help="Output path for treemap view of compilation times",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    generate(args.junit, args.output_dir)
+
+
+if __name__ == "__main__":
+    main()

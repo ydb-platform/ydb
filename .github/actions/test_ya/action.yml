@@ -122,7 +122,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners
+        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
 
         if [ ${{ inputs.testman_token }} ]; then
           TESTMO_PROXY_ADDR=127.0.0.1:8888
@@ -616,7 +616,6 @@ runs:
         export build_preset="${{ inputs.build_preset }}" 
         export commit_git_sha="$(git rev-parse HEAD)"
 
-        python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py
 
     - name: show_build_size_diff
@@ -632,8 +631,6 @@ runs:
         export yellow_treshold=102400
         export red_treshold=2097152 
         export commit_git_sha="$(git rev-parse HEAD)"
-
-        python3 -m pip install ydb ydb[yc] humanize
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`

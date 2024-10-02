@@ -6,14 +6,8 @@
 # - mutes tests
 
 import argparse
-import re
-import json
-import os
-import sys
-import urllib.parse
-import zipfile
-from typing import Set
-from xml.etree import ElementTree as ET
+
+from junitparser import JUnitXml
 
 import tree_map
 
@@ -21,23 +15,20 @@ THRESHOLD = 5  # sec
 
 
 def generate(junit_path, output_dir):
-    tree = ET.parse(junit_path)
-    root = tree.getroot()
+    junit = JUnitXml.fromfile(junit_path)
 
     tree_paths = []
     tree_paths.append([["/", "dir", 0]])
 
-    for suite in root.findall("testsuite"):
-        suite_name = suite.get("name")
-
-        for case in suite.findall("testcase"):
-            test_name = case.get("name")
-            duration = float(case.get("time"))
+    for suite in junit:
+        for case in suite:
+            test_name = case.name
+            duration = case.time
             
             test_name = test_name.split("[")[0]
 
             root_name = "/"
-            path = [root_name] + suite_name.split("/") + [test_name]
+            path = [root_name] + suite.name.split("/") + [test_name]
             path_with_info = [[chunk, "dir", 0] for chunk in path]
             path_with_info[-1][1] = "testcase"
             path_with_info[-1][2] = duration

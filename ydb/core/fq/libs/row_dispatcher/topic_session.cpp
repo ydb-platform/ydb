@@ -10,6 +10,8 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
+#include <util/string/join.h>
 #include <util/generic/queue.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
@@ -43,6 +45,8 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
 };
 
+using TJson = TList<TString>;
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -64,12 +68,12 @@ struct TEvPrivate {
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
-        TEvDataParsed(ui64 offset, TList<TString>&& value) 
+        TEvDataParsed(ui64 offset, TJson&& value) 
             : Offset(offset)
             , Value(std::move(value))
         {}
         ui64 Offset = 0; 
-        TList<TString> Value;
+        TJson Value;
     };
 
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
@@ -100,7 +104,7 @@ TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& va
 class TTopicSession : public TActorBootstrapped<TTopicSession> {
 
 private:
-    using TParserInputType = std::pair< TVector<TString>, TVector<TString>>; // TODO: remove after YQ-3594
+    using TParserInputType = TSet<std::pair<TString, TString>>;
 
     struct ClientsInfo {
         ClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
@@ -155,6 +159,8 @@ private:
     TMaybe<TParserInputType> CurrentParserTypes;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
+    NYql::IPqGateway::TPtr PqGateway;
+    THashMap<TString, ui64> FieldParserOffsets;
 
 public:
     explicit TTopicSession(
@@ -180,7 +186,7 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(ui64 offset, const TString& message);
     void SendData(ClientsInfo& info);
-    void InitParser(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
+    void UpdateParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
     void SendDataArrived(ClientsInfo& client);
     void StopReadSession();
@@ -205,6 +211,8 @@ private:
 
     void PrintInternalState();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
+    TJson RebuildJson(const ClientsInfo& info, const TJson& json);
+    void UpdateFieldOffsets();
 
 private:
 
@@ -346,11 +354,11 @@ void TTopicSession::CreateTopicSession() {
         return;
     }
 
-    // Use any sourceParams.
-    const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
-
     if (!ReadSession) {
-        InitParser(sourceParams);
+        UpdateParser();
+    
+        // Use any sourceParams.
+        const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
         SubscribeOnNextEvent();
     }
@@ -368,6 +376,20 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
+TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json) {
+    TJson result;
+
+    for (auto name : info.Settings.GetSource().GetColumns()) {
+        auto offset = FieldParserOffsets[name];
+        auto it = json.begin();
+        std::advance(it, offset);
+        result.push_back(*it);
+    }
+    LOG_ROW_DISPATCHER_TRACE("RebuildJson " << JoinSeq(',', result));
+
+    return result;
+}
+
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset);
 
@@ -380,7 +402,8 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
             if (!info.Filter) {
                 continue;
             }
-            info.Filter->Push(ev->Get()->Offset, ev->Get()->Value);
+            auto json = RebuildJson(info, ev->Get()->Value);
+            info.Filter->Push(ev->Get()->Offset, json);
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter);
         }
@@ -390,7 +413,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration, read actor id " << ev->Get()->ReadActorId.ToString());
+    LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration, read actor id " << ev->Get()->ReadActorId.ToString() << ", " << ev->Get()->Json);
     auto it = Clients.find(ev->Get()->ReadActorId);
     if (it == Clients.end()) {
         LOG_ROW_DISPATCHER_ERROR("Skip DataAfterFilteration, wrong read actor, id " << ev->Get()->ReadActorId.ToString());
@@ -596,11 +619,6 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
     auto columns = GetVector(ev->Get()->Record.GetSource().GetColumns());
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
-    auto parserType = std::make_pair(columns, types);
-    if (CurrentParserTypes && *CurrentParserTypes != parserType) {
-        SendSessionError(ev->Sender, "Different columns/types, use same in all queries");
-        return;
-    }
 
     try {
         auto& clientInfo = Clients.emplace(
@@ -636,7 +654,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     } catch (...) {
         FatalError("Adding new client failed, " + CurrentExceptionMessage());
     }
-
+    UpdateParser();
     PrintInternalState();
     if (!ReadSession) { 
         Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
@@ -667,17 +685,54 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     ClientsWithoutPredicate.erase(ev->Sender);
 }
 
-void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
-    if (Parser) {
+
+void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSet<std::pair<TString, TString>>& columns) {
+    auto size = sourceParams.GetColumns().size();
+    Y_ENSURE(size == sourceParams.GetColumnTypes().size());
+
+    for (int i = 0; i < size; ++i) {
+        auto name = sourceParams.GetColumns().Get(i);
+        auto type = sourceParams.GetColumnTypes().Get(i);
+        columns.emplace(name, type);
+    }
+}
+
+void TTopicSession::UpdateFieldOffsets() {
+    FieldParserOffsets.clear();
+    Y_ENSURE(CurrentParserTypes);
+    ui64 offset = 0;
+    for (const auto& [name, type]: *CurrentParserTypes) {
+        FieldParserOffsets[name] = offset++;
+    }
+}
+
+void TTopicSession::UpdateParser() {
+    TSet<std::pair<TString, TString>> namesWithTypes;
+    for (auto& [readActorId, info] : Clients) {
+        CollectColumns(info.Settings.GetSource(), namesWithTypes);
+    }
+    if (namesWithTypes == CurrentParserTypes) {
         return;
     }
+
     try {
-        CurrentParserTypes = std::make_pair(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
+        CurrentParserTypes = namesWithTypes;
+        UpdateFieldOffsets();
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+
+        TVector<TString> names;
+        TVector<TString> types;
+        for (const auto& [name, type] : namesWithTypes) {
+            names.push_back(name);
+            types.push_back(type);
+        }
+
+        LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
+
         Parser = NewJsonParser(
-            GetVector(sourceParams.GetColumns()),
-            GetVector(sourceParams.GetColumnTypes()),
-            [actorSystem, selfId = SelfId()](ui64 offset, TList<TString>&& value){
+            names,
+            types,
+            [actorSystem, selfId = SelfId()](ui64 offset, TJson&& value){
                 actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(offset, std::move(value)));
             });
     } catch (const NYql::NPureCalc::TCompileError& e) {

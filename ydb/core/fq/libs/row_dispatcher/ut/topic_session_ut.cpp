@@ -351,6 +351,35 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
     }
+
+     Y_UNIT_TEST_F(TwoSessionsWithDifferentSchemes, TFixture) {
+        const TString topicName = "dif_schemes";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source1 = BuildSource(topicName);
+        auto source2 = BuildSource(topicName);
+        source2.AddColumns("key");
+        source2.AddColumnTypes("String");
+
+        StartSession(ReadActorId1, source1);
+        StartSession(ReadActorId2, source2);
+
+        TString json1 = "{\"dt\":100,\"value\":\"value1\", \"key\":\"key1\"}";
+    
+        const std::vector<TString> data = { json1 };
+        PQWrite(data, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
+
+        TString expectedJson1 = "{\"dt\":100,\"value\":\"value1\"}";
+        TString expectedJson2 = "{\"dt\":100,\"key\":\"key1\",\"value\":\"value1\"}";
+        ExpectMessageBatch(ReadActorId1, { expectedJson1 });
+        ExpectMessageBatch(ReadActorId2, { expectedJson2 });
+
+        StopSession(ReadActorId1, source1);
+        StopSession(ReadActorId2, source2);
+    }
 }
 
 }

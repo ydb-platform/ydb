@@ -189,8 +189,7 @@ class YdbCliHelper:
             return cmd
 
         def _exec_cli(self) -> None:
-            process = yatest.common.process.execute(self._get_cmd(), wait=False, check_exit_code=False)
-            process.wait(check_exit_code=False, timeout=self.timeout)
+            process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
             self.result.stdout = process.stdout.decode('utf-8', 'replace')
             self.result.stderr = process.stderr.decode('utf-8', 'replace')
             self._process_returncode(process.returncode, self.result.stderr)

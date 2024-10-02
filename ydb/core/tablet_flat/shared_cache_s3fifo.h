@@ -256,7 +256,7 @@ private:
                 if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1 && reinserts < ReinsertsLimit) { // load inserts, first read touches, second read touches
                     Push(MainQueue, page);
                 } else {
-                    if (frequency > 0) { // used only once or reinserts limit exceeded
+                    if (frequency > 0) { // the page is used only once or reinserts limit exceeded
                         TPageTraits::SetFrequency(page, 0);
                     }
                     AddGhost(page);

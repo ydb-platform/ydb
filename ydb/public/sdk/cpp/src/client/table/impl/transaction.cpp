@@ -9,10 +9,8 @@ TTransaction::TImpl::TImpl(const TSession& session, const std::string& txId)
 {
 }
 
-TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSettings& settings)
+TAsyncStatus TTransaction::TImpl::Precommit() const
 {
-    ChangesAreAccepted = false;
-
     auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
 
     for (auto& callback : PrecommitCallbacks) {
@@ -26,6 +24,15 @@ TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSetting
 
         result = result.Apply(action);
     }
+
+    return result;
+}
+
+TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSettings& settings)
+{
+    ChangesAreAccepted = false;
+
+    auto result = Precommit();
 
     auto precommitsCompleted = [this, settings](const TAsyncStatus& result) mutable {
         if (const TStatus& status = result.GetValue(); !status.IsSuccess()) {

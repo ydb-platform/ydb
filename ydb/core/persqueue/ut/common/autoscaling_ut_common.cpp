@@ -63,7 +63,7 @@ ui64 SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition,
 }
 
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
-    return SplitPartition(runtime, txId, TEST_TOPIC, partition, boundary);
+    return SplitPartition(runtime, txId, TString{TEST_TOPIC}, partition, boundary);
 }
 
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {

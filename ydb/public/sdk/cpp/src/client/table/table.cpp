@@ -1989,7 +1989,7 @@ const std::string& TSession::GetId() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TTxControl::TTxControl(const TTransaction& tx)
-    : TxId_(tx.GetId())
+    : Tx_(tx)
 {}
 
 TTxControl::TTxControl(const TTxSettings& begin)
@@ -2010,6 +2010,11 @@ const std::string& TTransaction::GetId() const
 bool TTransaction::IsActive() const
 {
     return TransactionImpl_->IsActive();
+}
+
+TAsyncStatus TTransaction::Precommit() const
+{
+    return TransactionImpl_->Precommit();
 }
 
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {

@@ -9,9 +9,12 @@ TAllocationGuard::~TAllocationGuard() {
     if (Released || !IsRegistered) {
         return;
     }
-    AFL_VERIFY(TlsActivationContext);
-    NActors::TActivationContext::AsActorContext().Send(
-        ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, ScopeId, AllocationId));
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, ScopeId, AllocationId));
+    } else {
+        AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("failed to unregister allocation", AllocationId);
+    }
 }
 
 void TAllocationGuard::Update(const ui64 newVolume) {
@@ -36,8 +39,11 @@ TGroupGuard::~TGroupGuard() {
     if (!IsRegistered) {
         return;
     }
-    AFL_VERIFY(TlsActivationContext);
-    NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishGroup>(ProcessId, ExternalScopeId, GroupId));
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishGroup>(ProcessId, ExternalScopeId, GroupId));
+    } else {
+        AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("failed to unregister group", GroupId);
+    }
 }
 
 TGroupGuard::TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 externalScopeId, const ui64 groupId)
@@ -55,8 +61,11 @@ TProcessGuard::~TProcessGuard() {
     if (!IsRegistered) {
         return;
     }
-    AFL_VERIFY(TlsActivationContext);
-    NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishProcess>(ProcessId));
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishProcess>(ProcessId));
+    } else {
+        AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("failed to unregister process", ProcessId);
+    }
 }
 
 TProcessGuard::TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
@@ -72,8 +81,11 @@ TScopeGuard::~TScopeGuard() {
     if (!IsRegistered) {
         return;
     }
-    AFL_VERIFY(TlsActivationContext);
-    NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishProcessScope>(ProcessId, ScopeId));
+    if (TlsActivationContext) {
+        NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishProcessScope>(ProcessId, ScopeId));
+    } else {
+        AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("failed to unregister scope", ScopeId);
+    }
 }
 
 TScopeGuard::TScopeGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 scopeId)

@@ -674,6 +674,52 @@ public:
     }
 };
 
+class TDone: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TMoveSequence TDone"
+            << ", operationId: " << OperationId;
+    }
+public:
+    TDone(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), AllIncomingEvents());
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveSequence);
+
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", SourcePathId: " << txState->SourcePathId
+                               << ", TargetPathId: " << txState->TargetPathId
+                               << ", at schemeshard: " << ssId);
+
+        // clear resources on src
+        NIceDb::TNiceDb db(context.GetDB());
+        TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
+        context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
+
+        TPathElement::TPtr dstPath = context.SS->PathsById.at(txState->TargetPathId);
+        context.OnComplete.ReleasePathState(OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
+};
+
 class TMoveSequence: public TSubOperation {
 
     static TTxState::ETxState NextState() {
@@ -887,6 +933,11 @@ public:
             return result;
         }
 
+        if (!context.SS->CheckLocks(srcPath.Base()->PathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+
         dstPath.MaterializeLeaf(srcPath.Base()->Owner);
         result->SetPathId(dstPath->PathId.LocalPathId);
 
@@ -953,6 +1004,8 @@ public:
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);
+
+        context.OnComplete.ActivateTx(OperationId);
 
         SetState(NextState());
         return result;

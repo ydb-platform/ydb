@@ -895,9 +895,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 }
 
 void TColumnShard::SetupCleanupUnusedSchemaVersions() {
-    auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    ui64 lastVersion = primaryIndex.GetVersionedIndex().GetLastSchemaVersion();
-    if (primaryIndex.MutableVersionCounts().IsEmpty(lastVersion)) {
+    if (TablesManager.GetPrimaryIndexSafe().IsEmpty()) {
         return;
     }
     Execute(new TTxSchemaVersionsCleanup(this));
@@ -1235,10 +1233,11 @@ TDuration TColumnShard::GetMaxReadStaleness() {
 }
 
 void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui64>& removedSchemaVersions) {
-    auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
-    ui64 lastVersion = primaryIndex.GetVersionedIndex().GetLastSchemaVersion();
-    primaryIndex.MutableVersionCounts().EnumerateVersionsToErase([&](ui64 version, auto& key) {
+    ui64 lastVersion = TablesManager.MutablePrimaryIndex().LastSchemaVersion();
+    auto* versionCounts = TablesManager.MutablePrimaryIndex().MutableVersionCounts();
+    AFL_VERIFY(versionCounts != nullptr);
+    versionCounts->EnumerateVersionsToErase([&](ui64 version, auto& key) {
         if (version != lastVersion) {
             LOG_S_DEBUG("Removing schema version from db " << version << " tablet id " << TabletID());
             removedSchemaVersions.insert(version);
@@ -1248,11 +1247,9 @@ void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui
 }
 
 void TColumnShard::CompleteSchemaVersionsCleanup(const THashSet<ui64>& removedSchemaVersions) {
-    auto& primaryIndex = MutableIndexAs<NOlap::TColumnEngineForLogs>();
     for (ui64 version: removedSchemaVersions) {
         LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << TabletID());
-        primaryIndex.RemoveSchemaVersion(version);
-        primaryIndex.MutableVersionCounts().VersionsToErase.erase(version);
+        TablesManager.MutablePrimaryIndex().EraseSchemaVersion(version);
     }
 }
 

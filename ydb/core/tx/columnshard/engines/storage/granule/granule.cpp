@@ -153,21 +153,14 @@ TGranuleMeta::TGranuleMeta(
 }
 
 std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts* versionCounts) {
+    auto portionId = portion.GetPortionId();
     auto schemaVersionOpt = portion.GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {
         versionCounts.VersionAddRef(*schemaVersionOpt);
     }
-    if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
-        const TInsertWriteId insertWriteId = portion.GetInsertWriteIdVerified();
-        auto emplaceInfo = InsertedPortions.emplace(insertWriteId, std::make_shared<TPortionInfo>(std::move(portion)));
-        AFL_VERIFY(emplaceInfo.second);
-        return emplaceInfo.first->second;
-    } else {
-        auto portionId = portion.GetPortionId();
-        auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
-        AFL_VERIFY(emplaceInfo.second);
-        return emplaceInfo.first->second;
-    }
+    auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
+    AFL_VERIFY(emplaceInfo.second);
+    return emplaceInfo.first->second;
 }
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {

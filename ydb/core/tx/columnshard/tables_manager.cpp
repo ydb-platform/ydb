@@ -311,8 +311,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
         } else {
             PrimaryIndex->RegisterSchemaVersion(version, schema);
         }
-        auto& index = MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-        auto& key = index.MutableVersionCounts().VersionToKey[versionInfo.GetSchema().GetVersion()];
+        auto& key = PrimaryIndex->MutableVersionCounts()->VersionToKey[versionInfo.GetSchema().GetVersion()];
         key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
         for (auto& columnName : Ttl.TtlColumns()) {
             PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);

@@ -212,23 +212,45 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
     }
 };
 
+static bool IsPipe(const TString& filePath) {
+#ifdef _unix_
+    int file = open(filePath.c_str(), O_RDWR);
+    if (file < 0) {
+        return false;
+    }
+    struct stat stats;
+    if (fstat(file, &stats) != 0) {
+        return false;
+    }
+    return S_ISFIFO(stats.st_mode);
+#endif
+    return false;
+}
+
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
-    TString topicPath = settings.Topics_.front().Path_;
-    Y_ENSURE(settings.Topics_.front().PartitionIds_.size() == 1);
-    ui64 partitionId = settings.Topics_.front().PartitionIds_.front();
+    const auto& topic = settings.Topics_.front();
+    TString topicPath = topic.Path_;
+    Y_ENSURE(topic.PartitionIds_.size() == 1);
+    ui64 partitionId = topic.PartitionIds_.front();
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    Y_ENSURE(topicsIt->second.Path);
+    auto path = topicsIt->second.Path;
+    Y_ENSURE(path);
 
     TString filePath;
-    if (TFsPath(*topicsIt->second.Path).IsDirectory()) {
-        filePath = TString(*topicsIt->second.Path) + "/" + ToString(partitionId);
+    TFsPath fsPath(*path);
+    if (fsPath.IsDirectory()) {
+        filePath = TStringBuilder() << *path << "/" << ToString(partitionId);
     } else {
-        if (TFsPath(*topicsIt->second.Path).Exists() && topicsIt->second.PartitionsCount == 1) {
-            filePath = *topicsIt->second.Path;
+        if (fsPath.Exists() && topicsIt->second.PartitionsCount == 1) {
+            filePath = *path;
         } else {
-            filePath = TString(*topicsIt->second.Path) + "_" + ToString(partitionId);
+            if (IsPipe(*path)) {
+                filePath = TStringBuilder() << *path << "_" << ToString(partitionId);
+            } else {
+                filePath = *path;
+            }
         }
     }
 

@@ -993,7 +993,7 @@ int RunMain(int argc, const char* argv[])
                     Cerr << "Incorrect table mapping, expected form topic@path[:partitions_count]" << Endl;
                     return 1;
                 }
-                size_t partitionCount = !partitionCountStr.empty() ? partitionCount = FromString<size_t>(partitionCountStr) : 1;
+                size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
                 fileGateway->AddDummyTopic(TDummyTopic("pq", TString(topicName), TString(path), partitionCount));
             }
             pqGateway = std::move(fileGateway);

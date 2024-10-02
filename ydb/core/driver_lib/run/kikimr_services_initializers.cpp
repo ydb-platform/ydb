@@ -1094,6 +1094,7 @@ void TSharedCacheInitializer::InitializeServices(
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
     config->ReplacementPolicy = cfg.GetReplacementPolicy();
     config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
+    config->ReplacementPolicyReinsertsLimit = cfg.GetReplacementPolicyReinsertsLimit();
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");

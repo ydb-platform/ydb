@@ -14,4 +14,5 @@ message TSharedCacheConfig {
     reserved 5;
     optional TReplacementPolicy ReplacementPolicy = 6 [default = ThreeLeveledLRU];
     optional uint32 ReplacementPolicySwitchUniformDelaySeconds = 7 [default = 3600];
+    optional uint64 ReplacementPolicyReinsertsLimit = 8 [default = 20];
 }

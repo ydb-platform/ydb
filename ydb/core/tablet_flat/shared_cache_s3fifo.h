@@ -21,7 +21,7 @@ class TS3FIFOGhostPageQueue {
 
     struct TGhostPage {
         TPageKey Key;
-        ui64 Size; // zero size is tombstone
+        ui64 Size; // zero size is a tombstone
 
         TGhostPage(const TPageKey& key, ui64 size)
             : Key(key)
@@ -159,8 +159,9 @@ class TS3FIFOCache : public ICacheCache<TPage> {
     };
 
 public:
-    TS3FIFOCache(ui64 limit)
+    TS3FIFOCache(ui64 limit, ui64 reinsertsLimit)
         : Limit(limit)
+        , ReinsertsLimit(reinsertsLimit)
         , SmallQueue(ES3FIFOPageLocation::SmallQueue)
         , MainQueue(ES3FIFOPageLocation::MainQueue)
         , GhostQueue(limit)
@@ -249,22 +250,27 @@ public:
 
 private:
     TPage* EvictOneIfFull() {
-        while (true) {
+        for (ui64 reinserts = 0; ; reinserts++) {
             if (!SmallQueue.Queue.Empty() && SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1 && reinserts < ReinsertsLimit) { // load inserts, first read touches, second read touches
                     Push(MainQueue, page);
                 } else {
-                    if (frequency) TPageTraits::SetFrequency(page, 0);
+                    if (frequency) { // used only once or reinserts limit exceeded
+                        TPageTraits::SetFrequency(page, 0);
+                    }
                     AddGhost(page);
                     return page;
                 }
             } else if (!MainQueue.Queue.Empty() && MainQueue.Size > Limit.MainQueueLimit) {
                 TPage* page = Pop(MainQueue);
-                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0 && reinserts < ReinsertsLimit) {
                     TPageTraits::SetFrequency(page, frequency - 1);
                     Push(MainQueue, page);
                 } else {
+                    if (frequency > 0) { // reinserts limit exceeded
+                        TPageTraits::SetFrequency(page, 0);
+                    }
                     return page;
                 }
             } else {
@@ -337,6 +343,7 @@ private:
 
 private:
     TLimit Limit;
+    ui64 ReinsertsLimit;
     TQueue SmallQueue;
     TQueue MainQueue;
     TS3FIFOGhostPageQueue<TPageTraits> GhostQueue;

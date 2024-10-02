@@ -185,9 +185,17 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
             phyColumn.MutableDefaultFromLiteral()->CopyFrom(column->DefaultFromLiteral);
         }
         phyColumn.SetNotNull(column->NotNull);
-        if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-            phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetPgTypeDesc()));
+        switch (column->TypeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Pg: {
+            phyColumn.MutableTypeParam()->SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetPgTypeDesc()));
+            break;
         }
+        case NScheme::NTypeIds::Decimal: {
+            ProtoFromDecimalType(column->TypeInfo.GetDecimalType(), *phyColumn.MutableTypeParam()->MutableDecimal());
+            break;
+        }        
+        }
+
     }
 }
 
@@ -1076,20 +1084,22 @@ private:
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
+            auto fillColumnProto = [] (TString columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+                columnProto->SetId(column->Id);
+                columnProto->SetName(columnName);
+                columnProto->SetTypeId(column->TypeInfo.GetTypeId());
+
+                if(NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
+                    ProtoFromTypeInfo(column->TypeInfo, column->TypeMod, *columnProto->MutableTypeInfo());
+                }
+            };
+
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
 
                 auto keyColumnProto = settingsProto.AddKeyColumns();
-                keyColumnProto->SetId(columnMeta->Id);
-                keyColumnProto->SetName(columnName);
-                keyColumnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
-
-                if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    auto& typeInfo = *keyColumnProto->MutableTypeInfo();
-                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetPgTypeDesc()));
-                    typeInfo.SetPgTypeMod(columnMeta->TypeMod);
-                }
+                fillColumnProto(columnName, columnMeta, keyColumnProto);
             }
 
             for (const auto& column : settings.Columns().Cast()) {
@@ -1098,15 +1108,7 @@ private:
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
 
                 auto columnProto = settingsProto.AddColumns();
-                columnProto->SetId(columnMeta->Id);
-                columnProto->SetName(columnName);
-                columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
-
-                if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    auto& typeInfo = *columnProto->MutableTypeInfo();
-                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetPgTypeDesc()));
-                    typeInfo.SetPgTypeMod(columnMeta->TypeMod);
-                }
+                fillColumnProto(columnName, columnMeta, columnProto);
             }
 
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {

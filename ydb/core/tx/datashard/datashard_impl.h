@@ -107,14 +107,12 @@ public:
                           TRowVersion completeEdge = TRowVersion::Min(),
                           TRowVersion incompleteEdge = TRowVersion::Min(),
                           TRowVersion immediateWriteEdge = TRowVersion::Min(),
-                          TRowVersion lowWatermark = TRowVersion::Min(),
-                          bool performedUnprotectedReads = false)
+                          TRowVersion lowWatermark = TRowVersion::Min())
         : TxId(txId)
         , CompleteEdge(completeEdge)
         , IncompleteEdge(incompleteEdge)
         , ImmediateWriteEdge(immediateWriteEdge)
         , LowWatermark(lowWatermark)
-        , PerformedUnprotectedReads(performedUnprotectedReads)
         , Tables(tables)
     {}
 
@@ -127,7 +125,6 @@ public:
     TRowVersion IncompleteEdge;
     TRowVersion ImmediateWriteEdge;
     TRowVersion LowWatermark;
-    bool PerformedUnprotectedReads;
 
 private:
     TVector<ui32> Tables;
@@ -152,12 +149,6 @@ struct TReadWriteVersions {
 
     const TRowVersion ReadVersion;
     const TRowVersion WriteVersion;
-};
-
-enum class TSwitchState {
-    READY,
-    SWITCHING,
-    DONE
 };
 
 class TDataShardEngineHost;
@@ -228,7 +219,6 @@ class TDataShard
     class TTxStoreS3DownloadInfo;
     class TTxS3UploadRows;
     class TTxObjectStorageListing;
-    class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
     class TTxCompactTable;
@@ -321,9 +311,6 @@ class TDataShard
     friend class TCreateIncrementalRestoreSrcUnit;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
-
-    friend class TTxStartMvccStateChange;
-    friend class TTxExecuteMvccStateChange;
 
     friend class TTableChangeSenderShard;
 
@@ -1471,7 +1458,6 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();
     NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();
-    NTabletFlatExecutor::ITransaction* CreateTxExecuteMvccStateChange();
 
     TReadWriteVersions GetLocalReadWriteVersions() const;
 
@@ -1816,10 +1802,8 @@ public:
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
     void CheckStateChange(const TActorContext& ctx);
     void CheckSplitCanStart(const TActorContext& ctx);
-    void CheckMvccStateChangeCanStart(const TActorContext& ctx);
 
     ui32 GetState() const { return State; }
-    TSwitchState GetMvccSwitchState() { return MvccSwitchState; }
     void SetPersistState(ui32 state, TTransactionContext &txc)
     {
         NIceDb::TNiceDb db(txc.DB);
@@ -1827,6 +1811,9 @@ public:
 
         State = state;
     }
+
+    void PersistUnprotectedReadsEnabled(NIceDb::TNiceDb& db);
+    void PersistUnprotectedReadsEnabled(TTransactionContext& txc);
 
     bool IsStopping() const { return Stopping; }
 
@@ -1997,9 +1984,6 @@ public:
 
     TScanManager& GetScanManager() { return ScanManager; }
 
-    // Returns true when datashard is working in mvcc mode
-    bool IsMvccEnabled() const;
-
     // Calculates current follower read edge
     std::tuple<TRowVersion, bool, ui64> CalculateFollowerReadEdge() const;
 
@@ -2062,6 +2046,7 @@ public:
         NWilson::TTraceId traceId = {});
     void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
+    bool NeedMediatorStateRestored() const;
     void CheckMediatorStateRestored();
     void FinishMediatorStateRestore(TTransactionContext&, ui64, ui64);
 
@@ -2084,7 +2069,6 @@ public:
     void StartWatchingSubDomainPathId();
 
     bool WaitPlanStep(ui64 step);
-    bool CheckTxNeedWait() const;
     bool CheckTxNeedWait(const TRowVersion& mvccSnapshot) const;
     bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
     bool CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const;
@@ -2641,7 +2625,6 @@ private:
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
-    TSwitchState MvccSwitchState;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent

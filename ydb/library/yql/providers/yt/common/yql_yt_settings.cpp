@@ -265,6 +265,7 @@ TYtConfiguration::TYtConfiguration()
         })
         ;
     REGISTER_SETTING(*this, ParallelOperationsLimit).Lower(1);
+    REGISTER_SETTING(*this, LocalCalcLimit).Lower(1);
     REGISTER_SETTING(*this, DefaultCalcMemoryLimit);
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {

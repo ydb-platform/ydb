@@ -89,6 +89,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> InferSchemaTableCountThreshold;
     NCommon::TConfSetting<NSize::TSize, false> DefaultCalcMemoryLimit;
     NCommon::TConfSetting<ui32, false> ParallelOperationsLimit;
+    NCommon::TConfSetting<ui32, false> LocalCalcLimit;
     NCommon::TConfSetting<EQueryCacheMode, false> QueryCacheMode;
     NCommon::TConfSetting<bool, false> QueryCacheIgnoreTableRevision;
     NCommon::TConfSetting<TString, false> QueryCacheSalt;

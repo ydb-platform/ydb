@@ -253,7 +253,29 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
+        // --->
+
+        if (txState->CdcPathId != InvalidPathId) {
+            TPathId srcPathId = txState->SourcePathId;
+
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(srcPathId));
+            auto srcPath = context.SS->PathsById.at(srcPathId);
+
+            Y_ABORT_UNLESS(context.SS->Tables.contains(srcPathId));
+            auto srcTable = context.SS->Tables.at(srcPathId);
+
+            srcTable->AlterVersion += 1;
+
+            context.SS->PersistTableAlterVersion(db, srcPathId, table);
+
+            context.SS->ClearDescribePathCaches(path);
+            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
+        }
+
+        // <---
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
+
         return true;
     }
 

@@ -50,15 +50,12 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
        auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
-        // desc.SetDstPath(JoinPath({targetPathStr, item.GetPath().substr(1, item.GetPath().size() - 1)}));
         desc.SetDstPath("0" + item.GetPath());
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
-        desc.SetIsBackup(true);
+        // desc.SetIsBackup(true);
         desc.MutableCreateCdcStream()->CopyFrom(createCdcStreamOp);
     }
-    // Y_ABORT("%s", modifyScheme.DebugString().c_str());
-
 
     CreateConsistentCopyTables(opId, modifyScheme, context, result);
 
@@ -88,25 +85,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
         NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, false);
     }
-
-    // FIXME(+active) it is impossible to combine two datashard ops, we have to write new one
-    // if (bc->Properties.HasIncrementalBackupConfig()) {
-    //     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
-    //         NKikimrSchemeOp::TModifyScheme tx2;
-
-    //         tx2.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateContinuousBackup);
-    //         tx2.SetInternal(true);
-    //         auto& cb = *tx2.MutableCreateContinuousBackup();
-    //         cb.SetTableName(item.GetPath());
-    //         cb.MutableContinuousBackupDescription();
-
-    //         auto res2 = CreateNewContinuousBackup(opId, tx2, context, res);
-
-    //         if (!res2) {
-    //             return res;
-    //         }
-    //     }
-    // }
 
     return result;
 }

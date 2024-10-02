@@ -664,6 +664,24 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
         }
 
+        // Good case: upsert overflowed Decimal
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key22").Decimal(TDecimalValue("12345678901234567890.1234567891", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("1234567890123456789012345678901234567890.1234567891", 35, 10))
+                    .AddMember("Value22").Decimal(TDecimalValue("inf", 22, 9))
+                    .AddMember("Value35").Decimal(TDecimalValue("inf", 35, 10))
+                    .AddMember("ValueInt").Uint64(999999999)
+                .EndStruct();
+            rows.EndList();
+
+            auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        }         
+
         // Bad case: lookup by Uint64 value in Decimal key
         {
             NYdb::TValueBuilder keys;
@@ -694,7 +712,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(issues.Contains("Type mismatch, got type Decimal(35,10) for column Key22, but expected Decimal(22,9)"), issues);
         }
 
-        // Good case
+        // Good case: lookup decimal
         {
             NYdb::TValueBuilder keys;
             keys.BeginList();
@@ -717,6 +735,22 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 ]
             )", res);
         }
+
+        // Good case: lookup overflowed decimal
+        {
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key22").Decimal(TDecimalValue("inf", 22, 9))
+                    .AddMember("Key35").Decimal(TDecimalValue("inf", 35, 10))
+                .EndStruct();
+            keys.EndList();
+            auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+            UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+            auto res = FormatResultSetYson(selectResult.GetResultSet());
+            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", res);
+        }        
     }
 
 

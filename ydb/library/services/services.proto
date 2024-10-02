@@ -345,6 +345,9 @@ enum EServiceKikimr {
     DB_POOL = 1167;
     YTS = 1168;
 
+    OBJECT_STORAGE_INFERENCINATOR = 1169;
+    FQ_ROW_DISPATCHER = 1170;
+
     // 1024 - 1099 is reserved for nbs
 
     // Change exchange (async indexes & CDC)

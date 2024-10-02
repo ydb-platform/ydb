@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto, 
+NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
     const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
     const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic) {
     auto parseBase = TBase::DeserializeFromProto(proto);
@@ -73,6 +73,11 @@ void TSourceSession::SaveCursorToDatabase(NIceDb::TNiceDb& db) {
     GetCursorVerified()->SaveToDatabase(db, GetSessionId());
 }
 
+void TSourceSession::AckTransferSchemeHistory(
+    NColumnShard::TColumnShard* self, const TTabletId tabletId, const std::shared_ptr<TSourceSession>& selfPtr) {
+    ActualizeDestination(*self, self->GetDataLocksManager());
+}
+
 void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
     AFL_VERIFY(IsInProgress() || IsPrepared());
     AFL_VERIFY(Cursor);
@@ -102,14 +107,21 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
     }
 }
 
-bool TSourceSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+void TSourceSession::TransferSchemeHistory(const NColumnShard::TColumnShard& shard) {
+    auto ev = std::make_unique<NEvents::TEvTransferSchemeHistory>(GetSessionId(), {});
+
+    NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+}
+
+bool TSourceSession::DoStart(
+    const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
     AFL_VERIFY(Cursor);
     if (Cursor->Start(shard.GetStoragesManager(), portions, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex())) {
-        ActualizeDestination(shard, shard.GetDataLocksManager());
+        TransferSchemeHistory(shard);
         return true;
     } else {
         return false;
     }
 }
-
 }

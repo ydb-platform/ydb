@@ -24,8 +24,6 @@
 
 namespace NKikimr {
 
-using namespace NColumnShard;
-
 class TLocalHelper: public Tests::NCS::THelper {
 private:
     using TBase = Tests::NCS::THelper;

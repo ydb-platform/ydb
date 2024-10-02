@@ -25,8 +25,6 @@
 
 namespace NKikimr {
 
-using namespace NColumnShard;
-
 Y_UNIT_TEST_SUITE(Secret) {
 
     class TJsonChecker {

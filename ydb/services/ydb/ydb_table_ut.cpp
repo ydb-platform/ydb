@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        TVector<TResultSet> resultSets = result.GetResultSets();
+        std::vector<TResultSet> resultSets = result.GetResultSets();
         UNIT_ASSERT_EQUAL(resultSets.size(), 1);
         UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 1);
         UNIT_ASSERT_EQUAL(resultSets[0].GetColumnsMeta().size(), 1);

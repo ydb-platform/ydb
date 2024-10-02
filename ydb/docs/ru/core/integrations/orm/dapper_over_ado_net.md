@@ -144,19 +144,15 @@ await connection.OpenAsync();
 
 var ydbCommand = connection.CreateCommand();
 ydbCommand.CommandText = """
-                         DECLARE $series_id AS Uint64;
-                         DECLARE $season_id AS Uint64;
-                         DECLARE $limit_size AS Uint64;
-
                          SELECT series_id, season_id, episode_id, air_date, title
                          FROM episodes
-                         WHERE series_id = $series_id AND season_id > $season_id
+                         WHERE series_id = @series_id AND season_id > @season_id
                          ORDER BY series_id, season_id, episode_id
-                         LIMIT $limit_size;
+                         LIMIT @limit_size;
                          """;
-ydbCommand.Parameters.Add(new YdbParameter("$series_id", DbType.UInt64, 1U));
-ydbCommand.Parameters.Add(new YdbParameter("$season_id", DbType.UInt64, 1U));
-ydbCommand.Parameters.Add(new YdbParameter("$limit_size", DbType.UInt64, 3U));
+ydbCommand.Parameters.Add(new YdbParameter("series_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
 
 var ydbDataReader = await ydbCommand.ExecuteReaderAsync();
 
@@ -170,7 +166,7 @@ while (await ydbDataReader.ReadAsync())
 }
 ```
 
-В этом примере мы объявляем параметры `$series_id`, `$season_id` и `$limit_size` внутри SQL-запроса и затем добавляем их в команду с помощью `YdbParameter` объектов.
+В этом примере мы объявляем параметры `series_id`, `season_id` и `limit_size` внутри SQL-запроса и затем добавляем их в команду с помощью `YdbParameter` объектов.
 
 ### Альтернативный стиль с префиксом @
 
@@ -237,7 +233,7 @@ catch (YdbException e)
 
 ### Свойства исключения YdbException
 
-Исключение YdbException содержит следующие свойства, которые помогут вам более точно обработать ошибку:
+Исключение `YdbException` содержит следующие свойства, которые помогут вам более точно обработать ошибку:
 
 - `IsTransient`: Возвращает true, если ошибка временная и может быть устранена повторной попыткой. Например, такая
   ошибка может возникнуть в случае нарушения блокировки транзакции, когда транзакция не успела завершить коммит.

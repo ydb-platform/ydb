@@ -8,6 +8,7 @@ from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 
+
 class TestClickbench(LoadSuiteBase):
     suite = 'Clickbench'
     workload_type: WorkloadType = WorkloadType.Clickbench
@@ -17,7 +18,7 @@ class TestClickbench(LoadSuiteBase):
         if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_CLICKBECNH', '0') == '1':
             return
         root_path = YdbCluster.tables_path
-        path = get_external_param(f'table-path-clickbench', f'{root_path}/clickbench/hits')
+        path = get_external_param('table-path-clickbench', f'{root_path}/clickbench/hits')
         fail_count = 0
         start_time = time()
         for query_num in range(0, 43):
@@ -35,7 +36,7 @@ class TestClickbench(LoadSuiteBase):
             except BaseException:
                 fail_count += 1
 
-        test='_Verification'
+        test = '_Verification'
         ResultsProcessor.upload_results(
             kind='Load',
             suite=self.suite,
@@ -45,7 +46,6 @@ class TestClickbench(LoadSuiteBase):
         )
         if fail_count > 0:
             pytest.fail(f'{fail_count} verification queries failed')
-
 
     @pytest.mark.parametrize('query_num', [i for i in range(0, 43)])
     def test_clickbench(self, query_num):

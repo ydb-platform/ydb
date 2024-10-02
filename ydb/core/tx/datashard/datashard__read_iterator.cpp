@@ -334,8 +334,8 @@ public:
         TSerializedCellVec keyToCells;
         if (LastProcessedKey) {
             if (!State.Reverse) {
-                keyFromCells = TSerializedCellVec(State.LastProcessedKey);
-                fromInclusive = State.LastProcessedKeyErasedOrMissing;
+                keyFromCells = TSerializedCellVec(LastProcessedKey);
+                fromInclusive = LastProcessedKeyErasedOrMissing;
 
                 keyToCells = range.To;
                 toInclusive = range.ToInclusive;
@@ -344,8 +344,8 @@ public:
                 keyFromCells = range.From;
                 fromInclusive = range.FromInclusive;
 
-                keyToCells = TSerializedCellVec(State.LastProcessedKey);
-                toInclusive = State.LastProcessedKeyErasedOrMissing;
+                keyToCells = TSerializedCellVec(LastProcessedKey);
+                toInclusive = LastProcessedKeyErasedOrMissing;
             }
         } else {
             keyFromCells = range.From;

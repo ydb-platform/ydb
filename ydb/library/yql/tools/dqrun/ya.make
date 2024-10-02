@@ -95,6 +95,8 @@ ENDIF()
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors
         ydb/core/fq/libs/db_id_async_resolver_impl
+        ydb/core/fq/libs/init
+        ydb/core/external_sources
 
         ydb/library/yql/udfs/common/clickhouse/client
     )

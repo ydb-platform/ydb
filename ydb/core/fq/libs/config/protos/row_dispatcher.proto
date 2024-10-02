@@ -11,6 +11,7 @@ import "ydb/core/fq/libs/config/protos/storage.proto";
 message TRowDispatcherCoordinatorConfig {
     TYdbStorageConfig Database = 1;
     string CoordinationNodePath = 2;
+    bool LocalMode = 3;                     // Use only local row_dispatcher.
 }
 message TRowDispatcherConfig {
     bool Enabled = 1;
@@ -19,5 +20,4 @@ message TRowDispatcherConfig {
     uint64 MaxSessionUsedMemory = 4; 
     bool WithoutConsumer = 5;
     TRowDispatcherCoordinatorConfig Coordinator = 6;
-
 }

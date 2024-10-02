@@ -176,7 +176,7 @@ public:
             const TString& username,
             const IPipelineConfigurator& pipelineConf);
 
-    TStatus RunWithConfig(
+    TFutureStatus RunWithConfig(
             const TString& username,
             const IPipelineConfigurator& pipelineConf);
 

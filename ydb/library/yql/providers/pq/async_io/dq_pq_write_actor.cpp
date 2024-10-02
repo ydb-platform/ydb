@@ -152,6 +152,7 @@ public:
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << taskId << ", PQ sink. ")
         , FreeSpace(freeSpace)
         , TopicClient(Driver, GetTopicClientSettings())
+        , File("data/result/" + std::get<TString>(TxId), EOpenModeFlag::CreateAlways |  EOpenModeFlag::WrOnly)
     { 
         EgressStats.Level = statsLevel;
     }
@@ -191,6 +192,9 @@ public:
             }
 
             TString data(dataCol.AsStringRef());
+
+            TString logData(TStringBuilder() << Now() << " " << TxId << ": " << data << "\n");
+            File.Write(logData.data(), logData.size());
 
             LWPROBE(PqWriteDataToSend, TString(TStringBuilder() << TxId), SinkParams.GetTopicPath(), data);
             SINK_LOG_T("Received data for sending: " << data);
@@ -482,6 +486,7 @@ private:
     std::queue<TString> Buffer;
     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
+    TFile File;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(

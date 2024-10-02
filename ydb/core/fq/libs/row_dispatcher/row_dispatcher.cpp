@@ -108,7 +108,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
 
     NConfig::TRowDispatcherConfig Config;
-    NConfig::TCommonConfig CommonConfig;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> CoordinatorActorId;
@@ -120,6 +119,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TRowDispatcherMetrics Metrics;
+    NYql::IPqGateway::TPtr PqGateway;
 
     struct ConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -171,13 +171,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 public:
     explicit TRowDispatcher(
         const NConfig::TRowDispatcherConfig& config,
-        const NConfig::TCommonConfig& commonConfig,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        const NYql::IPqGateway::TPtr& pqGateway);
 
     void Bootstrap();
 
@@ -234,15 +234,14 @@ public:
 
 TRowDispatcher::TRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqGateway::TPtr& pqGateway)
     : Config(config)
-    , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
@@ -250,7 +249,8 @@ TRowDispatcher::TRowDispatcher(
     , Tenant(tenant)
     , ActorFactory(actorFactory)
     , Counters(counters)
-    , Metrics(counters) {
+    , Metrics(counters)
+    , PqGateway(pqGateway) {
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -391,7 +391,9 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 source.GetAddBearerToToken()),
-            Counters);
+            Counters,
+            PqGateway
+            );
         SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
         sessionInfo.Consumers[ev->Sender] = consumerInfo;
     } else {
@@ -586,23 +588,23 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqGateway::TPtr& pqGateway)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
-        commonConfig,
         credentialsProviderFactory,
         yqSharedResources,
         credentialsFactory,
         tenant,
         actorFactory,
-        counters));
+        counters,
+        pqGateway));
 }
 
 } // namespace NFq

@@ -7,6 +7,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/fq/libs/config/protos
+    ydb/core/fq/libs/init
     ydb/library/yql/utils
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/spilling

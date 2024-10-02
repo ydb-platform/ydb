@@ -70,6 +70,47 @@ private:
 };
 
 template <typename... Params1, typename... Params2>
+TProgram::TFutureStatus AsyncRetry(
+        TProgram* program,
+        TProgram::TFutureStatus (TProgram::*method)(Params1...),
+        Params2&&... params) {
+    TProgram::TFutureStatus future =
+            (program->*method)(std::forward<Params2>(params)...);
+    YQL_ENSURE(future.Initialized());
+    return future.Apply([program](TProgram::TFutureStatus f) -> TProgram::TFutureStatus {
+        try {
+            auto status = f.GetValue();
+            if (status == TProgram::TStatus::Async) {
+                return AsyncRetry(program, &TProgram::ContinueAsync);
+            }
+            return MakeFuture(status);
+        } catch (const std::exception& e) {
+            return NThreading::MakeFuture<TProgram::TStatus>(TProgram::TStatus::Error);
+        }
+    });
+}
+
+template <typename... Params1, typename... Params2>
+TProgram::TFutureStatus AsyncExecution(
+        TProgram* program,
+        TProgram::TFutureStatus (TProgram::*method)(Params1...),
+        Params2&&... params) {
+    return AsyncRetry(program, method, std::forward<Params2>(params)...)
+        .Apply([program](TProgram::TFutureStatus f) -> TProgram::TFutureStatus {
+            try {
+                auto status = f.GetValue();
+                if (status == TProgram::TStatus::Error) {
+                program->Print(program->ExprStream(), program->PlanStream());
+            }
+            return MakeFuture(status);
+            } catch (const std::exception& e) {
+                return NThreading::MakeFuture<TProgram::TStatus>(TProgram::TStatus::Error);
+            }
+            
+        });
+}
+
+template <typename... Params1, typename... Params2>
 TProgram::TStatus SyncExecution(
         TProgram* program,
         TProgram::TFutureStatus (TProgram::*method)(Params1...),
@@ -1185,12 +1226,12 @@ TProgram::TFutureStatus TProgram::RunAsync(
     });
 }
 
-TProgram::TStatus TProgram::RunWithConfig(
+TProgram::TFutureStatus TProgram::RunWithConfig(
         const TString& username, const IPipelineConfigurator& pipelineConf)
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::RunAsyncWithConfig;
-    return SyncExecution(this, m, username, pipelineConf);
+    return AsyncExecution(this, m, username, pipelineConf);
 }
 
 TProgram::TFutureStatus TProgram::RunAsyncWithConfig(

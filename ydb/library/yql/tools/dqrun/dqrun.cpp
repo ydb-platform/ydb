@@ -81,8 +81,12 @@
 #include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
+
 #include <ydb/core/util/pb.h>
 
 #include <yt/cpp/mapreduce/interface/init.h>
@@ -173,6 +177,17 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 
     if (config->HasSqlCore()) {
         sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
+    }
+}
+
+void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
+    if (fqCfgFile.empty()) {
+        return;
+    }
+    auto configData = TFileInput(fqCfgFile).ReadAll();
+    using ::google::protobuf::TextFormat;
+    if (!TextFormat::ParseFromString(configData, fqConfig)) {
+        ythrow yexception() << "Bad format of fq configuration";
     }
 }
 
@@ -355,7 +370,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
 }
 
-int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
+int PrepareProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
     program->SetUseTableMetaFromGraph(options.UseMetaFromGraph);
     bool fail = true;
     if (options.Sql || options.Pg) {
@@ -398,24 +413,20 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     if (fail) {
         return 1;
     }
+    return 0;
+}
 
-    TProgram::TStatus status = TProgram::TStatus::Error;
-    if (options.ValidateOnly) {
-        Cout << "Validate program..." << Endl;
-        status = program->Validate(options.User);
-    } else if (options.LineageOnly) {
-        Cout << "Calculate lineage..." << Endl;
-        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
-        status = program->LineageWithConfig(options.User, config);
-    } else if (options.OptimizeOnly) {
-        Cout << "Optimize program..." << Endl;
-        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
-        status = program->OptimizeWithConfig(options.User, config);
-    } else {
-        Cout << "Run program..." << Endl;
-        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
-        status = program->RunWithConfig(options.User, config);
-    }
+TProgram::TFutureStatus RunProgram(TProgramPtr program, const TRunOptions& options) {
+    // TProgram::TStatus status = TProgram::TStatus::Error;
+    YQL_ENSURE(!options.ValidateOnly);
+    YQL_ENSURE(!options.LineageOnly);
+    YQL_ENSURE(!options.OptimizeOnly);
+    Cout << "Run program..." << Endl;
+    auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
+    return program->RunWithConfig(options.User, config);
+}
+
+int PrintResults(TProgramPtr program, const TRunOptions& options, TProgram::TStatus status) {
     if (options.WithFinalIssues) {
         program->FinalizeIssues();
     }
@@ -482,7 +493,8 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
-    TString progFile;
+    TString fqCfgFile;
+    TString progFiles;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
     TString user = GetUsername();
@@ -550,7 +562,7 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
         .Optional()
         .RequiredArgument("FILE")
-        .StoreResult(&progFile);
+        .StoreResult(&progFiles);
     opts.AddLongOption('s', "sql", "Program is SQL query")
         .Optional()
         .NoArgument()
@@ -573,6 +585,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&gatewaysCfgFile);
+    opts.AddLongOption("fq-cfg", "federated query configuration file")
+        .Optional()
+        .RequiredArgument("FILE")
+        .StoreResult(&fqCfgFile);
     opts.AddLongOption("fs-cfg", "Path to file storage config")
         .Optional()
         .StoreResult(&fileStorageCfg);
@@ -841,12 +857,15 @@ int RunMain(int argc, const char* argv[])
 
     TGatewaysConfig gatewaysConfig;
     ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
-    PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
+    // PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
         setting->SetValue("1");
     }
+
+    NFq::NConfig::TConfig fqConfig;
+    ReadFqConfig(fqCfgFile, &fqConfig);
 
     if (res.Has("enable-spilling")) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
@@ -985,13 +1004,16 @@ int RunMain(int argc, const char* argv[])
             auto fileGateway = MakeIntrusive<TDummyPqGateway>();
 
             for (auto& s : pqFileList) {
-                TStringBuf topicName, filePath;
-                TStringBuf(s).Split('@', topicName, filePath);
-                if (topicName.empty() || filePath.empty()) {
-                    Cerr << "Incorrect table mapping, expected form topic@file" << Endl;
+                TStringBuf topicName, others;
+                TStringBuf(s).Split('@', topicName, others);
+                TStringBuf path, partitionCountStr;
+                TStringBuf(others).Split(':', path, partitionCountStr);
+                if (topicName.empty() || path.empty()) {
+                    Cerr << "Incorrect table mapping, expected form topic@path[:partitions_count]" << Endl;
                     return 1;
                 }
-                fileGateway->AddDummyTopic(TDummyTopic("pq", TString(topicName), TString(filePath)));
+                size_t partitionCount = !partitionCountStr.empty() ? partitionCount = FromString<size_t>(partitionCountStr) : 1;
+                fileGateway->AddDummyTopic(TDummyTopic("pq", TString(topicName), TString(path), partitionCount));
             }
             pqGateway = std::move(fileGateway);
         } else {
@@ -1038,7 +1060,7 @@ int RunMain(int argc, const char* argv[])
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
-                metricsRegistry, metricsPusherFactory);
+                metricsRegistry, metricsPusherFactory, fqConfig, pqGateway);
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
@@ -1109,6 +1131,13 @@ int RunMain(int argc, const char* argv[])
         )
     );
 
+    TVector<TProgramPtr> programs;
+    for (int i = 0;; ++i) {
+        auto progFile = TString("data/query/" + std::to_string(i) + ".txt");
+        if (!NFs::Exists(progFile)) {
+            break;
+        }
+
     TProgramPtr program;
     if (res.Has("replay") && res.Has("capture")) {
         YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
@@ -1120,7 +1149,7 @@ int RunMain(int argc, const char* argv[])
     } else if (progFile == TStringBuf("-")) {
         program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {
-        program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
+        program = progFactory.Create(TFile(progFile, RdOnly), opId + std::to_string(i), qContext);
         program->SetQueryName(progFile);
     }
 
@@ -1159,13 +1188,35 @@ int RunMain(int argc, const char* argv[])
         runOptions.ValidateResultFormat = true;
     }
 
-    int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);
+        int result = PrepareProgram(program, runOptions, clusters, sqlFlags);
+        if (result) {
+            return result;
+        }
+        programs.emplace_back(program);
+    }
+
+    TVector<TProgram::TFutureStatus> futures;
+    for (TProgramPtr program : programs) {
+        futures.emplace_back(RunProgram(program, runOptions));
+    }
     if (res.Has("metrics")) {
         NProto::TMetricsRegistrySnapshot snapshot;
         snapshot.SetDontIncrement(true);
         metricsRegistry->TakeSnapshot(&snapshot);
         auto output = MakeHolder<TFileOutput>(metricsFile);
         SerializeToTextFormat(snapshot, *output.Get());
+    }
+
+    int result = 0;
+    NThreading::WaitAll(futures).Wait();
+    for (size_t i = 0; i < futures.size(); ++i) {
+        try {
+            YQL_ENSURE(futures[i].IsReady());
+            PrintResults(programs[i], runOptions, futures[i].GetValueSync());
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << e.what() << '\n';
+            result = 1;
+        }
     }
 
     if (result == 0 && res.Has("capture")) {

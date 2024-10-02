@@ -2348,6 +2348,11 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
 
         TTableInfo::TPtr tableInfo = Tables.at(pathId);
         extraData = tableInfo->SerializeAlterExtraData();
+    } else if (txState.TxType == TTxState::TxCopyTable) {
+        NKikimrProto::TPathID proto;
+        PathIdFromPathId(txState.TargetPathId, &proto);
+        bool serializeRes = proto.SerializeToString(&extraData);
+        Y_ABORT_UNLESS(serializeRes);
     }
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
                 NIceDb::TUpdate<Schema::TxInFlightV2::TxType>((ui8)txState.TxType),

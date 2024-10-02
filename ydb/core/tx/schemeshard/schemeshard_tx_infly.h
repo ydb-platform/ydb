@@ -268,6 +268,7 @@ struct TTxState {
     ETxState State = Invalid;
     TStepId MinStep = InvalidStepId;
     TStepId PlanStep = InvalidStepId;
+    TPathId CdcPathId = InvalidPathId;              // path (dir or table) being modified
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them

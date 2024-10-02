@@ -3508,6 +3508,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!path->UserAttrs->AlterData) {
                         path->UserAttrs->AlterData = new TUserAttributes(path->UserAttrs->AlterVersion + 1);
                     }
+                } else if (txState.TxType == TTxState::TxCopyTable) {
+                    if (!extraData.empty()) {
+                        NKikimrProto::TPathID proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = PathIdFromPathId(proto);
+                    }
                 }
 
 

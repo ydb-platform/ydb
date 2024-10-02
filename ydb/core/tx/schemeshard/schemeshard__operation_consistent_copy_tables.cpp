@@ -53,14 +53,20 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+void CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
     const auto& op = tx.GetCreateConsistentCopyTables();
 
     if (0 == op.CopyTableDescriptionsSize()) {
         TString msg = TStringBuilder() << "no task to do, empty list CopyTableDescriptions";
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        return;
     }
 
     TPath firstPath = TPath::Resolve(op.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
@@ -95,10 +101,9 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        return;
     }
-
-    TVector<ISubOperation::TPtr> result;
 
     for (const auto& descr: op.GetCopyTableDescriptions()) {
         const auto& srcStr = descr.GetSrcPath();
@@ -115,7 +120,8 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
 
             if (!checks) {
                 Y_ABORT("%s, %s", srcPath.PathString().c_str(), checks.GetError().c_str());
-                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                return;
             }
         }
 
@@ -290,6 +296,12 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
         }
     }
+}
+
+TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
+    CreateConsistentCopyTables(nextId, tx, context, result);
 
     return result;
 }

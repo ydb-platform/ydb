@@ -444,6 +444,11 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
+void CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);

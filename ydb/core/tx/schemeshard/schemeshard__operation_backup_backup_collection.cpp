@@ -1,5 +1,8 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -11,12 +14,12 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     Y_UNUSED(opId, tx, context);
 
     NKikimrSchemeOp::TModifyScheme modifyScheme;
-
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
     modifyScheme.SetInternal(true);
 
     auto& cct = *modifyScheme.MutableCreateConsistentCopyTables();
     auto& copyTables = *cct.MutableCopyTableDescriptions();
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     // Y_ABORT("%s %s", tx.GetWorkingDir().c_str(), tx.GetBackupBackupCollection().GetName().c_str());
     // FIXME(+active)
 
@@ -32,6 +35,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     cct.SetDstBasePath(bcPathStr);
 
+    TVector<ISubOperation::TPtr> result;
+
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
 
         auto& desc = *copyTables.Add();
@@ -41,11 +46,21 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
-    }
 
+        NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+        createCdcStreamOp.SetTableName(item.GetPath());
+        auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+        streamDescription.SetName(NBackup::CB_CDC_STREAM_NAME);
+        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+        const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+        NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, workingDirPath, sPath, false, false);
+    }
     // Y_ABORT("%s", modifyScheme.DebugString().c_str());
 
-    auto res = CreateConsistentCopyTables(opId, modifyScheme, context);
+
+    CreateConsistentCopyTables(opId, modifyScheme, context, result);
 
     // FIXME(+active) it is impossible to combine two datashard ops, we have to write new one
     // if (bc->Properties.HasIncrementalBackupConfig()) {
@@ -66,7 +81,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     //     }
     // }
 
-    return res;
+    return result;
 }
 
 }  // namespace NKikimr::NSchemeShard

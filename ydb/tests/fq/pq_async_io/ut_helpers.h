@@ -10,7 +10,6 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>

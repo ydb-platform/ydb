@@ -38,15 +38,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     TVector<ISubOperation::TPtr> result;
 
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
-
-        auto& desc = *copyTables.Add();
-        desc.SetSrcPath(item.GetPath());
-        // desc.SetDstPath(JoinPath({targetPathStr, item.GetPath().substr(1, item.GetPath().size() - 1)}));
-        desc.SetDstPath("0" + item.GetPath());
-        desc.SetOmitIndexes(true);
-        desc.SetOmitFollowers(true);
-        desc.SetIsBackup(true);
-
         NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
         createCdcStreamOp.SetTableName(item.GetPath());
         auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
@@ -56,11 +47,47 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
         const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
         NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, workingDirPath, sPath, false, false);
+
+       auto& desc = *copyTables.Add();
+        desc.SetSrcPath(item.GetPath());
+        // desc.SetDstPath(JoinPath({targetPathStr, item.GetPath().substr(1, item.GetPath().size() - 1)}));
+        desc.SetDstPath("0" + item.GetPath());
+        desc.SetOmitIndexes(true);
+        desc.SetOmitFollowers(true);
+        desc.SetIsBackup(true);
+        desc.MutableCreateCdcStream()->CopyFrom(createCdcStreamOp);
     }
     // Y_ABORT("%s", modifyScheme.DebugString().c_str());
 
 
     CreateConsistentCopyTables(opId, modifyScheme, context, result);
+
+    for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
+        NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+        createCdcStreamOp.SetTableName(item.GetPath());
+        auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+        streamDescription.SetName(NBackup::CB_CDC_STREAM_NAME);
+        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+        const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+        auto table = context.SS->Tables.at(sPath.Base()->PathId);
+
+        TVector<TString> boundaries;
+        const auto& partitions = table->GetPartitions();
+        boundaries.reserve(partitions.size() - 1);
+
+        for (ui32 i = 0; i < partitions.size(); ++i) {
+            const auto& partition = partitions.at(i);
+            if (i != partitions.size() - 1) {
+                boundaries.push_back(partition.EndOfRange);
+            }
+        }
+
+        const auto streamPath = sPath.Child(NBackup::CB_CDC_STREAM_NAME);
+
+        NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, false);
+    }
 
     // FIXME(+active) it is impossible to combine two datashard ops, we have to write new one
     // if (bc->Properties.HasIncrementalBackupConfig()) {

@@ -55,7 +55,7 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
         ui64 tableId = snapshot.GetTableId_Deprecated();
         if (snapshot.HasTableId()) {
             Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
-            tableId = schemeTx.GetSendSnapshot().GetTableId().GetTableId();
+            tableId = snapshot.GetTableId().GetTableId();
         }
 
         Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));

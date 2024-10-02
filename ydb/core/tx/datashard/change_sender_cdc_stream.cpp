@@ -552,7 +552,7 @@ class TCdcChangeSenderMain
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
 
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1, "%d", (int)entry.ListNodeEntry->Children.size());
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
         Y_ABORT_UNLESS(topic.Kind == TNavigate::KindTopic);

@@ -84,10 +84,10 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
         .DefaultValue("generic").StoreResult(&QueryExecuterType);
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
-    config.Opts->AddLongOption("global-timeout", "Timeout for perform all request")
+    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
         .StoreResult(&GlobalTimeout);
 
-    config.Opts->AddLongOption("request-timeout", "Timeout for perform each iteration of each request")
+    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
         .StoreResult(&RequestTimeout);
 
 }

@@ -988,6 +988,15 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
+            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+                partitioning.reserve(pqDesc.GetPartitions().size());
+                for (const auto& partition : pqDesc.GetPartitions()) {
+                    partitioning.emplace_back(partition.GetPartitionId());
+                }
+
+                return;
+            }
+
             if (pqConfig.GetPartitionKeySchema().empty()) {
                 return;
             }
@@ -999,15 +1008,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else {
                     schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
                 }
-            }
-
-            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
-                partitioning.reserve(pqDesc.GetPartitions().size());
-                for (const auto& partition : pqDesc.GetPartitions()) {
-                    partitioning.emplace_back(partition.GetPartitionId());
-                }
-
-                return;
             }
 
             partitioning.reserve(pqDesc.PartitionsSize());

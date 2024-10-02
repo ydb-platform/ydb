@@ -583,12 +583,14 @@ class TCdcChangeSenderMain
         const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
         TopicVersion = topicVersion;
 
-        Y_ABORT_UNLESS(entry.PQGroupInfo->Schema);
+        auto topicAutoPartitioning = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
+
+        Y_ABORT_UNLESS(topicAutoPartitioning || entry.PQGroupInfo->Schema);
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ABORT_UNLESS(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
-        if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+        if (topicAutoPartitioning) {
             SetPartitionResolver(new TBoundaryPartitionResolver(pqDesc));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));

@@ -76,6 +76,7 @@ enum class EExecutionUnitKind: ui32 {
     DropCdcStream,
     MoveIndex,
     CreateIncrementalRestoreSrc,
+    CreateIncrementalBackupSrc,
     Count,
     Unspecified
 };

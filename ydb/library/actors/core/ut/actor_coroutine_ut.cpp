@@ -11,6 +11,7 @@
 
 using namespace NActors;
 
+
 Y_UNIT_TEST_SUITE(ActorCoro) {
     enum {
         Begin = EventSpaceBegin(TEvents::ES_USERSPACE),

@@ -135,7 +135,7 @@ runs:
             --cert-key "$TMP_DIR/key.pem" \
             --target-timeout 3,60 \
             --max-request-time 200 \
-            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy.log 2>&1 &
+            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy_log.txt 2>&1 &
             
           TESTMO_PROXY_PID=$!
           echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
@@ -162,8 +162,8 @@ runs:
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         
         if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare.log"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare.log"
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
           ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
@@ -307,8 +307,8 @@ runs:
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
-        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
-        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
+        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
+        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
@@ -387,7 +387,7 @@ runs:
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
           set +e
           (./ya make $YA_MAKE_TARGET "${params[@]}" \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e

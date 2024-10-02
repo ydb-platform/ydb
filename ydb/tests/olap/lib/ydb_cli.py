@@ -178,25 +178,22 @@ class YdbCliHelper:
                 '--include', str(self.query_num),
                 '--iterations', str(self.iterations),
                 '--plan', self._plan_path,
+                '--global-timeout', f'{self.timeout}s',
                 '--verbose'
             ]
             query_preffix = get_external_param('query-prefix', '')
             if query_preffix:
                 cmd += ['--query-settings', query_preffix]
             if self.check_canonical:
-                cmd.append('--check-cannonical')
+                cmd.append('--check-canonical')
             return cmd
 
         def _exec_cli(self) -> None:
-            try:
-                process = yatest.common.process.execute(self._get_cmd(), wait=False, check_exit_code=False)
-                process.wait(check_exit_code=False, timeout=self.timeout)
-                self._process_returncode(process.returncode, process.stderr.decode('utf-8', 'replace'))
-            except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
-                self._process_returncode(0, process.stderr.decode('utf-8', 'replace'))
-                self._add_error(f'Timeout {self.timeout}s expeared.')
+            process = yatest.common.process.execute(self._get_cmd(), wait=False, check_exit_code=False)
+            process.wait(check_exit_code=False, timeout=self.timeout)
             self.result.stdout = process.stdout.decode('utf-8', 'replace')
             self.result.stderr = process.stderr.decode('utf-8', 'replace')
+            self._process_returncode(process.returncode, self.result.stderr)
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:

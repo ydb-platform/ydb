@@ -59,8 +59,16 @@ namespace NKikimr::NPDisk {
                         const size_t bytesToRead = PDisk->Format.RoundUpToSectorSize(sizeof(TMetadataHeader) + header->Length);
                         Buffer = TRcBuf::UninitializedPageAligned(bytesToRead); // __header is not valid anymore__
                         const ui64 offset = PDisk->Format.Offset(Req->Key.ChunkIdx, Req->Key.OffsetInSectors);
-                        PDisk->BlockDevice->PreadAsync(GetBuffer(), bytesToRead, offset, this, Req->ReqId, nullptr);
-                        return;
+                        auto buffer = GetBuffer();
+                        auto reqId = Req->ReqId;
+                        auto callback = [buffer, bytesToRead, offset, this, reqId](bool success, TActorSystem *actorSystem) {
+                            if (success) {
+                                PDisk->BlockDevice->PreadAsync(buffer, bytesToRead, offset, this, reqId, nullptr);
+                            } else {
+                                Release(actorSystem);
+                            }
+                        };
+                        return PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TContinueReadMetadata>(callback));
                     }
                 } else {
                     Req->ErrorReason = "header checksum does not pass validation";

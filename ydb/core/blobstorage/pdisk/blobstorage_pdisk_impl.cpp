@@ -2485,6 +2485,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestPushUnformattedMetadataSector:
                 ProcessPushUnformattedMetadataSector(static_cast<TPushUnformattedMetadataSector&>(*req));
                 break;
+            case ERequestType::RequestContinueReadMetadata:
+                static_cast<TContinueReadMetadata&>(*req).Execute(PCtx->ActorSystem);
+                break;
             default:
                 Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
                 break;
@@ -3078,6 +3081,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestReadMetadata:
         case ERequestType::RequestWriteMetadata:
+        case ERequestType::RequestContinueReadMetadata:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();

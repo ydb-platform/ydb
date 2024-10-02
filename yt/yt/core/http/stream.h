@@ -87,11 +87,11 @@ class THttpInput
 {
 public:
     THttpInput(
-        const NNet::IConnectionPtr& connection,
-        const NNet::TNetworkAddress& peerAddress,
-        const IInvokerPtr& readInvoker,
+        NNet::IConnectionPtr connection,
+        const NNet::TNetworkAddress& remoteAddress,
+        IInvokerPtr readInvoker,
         EMessageType messageType,
-        const THttpIOConfigPtr& config);
+        THttpIOConfigPtr config);
 
     EMethod GetMethod() override;
     const TUrlRef& GetUrl() override;
@@ -135,6 +135,7 @@ private:
     const NNet::TNetworkAddress RemoteAddress_;
     const EMessageType MessageType_;
     const THttpIOConfigPtr Config_;
+    const IInvokerPtr ReadInvoker_;
 
     TSharedMutableRef InputBuffer_;
     TSharedRef UnconsumedData_;
@@ -147,7 +148,7 @@ private:
     int Port_;
     THeadersPtr Headers_;
 
-    // Debug.
+    // Debug
     TRequestId RequestId_;
     i64 StartByteCount_ = 0;
     NNet::TConnectionStatistics StartStatistics_;
@@ -157,11 +158,11 @@ private:
     bool SafeToReuse_ = false;
     bool IsHttps_ = false;
 
+    TError AnnotateError(const TError& error);
+
     void FinishHeaders();
     void FinishMessage();
     void EnsureHeadersReceived();
-
-    IInvokerPtr ReadInvoker_;
 
     TSharedRef DoRead();
 
@@ -179,15 +180,15 @@ class THttpOutput
 {
 public:
     THttpOutput(
-        const THeadersPtr& headers,
-        const NNet::IConnectionPtr& connection,
+        THeadersPtr headers,
+        NNet::IConnectionPtr connection,
         EMessageType messageType,
-        const THttpIOConfigPtr& config);
+        THttpIOConfigPtr config);
 
     THttpOutput(
-        const NNet::IConnectionPtr& connection,
+        NNet::IConnectionPtr connection,
         EMessageType messageType,
-        const THttpIOConfigPtr& config);
+        THttpIOConfigPtr config);
 
     const THeadersPtr& GetHeaders() override;
     void SetHeaders(const THeadersPtr& headers);
@@ -222,9 +223,9 @@ private:
     const EMessageType MessageType_;
     const THttpIOConfigPtr Config_;
 
-    TClosure OnWriteFinish_;
+    const TClosure OnWriteFinish_;
 
-    //! Debugging.
+    // Debug
     TRequestId RequestId_;
     i64 StartByteCount_ = 0;
     NNet::TConnectionStatistics StartStatistics_;
@@ -235,7 +236,7 @@ private:
 
     bool ConnectionClose_ = false;
 
-    //! Headers.
+    // Headers
     THeadersPtr Headers_;
     std::optional<EStatusCode> Status_;
     std::optional<EMethod> Method_;
@@ -244,8 +245,10 @@ private:
     bool HeadersFlushed_ = false;
     bool MessageFinished_ = false;
 
-    //! Trailers.
+    // Trailers
     THeadersPtr Trailers_;
+
+    TError AnnotateError(const TError& error);
 
     TFuture<void> FinishChunked();
 
@@ -253,11 +256,6 @@ private:
     TSharedRef GetTrailersPart();
 
     static TSharedRef GetChunkHeader(size_t size);
-
-    static const TSharedRef Http100Continue;
-    static const TSharedRef CrLf;
-    static const TSharedRef ZeroCrLf;
-    static const TSharedRef ZeroCrLfCrLf;
 
     void OnWriteFinish();
 };

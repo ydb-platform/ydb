@@ -131,10 +131,10 @@ namespace NMonitoring {
             return IsRate_ ? EMetricType::HIST_RATE : EMetricType::HIST;
         }
 
-        virtual void Record(double value) = 0;
-        virtual void Record(double value, ui32 count) = 0;
+        virtual void Record(double value) noexcept = 0;
+        virtual void Record(double value, ui32 count) noexcept = 0;
         virtual IHistogramSnapshotPtr TakeSnapshot() const = 0;
-        virtual void Reset() = 0;
+        virtual void Reset() noexcept = 0;
 
     protected:
         const bool IsRate_;
@@ -368,11 +368,11 @@ namespace NMonitoring {
         {
         }
 
-        void Record(double value) override {
+        void Record(double value) noexcept override {
             Collector_->Collect(value);
         }
 
-        void Record(double value, ui32 count) override {
+        void Record(double value, ui32 count) noexcept override {
             Collector_->Collect(value, count);
         }
 
@@ -384,7 +384,7 @@ namespace NMonitoring {
             return Collector_->Snapshot();
         }
 
-        void Reset() override {
+        void Reset() noexcept override {
             Collector_->Reset();
         }
 

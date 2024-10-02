@@ -1,7 +1,7 @@
 import json
 import os
 import six
-from _common import rootrel_arc_src
+from _common import rootrel_arc_src, ugly_conftest_exception
 import ymake
 
 
@@ -65,7 +65,10 @@ def onresource_files(unit, *args):
                     ['warn', "Duplicated resource file {} in RESOURCE_FILES() macro. Skipped it.".format(path)]
                 )
                 continue
-            src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
+            if not ugly_conftest_exception(path):
+                src = 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)
+            else:
+                src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
             res += ['-', src, path, key]
 
     if unit.enabled('_GO_MODULE'):

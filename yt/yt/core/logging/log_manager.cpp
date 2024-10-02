@@ -50,6 +50,8 @@
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
+#include <library/cpp/yt/containers/expiring_set.h>
+
 #include <util/system/defaults.h>
 #include <util/system/sigset.h>
 #include <util/system/yield.h>
@@ -247,84 +249,6 @@ private:
     TString Path_;
     TClosure Callback_;
 
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class TElement>
-class TExpiringSet
-{
-public:
-    TExpiringSet()
-    {
-        Reconfigure(TDuration::Zero());
-    }
-
-    explicit TExpiringSet(TDuration lifetime)
-    {
-        Reconfigure(lifetime);
-    }
-
-    void Update(std::vector<TElement> elements)
-    {
-        RemoveExpired();
-        Insert(std::move(elements));
-    }
-
-    bool Contains(const TElement& element)
-    {
-        return Set_.contains(element);
-    }
-
-    void Reconfigure(TDuration lifetime)
-    {
-        Lifetime_ = DurationToCpuDuration(lifetime);
-    }
-
-    void Clear()
-    {
-        Set_.clear();
-        ExpirationQueue_ = std::priority_queue<TPack>();
-    }
-
-private:
-    struct TPack
-    {
-        std::vector<TElement> Elements;
-        TCpuInstant ExpirationTime;
-
-        bool operator<(const TPack& other) const
-        {
-            // Reversed ordering for the priority queue.
-            return ExpirationTime > other.ExpirationTime;
-        }
-    };
-
-    TCpuDuration Lifetime_;
-    THashSet<TElement> Set_;
-    std::priority_queue<TPack> ExpirationQueue_;
-
-
-    void Insert(std::vector<TElement> elements)
-    {
-        for (const auto& element : elements) {
-            Set_.insert(element);
-        }
-
-        ExpirationQueue_.push(TPack{std::move(elements), GetCpuInstant() + Lifetime_});
-    }
-
-    void RemoveExpired()
-    {
-        auto now = GetCpuInstant();
-        while (!ExpirationQueue_.empty() && ExpirationQueue_.top().ExpirationTime < now) {
-            for (const auto& element : ExpirationQueue_.top().Elements) {
-                Set_.erase(element);
-            }
-
-            ExpirationQueue_.pop();
-        }
-    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -935,7 +859,7 @@ private:
         CompressionThreadPool_->Configure(Config_->CompressionThreadCount);
 
         if (RequestSuppressionEnabled_) {
-            SuppressedRequestIdSet_.Reconfigure((Config_->RequestSuppressionTimeout + DequeuePeriod) * 2);
+            SuppressedRequestIdSet_.SetTTl((Config_->RequestSuppressionTimeout + DequeuePeriod) * 2);
         } else {
             SuppressedRequestIdSet_.Clear();
             SuppressedRequestIdQueue_.DequeueAll();
@@ -1328,15 +1252,15 @@ private:
         int eventsWritten = 0;
         int eventsSuppressed = 0;
 
-        SuppressedRequestIdSet_.Update(SuppressedRequestIdQueue_.DequeueAll());
+        SuppressedRequestIdSet_.InsertMany(Now(), SuppressedRequestIdQueue_.DequeueAll());
 
         auto requestSuppressionEnabled = RequestSuppressionEnabled_.load(std::memory_order::relaxed);
-        auto deadline = GetCpuInstant() - DurationToCpuDuration(Config_->RequestSuppressionTimeout);
+        auto suppressionDeadline = GetCpuInstant() - DurationToCpuDuration(Config_->RequestSuppressionTimeout);
 
         while (!TimeOrderedBuffer_.empty()) {
             const auto& event = TimeOrderedBuffer_.front();
 
-            if (requestSuppressionEnabled && GetEventInstant(event) > deadline) {
+            if (requestSuppressionEnabled && GetEventInstant(event) > suppressionDeadline) {
                 break;
             }
 
@@ -1442,9 +1366,8 @@ private:
     THashMap<TEventProfilingKey, TCounter> WrittenEventsCounters_;
 
     const TProfiler Profiler{"/logging"};
-
-    TGauge MinLogStorageAvailableSpace_ = Profiler.Gauge("/min_log_storage_available_space");
-    TGauge MinLogStorageFreeSpace_ = Profiler.Gauge("/min_log_storage_free_space");
+    const TGauge MinLogStorageAvailableSpace_ = Profiler.Gauge("/min_log_storage_available_space");
+    const TGauge MinLogStorageFreeSpace_ = Profiler.Gauge("/min_log_storage_free_space");
 
     TBufferedProducerPtr AnchorBufferedProducer_;
     TInstant LastAnchorStatsCaptureTime_;

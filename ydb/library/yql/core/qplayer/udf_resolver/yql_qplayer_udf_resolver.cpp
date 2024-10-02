@@ -30,10 +30,10 @@ public:
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "can't replay GetSystemModulePath";
+            return MakeMaybe<TFilePathWithMd5>("", "");
         }
 
-        return Inner_-> GetSystemModulePath(moduleName);
+        return Inner_->GetSystemModulePath(moduleName);
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,

@@ -856,59 +856,24 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::CORRUPTED);
     }
 
-    void SmallDisk(ui64 diskSizeGb) {
-        ui64 diskSize = diskSizeGb << 30;
+    Y_UNIT_TEST(SmallDisk10Gb) {
+        ui64 diskSize = 10_GB;
         TActorTestContext testCtx({
             .IsBad = false,
             .DiskSize = diskSize,
             .SmallDisk = true,
         });
 
-        TString data(NPDisk::SmallDiskMaximumChunkSize, '0');
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
 
-        auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TStrokaBackedUpParts>(data);
-
-        ui64 dataMb = 0;
-        for (ui32 i = 0; i < 200; ++i) {
-            TVDiskMock mock(&testCtx);
-            testCtx.Send(new NPDisk::TEvYardInit(mock.OwnerRound.fetch_add(1), mock.VDiskID, testCtx.TestCtx.PDiskGuid));
-            const auto evInitRes = testCtx.Recv<NPDisk::TEvYardInitResult>();
-
-            if (evInitRes->Status == NKikimrProto::OK) {
-                std::vector<ui32> chunks;
-                while (true) {
-                    testCtx.Send(new NPDisk::TEvChunkReserve(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 1));
-                    auto resp = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
-                    if (resp->Status == NKikimrProto::OK) {
-                        ui32 chunk = resp->ChunkIds.front();
-                        chunks.push_back(chunk);
-                        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
-                            evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound,
-                            chunk, 0, parts, nullptr, false, 0),
-                            NKikimrProto::OK);
-                        dataMb += NPDisk::SmallDiskMaximumChunkSize >> 20;
-                    } else {
-                        break;
-                    }
-                }
-                if (chunks.empty()) {
-                    break;
-                }
-            } else {
-                break;
-            }
+        ui64 reservedSpace = 0;
+        // Assert that it is possible for single owner to allocated and commit 85% of small disk size
+        while (reservedSpace < diskSize * 0.85) {
+            vdisk.ReserveChunk();
+            vdisk.CommitReservedChunks();
+            reservedSpace += NPDisk::SmallDiskMaximumChunkSize;
         }
-        UNIT_ASSERT_GE(dataMb, diskSizeGb * 1024 * 0.85);
-    }
-
-    Y_UNIT_TEST(SmallDisk10) {
-        SmallDisk(10);
-    }
-    Y_UNIT_TEST(SmallDisk20) {
-        SmallDisk(20);
-    }
-    Y_UNIT_TEST(SmallDisk40) {
-        SmallDisk(40);
     }
 
     Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {

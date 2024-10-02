@@ -133,20 +133,27 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     return batch;
 }
 
-void ISnapshotSchema::AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const {
-    if (targetSchema->GetVersion() != GetVersion()) {
-        std::vector<ui32> columnIdxToDelete;
-        for (size_t columnIdx = 0; columnIdx < batch.GetSchema()->GetFields().size(); ++columnIdx) {
-            const std::optional<ui32> targetColumnId = targetSchema->GetColumnIdOptional(batch.GetSchema()->field(columnIdx)->name());
-            const ui32 batchColumnId = GetColumnIdVerified(GetFieldByIndex(columnIdx)->name());
-            if (!targetColumnId || *targetColumnId != batchColumnId) {
-                columnIdxToDelete.emplace_back(columnIdx);
-            }
-        }
-        if (!columnIdxToDelete.empty()) {
-            batch.DeleteFieldsByIndex(columnIdxToDelete);
+std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {
+    if (targetSchema->GetVersion() == GetVersion()) {
+        return {};
+    }
+    std::set<ui32> columnIdxsToDelete;
+    for (const auto& columnIdx : GetColumnIds()) {
+        const std::optional<ui32> targetColumnId = targetSchema->GetColumnIdOptional(GetFieldByColumnIdOptional(columnIdx)->name());
+        if (!targetColumnId || *targetColumnId != columnIdx) {
+            columnIdxsToDelete.emplace(columnIdx);
         }
     }
+    return columnIdxsToDelete;
+}
+
+std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const {
+    std::vector<ui32> columnIndexes;
+    for (const auto& id : idxs) {
+        AFL_VERIFY(HasColumnId(id));
+        columnIndexes.emplace_back(GetFieldIndex(id));
+    }
+    return columnIndexes;
 }
 
 ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {

@@ -1262,25 +1262,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
             c = TCell(v.data(), v.size());
             break;
         }
-    case NScheme::NTypeIds::Decimal: {
-        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
-        valInPool.first = val.low_128();
-        valInPool.second = val.high_128();
-        if (NYql::NDecimal::MakePair(NYql::NDecimal::Inf()) == valInPool) {
-            err = "Decimal value is Inf";
-            return false;
-        }
-        if (NYql::NDecimal::MakePair(NYql::NDecimal::Err()) == valInPool) {
-            err = "Decimal value is Err";
-            return false;
-        }
-        if (NYql::NDecimal::MakePair(NYql::NDecimal::Nan()) == valInPool) {
-            err = "Decimal value is Nan";
-            return false;
-        }
-        c = TCell((const char*)&valInPool, sizeof(valInPool));
-        break;
-    }
+    case NScheme::NTypeIds::Decimal :
     case NScheme::NTypeIds::Uuid : {
         std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
         valInPool.first = val.low_128();

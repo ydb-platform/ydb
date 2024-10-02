@@ -15,22 +15,32 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
+
+        if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
+            return result;
+        }
+        if (effectiveSettings) {
+            *effectiveSettings = parsedSettings;
+        }
+
         google::protobuf::Arena arena;
         if (!parsedSettings.Arena) {
             parsedSettings.Arena = &arena;
         }
 
-        if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
-            return result;
-        }
-
         if (!parsedSettings.DeclaredNamedExprs.empty() && !parsedSettings.PgParser && parsedSettings.SyntaxVersion != 1) {
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "Externally declared named expressions not supported in V0 syntax"));
+            return result;
+        }
+
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
             return result;
         }
 
@@ -182,6 +192,12 @@ namespace NSQLTranslation {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                 "Externally declared named expressions not supported in V0 syntax"));
             return {};
+        }
+
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
+            return result;
         }
 
         if (parsedSettings.PgParser) {

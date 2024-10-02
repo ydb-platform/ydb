@@ -6,20 +6,23 @@
 #include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
-    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity)
-        : TExecutorPoolBase(poolId, threads, affinity)
+    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity, bool useRingQueue)
+        : TExecutorPoolBase(poolId, threads, affinity, useRingQueue)
         , Threads(new TExecutorThreadCtx[threads])
         , PoolName(poolName)
     {}
 
-    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg)
+    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
         : TIOExecutorPool(
             cfg.PoolId,
             cfg.Threads,
             cfg.PoolName,
-            new TAffinity(cfg.Affinity)
+            new TAffinity(cfg.Affinity),
+            cfg.UseRingQueue
         )
-    {}
+    {
+        Harmonizer = harmonizer;
+    }
 
     TIOExecutorPool::~TIOExecutorPool() {
         Threads.Destroy();
@@ -51,7 +54,7 @@ namespace NActors {
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+            if (const ui32 activation = std::visit([&revolvingCounter](auto &x){return x.Pop(++revolvingCounter);}, Activations)) {
                 return activation;
             }
             SpinLockPause();
@@ -84,7 +87,9 @@ namespace NActors {
     }
 
     void TIOExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) {
-        Activations.Push(activation, revolvingWriteCounter);
+        std::visit([activation, revolvingWriteCounter](auto &x) {
+            x.Push(activation, revolvingWriteCounter);
+        }, Activations);
         const TAtomic x = AtomicIncrement(Semaphore);
         if (x <= 0) {
             for (;; ++revolvingWriteCounter) {
@@ -146,6 +151,17 @@ namespace NActors {
         for (i16 i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
         }
+    }
+
+    void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
+        if (Harmonizer) {
+            TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
+            poolState.UsedCpu = stats.AvgConsumedCpu;
+        }
+        poolState.CurrentLimit = PoolThreads;
+        poolState.MaxLimit = PoolThreads;
+        poolState.MinLimit = PoolThreads;
+        poolState.PossibleMaxLimit = PoolThreads;
     }
 
     TString TIOExecutorPool::GetName() const {

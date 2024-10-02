@@ -3,6 +3,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
@@ -10,43 +11,6 @@
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow {
-
-class TRowSizeCalculator {
-private:
-    std::shared_ptr<arrow::RecordBatch> Batch;
-    ui32 CommonSize = 0;
-    std::vector<const arrow::BinaryArray*> BinaryColumns;
-    std::vector<const arrow::StringArray*> StringColumns;
-    bool Prepared = false;
-    const ui32 AlignBitsCount = 1;
-
-    ui32 GetBitWidthAligned(const ui32 bitWidth) const {
-        if (AlignBitsCount == 1) {
-            return bitWidth;
-        }
-        ui32 result = bitWidth / AlignBitsCount;
-        if (bitWidth % AlignBitsCount) {
-            result += 1;
-        }
-        result *= AlignBitsCount;
-        return result;
-    }
-
-public:
-
-    ui64 GetApproxSerializeSize(const ui64 dataSize) const {
-        return Max<ui64>(dataSize * 1.05, dataSize + Batch->num_columns() * 8);
-    }
-
-    TRowSizeCalculator(const ui32 alignBitsCount)
-        : AlignBitsCount(alignBitsCount)
-    {
-
-    }
-    bool InitBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
-    ui32 GetRowBitWidth(const ui32 row) const;
-    ui32 GetRowBytesSize(const ui32 row) const;
-};
 
 class TBatchSplitttingContext {
 private:
@@ -70,23 +34,29 @@ public:
 
 class TSerializedBatch {
 private:
-    YDB_READONLY_DEF(TString, SchemaData);
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    std::optional<TFirstLastSpecialKeys> SpecialKeys;
+    std::optional<TString> SpecialKeysFull;
+    std::optional<TString> SpecialKeysPayload;
+
 public:
     size_t GetSize() const {
         return Data.size();
     }
 
-    const TFirstLastSpecialKeys& GetSpecialKeysSafe() const {
-        AFL_VERIFY(SpecialKeys);
-        return *SpecialKeys;
+    const TString& GetSpecialKeysPayloadSafe() const {
+        AFL_VERIFY(SpecialKeysPayload);
+        return *SpecialKeysPayload;
+    }
+
+    const TString& GetSpecialKeysFullSafe() const {
+        AFL_VERIFY(SpecialKeysFull);
+        return *SpecialKeysFull;
     }
 
     bool HasSpecialKeys() const {
-        return !!SpecialKeys;
+        return !!SpecialKeysFull;
     }
 
     TString DebugString() const;
@@ -95,27 +65,17 @@ public:
     static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TFirstLastSpecialKeys>& specialKeys)
-        : SchemaData(schemaData)
-        , Data(data)
+    TSerializedBatch(TString&& data, const ui32 rowsCount, const ui32 rawBytes,
+        const std::optional<TString>& specialKeysPayload, const std::optional<TString>& specialKeysFull)
+        : Data(data)
         , RowsCount(rowsCount)
         , RawBytes(rawBytes)
-        , SpecialKeys(specialKeys)
-    {
-
+        , SpecialKeysFull(specialKeysFull)
+        , SpecialKeysPayload(specialKeysPayload) {
+        AFL_VERIFY(!!SpecialKeysPayload == !!SpecialKeysFull);
     }
 };
 
 TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context);
-
-// Return size in bytes including size of bitmap mask
-ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
-ui64 GetTableDataSize(const std::shared_ptr<arrow::Table>& batch);
-// Return size in bytes including size of bitmap mask
-ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data);
-ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>&batch);
-ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch);
-// Return size in bytes *not* including size of bitmap mask
-ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
 
 }

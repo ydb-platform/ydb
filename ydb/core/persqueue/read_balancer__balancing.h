@@ -276,6 +276,8 @@ struct TSession {
     // The partition families that are being read by this session.
     std::unordered_map<size_t, TPartitionFamily*> Families;
 
+    size_t Order;
+
     // true if client connected to read from concret partitions
     bool WithGroups() const;
 
@@ -285,32 +287,6 @@ struct TSession {
     TString DebugStr() const;
 };
 
-struct TStatistics {
-    struct TConsumerStatistics {
-        struct TPartitionStatistics {
-            ui32 PartitionId;
-            ui64 TabletId = 0;
-            ui32 State = 0;
-            TString Session;
-        };
-
-        TString ConsumerName;
-        std::vector<TPartitionStatistics> Partitions;
-    };
-
-    struct TSessionStatistics {
-        TString Session;
-        size_t ActivePartitionCount;
-        size_t InactivePartitionCount;
-        size_t SuspendedPartitionCount;
-        size_t TotalPartitionCount;
-    };
-
-    std::vector<TConsumerStatistics> Consumers;
-    std::vector<TSessionStatistics> Sessions;
-
-    size_t FreePartitions;
-};
 
 class TBalancer {
     friend struct TConsumer;
@@ -328,7 +304,8 @@ public:
     i32 GetLifetimeSeconds() const;
 
     TConsumer* GetConsumer(const TString& consumerName);
-    const TStatistics GetStatistics() const;
+    const std::unordered_map<TString, std::unique_ptr<TConsumer>>& GetConsumers() const;
+    const std::unordered_map<TActorId, std::unique_ptr<TSession>>& GetSessions() const;
 
     void UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32> deletedPartitions, const TActorContext& ctx);
     bool SetCommittedState(const TString& consumer, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx);
@@ -350,6 +327,11 @@ public:
 
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void ProcessPendingStats(const TActorContext& ctx);
+
+    void RenderApp(TStringStream& str) const;
+
 private:
     TString GetPrefix() const;
     ui32 NextStep();
@@ -361,6 +343,14 @@ private:
     std::unordered_map<TString, std::unique_ptr<TConsumer>> Consumers;
 
     ui32 Step;
+
+    struct TData {
+        ui32 Generation;
+        ui64 Cookie;
+        const TString Consumer;
+        bool Commited;
+    };
+    std::unordered_map<ui32, std::vector<TData>> PendingUpdates;
 };
 
 }

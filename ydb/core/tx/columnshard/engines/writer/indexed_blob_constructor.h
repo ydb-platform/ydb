@@ -86,23 +86,56 @@ public:
 
 class TWriteAggregation {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, WriteData);
+    NEvWrite::TWriteMeta WriteMeta;
+    YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY(ui64, Rows, 0);
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
-    YDB_READONLY_DEF(TVector<TWriteId>, WriteIds);
+    YDB_READONLY_DEF(TVector<TInsertWriteId>, InsertWriteIds);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+    std::shared_ptr<arrow::RecordBatch> RecordBatch;
+
 public:
-    void AddWriteId(const TWriteId& id) {
-        WriteIds.emplace_back(id);
+    const std::shared_ptr<arrow::RecordBatch>& GetRecordBatch() const {
+        AFL_VERIFY(RecordBatch);
+        return RecordBatch;
     }
 
-    TWriteAggregation(const std::shared_ptr<NEvWrite::TWriteData>& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs)
-        : WriteData(writeData) {
+    const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return WriteMeta;
+    }
+
+    NEvWrite::TWriteMeta& MutableWriteMeta() {
+        return WriteMeta;
+    }
+
+    void AddInsertWriteId(const TInsertWriteId id) {
+        InsertWriteIds.emplace_back(id);
+    }
+
+    TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs, const std::shared_ptr<arrow::RecordBatch>& batch)
+        : WriteMeta(writeData.GetWriteMeta())
+        , SchemaVersion(writeData.GetData()->GetSchemaVersion())
+        , Size(writeData.GetSize())
+        , BlobsAction(writeData.GetBlobsAction())
+        , SchemaSubset(writeData.GetSchemaSubsetVerified())
+        , RecordBatch(batch)
+    {
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
         }
+        for (const auto& batch : SplittedBlobs) {
+            Rows += batch->GetRowsCount();
+        }
     }
 
-    TWriteAggregation(const std::shared_ptr<NEvWrite::TWriteData>& writeData)
-        : WriteData(writeData) {
+    TWriteAggregation(const NEvWrite::TWriteData& writeData)
+        : WriteMeta(writeData.GetWriteMeta())
+        , SchemaVersion(writeData.GetData()->GetSchemaVersion()) 
+        , Size(writeData.GetSize())
+        , BlobsAction(writeData.GetBlobsAction()) {
+        AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
 
@@ -120,7 +153,7 @@ public:
     {
         AFL_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
-            SumSize += aggr->GetWriteData()->GetSize();
+            SumSize += aggr->GetSize();
         }
     }
 

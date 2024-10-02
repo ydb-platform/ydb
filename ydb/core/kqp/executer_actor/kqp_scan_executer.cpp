@@ -339,7 +339,10 @@ private:
             .UserRequestContext = GetUserRequestContext(),
             .FederatedQuerySetup = std::nullopt,
             .OutputChunkMaxSize = Request.OutputChunkMaxSize,
-            .GUCSettings = nullptr
+            .GUCSettings = nullptr,
+            .MayRunTasksLocally = false,
+            .ResourceManager_ = Request.ResourceManager_,
+            .CaFactory_ = Request.CaFactory_
         });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

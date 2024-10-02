@@ -49,7 +49,7 @@ public:
         bucket.Map[key] = value;
     }
 
-    V& InsertIfAbsent(const K& key, const V& value) {
+    V InsertIfAbsent(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
         TWriteGuard guard(bucket.RWLock);
 
@@ -57,7 +57,7 @@ public:
     }
 
     template <typename Callable>
-    V& InsertIfAbsentWithInit(const K& key, Callable initFunc) {
+    V InsertIfAbsentWithInit(const K& key, Callable initFunc) {
         TBucket& bucket = GetBucketForKey(key);
         TWriteGuard guard(bucket.RWLock);
 

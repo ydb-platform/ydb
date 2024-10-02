@@ -365,6 +365,10 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
 
+        if (!table->IsAsyncReplica()) {
+            path->SetAsyncReplica(false);
+        }
+
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables[pathId] = table;
@@ -519,8 +523,10 @@ public:
                 .IsTable()
                 .NotUnderOperation();
 
-            if (!Transaction.GetInternal()) {
-                checks.NotAsyncReplicaTable();
+            if (checks && !Transaction.GetInternal()) {
+                checks
+                    .NotAsyncReplicaTable()
+                    .NotBackupTable();
             }
 
             if (!context.IsAllowedPrivateTables) {
@@ -722,6 +728,10 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    if (path.IsBackupTable()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
     TPath parent = path.Parent();
 
     if (!parent.IsTableIndex()) {
@@ -731,7 +741,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     // Admins can alter indexImplTable unconditionally.
     // Regular users can only alter allowed fields.
     if (!IsSuperUser(context.UserToken.Get())
-        && (!CheckAllowedFields(alter, {"Name", "PartitionConfig"})
+        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig"})
             || (alter.HasPartitionConfig()
                 && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
             )
@@ -744,6 +754,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

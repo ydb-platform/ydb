@@ -1119,7 +1119,7 @@ public:
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
-        if (cf.TenantName && ScopeId.IsEmpty()) {
+        if (!cf.TenantName && ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {
@@ -1247,6 +1247,7 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
+            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

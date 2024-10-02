@@ -46,10 +46,14 @@ struct TExportConv {
         }
 
         if (exprt.HasStartTime()) {
-            *operation.mutable_start_time() = exprt.GetStartTime();
+            *operation.mutable_create_time() = exprt.GetStartTime();
         }
         if (exprt.HasEndTime()) {
             *operation.mutable_end_time() = exprt.GetEndTime();
+        }
+
+        if (exprt.HasUserSID()) {
+            operation.set_created_by(exprt.GetUserSID());
         }
 
         using namespace Ydb::Export;

@@ -9,6 +9,7 @@
 #include "mailbox.h"
 #include "thread_context.h"
 #include <atomic>
+#include <memory>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 
@@ -81,7 +82,7 @@ namespace NActors {
     }
 
     TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
-        : TExecutorPoolBase(cfg.PoolId, cfg.Threads, new TAffinity(cfg.Affinity))
+        : TExecutorPoolBase(cfg.PoolId, cfg.Threads, new TAffinity(cfg.Affinity), cfg.UseRingQueue)
         , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , SpinThresholdCycles(DefaultSpinThresholdCycles)
         , SpinThresholdCyclesPerThread(new NThreading::TPadded<std::atomic<ui64>>[cfg.Threads])
@@ -234,7 +235,7 @@ namespace NActors {
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
                     } else {
@@ -307,8 +308,9 @@ namespace NActors {
 
     void TBasicExecutorPool::ScheduleActivationExCommon(ui32 activation, ui64 revolvingCounter, TAtomic x) {
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-
-        Activations.Push(activation, revolvingCounter);
+        std::visit([activation, revolvingCounter](auto &x) {
+            x.Push(activation, revolvingCounter);
+        }, Activations);
         bool needToWakeUp = false;
         bool needToChangeOldSemaphore = true;
 
@@ -423,6 +425,19 @@ namespace NActors {
         for (i16 i = 0; i < MaxFullThreadCount; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
         }
+    }
+
+    void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
+        if (Harmonizer) {
+            TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
+            poolState.UsedCpu = stats.AvgConsumedCpu;
+            poolState.PossibleMaxLimit = stats.PotentialMaxThreadCount;
+        } else {
+            poolState.PossibleMaxLimit = poolState.MaxLimit;
+        }
+        poolState.CurrentLimit = GetThreadCount();
+        poolState.MaxLimit = GetMaxThreadCount();
+        poolState.MinLimit = GetDefaultThreadCount();
     }
 
     void TBasicExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {

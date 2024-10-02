@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Fatal: Optimization
+
+    <tmp_path>/program.sql:<main>:8:1: Fatal: ydb/library/yql/core/yql_opt_match_recognize.cpp:xxx  ExpandMatchRecognize(): requirement sortOrder->ChildrenSize() == 1 failed, message: Expect ORDER BY timestamp for MATCH_RECOGNIZE
+    	select * from (select * from AS_TABLE($data) MATCH_RECOGNIZE(
+	^

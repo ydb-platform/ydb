@@ -17,8 +17,6 @@ protected:
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    std::vector<TWritePortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
-        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const;
 
     virtual void DoDebugString(TStringOutput& out) const override {
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";
@@ -61,11 +59,11 @@ public:
         AFL_VERIFY(PortionsToRemove.emplace(info.GetAddress(), info).second);
     }
 
-    std::vector<TWritePortionInfoWithBlobs> AppendedPortions;
+    std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }
-    virtual TWritePortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) override {
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) override {
         Y_ABORT_UNLESS(index < AppendedPortions.size());
         return &AppendedPortions[index];
     }

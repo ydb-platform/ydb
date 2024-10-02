@@ -29,9 +29,6 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     RecordSnapshotMax = meta.RecordSnapshotMax;
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
-    if (!meta.StatisticsStorage.IsEmpty()) {
-        StatisticsStorage = meta.StatisticsStorage;
-    }
     if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
         Produced = meta.Produced;
     }
@@ -49,27 +46,13 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.DeletionsCount = *DeletionsCount;
     AFL_VERIFY(Produced);
     result.Produced = *Produced;
-    if (StatisticsStorage) {
-        result.StatisticsStorage = *StatisticsStorage;
-    }
     return result;
 }
 
 bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo) {
     if (!!Produced) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
         return true;
-    }
-    if (portionMeta.HasStatisticsStorage()) {
-        auto parsed = NStatistics::TPortionStorage::BuildFromProto(portionMeta.GetStatisticsStorage());
-        if (!parsed) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", parsed.GetErrorMessage());
-            return false;
-        }
-        StatisticsStorage = parsed.DetachResult();
-        if (StatisticsStorage->IsEmpty()) {
-            StatisticsStorage.reset();
-        }
     }
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();

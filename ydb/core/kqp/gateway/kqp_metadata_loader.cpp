@@ -303,7 +303,7 @@ TTableMetadataResult GetViewMetadataResult(
   metadata->SchemaVersion = description.GetVersion();
   metadata->Kind = NYql::EKikimrTableKind::View;
   metadata->Attributes = schemeEntry.Attributes;
-  metadata->ViewPersistedData = {description.GetQueryText()};
+  metadata->ViewPersistedData = {description.GetQueryText(), description.GetCapturedContext()};
 
   return builtResult;
 }
@@ -961,6 +961,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 auto s = resp.Simple;
                 result.Metadata->RecordsCount = s.RowCount;
                 result.Metadata->DataSize = s.BytesSize;
+                result.Metadata->StatsLoaded = true;
                 promise.SetValue(result);
         });
 

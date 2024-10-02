@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -147,7 +148,7 @@ struct TKqpSessionInfo {
 
 class TLocalSessionsRegistry {
     THashMap<TString, TKqpSessionInfo> LocalSessions;
-    std::map<TString, TKqpSessionInfo*> OrderedSessions;
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*> OrderedSessions;
     THashMap<TActorId, TString> TargetIdIndex;
     THashSet<TString> ShutdownInFlightSessions;
     THashMap<TString, ui32> SessionsCountPerDatabase;
@@ -205,7 +206,7 @@ public:
         auto result = LocalSessions.emplace(sessionId,
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
                 sessionStartedAt + idleDuration, IdleSessions.end(), pgWire, startedAt));
-        OrderedSessions.emplace(sessionId, &result.first->second);
+        OrderedSessions.emplace(std::make_pair(database, sessionId), &result.first->second);
         SessionsCountPerDatabase[database]++;
         Y_ABORT_UNLESS(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -299,11 +300,11 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
-    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& continuation) const {
-        return OrderedSessions.lower_bound(continuation);
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*>::const_iterator GetOrderedLowerBound(const TString& tenant, const TString& continuation) const {
+        return OrderedSessions.lower_bound(std::make_pair(tenant, continuation));
     }
 
-    std::map<TString, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
+    std::map<std::pair<TString, TString>, TKqpSessionInfo*>::const_iterator GetOrderedEnd() const {
         return OrderedSessions.end();
     }
 
@@ -336,7 +337,7 @@ public:
                 }
             }
 
-            OrderedSessions.erase(sessionId);
+            OrderedSessions.erase(std::make_pair(it->second.Database, sessionId));
             LocalSessions.erase(it);
         }
 
@@ -413,6 +414,42 @@ private:
             }
         }
     }
+};
+
+class TResourcePoolsCache {
+    struct TPoolInfo {
+        NResourcePool::TPoolSettings Config;
+        std::optional<NACLib::TSecurityObject> SecurityObject;
+    };
+
+public:
+    std::optional<TPoolInfo> GetPoolInfo(const TString& database, const TString& poolId) const {
+        auto it = PoolsCache.find(GetPoolKey(database, poolId));
+        if (it == PoolsCache.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    void UpdatePoolInfo(const TString& database, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject) {
+        const TString& poolKey = GetPoolKey(database, poolId);
+        if (!config) {
+            PoolsCache.erase(poolKey);
+            return;
+        }
+
+        auto& poolInfo = PoolsCache[poolKey];
+        poolInfo.Config = *config;
+        poolInfo.SecurityObject = securityObject;
+    }
+
+private:
+    static TString GetPoolKey(const TString& database, const TString& poolId) {
+        return CanonizePath(TStringBuilder() << database << "/" << poolId);
+    }
+
+private:
+    std::unordered_map<TString, TPoolInfo> PoolsCache;
 };
 
 }  // namespace NKikimr::NKqp

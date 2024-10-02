@@ -31,7 +31,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
-    auto result = NArrow::DeserializeBatch(IncomingData, BatchSchema->GetSchema());
+    auto result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
     IncomingData = "";
     return result;
 }

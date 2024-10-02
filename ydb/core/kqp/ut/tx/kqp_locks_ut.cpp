@@ -204,6 +204,42 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[2u];#;[11u];["Session2"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(TwoPhaseTx) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session1.ExecuteDataQuery(Q_(R"(
+            REPLACE INTO `/Root/Test` (Group, Name, Comment) VALUES (1U, "Paul", "Changed");
+            SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto tx1 = result.GetTransaction();
+        UNIT_ASSERT(tx1);
+
+        result = session2.ExecuteDataQuery(Q_(R"(
+            REPLACE INTO `/Root/Test` (Group, Name, Comment)
+            VALUES (1U, "Paul", "Changed");
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session1.ExecuteDataQuery(Q_(R"(
+            SELECT * FROM `KeyValue`;
+        )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto commitResult = tx1->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        commitResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+            [] (const NYql::TIssue& issue) {
+                return issue.GetMessage().Contains("/Root/Test");
+            }), commitResult.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

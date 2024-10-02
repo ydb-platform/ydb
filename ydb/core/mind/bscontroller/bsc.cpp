@@ -131,6 +131,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
     StaticVDiskMap.clear();
 
+    const TMonotonic mono = TActivationContext::Monotonic();
+
     if (StorageConfig.HasBlobStorageConfig()) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
@@ -143,7 +145,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 const auto& location = vslot.GetVDiskLocation();
                 const TPDiskId pdiskId(location.GetNodeID(), location.GetPDiskID());
                 const TVSlotId vslotId(pdiskId, location.GetVDiskSlotID());
-                StaticVSlots.try_emplace(vslotId, vslot, prevStaticVSlots);
+                StaticVSlots.try_emplace(vslotId, vslot, prevStaticVSlots, mono);
                 const TVDiskID& vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
                 StaticVDiskMap.emplace(vdiskId, vslotId);
                 StaticVDiskMap.emplace(TVDiskID(vdiskId.GroupID, 0, vdiskId), vslotId);
@@ -270,6 +272,13 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     const bool initial = !HostRecords;
     HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
     if (initial) {
+        if (auto *appData = AppData()) {
+            if (appData->Icb) {
+                EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+                appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
+                    "BlobStorageControllerControls.EnableSelfHealWithDegraded");
+            }
+        }
         SelfHealId = Register(CreateSelfHealActor());
         PushStaticGroupsToSelfHeal();
         if (StorageConfigObtained) {
@@ -337,7 +346,7 @@ void TBlobStorageController::ValidateInternalState() {
             Y_ABORT_UNLESS(donor->GetShortVDiskId() == vslot->GetShortVDiskId());
         }
         if (vslot->Group) {
-            if (vslot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
+            if (vslot->GetStatus() == NKikimrBlobStorage::EVDiskStatus::READY) {
                 Y_DEBUG_ABORT_UNLESS(vslot->IsReady || vslot->IsInVSlotReadyTimestampQ());
             } else {
                 Y_DEBUG_ABORT_UNLESS(!vslot->IsReady && !vslot->IsInVSlotReadyTimestampQ());
@@ -401,7 +410,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
             const auto& record = msg->Record;
             for (const auto& item : record.GetVDiskStatus()) {
                 const TVSlotId vslotId(item.GetNodeId(), item.GetPDiskId(), item.GetVSlotId());
-                if (TVSlotInfo *slot = FindVSlot(vslotId); slot && slot->Status > item.GetStatus()) {
+                if (TVSlotInfo *slot = FindVSlot(vslotId); slot && slot->GetStatus() > item.GetStatus()) {
                     return 1;
                 } else if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() && it->second.VDiskStatus > item.GetStatus()) {
                     return 1;

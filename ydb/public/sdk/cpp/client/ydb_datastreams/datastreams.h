@@ -106,6 +106,7 @@ namespace NYdb::NDataStreams::V1 {
         Disabled = 1,
         ScaleUp = 2,
         ScaleUpAndDown = 3,
+        Paused = 4
     };
 
     struct TCreateStreamSettings;

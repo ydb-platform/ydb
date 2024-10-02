@@ -457,9 +457,9 @@
     ],
     "test.test[bigdate-table_arithmetic_mul_div-default.txt-Debug]": [
         {
-            "checksum": "7d3363f2bc50bd3ecf9097b47926a9e4",
+            "checksum": "11e7ab9520da2bde231d70dbb834e16a",
             "size": 9840,
-            "uri": "https://{canondata_backend}/1936842/e2f5b27b418549665a04de58de4b4e487f33c292/resource.tar.gz#test.test_bigdate-table_arithmetic_mul_div-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1937424/022b4c4aaf443124c76bb3e388177d9b3de00044/resource.tar.gz#test.test_bigdate-table_arithmetic_mul_div-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-table_arithmetic_mul_div-default.txt-Plan]": [

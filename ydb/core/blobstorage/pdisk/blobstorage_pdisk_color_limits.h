@@ -26,7 +26,7 @@ struct TDiskColor {
     }
 
     double CalculateOccupancy(i64 total) const {
-        return (double)CalculateQuota(total) / total;
+        return 1 - (double)CalculateQuota(total) / total;
     }
 };
 
@@ -92,15 +92,15 @@ struct TColorLimits {
 
     double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
         switch (color) {
-            case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:          return Cyan.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:           return LightYellow.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:   return Yellow.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:         return LightOrange.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:   return PreOrange.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:     return Orange.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:         return Red.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::RED:            return Black.CalculateOccupancy(total);
-            case NKikimrBlobStorage::TPDiskSpaceColor::BLACK:          return 1.0;
+                case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:           return 0.0;
+                case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:            return Cyan.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:    return LightYellow.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:          return Yellow.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:    return LightOrange.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:      return PreOrange.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:          return Orange.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::RED:             return Red.CalculateOccupancy(total);
+                case NKikimrBlobStorage::TPDiskSpaceColor::BLACK:           return Black.CalculateOccupancy(total);
 
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:

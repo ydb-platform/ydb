@@ -75,32 +75,53 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     return TKikimrRunner(serverSettings);
 }
 
-class TChainConstructor {
+void PrintPlan(const TString& plan) {
+    Cout << plan << Endl;
+}
+
+class TChainTester {
 public:
-    TChainConstructor(size_t chainSize)
-        : Kikimr_(GetKikimrWithJoinSettings())
-        , TableClient_(Kikimr_.GetTableClient())
-        , Session_(TableClient_.CreateSession().GetValueSync().GetSession())
-        , ChainSize_(chainSize)
+    TChainTester(size_t chainSize)
+        : Kikimr(GetKikimrWithJoinSettings(false, GetStats(chainSize)))
+        , TableClient(Kikimr.GetTableClient())
+        , Session(TableClient.CreateSession().GetValueSync().GetSession())
+        , ChainSize(chainSize)
     {}
 
+public:
+    void Test() {
+        CreateTables();
+        JoinTables();
+    }
+
+    static TString GetStats(size_t chainSize) {
+        srand(228);
+        NJson::TJsonValue stats;
+        for (size_t i = 0; i < chainSize; ++i) {
+            ui64 nRows = rand();
+            NJson::TJsonValue tableStat;
+            tableStat["n_rows"] = nRows;
+            tableStat["byte_size"] = nRows * 10;
+
+            TString table = Sprintf("/Root/table_%ld", i);
+            stats[table] = std::move(tableStat);
+        }
+        return stats.GetStringRobust();
+    }
+
+private:
     void CreateTables() {
-        for (size_t i = 0; i < ChainSize_; ++i) {
-            TString tableName;
-            
-            tableName
-                .append("/Root/table_").append(ToString(i));;
+        for (size_t i = 0; i < ChainSize; ++i) {
+            TString tableName = Sprintf("/Root/table_%ld", i);
 
-            TString createTable;
-            createTable
-                += "CREATE TABLE `" +  tableName + "` (id"
-                +  ToString(i) + " Int32, " 
-                +  "PRIMARY KEY (id" + ToString(i) + "));";
+            TString createTable = Sprintf(
+                "CREATE TABLE `%s` (id%ld Int32, PRIMARY KEY (id%ld));",
+                tableName.c_str(), i, i
+            );
 
-            std::cout << createTable << std::endl;
-            auto res = Session_.ExecuteSchemeQuery(createTable).GetValueSync();
-            std::cout << res.GetIssues().ToString() << std::endl;
-            UNIT_ASSERT(res.IsSuccess());
+            auto result = Session.ExecuteSchemeQuery(createTable).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
 
@@ -109,30 +130,29 @@ public:
 
         joinRequest.append("SELECT * FROM `/Root/table_0` as t0 ");
 
-        for (size_t i = 1; i < ChainSize_; ++i) {
-            TString table = "/Root/table_" + ToString(i);
+        for (size_t i = 1; i < ChainSize; ++i) {
+            TString table = Sprintf("/Root/table_%ld", i);
 
-            TString prevAliasTable = "t" + ToString(i - 1);
-            TString aliasTable = "t" + ToString(i);
+            TString prevAliasTable = Sprintf("t%ld", i - 1);
+            TString aliasTable = Sprintf("t%ld", i);
 
-            joinRequest
-                += "INNER JOIN `" + table + "`" + " AS " + aliasTable + " ON "
-                +  aliasTable + ".id" + ToString(i) + "=" + prevAliasTable + ".id" 
-                +  ToString(i-1) + " ";
+            joinRequest +=
+                Sprintf(
+                    "INNER JOIN `%s` AS %s ON %s.id%ld = %s.id%ld ",
+                    table.c_str(), aliasTable.c_str(), aliasTable.c_str(), i, prevAliasTable.c_str(), i - 1
+                );
         }
 
-        auto result = Session_.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-        std::cout << result.GetIssues().ToString() << std::endl;
-        std::cout << joinRequest << std::endl;
+        auto result = Session.ExplainDataQuery(joinRequest).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        PrintPlan(result.GetPlan());
     }
 
-private:
-    TKikimrRunner Kikimr_;
-    NYdb::NTable::TTableClient TableClient_;
-    TSession Session_;
-    size_t ChainSize_; 
+    TKikimrRunner Kikimr;
+    NYdb::NTable::TTableClient TableClient;
+    TSession Session;
+    size_t ChainSize; 
 };
 
 void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLookupJoin) {
@@ -175,9 +195,7 @@ void ExecuteJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(Chain65Nodes) {
-        TChainConstructor chain(65);
-        chain.CreateTables();
-        chain.JoinTables();
+        TChainTester(65).Test();
     }
 
     Y_UNIT_TEST_TWIN(FiveWayJoin, StreamLookupJoin) {

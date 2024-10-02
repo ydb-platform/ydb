@@ -570,7 +570,7 @@ void TReadSessionActor::AnswerForCommitsIfCan(const TActorContext& ctx) {
         ui64 diff = result.ByteSize();
         BytesInflight_ += diff;
         if (BytesInflight) (*BytesInflight) += diff;
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
 
         ui32 commitDurationMs = (ctx.Now() - it->second.StartTime).MilliSeconds();
         CommitLatency.IncFor(commitDurationMs, 1);
@@ -941,7 +941,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
         BytesInflight_ += diff;
         if (BytesInflight) (*BytesInflight) += diff;
 
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
 
         Handler->ReadyForNextRead();
 
@@ -1101,7 +1101,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             jt->second->ControlMessages.push_back(result);
         }
@@ -1120,7 +1120,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             jt->second->ControlMessages.push_back(result);
         }
@@ -1275,7 +1275,7 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const NPersQueu
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " GRps is shutting dows, skip reply");
         }
@@ -1324,7 +1324,7 @@ bool TReadSessionActor::ProcessReleasePartition(const THashMap<std::pair<TString
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             jt->second->ControlMessages.push_back(result);
         }
@@ -1536,7 +1536,7 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
             ConvertToOldBatch(formedResponse->Response);
         }
         diff -= formedResponse->Response.ByteSize(); // Bytes will be tracked inside handler
-        Handler->Reply(formedResponse->Response);
+        Handler->Reply(std::move(formedResponse->Response));
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " empty read result " << formedResponse->Guid << ", start new reading");
     }
@@ -1548,7 +1548,7 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
         ui64 diff = r.ByteSize();
         BytesInflight_ += diff;
         if (BytesInflight) (*BytesInflight) += diff;
-        Handler->Reply(r);
+        Handler->Reply(std::move(r));
     }
 
     for (const TActorId& p : formedResponse->PartitionsTookPartInRead) {

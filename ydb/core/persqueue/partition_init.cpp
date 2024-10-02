@@ -169,15 +169,14 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
             auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
-                                                                     Partition()->TabletConfig);
+                                                                     Partition()->TabletConfig,
+                                                                     NKikimrPQ::TBootstrapConfig());
             Partition()->PushFrontDistrTx(event.Release());
         }
         break;
 
     case NKikimrProto::NODATA:
         Partition()->Config = Partition()->TabletConfig;
-        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
-        Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
         break;
 
     case NKikimrProto::ERROR:
@@ -190,6 +189,9 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Cerr << "ERROR " << response.GetStatus() << "\n";
         Y_ABORT("bad status");
     };
+
+    Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
+    Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
 
     Done(ctx);
 }

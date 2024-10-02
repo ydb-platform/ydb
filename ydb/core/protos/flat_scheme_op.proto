@@ -11,15 +11,16 @@ import "ydb/core/protos/filestore_config.proto";
 import "ydb/core/protos/channel_purpose.proto";
 import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
+import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/library/formats/arrow/protos/accessor.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -423,6 +424,7 @@ message TOlapColumnDiff {
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
 }
 
 message TOlapColumnDescription {
@@ -442,11 +444,16 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
 }
 
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
+}
+
+message TRequestedMaxIndex {
+    optional string ColumnName = 1;
 }
 
 message TOlapIndexRequested {
@@ -457,6 +464,7 @@ message TOlapIndexRequested {
     optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
+        TRequestedMaxIndex MaxIndex = 41;
     }
 }
 
@@ -464,6 +472,10 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TMaxIndex {
+    optional uint32 ColumnId = 1;
 }
 
 message TOlapIndexDescription {
@@ -478,6 +490,7 @@ message TOlapIndexDescription {
     optional string ClassName = 40;
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
+        TMaxIndex MaxIndex = 42;
     }
 }
 
@@ -541,7 +554,6 @@ message TColumnTableSchema {
 
     optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
-    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
 }
 
@@ -558,8 +570,6 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
-    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
-    repeated string DropStatistics = 11;
     optional TColumnTableRequestedOptions Options = 12;
 }
 
@@ -913,10 +923,6 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
-    oneof IndexMode {
-        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
-        string IndexName = 6;
-    }
 }
 
 message TAlterCdcStream {
@@ -1631,7 +1637,6 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
-    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {
@@ -1800,6 +1805,7 @@ message TDescribeOptions {
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
+    optional bool ReturnIndexTableBoundaries = 11 [default = false];
 }
 
 // Request to read scheme for a specific path
@@ -2112,6 +2118,7 @@ message TViewDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional string QueryText = 4;
+    optional NYql.NProto.TTranslationSettings CapturedContext = 5;
 }
 
 message TResourcePoolProperties {

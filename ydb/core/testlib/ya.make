@@ -100,7 +100,9 @@ PEERDIR(
     ydb/services/datastreams
     ydb/services/discovery
     ydb/services/ext_index/service
+    ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery

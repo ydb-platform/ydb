@@ -49,7 +49,7 @@ private:
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
     TNormalizationContext NormContext;
 protected:
-    virtual bool DoExecute() override {
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         for (auto&& chunkInfo : Chunks) {
             const auto& blobRange = chunkInfo.GetBlobRange();
 
@@ -59,16 +59,17 @@ protected:
             Y_ABORT_UNLESS(!!columnLoader);
 
             TPortionInfo::TAssembleBlobInfo assembleBlob(blobData);
+            assembleBlob.SetExpectedRecordsCount(chunkInfo.GetRecordsCount());
             auto batch = assembleBlob.BuildRecordBatch(*columnLoader);
             Y_ABORT_UNLESS(!!batch);
 
-            chunkInfo.MutableUpdate().SetNumRows(batch->num_rows());
-            chunkInfo.MutableUpdate().SetRawBytes(NArrow::GetBatchDataSize(batch));
+            chunkInfo.MutableUpdate().SetNumRows(batch->GetRecordsCount());
+            chunkInfo.MutableUpdate().SetRawBytes(batch->GetRawSizeVerified());
         }
 
         auto changes = std::make_shared<TChunksNormalizer::TNormalizerResult>(std::move(Chunks));
         TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
-        return true;
+        return TConclusionStatus::Success();
     }
 
 public:

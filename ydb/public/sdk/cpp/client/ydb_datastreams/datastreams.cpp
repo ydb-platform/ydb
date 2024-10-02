@@ -35,6 +35,9 @@ namespace NYdb::NDataStreams::V1 {
             case EAutoPartitioningStrategy::ScaleUpAndDown:
                 strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
                 break;
+            case EAutoPartitioningStrategy::Paused:
+                strategy = ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED;
+                break;
         }
 
         pt->mutable_auto_partitioning_settings()->set_strategy(strategy);

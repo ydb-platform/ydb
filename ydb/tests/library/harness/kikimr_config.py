@@ -83,6 +83,8 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     yaml_dict["log_config"]["entry"] = []
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
+    if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
+        yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
     return yaml_dict
 
 
@@ -395,6 +397,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
 
             # https://github.com/ydb-platform/ydb/issues/5152

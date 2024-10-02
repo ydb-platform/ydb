@@ -1263,7 +1263,7 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
         return {CreateSubDomain(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
-        return {CreateCompatibleSubdomainAlter(context.SS, NextPartId(), tx)};
+        return CreateCompatibleSubdomainAlter(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
         return {CreateDropSubdomain(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:

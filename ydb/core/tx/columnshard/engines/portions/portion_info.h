@@ -3,9 +3,11 @@
 #include "index_chunk.h"
 #include "meta.h"
 
+#include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/formats/arrow/common/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -27,57 +29,6 @@ class TPortionInfoConstructor;
 struct TIndexInfo;
 class TVersionedIndex;
 class IDbWrapper;
-
-class TDeserializeChunkedArray: public NArrow::NAccessor::IChunkedArray {
-private:
-    using TBase = NArrow::NAccessor::IChunkedArray;
-public:
-    class TChunk {
-    private:
-        YDB_READONLY(ui32, RecordsCount, 0);
-        std::shared_ptr<arrow::Array> PredefinedArray;
-        const TString Data;
-    public:
-        TChunk(const std::shared_ptr<arrow::Array>& predefinedArray)
-            : PredefinedArray(predefinedArray) {
-            AFL_VERIFY(PredefinedArray);
-            RecordsCount = PredefinedArray->length();
-        }
-
-        TChunk(const ui32 recordsCount, const TString& data)
-            : RecordsCount(recordsCount)
-            , Data(data) {
-
-        }
-
-        std::shared_ptr<arrow::Array> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const {
-            if (PredefinedArray) {
-                return PredefinedArray;
-            }
-            auto result = loader->ApplyVerified(Data);
-            AFL_VERIFY(result);
-            AFL_VERIFY(result->num_columns() == 1);
-            AFL_VERIFY(result->num_rows() == RecordsCount)("length", result->num_rows())("records_count", RecordsCount);
-            return result->column(0);
-        }
-    };
-
-    std::shared_ptr<TColumnLoader> Loader;
-    std::vector<TChunk> Chunks;
-protected:
-    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
-        AFL_VERIFY(false);
-        return nullptr;
-    }
-public:
-    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks)
-        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
-        , Loader(loader)
-        , Chunks(std::move(chunks)) {
-        AFL_VERIFY(Loader);
-    }
-};
 
 class TEntityChunk {
 private:
@@ -147,7 +98,7 @@ private:
     }
 
     template <class TAggregator, class TChunkInfo>
-    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::optional<std::set<ui32>>& columnIds, const bool validation) {
+    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {
         if (columnIds) {
             auto itColumn = columnIds->begin();
             auto itRecord = chunks.begin();
@@ -197,6 +148,16 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+        std::vector<TString> result;
+        for (auto&& i : Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
+    }
+
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {
             AddRuntimeFeature(feature);
@@ -239,8 +200,7 @@ public:
 
     void ReorderChunks();
 
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo & info) const;
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -359,8 +319,8 @@ public:
         return result;
     }
 
-    TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
-        TSerializationStats result;
+    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+        NArrow::NSplitter::TSerializationStats result;
         for (auto&& i : Records) {
             if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
                 result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
@@ -378,36 +338,29 @@ public:
     }
 
     const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const {
-        for (auto&& i : Records) {
-            if (i.GetAddress() == address) {
-                return &i;
-            }
+        auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+            return item.GetAddress() < address;
+        });
+        if (it != Records.end() && it->GetAddress() == address) {
+            return &*it;
         }
         return nullptr;
     }
 
-    std::optional<TEntityChunk> GetEntityRecord(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        return {};
-    }
-
     bool HasEntityAddress(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
+        {
+            auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
+                return item.GetAddress() < address;
+            });
+            if (it != Records.end() && it->GetAddress() == address) {
                 return true;
             }
         }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
+        {
+            auto it = std::lower_bound(Indexes.begin(), Indexes.end(), address, [](const TIndexChunk& item, const TChunkAddress& address) {
+                return item.GetAddress() < address;
+            });
+            if (it != Indexes.end() && it->GetAddress() == address) {
                 return true;
             }
         }
@@ -498,10 +451,7 @@ public:
             return false;
         }
 
-        bool visible = (Meta.RecordSnapshotMin <= snapshot);
-        if (visible && RemoveSnapshot.Valid()) {
-            visible = snapshot < RemoveSnapshot;
-        }
+        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)("snapshot", snapshot.DebugString());
         return visible;
@@ -587,20 +537,21 @@ public:
         return result;
     }
 
-    ui64 GetIndexRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetIndexRawBytes(const bool validation = true) const;
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
-            sum += rec.GetBlobRange().Size;
+            sum += rec.GetDataSize();
         }
         return sum;
     }
 
-    ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const bool validation = true) const;
 
-    ui64 GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const bool validation = true) const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();
@@ -658,8 +609,8 @@ public:
             return DefaultRowsCount && !Data;
         }
 
-        std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const;
-        TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildRecordBatch(const TColumnLoader& loader) const;
+        NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
     class TPreparedColumn {
@@ -672,28 +623,26 @@ public:
         }
 
         const std::string& GetName() const {
-            return Loader->GetExpectedSchema()->field(0)->name();
+            return Loader->GetField()->name();
         }
 
         std::shared_ptr<arrow::Field> GetField() const {
-            return Loader->GetExpectedSchema()->field(0);
+            return Loader->GetField();
         }
 
         TPreparedColumn(std::vector<TAssembleBlobInfo>&& blobs, const std::shared_ptr<TColumnLoader>& loader)
             : Loader(loader)
             , Blobs(std::move(blobs)) {
-            Y_ABORT_UNLESS(Loader);
-            Y_ABORT_UNLESS(Loader->GetExpectedSchema()->num_fields() == 1);
+            AFL_VERIFY(Loader);
         }
 
-        std::shared_ptr<arrow::ChunkedArray> Assemble() const;
-        std::shared_ptr<TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleAccessor() const;
     };
 
     class TPreparedBatchData {
     private:
         std::vector<TPreparedColumn> Columns;
-        std::shared_ptr<arrow::Schema> Schema;
         size_t RowsCount = 0;
     public:
         struct TAssembleOptions {
@@ -734,10 +683,6 @@ public:
             return nullptr;
         }
 
-        std::vector<std::string> GetSchemaColumnNames() const {
-            return Schema->field_names();
-        }
-
         size_t GetColumnsCount() const {
             return Columns.size();
         }
@@ -746,15 +691,12 @@ public:
             return RowsCount;
         }
 
-        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema, const size_t rowsCount)
+        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
             : Columns(std::move(columns))
-            , Schema(schema)
             , RowsCount(rowsCount) {
         }
 
-        std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
-        std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
-        std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
     };
 
     class TColumnAssemblingInfo {
@@ -791,7 +733,7 @@ public:
 
         TPreparedColumn Compile() {
             if (BlobsInfo.empty()) {
-                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader->GetDefaultValue()));
+                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
                 return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
             } else {
                 AFL_VERIFY(NumRowsByChunks == NumRows)("by_chunks", NumRowsByChunks)("expected", NumRows);
@@ -803,13 +745,6 @@ public:
 
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const;
-
-    std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TString>& data) const {
-        auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
-        Y_ABORT_UNLESS(batch->Validate().ok());
-        return batch;
-    }
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
         out << info.DebugString();

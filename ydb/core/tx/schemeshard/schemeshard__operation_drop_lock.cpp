@@ -119,8 +119,11 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
                 .IsLikeDirectory();
+
+            if (checks && !parentPath.IsTableIndex()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -134,10 +137,12 @@ public:
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
 
             if (checks) {
+                if (!parentPath.IsTableIndex()) {
+                    checks.IsCommonSensePath();
+                }
                 if (dstPath.IsUnderOperation()) { // may be part of a consistent operation
                     checks.IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {

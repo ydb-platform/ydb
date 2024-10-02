@@ -17,6 +17,8 @@ struct TPoolSettings {
 
     TPercent QueryMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity, -1 = disabled
 
+    TPercent DatabaseLoadCpuThreshold = -1;  // -1 = disabled
+
     bool operator==(const TPoolSettings& other) const = default;
 };
 

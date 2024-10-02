@@ -69,7 +69,7 @@ class BasePostgresTest(object):
                 'KQP_COMPILE_REQUEST': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG
             },
-            extra_feature_flags=['enable_table_pg_types', 'enable_temp_tables'],
+            extra_feature_flags=['enable_table_pg_types', 'enable_temp_tables', 'enable_pg_syntax'],
             pgwire_port=cls.pgport
         ))
         cls.cluster.start()

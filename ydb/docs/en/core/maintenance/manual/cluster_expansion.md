@@ -86,7 +86,7 @@ To add static nodes to the cluster, perform the following steps:
     ErrorDescription: "ItemConfigGeneration mismatch ItemConfigGenerationProvided# 0 ItemConfigGenerationExpected# 1"
     ```
 
-10.  Add additional storage groups to one or more databases by running the following commands on any cluster node:
+10. Add additional storage groups to one or more databases by running the following commands on any cluster node:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib

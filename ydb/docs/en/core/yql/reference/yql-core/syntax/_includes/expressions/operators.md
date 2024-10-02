@@ -6,7 +6,7 @@ The operators `+`, `-`, `*`, `/`, `%` are defined for [primitive data types](../
 
 For the Decimal data type, bankers rounding is used (to the nearest even integer).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT 2 + 2;
@@ -48,7 +48,7 @@ Bitwise operations on numbers:
 * `<`, `>`: Left or right shifts.
 * `|<`, `>|`: Circular left or right shifts.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT

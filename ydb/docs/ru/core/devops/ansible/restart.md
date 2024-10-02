@@ -29,6 +29,7 @@ ansible-playbook ydb_platform.ydb.restart --tags static
 ```
 
 Эти две команды эквивалентны и перезапустят все узлы баз данных:
+
 ```bash
 ansible-playbook ydb_platform.ydb.restart --tags database
 ansible-playbook ydb_platform.ydb.restart --tags dynamic
@@ -44,6 +45,7 @@ ansible-playbook ydb_platform.ydb.restart --limit='<hostname-1,hostname-2>'
 ```
 
 Его можно использовать и вместе с тегами:
+
 ```bash
 ansible-playbook ydb_platform.ydb.restart --tags database --limit='<hostname>'
 ```

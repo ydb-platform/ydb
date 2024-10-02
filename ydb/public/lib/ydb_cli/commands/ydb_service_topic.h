@@ -136,7 +136,7 @@ namespace NYdb::NConsoleClient {
         TString ConsumerName_;
     };
 
-    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithFormat, public TCommandWithTopicName {
+    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithOutput, public TCommandWithTopicName {
     public:
         TCommandTopicConsumerDescribe();
         void Config(TConfig& config) override;
@@ -177,7 +177,7 @@ namespace NYdb::NConsoleClient {
     };
 
     class TCommandTopicRead: public TYdbCommand,
-                             public TCommandWithFormat,
+                             public TCommandWithMessagingFormat,
                              public TInterruptibleCommand,
                              public TCommandWithTopicName,
                              public TCommandWithTransformBody {
@@ -225,16 +225,16 @@ namespace NYdb::NConsoleClient {
     protected:
         void AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NTopic::ECodec>& allowedCodecs);
         void ParseCodec();
-        NTopic::ECodec GetCodec() const;
+        TMaybe<NTopic::ECodec> GetCodec() const;
 
     private:
         TVector<NTopic::ECodec> AllowedCodecs_;
         TString CodecStr_;
-        NTopic::ECodec Codec_ = NTopic::ECodec::RAW;
+        TMaybe<NTopic::ECodec> Codec_;
     };
 
     class TCommandTopicWrite: public TYdbCommand,
-                              public TCommandWithFormat,
+                              public TCommandWithMessagingFormat,
                               public TInterruptibleCommand,
                               public TCommandWithTopicName,
                               public TCommandWithCodec,

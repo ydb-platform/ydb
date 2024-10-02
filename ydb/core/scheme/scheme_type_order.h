@@ -52,17 +52,11 @@ private:
 };
 
 struct TTypeInfoOrder {
-    TTypeInfoOrder()
-    {}
-
-    TTypeInfoOrder(TTypeIdOrder typeIdOrder, const ITypeDesc* typeDesc = {})
-        : TypeIdOrder(typeIdOrder)
-        , TypeDesc(typeDesc)
-    {}
+    TTypeInfoOrder() = default;
 
     TTypeInfoOrder(TTypeInfo typeInfo, EOrder order = EOrder::Ascending)
         : TypeIdOrder(typeInfo.GetTypeId(), order)
-        , TypeDesc(typeInfo.GetTypeDesc())
+        , RawDesc(typeInfo.RawDesc)
     {}
 
     TTypeId GetTypeId() const {
@@ -81,21 +75,17 @@ struct TTypeInfoOrder {
         return TypeIdOrder.IsDescending();
     }
 
-    const ITypeDesc* GetTypeDesc() const {
-        return TypeDesc;
-    }
-
     TTypeInfo ToTypeInfo() const {
-        return TTypeInfo(GetTypeId(), GetTypeDesc());
+        return TTypeInfo(GetTypeId(), RawDesc);
     }
     
     const NPg::ITypeDesc* GetPgTypeDesc() const {
-        return reinterpret_cast<const NPg::ITypeDesc*>(TypeDesc);
+        return reinterpret_cast<const NPg::ITypeDesc*>(RawDesc);
     }    
 
 private:
     TTypeIdOrder TypeIdOrder;
-    const ITypeDesc* TypeDesc = {};
+    TTypeInfo::TRawTypeDesc RawDesc;
 };
 
 }

@@ -686,13 +686,13 @@ def yson_to_csv(yson_content, columns=None, with_header=True, strict=False):
         headers = sorted(columns)
     else:
         headers = set()
-        for item in yson.loads(yson_content, yson_type='list_fragment'):
+        for item in yson.loads(yson_content):
             headers.update(six.iterkeys(item))
         headers = sorted(headers)
     csv_content = []
     if with_header:
         csv_content.append(';'.join(headers))
-    for item in yson.loads(yson_content, yson_type='list_fragment'):
+    for item in yson.loads(yson_content):
         if strict and sorted(six.iterkeys(item)) != headers:
             return None
         csv_content.append(';'.join([str(item[h]).replace('YsonEntity', '').encode('string_escape') if h in item else '' for h in headers]))

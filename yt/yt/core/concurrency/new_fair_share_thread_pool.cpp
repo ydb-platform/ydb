@@ -443,11 +443,11 @@ public:
         }
 
         // Detach under lock.
-        auto* poolDangerousPtr = bucket->Pool.Release();
+        auto* rawPool = bucket->Pool.Release();
 
         // Do not want use NewWithDeleter and keep pointer to TTwoLevelFairShareQueue in each execution pool.
-        if (NYT::GetRefCounter(poolDangerousPtr)->Unref(1)) {
-            auto poolsToRemove = DetachPool(poolDangerousPtr);
+        if (NYT::GetRefCounter(rawPool)->Unref(1)) {
+            auto poolsToRemove = DetachPool(rawPool);
             guard.Release();
 
             while (poolsToRemove.GetSize() > 0) {
@@ -466,19 +466,21 @@ public:
         if (!inserted) {
             YT_ASSERT(mappingIt->second->PoolName == poolName);
 
-            auto* pool = mappingIt->second;
+            auto* rawPool = mappingIt->second;
             // If RetainPoolQueue_ contains only one element its LinkedListNode will be null.
             // Determine that pool is in RetainPoolQueue_ by checking its ref count.
-            if (NYT::GetRefCounter(pool)->GetRefCount() == 0) {
-                RetainPoolQueue_.Remove(pool);
-                pool->LinkedListNode = {};
+            if (NYT::GetRefCounter(rawPool)->GetRefCount() == 0) {
+                RetainPoolQueue_.Remove(rawPool);
+                rawPool->LinkedListNode = {};
 
-                YT_LOG_TRACE("Restoring pool (PoolName: %v)", pool->PoolName);
+                YT_LOG_TRACE("Restoring pool (PoolName: %v)", rawPool->PoolName);
             }
 
-            YT_LOG_TRACE("Reusing pool (PoolName: %v)", pool->PoolName);
+            YT_LOG_TRACE("Reusing pool (PoolName: %v)", rawPool->PoolName);
 
-            return pool;
+            // NB: Strong RC could be zero, see above.
+            NYT::GetRefCounter(rawPool)->DangerousRef();
+            return TExecutionPoolPtr(rawPool, /*addReference*/ false);
         } else {
             YT_LOG_TRACE("Creating pool (PoolName: %v)", poolName);
             auto pool = New<TExecutionPool>(poolName, GetPoolProfiler(poolName));

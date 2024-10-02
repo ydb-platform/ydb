@@ -1,6 +1,3 @@
-#ifndef LINUX
-    #define LINUX
-#endif
 #include <stdio.h>
 
 #define DECLARER
@@ -17,13 +14,15 @@
 
 option_t options[] = {
 {"SCALE", OPT_INT, 0, "scale", NULL, "1"}, 
-{"PARALLEL", OPT_INT, 0, "process count", NULL, ""}, 
-{"CHILD", OPT_INT, 0, "process index", NULL, "1"}, 
+{"PARALLEL", OPT_INT, 1, "process count", NULL, ""}, 
+{"CHILD", OPT_INT, 2, "process index", NULL, "1"}, 
 {NULL, 0, 0, NULL, NULL, NULL} 
 };
 
 char* params[] = {
-    NULL
+    NULL,
+    NULL,
+    NULL,
 };
 
 file_ref_t *pCurrentFile;

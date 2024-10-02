@@ -4,7 +4,7 @@
 
 ### Пример
 
-``` yql
+```yql
 SELECT
     key
 FROM my_table

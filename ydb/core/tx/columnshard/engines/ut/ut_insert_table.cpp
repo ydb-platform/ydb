@@ -84,19 +84,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         
         // insert, not commited
         auto userData1 = std::make_shared<TUserData>(tableId, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
+        insertTable.RegisterPathInfo(tableId);
         bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData1));
         UNIT_ASSERT(ok);
-
-        // insert the same blobId1 again
-        auto userData2 = std::make_shared<TUserData>(tableId, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData2));
-        UNIT_ASSERT(!ok);
-
-        // insert different blodId with the same writeId and dedupId
-        TUnifiedBlobId blobId2(2222, 1, 2, 100, 2, 0, 1);
-        auto userData3 = std::make_shared<TUserData>(tableId, TBlobRange(blobId2), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData3));
-        UNIT_ASSERT(!ok);
 
         // read nothing
         auto blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);

@@ -26,6 +26,7 @@ SRCS(
     sparsed_ut.cpp
     tiering_ut.cpp
     decimal_ut.cpp
+    compression_ut.cpp
 )
 
 PEERDIR(

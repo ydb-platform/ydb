@@ -34,7 +34,7 @@ constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NOrigin {
+namespace NDetail {
 
 namespace {
 
@@ -71,8 +71,6 @@ void TryExtractHost(const TOriginAttributes& attributes)
 
     attributes.Host = name;
 }
-
-} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -187,9 +185,11 @@ TOriginAttributes ExtractFromDictionaryOverride(const NYTree::IAttributeDictiona
     return result;
 }
 
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
-void EnableOriginOverrides()
+void EnableErrorOriginOverrides()
 {
     static NGlobal::TVariable<std::byte> getExtensionDataOverride{
         NYT::NDetail::GetExtensionDataTag,
@@ -214,14 +214,14 @@ void EnableOriginOverrides()
     extractFromDictionaryOverride.Get();
 }
 
-} // namespace NOrigin
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
 bool HasHost(const TError& error) noexcept
 {
     if (auto* attributes = error.MutableOriginAttributes()) {
-        return NOrigin::HasHost(*attributes);
+        return NYT::NDetail::HasHost(*attributes);
     }
     return false;
 }
@@ -229,7 +229,7 @@ bool HasHost(const TError& error) noexcept
 TStringBuf GetHost(const TError& error) noexcept
 {
     if (auto* attributes = error.MutableOriginAttributes()) {
-        return NOrigin::GetHost(*attributes);
+        return NYT::NDetail::GetHost(*attributes);
     }
     return {};
 }
@@ -237,7 +237,7 @@ TStringBuf GetHost(const TError& error) noexcept
 NConcurrency::TFiberId GetFid(const TError& error) noexcept
 {
     if (auto* attributes = error.MutableOriginAttributes()) {
-        return NOrigin::GetFid(*attributes);
+        return NYT::NDetail::GetFid(*attributes);
     }
     return NConcurrency::InvalidFiberId;
 }
@@ -245,7 +245,7 @@ NConcurrency::TFiberId GetFid(const TError& error) noexcept
 bool HasTracingAttributes(const TError& error) noexcept
 {
     if (auto* attributes = error.MutableOriginAttributes()) {
-        return NOrigin::HasTracingAttributes(*attributes);
+        return NYT::NDetail::HasTracingAttributes(*attributes);
     }
     return false;
 }
@@ -253,7 +253,7 @@ bool HasTracingAttributes(const TError& error) noexcept
 NTracing::TTraceId GetTraceId(const TError& error) noexcept
 {
     if (auto* attributes = error.MutableOriginAttributes()) {
-        return NOrigin::GetTraceId(*attributes);
+        return NYT::NDetail::GetTraceId(*attributes);
     }
     return NTracing::InvalidTraceId;
 }
@@ -261,7 +261,7 @@ NTracing::TTraceId GetTraceId(const TError& error) noexcept
 NTracing::TSpanId GetSpanId(const TError& error) noexcept
 {
     if (auto* attributes = error.MutableOriginAttributes()) {
-        return NOrigin::GetSpanId(*attributes);
+        return NYT::NDetail::GetSpanId(*attributes);
     }
     return NTracing::InvalidSpanId;
 }
@@ -274,7 +274,7 @@ void SetTracingAttributes(TError* error, const NTracing::TTracingAttributes& att
         return;
     }
 
-    NOrigin::UpdateTracingAttributes(originAttributes, attributes);
+    NYT::NDetail::UpdateTracingAttributes(originAttributes, attributes);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

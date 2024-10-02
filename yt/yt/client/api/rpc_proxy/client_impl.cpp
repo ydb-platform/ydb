@@ -471,17 +471,25 @@ TFuture<void> TClient::AlterTableReplica(
     if (options.Enabled) {
         req->set_enabled(*options.Enabled);
     }
+
     if (options.Mode) {
         req->set_mode(static_cast<NProto::ETableReplicaMode>(*options.Mode));
     }
+
     if (options.PreserveTimestamps) {
         req->set_preserve_timestamps(*options.PreserveTimestamps);
     }
+
     if (options.Atomicity) {
         req->set_atomicity(static_cast<NProto::EAtomicity>(*options.Atomicity));
     }
+
     if (options.EnableReplicatedTableTracker) {
         req->set_enable_replicated_table_tracker(*options.EnableReplicatedTableTracker);
+    }
+
+    if (options.ReplicaPath) {
+        req->set_replica_path(*options.ReplicaPath);
     }
 
     ToProto(req->mutable_mutating_options(), options);

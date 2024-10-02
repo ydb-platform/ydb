@@ -1,5 +1,7 @@
 # Change Data Capture (CDC)
 
+{% include [olap_not_allow](../_includes/not_allow_for_olap_note.md) %}
+
 Change Data Capture (CDC) captures changes to {{ ydb-short-name }} table rows, uses these changes to generate a _changefeed_, writes them to distributed storage, and provides access to these records for further processing. It uses a [topic](topic.md) as distributed storage to efficiently store the table change log.
 
 When adding, updating, or deleting a table row, CDC generates a change record by specifying the [primary key](datamodel/table.md) of the row and writes it to the topic partition corresponding to this key.
@@ -55,6 +57,12 @@ The record with the source row value is labeled as an [update](#restrictions) re
 {% endnote %}
 
 During the scanning process, depending on the table update frequency, you might see too many `OVERLOADED` errors. This is because, besides the update records, you also need to deliver records with the source row values. When the scan is complete, the changefeed switches to normal operation.
+
+{% note warning %}
+
+[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table during the initial scan.
+
+{% endnote %}
 
 ## Record structure {#record-structure}
 
@@ -139,7 +147,7 @@ Record with virtual timestamps:
 
 * The same record may not contain the `update` and `erase` fields simultaneously, since these fields are operation flags (you can't update and erase a table row at the same time). However, each record contains one of these fields (any operation is either an update or an erase).
 * In `UPDATES` mode, the `update` field for update operations is an operation flag (update) and contains the names and values of updated columns.
-* JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` in `UPDATES` mode), *do not include* the columns that are primary key components.
+* JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` in `UPDATES` mode), _do not include_ the columns that are primary key components.
 * If a record contains the `erase` field (indicating that the record matches the erase operation), this is always an empty JSON object (`{}`).
 
 {% endnote %}

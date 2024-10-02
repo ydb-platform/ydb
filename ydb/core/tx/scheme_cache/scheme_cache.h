@@ -190,6 +190,8 @@ struct TSchemeCacheNavigate {
     struct TPQGroupInfo : public TAtomicRefCount<TPQGroupInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TPersQueueGroupDescription Description;
+        TVector<NScheme::TTypeInfo> Schema;
+        TVector<NKikimr::TKeyDesc::TPartitionInfo> Partitioning;
     };
 
     struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {

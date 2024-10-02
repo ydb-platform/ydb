@@ -20,20 +20,20 @@
 
 * Adding constant values using [`VALUES`](../values.md).
 
-```yql
+  ```yql
   INSERT INTO my_table (Key1, Key2, Value1, Value2)
   VALUES (345987,'ydb', 'Pied piper', 1414);
   COMMIT;
   ```
 
-```yql
+  ```yql
   INSERT INTO my_table (key, value)
   VALUES ("foo", 1), ("bar", 2);
   ```
 
 * Saving the `SELECT` result.
 
-```yql
+  ```yql
   INSERT INTO my_table
   SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
   FROM my_table1;

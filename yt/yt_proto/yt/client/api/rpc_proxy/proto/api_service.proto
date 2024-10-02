@@ -637,6 +637,8 @@ message TReqSelectRows
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
     optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 25;
+    optional bool use_lookup_cache = 26;
+    optional int64 min_row_count_per_subquery = 27;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -835,6 +837,7 @@ message TReqExplainQuery
     optional string execution_pool = 11;
     optional bool new_range_inference = 12;
     optional int32 syntax_version = 13 [default = 1];
+    optional int64 min_row_count_per_subquery = 14;
 }
 
 message TRspExplainQuery
@@ -1985,6 +1988,7 @@ message TReqAlterTableReplica
     optional bool preserve_timestamps = 4;
     optional EAtomicity atomicity = 5;
     optional bool enable_replicated_table_tracker = 6;
+    optional string replica_path = 7;
 
     optional TMutatingOptions mutating_options = 100;
 }

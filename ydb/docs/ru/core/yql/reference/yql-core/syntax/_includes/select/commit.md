@@ -7,7 +7,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 INSERT INTO result1 SELECT * FROM my_table;
 INSERT INTO result2 SELECT * FROM my_table;
 COMMIT;

@@ -27,7 +27,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
             queryResultIndex = result.GetQueryResultIndex();
         }
 
-        TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder,
+        TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder, &resultMeta.ColumnHints,
             queryResultIndex);
     }
 }
@@ -39,7 +39,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
     ResultRowsBytes += rows.Size();
     auto guard = AllocState->TypeEnv.BindAllocator();
     auto& result = TxResults[idx];
-    if (rows.RowCount() || !result.IsStream) {
+    if (rows.RowCount()) {
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
             static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()));

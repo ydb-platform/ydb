@@ -1,4 +1,5 @@
 # KNN
+
 ## Introduction
 
 [Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists of finding the closest point in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.
@@ -89,10 +90,12 @@ Distance functions return small values for close vectors, while similarity funct
 {% endnote %}
 
 Similarity functions:
+
 * inner product `InnerProductSimilarity`, it's the dot product, also known as the scalar product (sum of products of coordinates)
 * cosine similarity `CosineSimilarity` (dot product divided by product of vector lengths)
 
 Distance functions:
+
 * cosine distance `CosineDistance` (1 - cosine similarity)
 * manhattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
 * euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of the sum of squares of coordinate differences)
@@ -126,6 +129,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 ## Еxact search examples
 
 {% if backend_name == "YDB" %}
+
 ### Creating a table
 
 ```yql
@@ -223,6 +227,7 @@ This example differs from the [exact search example](#еxact-search-examples) by
 This allows to first do a approximate preliminary search by the `embedding_bit` column, and then refine the results by the original vector column `embegging`.
 
 {% if backend_name == "YDB" %}
+
 ### Creating a table
 
 ```yql
@@ -245,6 +250,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 ```
 
 {% else %}
+
 ### Data declaration
 
 ```yql
@@ -259,6 +265,7 @@ $facts = AsList(
     ),
 );
 ```
+
 {% endif %}
 
 ### Scalar quantization

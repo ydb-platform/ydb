@@ -322,7 +322,9 @@ message TClusterInfo {
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
     uint32 NumberOfCpus = 20;
-    double LoadAverage = 21;
+    double CoresUsed = 21;
+    double LoadAverage = 22;
+    repeated NKikimrWhiteboard.TSystemStateInfo.TPoolStats PoolStats = 23;
     uint64 MemoryTotal = 30;
     uint64 MemoryUsed = 31;
     uint64 StorageTotal = 40;
@@ -334,6 +336,7 @@ message TClusterInfo {
     repeated string Versions = 46;
     map<string, uint32> MapVersions = 47;
     map<string, uint32> MapNodeStates = 48;
+    map<string, uint32> MapNodeRoles = 49;
     repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 50;
     repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
     uint64 Hosts = 60;
@@ -460,6 +463,16 @@ message TStorageGroupInfo {
 message TStorageGroupGroup {
     string GroupName = 1;
     uint64 GroupCount = 2;
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
 }
 
 message TStoragePoolInfo {

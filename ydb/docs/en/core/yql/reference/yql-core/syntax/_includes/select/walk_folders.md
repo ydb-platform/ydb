@@ -74,7 +74,7 @@ Recommendations for usage:
 
 **Recursively collect the paths** of all tables starting from the `initial_folder`:
 
-``` yql
+```yql
 $postHandler = ($nodes, $state, $level) -> {
     $tables = ListFilter($nodes, ($x)->($x.Type = "table"));
     return ListExtend($state, ListExtract($tables, "Path"));
@@ -137,7 +137,6 @@ $postHandler = ($nodes, $state, $_) -> {
 SELECT
     State
 FROM WalkFolders(`initial_folder`, $diveHandler AS DiveHandler, $postHandler AS PostHandler);
-
 ```
 
 **Recursively collect the paths** of all broken (destination path does not exist) links from the `initial_folder`:

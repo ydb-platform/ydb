@@ -505,6 +505,12 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
         return false;
     }
 
+    if (State->Config.SentinelConfig.EvictVDisksStatus.Empty()) {
+        error.Code = TStatus::ERROR;
+        error.Reason = "Evict vdisks is disabled in Sentinel (self heal)";
+        return false;
+    }
+
     switch (action.GetType()) {
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:

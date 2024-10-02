@@ -6,6 +6,8 @@ import os
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum
+from time import time
+from types import TracebackType
 
 
 class WorkloadType(StrEnum):
@@ -37,7 +39,7 @@ class YdbCliHelper:
         def __init__(
             self, stats: dict[str, dict[str, any]] = {}, query_out: Optional[str] = None, stdout: Optional[str] = None, stderr: Optional[str] = None,
             error_message: Optional[str] = None, plans: Optional[list[YdbCliHelper.QueryPlan]] = None,
-            errors_by_iter: Optional[dict[int, str]] = None, explain_plan: Optional[YdbCliHelper.QueryPlan] = None
+            errors_by_iter: Optional[dict[int, str]] = None, explain_plan: Optional[YdbCliHelper.QueryPlan] = None, traceback: Optional[TracebackType] = None
         ) -> None:
             self.stats = stats
             self.query_out = query_out if str != '' else None
@@ -48,6 +50,7 @@ class YdbCliHelper:
             self.plans = plans
             self.explain_plan = explain_plan
             self.errors_by_iter = errors_by_iter
+            self.traceback = traceback
 
     @staticmethod
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
@@ -95,13 +98,22 @@ class YdbCliHelper:
                     result.svg = f.read()
             return result
 
+        def _get_nodes_info() -> dict[str, dict[str, int]]:
+            nodes, _ = YdbCluster.get_cluster_nodes()
+            return {
+                n['SystemState']['Host']: {
+                    'start_time': int(int(n['SystemState'].get('StartTime', time() * 1000)) / 1000)
+                }
+                for n in nodes
+            }
+
         errors_by_iter = {}
         try:
             wait_error = YdbCluster.wait_ydb_alive(300, path)
             if wait_error is not None:
                 return YdbCliHelper.WorkloadRunResult(error_message=f'Ydb cluster is dead: {wait_error}')
 
-            cluster_start_time = YdbCluster.get_cluster_info().get('max_start_time', 0)
+            nodes_info = _get_nodes_info()
 
             json_path = yatest.common.work_path(f'q{query_num}.json')
             qout_path = yatest.common.work_path(f'q{query_num}.out')
@@ -132,8 +144,23 @@ class YdbCliHelper:
                         err = f'Invalid return code: {exec.returncode} instesd 0.'
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
                 err = f'Timeout {timeout}s expeared.'
-            if YdbCluster.get_cluster_info().get('max_start_time', 0) != cluster_start_time:
-                err = ('' if err is None else f'{err}\n\n') + 'Some nodes were restart'
+
+            node_errors = []
+            for node, info in _get_nodes_info().items():
+                if node in nodes_info:
+                    if info['start_time'] > nodes_info[node]['start_time']:
+                        node_errors.append(f'Node {node} was restarted')
+                    nodes_info[node]['processed'] = True
+            for node, info in nodes_info.items():
+                if not info.get('processed', False):
+                    node_errors.append(f'Node {node} is down')
+            if len(node_errors) > 0:
+                if err is None:
+                    err = ''
+                else:
+                    err += '\n\n'
+                err += '\n'.join(node_errors)
+
             stats = {}
             if (os.path.exists(json_path)):
                 with open(json_path, 'r') as r:
@@ -162,4 +189,4 @@ class YdbCliHelper:
                 errors_by_iter=errors_by_iter
             )
         except BaseException as e:
-            return YdbCliHelper.WorkloadRunResult(error_message=str(e))
+            return YdbCliHelper.WorkloadRunResult(error_message=str(e), traceback=e.__traceback__)

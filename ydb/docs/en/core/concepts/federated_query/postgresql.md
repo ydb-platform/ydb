@@ -30,6 +30,7 @@ To work with an external PostgreSQL database, you need to follow these steps:
 4. [Execute a query](#query) to the database.
 
 ## Query syntax {#query}
+
 The following SQL query format is used to work with PostgreSQL:
 
 ```yql

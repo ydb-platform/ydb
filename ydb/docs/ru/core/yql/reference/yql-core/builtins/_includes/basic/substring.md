@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 Substring(String[, Uint32? [, Uint32?]])->String
 Substring(String?[, Uint32? [, Uint32?]])->String?
 ```
@@ -23,14 +23,14 @@ Substring(String?[, Uint32? [, Uint32?]])->String?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SUBSTRING("abcdefg", 3, 1); -- d
 ```
 
-``` yql
+```yql
 SELECT SUBSTRING("abcdefg", 3); -- defg
 ```
 
-``` yql
+```yql
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```

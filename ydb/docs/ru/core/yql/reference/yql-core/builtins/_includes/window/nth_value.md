@@ -6,20 +6,20 @@
 
 ### Сигнатура
 
-```
+```yql
 NTH_VALUE(T,N)->T?
 ```
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
    NTH_VALUE(my_column, 2) OVER w
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
 
-``` yql
+```yql
 SELECT
    NTH_VALUE(my_column, 3) IGNORE NULLS OVER w
 FROM my_table

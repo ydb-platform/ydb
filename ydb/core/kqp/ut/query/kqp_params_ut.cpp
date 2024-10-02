@@ -935,7 +935,57 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             )"), upsertParams);
             UNIT_ASSERT_VALUES_EQUAL(status, EStatus::GENERIC_ERROR);
             UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to convert input columns types to scheme types");
+        }
+        // Good case: Upsert overflowed Decimal
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1001).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("12345678901234567890.1234567891", 22, 9)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("1234567890123456789012345678901234567890.1234567891", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                DECLARE $key AS Int32;
+                DECLARE $value22 AS Decimal(22,9);
+                DECLARE $value35 AS Decimal(35,10);
+
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+        }
+        // Good case: Upsert inf Decimal
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1002).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("inf", 22, 9)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("inf", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                DECLARE $key AS Int32;
+                DECLARE $value22 AS Decimal(22,9);
+                DECLARE $value35 AS Decimal(35,10);
+
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
         }        
+        // Good case: select overflowed and inf decimal
+        {
+            auto emptyParams = tableClient.GetParamsBuilder().Build();
+            auto [status, issues, resultSet] = execSelectQuery(Q1_(R"(
+                SELECT * FROM Table WHERE Key IN (1001, 1002);
+            )"), emptyParams);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+            TString expected = R"([
+                [[1001];["inf"];["inf"]];
+                [[1002];["inf"];["inf"]]
+            ])";
+            TString actual = FormatResultSetYson(resultSet);
+            CompareYson(expected, actual);
+        }
     }
 
 }

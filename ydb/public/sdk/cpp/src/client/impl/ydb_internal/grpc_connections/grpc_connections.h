@@ -538,6 +538,11 @@ public:
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
+                static const std::string clientPid = GetClientPIDHeaderValue();
+                meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+                meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
+                meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
+
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 

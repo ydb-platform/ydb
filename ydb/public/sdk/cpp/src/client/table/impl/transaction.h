@@ -16,6 +16,7 @@ public:
         return !TxId_.empty();
     }
 
+    TAsyncStatus Precommit() const;
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 

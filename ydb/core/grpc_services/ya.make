@@ -43,6 +43,7 @@ SRCS(
     rpc_fq_internal.cpp
     rpc_fq.cpp
     rpc_get_operation.cpp
+    rpc_get_scale_recommendation.cpp
     rpc_get_shard_locations.cpp
     rpc_import.cpp
     rpc_import_data.cpp
@@ -152,6 +153,7 @@ RECURSE(
     base
     counters
     local_rpc
+    tablet
 )
 
 RECURSE_FOR_TESTS(

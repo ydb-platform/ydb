@@ -36,7 +36,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
-    EffectiveCompact = (HaveDistinct && CompactForDistinct && !TypesCtx.IsBlockEngineEnabled()) || ForceCompact || HasSetting(*settings, "compact");
+    EffectiveCompact = (HaveDistinct && CompactForDistinct && !UseBlocks) || ForceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : Traits) {
         auto mergeLambda = trait->Child(5);
         if (mergeLambda->Tail().IsCallable("Void")) {
@@ -67,7 +67,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
         return GeneratePhases();
     }
 
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    if (UseBlocks) {
         if (Suffix == "Combine") {
             auto ret = TryGenerateBlockCombine();
             if (ret) {
@@ -2785,7 +2785,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         streams.push_back(SerializeIdxSet(indicies));
     }
 
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    if (UseBlocks) {
         for (ui32 i = 0; i < unionAllInputs.size(); ++i) {
             unionAllInputs[i] = Ctx.Builder(Node->Pos())
                 .Callable("Map")
@@ -2806,7 +2806,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     }
 
     auto settings = cleanOutputSettings;
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    if (UseBlocks) {
         settings = AddSetting(*settings, Node->Pos(), "many_streams", Ctx.NewList(Node->Pos(), std::move(streams)), Ctx);
     }
 
@@ -2839,7 +2839,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
-    if (UsePartitionsByKeys || !TypesCtx.IsBlockEngineEnabled()) {
+    if (UsePartitionsByKeys || !UseBlocks) {
         return nullptr;
     }
 
@@ -2934,7 +2934,7 @@ TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContex
             return ret;
         }
     }
-    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.IsBlockEngineEnabled());
+    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.IsBlockEngineEnabled(), false);
 }
 
 } // namespace NYql

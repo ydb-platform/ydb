@@ -86,8 +86,8 @@ class TestS3Formats:
         [
             ("test.csv", "csv_with_names"),
             ("test.tsv", "tsv_with_names"),
-            ("test.json", "json_each_row"),
-            ("test.json", "json_list"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
             ("test.parquet", "parquet"),
         ],
     )
@@ -130,6 +130,8 @@ class TestS3Formats:
         [
             ("test.csv", "csv_with_names"),
             ("test.tsv", "tsv_with_names"),
+            ("test_each_row.json", "json_each_row"),
+            ("test_list.json", "json_list"),
             ("test.parquet", "parquet"),
         ],
     )

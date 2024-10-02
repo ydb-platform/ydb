@@ -215,7 +215,7 @@ if __name__ == "__main__":
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-arm64.json'}\" --platforms darwin-arm64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64 --generator cmake"
 #    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
 #            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64"
     print(f"yexport command {yexport_command}")

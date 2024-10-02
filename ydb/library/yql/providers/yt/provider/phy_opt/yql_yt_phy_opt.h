@@ -122,8 +122,6 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> MapToMerge(NNodes::TExprBase node, TExprContext& ctx) const;
 
-    NNodes::TMaybeNode<NNodes::TExprBase> UnorderedPublishTarget(NNodes::TExprBase node, TExprContext& ctx) const;
-
     NNodes::TMaybeNode<NNodes::TExprBase> AddTrivialMapperForNativeYtTypes(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqWrite(NNodes::TExprBase node, TExprContext& ctx) const;
@@ -131,6 +129,8 @@ private:
     NNodes::TMaybeNode<NNodes::TExprBase> PushDownYtMapOverSortedMerge(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> MergeToCopy(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> ForceTransform(NNodes::TExprBase node, TExprContext& ctx) const;
 
     template <typename TLMapType>
     NNodes::TMaybeNode<NNodes::TExprBase> LMap(NNodes::TExprBase node, TExprContext& ctx) const;

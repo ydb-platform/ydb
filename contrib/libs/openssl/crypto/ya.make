@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(1.1.1t)
+
 LICENSE(
     Apache-2.0 AND
     BSD-2-Clause AND

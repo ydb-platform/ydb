@@ -140,6 +140,7 @@ message TConfigItem {
         BackgroundCleaningConfigItem = 77;
         MetadataCacheConfigItem = 80;
         MemoryControllerConfigItem = 81;
+        ReplicationConfigItem = 83;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

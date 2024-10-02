@@ -2,11 +2,12 @@ from decimal import Decimal
 from doctest import DocTestSuite
 from fractions import Fraction
 from functools import reduce
-from itertools import combinations, count, permutations
+from itertools import combinations, count, groupby, permutations
 from operator import mul
 from math import factorial
 from sys import version_info
 from unittest import TestCase, skipIf
+from unittest.mock import patch
 
 import more_itertools as mi
 
@@ -157,6 +158,22 @@ class AllEqualTests(TestCase):
     def test_key(self):
         self.assertTrue(mi.all_equal('4٤໔４৪', key=int))
         self.assertFalse(mi.all_equal('Abc', key=str.casefold))
+
+    @patch('more_itertools.recipes.groupby', autospec=True)
+    def test_groupby_calls(self, mock_groupby):
+        next_count = 0
+
+        class _groupby(groupby):
+            def __next__(true_self):
+                nonlocal next_count
+                next_count += 1
+                return super().__next__()
+
+        mock_groupby.side_effect = _groupby
+        iterable = iter('aaaaa')
+        self.assertTrue(mi.all_equal(iterable))
+        self.assertEqual(list(iterable), [])
+        self.assertEqual(next_count, 2)
 
 
 class QuantifyTests(TestCase):
@@ -838,7 +855,7 @@ class TriplewiseTests(TestCase):
 
 
 class SlidingWindowTests(TestCase):
-    def test_basic(self):
+    def test_islice_version(self):
         for iterable, n, expected in [
             ([], 1, []),
             ([0], 1, [(0,)]),
@@ -852,6 +869,17 @@ class SlidingWindowTests(TestCase):
             with self.subTest(expected=expected):
                 actual = list(mi.sliding_window(iterable, n))
                 self.assertEqual(actual, expected)
+
+    def test_deque_version(self):
+        iterable = map(str, range(100))
+        all_windows = list(mi.sliding_window(iterable, 95))
+        self.assertEqual(all_windows[0], tuple(map(str, range(95))))
+        self.assertEqual(all_windows[-1], tuple(map(str, range(5, 100))))
+
+    def test_zero(self):
+        iterable = map(str, range(100))
+        with self.assertRaises(ValueError):
+            list(mi.sliding_window(iterable, 0))
 
 
 class SubslicesTests(TestCase):

@@ -753,29 +753,44 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             f.Wait();
 
             auto v = f.GetValueSync();
-            UNIT_ASSERT_C(!v.IsSuccess(), "Must receve error becuse max-partition is not 0");
+            UNIT_ASSERT_C(!v.IsSuccess(), "Must receve error becuse disabling is not supported");
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_BackCompatibility) {
+        auto topicName = "back-compatibility-test";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(3)
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
         }
 
         {
             TAlterTopicSettings alterSettings;
             alterSettings
                 .BeginAlterPartitioningSettings()
-                    .MaxActivePartitions(0)
-                    .BeginAlterAutoPartitioningSettings()
-                        .Strategy(EAutoPartitioningStrategy::Disabled)
-                    .EndAlterAutoPartitioningSettings()
+                    .MinActivePartitions(5)
                 .EndAlterTopicPartitioningSettings();
-            auto f = client.AlterTopic(topicName, alterSettings);
-            f.Wait();
-
-            auto v = f.GetValueSync();
-            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+            client.AlterTopic(topicName, alterSettings).Wait();
         }
 
         {
             auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
 
-            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Disabled);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 5);
         }
     }
 

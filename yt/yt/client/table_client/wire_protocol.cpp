@@ -1,5 +1,7 @@
 #include "wire_protocol.h"
 
+#include "private.h"
+
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/schema.h>
@@ -36,7 +38,7 @@ using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static NLogging::TLogger Logger("WireProtocol");
+static constexpr auto& Logger = TableClientLogger;
 
 struct TWireProtocolWriterTag
 { };
@@ -1196,7 +1198,7 @@ class TWireProtocolRowsetWriter
 public:
     TWireProtocolRowsetWriter(
         NCompression::ECodec codecId,
-        size_t desiredUncompressedBlockSize,
+        i64 desiredUncompressedBlockSize,
         TTableSchemaPtr schema,
         bool schemaful,
         const NLogging::TLogger& logger)
@@ -1296,7 +1298,7 @@ private:
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     TTableSchemaPtr schema,
     bool schemaful,
     const NLogging::TLogger& logger)

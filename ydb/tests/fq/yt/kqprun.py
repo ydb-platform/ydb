@@ -53,7 +53,7 @@ class KqpRun(object):
             for table in tables:
                 if table.format != 'yson':
                     pytest.skip('skip tests containing tables with a non-yson attribute format')
-                cmd += '--table=yt.Root/%s@%s ' % (table.full_name, table.yqlrun_file)
+                cmd += '--table=yt./Root/%s@%s ' % (table.full_name, table.yqlrun_file)
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)
         if proc_result.exit_code != 0 and check_error:

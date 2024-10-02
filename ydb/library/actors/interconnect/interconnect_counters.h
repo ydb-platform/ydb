@@ -43,6 +43,7 @@ public:
     virtual void UpdatePingTimeHistogram(ui64 value) = 0;
     virtual void UpdateOutputChannelTraffic(ui16 channel, ui64 value) = 0;
     virtual void UpdateOutputChannelEvents(ui16 channel) = 0;
+    virtual void SetUtilization(ui32 total, ui32 starvation) = 0;
     TString GetHumanFriendlyPeerHostName() const {
         return HumanFriendlyPeerHostName.value_or(TString());
     }

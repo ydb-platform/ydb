@@ -1234,16 +1234,34 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         ResourceBroker->Configure(std::move(config));
     }
 
-    LOG_LOG_S(ctx, 
-        success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, 
-        NKikimrServices::RESOURCE_BROKER, 
+    LOG_LOG_S(ctx,
+        success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR,
+        NKikimrServices::RESOURCE_BROKER,
         "Configure result: " << response->Record.ShortDebugString());
+
+    auto newConfig = ResourceBroker->GetConfig();
+    for (auto& queue : newConfig.GetQueues()) {
+        auto it = QueueSubscribers.find(queue.GetName());
+        if (it == QueueSubscribers.end())
+            continue;
+
+        for(const TActorId& subscriber: it->second) {
+            auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+            resp->QueueConfig = queue;
+            ctx.Send(subscriber, resp.Release());
+        }
+    }
 
     ctx.Send(ev->Sender, response.Release());
 }
 
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&)
 {
+    if (ev->Get()->Subscribe) {
+        auto [it, _] = QueueSubscribers.emplace(ev->Get()->Queue, THashSet<TActorId>());
+        it->second.emplace(ev->Sender);
+    }
+
     auto config = ResourceBroker->GetConfig();
     auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
     for (auto& queue : config.GetQueues()) {
@@ -1266,7 +1284,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::T
 void TResourceBrokerActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
 {
     auto config = ResourceBroker->GetConfig();
-    
+
     TStringStream str;
     HTML(str) {
         PRE() {

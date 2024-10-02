@@ -369,6 +369,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
             NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+            NLs::UserAttrsEqual({}),
         });
     }
 

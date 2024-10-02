@@ -13,6 +13,7 @@ SRCS(
     api/client_cache.cpp
     api/delegating_client.cpp
     api/delegating_transaction.cpp
+    api/distributed_table_sessions.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -30,6 +31,7 @@ SRCS(
     api/persistent_queue.cpp
     api/sticky_transaction_pool.cpp
     api/options.cpp
+    api/shuffle_client.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp
@@ -49,7 +51,9 @@ SRCS(
     api/rpc_proxy/timestamp_provider.cpp
     api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
+    api/rpc_proxy/row_batch_reader.cpp
     api/rpc_proxy/row_stream.cpp
+    api/rpc_proxy/row_batch_writer.cpp
     api/rpc_proxy/wire_row_stream.cpp
 
     bundle_controller_client/bundle_controller_client.cpp
@@ -61,6 +65,7 @@ SRCS(
 
     hydra/version.cpp
 
+    chaos_client/config.cpp
     chaos_client/helpers.cpp
     chaos_client/replication_card.cpp
     chaos_client/replication_card_cache.cpp
@@ -221,9 +226,11 @@ RECURSE(
     driver
     federated
     hedging
+    logging
 )
 
 RECURSE_FOR_TESTS(
+    api/unittests
     table_client/unittests
     unittests
 )

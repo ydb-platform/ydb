@@ -470,6 +470,7 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOk,
             StatusNoInfo,
             StatusOutdated,
+            StatusUnavailable,
         };
 
         ui32 Sz;
@@ -547,7 +548,7 @@ IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &,
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(
     const TString &path, const TActorId &owner, EBoardLookupMode mode,
-    TBoardRetrySettings boardRetrySettings = {});
+    TBoardRetrySettings boardRetrySettings = {}, ui64 cookie = 0);
 IActor* CreateBoardPublishActor(
     const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
     TBoardRetrySettings boardRetrySettings = {});

@@ -8,6 +8,7 @@ message TPgExtension {
     optional string LibraryPath = 4;
     optional bool TypesOnly = 5;
     optional string LibraryMD5 = 6;
+    optional string Version = 7;
 }
 
 message TPgExtensions {

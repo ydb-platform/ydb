@@ -36,7 +36,7 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
         if (NKqp::StructHoldsPgType(*rowType, i)) {
             auto pgTypeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
             MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetTypeDesc()),
+                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetPgTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetPgTypeDesc()),
                 "Key column type mismatch, column: " << name
             );
         } else {
@@ -74,7 +74,7 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
         NKikimr::NMiniKQL::TType* type = keyTypes->GetMemberType(i);
         if (type->GetKind() == TType::EKind::Pg) {
             auto itemType = AS_TYPE(TPgType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
+            result.KeyTypes[i] = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
         } else {
             if (type->IsOptional()) {
                 type = AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType();

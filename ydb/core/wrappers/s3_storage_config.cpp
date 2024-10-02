@@ -171,6 +171,7 @@ IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOpera
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings)
     : Config(ConfigFromSettings(settings))
     , Credentials(CredentialsFromSettings(settings))
+    , UseVirtualAddressing(!settings.disable_virtual_addressing())
 {
     Bucket = settings.bucket();
 }
@@ -178,6 +179,7 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFrom
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings)
     : Config(ConfigFromSettings(settings))
     , Credentials(CredentialsFromSettings(settings))
+    , UseVirtualAddressing(!settings.disable_virtual_addressing())
 {
     Bucket = settings.bucket();
 }

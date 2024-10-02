@@ -215,8 +215,13 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
 {
     PQ_LOG_D("Handle TEvTxCalcPredicateResult");
 
-    OnPartitionResult(event,
-                      event.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
+    TMaybe<EDecision> decision;
+
+    if (event.Predicate.Defined()) {
+        decision = *event.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT;
+    }
+
+    OnPartitionResult(event, decision);
 }
 
 void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
@@ -228,14 +233,16 @@ void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvPro
 }
 
 template<class E>
-void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decision)
+void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision> decision)
 {
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
     Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
-    SetDecision(SelfDecision, decision);
+    if (decision.Defined()) {
+        SetDecision(SelfDecision, *decision);
+    }
 
     ++PartitionRepliesCount;
 

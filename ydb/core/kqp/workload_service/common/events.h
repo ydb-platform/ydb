@@ -22,13 +22,13 @@ struct TEvPrivate {
         EvRefreshPoolState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvResolvePoolResponse,
         EvFetchPoolResponse,
-        EvFetchDatabaseResponse,
         EvCreatePoolResponse,
         EvPrepareTablesRequest,
         EvPlaceRequestIntoPoolResponse,
         EvFinishRequestInPool,
         EvResignPoolHandler,
         EvStopPoolHandler,
+        EvStopPoolHandlerResponse,
         EvCancelRequest,
         EvUpdatePoolSubscription,
 
@@ -45,8 +45,6 @@ struct TEvPrivate {
         EvDelayRequestResponse,
         EvStartRequestResponse,
         EvCleanupRequestsResponse,
-
-        EvRanksCheckerResponse,
 
         EvEnd
     };
@@ -93,20 +91,6 @@ struct TEvPrivate {
         const NYql::TIssues Issues;
     };
 
-    struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, EvFetchDatabaseResponse> {
-        TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, NYql::TIssues issues)
-            : Status(status)
-            , Database(database)
-            , Serverless(serverless)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const TString Database;
-        const bool Serverless;
-        const NYql::TIssues Issues;
-    };
-
     struct TEvCreatePoolResponse : public NActors::TEventLocal<TEvCreatePoolResponse, EvCreatePoolResponse> {
         TEvCreatePoolResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
             : Status(status)
@@ -128,13 +112,15 @@ struct TEvPrivate {
     };
 
     struct TEvPlaceRequestIntoPoolResponse : public NActors::TEventLocal<TEvPlaceRequestIntoPoolResponse, EvPlaceRequestIntoPoolResponse> {
-        TEvPlaceRequestIntoPoolResponse(const TString& database, const TString& poolId)
+        TEvPlaceRequestIntoPoolResponse(const TString& database, const TString& poolId, const TString& sessionId)
             : Database(database)
             , PoolId(poolId)
+            , SessionId(sessionId)
         {}
 
         const TString Database;
         const TString PoolId;
+        const TString SessionId;
     };
 
     struct TEvFinishRequestInPool : public NActors::TEventLocal<TEvFinishRequestInPool, EvFinishRequestInPool> {
@@ -166,6 +152,21 @@ struct TEvPrivate {
     };
 
     struct TEvStopPoolHandler : public NActors::TEventLocal<TEvStopPoolHandler, EvStopPoolHandler> {
+        explicit TEvStopPoolHandler(bool resetCounters)
+            : ResetCounters(resetCounters)
+        {}
+
+        const bool ResetCounters;
+    };
+
+    struct TEvStopPoolHandlerResponse : public NActors::TEventLocal<TEvStopPoolHandlerResponse, EvStopPoolHandlerResponse> {
+        TEvStopPoolHandlerResponse(const TString& database, const TString& poolId)
+            : Database(database)
+            , PoolId(poolId)
+        {}
+
+        const TString Database;
+        const TString PoolId;
     };
 
     struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
@@ -196,11 +197,15 @@ struct TEvPrivate {
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        explicit TEvCpuQuotaResponse(bool quotaAccepted)
+        explicit TEvCpuQuotaResponse(bool quotaAccepted, double maxClusterLoad, NYql::TIssues issues)
             : QuotaAccepted(quotaAccepted)
+            , MaxClusterLoad(maxClusterLoad)
+            , Issues(std::move(issues))
         {}
 
         const bool QuotaAccepted;
+        const double MaxClusterLoad;
+        const NYql::TIssues Issues;
     };
 
     struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
@@ -310,21 +315,6 @@ struct TEvPrivate {
 
         const Ydb::StatusIds::StatusCode Status;
         const std::vector<TString> SesssionIds;
-        const NYql::TIssues Issues;
-    };
-
-    // Resource pool classifier events
-    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
-        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
-            : Status(status)
-            , MaxRank(maxRank)
-            , NumberClassifiers(numberClassifiers)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const i64 MaxRank;
-        const ui64 NumberClassifiers;
         const NYql::TIssues Issues;
     };
 };

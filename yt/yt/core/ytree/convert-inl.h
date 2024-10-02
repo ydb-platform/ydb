@@ -99,14 +99,12 @@ NYson::TYsonProducer ConvertToProducer(T&& value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-INodePtr ConvertToNode(
+INodePtr DoConvertToNode(
     const T& value,
-    INodeFactory* factory,
-    int treeSizeLimit)
+    std::unique_ptr<ITreeBuilder> builder)
 {
     auto type = GetYsonType(value);
 
-    auto builder = CreateBuilderFromFactory(factory, treeSizeLimit);
     builder->BeginTree();
 
     switch (type) {
@@ -134,6 +132,25 @@ INodePtr ConvertToNode(
     }
 
     return builder->EndTree();
+}
+
+template <class T>
+INodePtr ConvertToNode(
+    const T& value,
+    int treeSizeLimit,
+    INodeFactory* factory)
+{
+    auto builder = CreateBuilderFromFactory(factory, treeSizeLimit);
+    return DoConvertToNode(value, std::move(builder));
+}
+
+template <class T>
+INodePtr ConvertToNode(
+    const T& value,
+    INodeFactory* factory)
+{
+    auto builder = CreateBuilderFromFactory(factory);
+    return DoConvertToNode(value, std::move(builder));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

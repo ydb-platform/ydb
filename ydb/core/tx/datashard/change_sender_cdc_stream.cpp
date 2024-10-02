@@ -4,18 +4,16 @@
 #include "change_record_cdc_serializer.h"
 #include "datashard_user_table.h"
 
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/services/lib/sharding/sharding.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -91,24 +89,42 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
     }
 
+    class TSerializer: public NChangeExchange::TBaseVisitor {
+        IChangeRecordSerializer& Serializer;
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& Cmd;
+
+    public:
+        explicit TSerializer(IChangeRecordSerializer& serializer, NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd)
+            : Serializer(serializer)
+            , Cmd(cmd)
+        {
+        }
+
+        void Visit(const TChangeRecord& record) override {
+            Serializer.Serialize(Cmd, record);
+        }
+    };
+
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
-        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-        for (auto recordPtr : records) {
+        for (auto recordPtr : ev->Get()->Records) {
             const auto& record = *recordPtr;
+            const auto seqNo = static_cast<i64>(record.GetOrder());
 
-            if (record.GetSeqNo() <= MaxSeqNo) {
+            if (seqNo <= MaxSeqNo) {
                 continue;
             }
 
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetIgnoreQuotaDeadline(true);
-            Serializer->Serialize(cmd, record);
 
-            Pending.push_back(record.GetSeqNo());
+            TSerializer serializer(*Serializer, cmd);
+            record.Accept(serializer);
+
+            Pending.push_back(seqNo);
         }
 
         if (!Pending) {
@@ -293,31 +309,32 @@ private:
 
 }; // TCdcChangeSenderPartition
 
-class TMd5Partitioner final : public NChangeExchange::IChangeSenderPartitioner<TChangeRecord> {
+class TMd5PartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
-    TMd5Partitioner(size_t partitionCount)
-        : PartitionCount(partitionCount) {
+    TMd5PartitionResolver(size_t partitionCount)
+        : PartitionCount(partitionCount)
+    {
     }
 
-    ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
+    void Visit(const TChangeRecord& record) override {
         using namespace NKikimr::NDataStreams::V1;
-        const auto hashKey = HexBytesToDecimal(record->GetPartitionKey() /* MD5 */);
-        return ShardFromDecimal(hashKey, PartitionCount);
+        const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
+        SetPartitionId(ShardFromDecimal(hashKey, PartitionCount));
     }
 
 private:
     size_t PartitionCount;
 };
 
-class TBoundaryPartitioner final : public NChangeExchange::IChangeSenderPartitioner<TChangeRecord> {
+class TBoundaryPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
-    TBoundaryPartitioner(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+    TBoundaryPartitionResolver(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
         Chooser = NPQ::CreatePartitionChooser(config);
     }
 
-    ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
-        auto* p = Chooser->GetPartition(record->GetPartitionKey());
-        return p->TabletId;
+    void Visit(const TChangeRecord& record) override {
+        auto* p = Chooser->GetPartition(record.GetPartitionKey());
+        SetPartitionId(p->TabletId);
     }
 
 private:
@@ -326,50 +343,12 @@ private:
 
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
-    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
-    , public NChangeExchange::IChangeSenderResolver
-    , public NChangeExchange::ISenderFactory
+    , public NChangeExchange::TChangeSender
+    , public NChangeExchange::IChangeSenderIdentity
+    , public NChangeExchange::IChangeSenderPathResolver
+    , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    struct TPQPartitionInfo {
-        ui32 PartitionId;
-        ui64 ShardId;
-        TPartitionKeyRange KeyRange;
-
-        struct TLess {
-            TConstArrayRef<NScheme::TTypeInfo> Schema;
-
-            TLess(const TVector<NScheme::TTypeInfo>& schema)
-                : Schema(schema)
-            {
-            }
-
-            bool operator()(const TPQPartitionInfo& lhs, const TPQPartitionInfo& rhs) const {
-                Y_ABORT_UNLESS(lhs.KeyRange.ToBound || rhs.KeyRange.ToBound);
-
-                if (!lhs.KeyRange.ToBound) {
-                    return false;
-                }
-
-                if (!rhs.KeyRange.ToBound) {
-                    return true;
-                }
-
-                Y_ABORT_UNLESS(lhs.KeyRange.ToBound && rhs.KeyRange.ToBound);
-
-                const int compares = CompareTypedCellVectors(
-                    lhs.KeyRange.ToBound->GetCells().data(),
-                    rhs.KeyRange.ToBound->GetCells().data(),
-                    Schema.data(), Schema.size()
-                );
-
-                return (compares < 0);
-            }
-
-        }; // TLess
-
-    }; // TPQPartitionInfo
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -475,7 +454,7 @@ class TCdcChangeSenderMain
 
     void ResolveCdcStream() {
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(PathId, TNavigate::OpList));
+        request->ResultSet.emplace_back(MakeNavigateEntry(StreamPathId, TNavigate::OpList));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveCdcStream);
@@ -506,7 +485,7 @@ class TCdcChangeSenderMain
 
         const auto& entry = result->ResultSet.at(0);
 
-        if (!CheckTableId(entry, PathId)) {
+        if (!CheckTableId(entry, StreamPathId)) {
             return;
         }
 
@@ -595,77 +574,26 @@ class TCdcChangeSenderMain
         const auto& pqDesc = entry.PQGroupInfo->Description;
         const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
-        TVector<NScheme::TTypeInfo> schema;
         PartitionToShard.clear();
-
-        schema.reserve(pqConfig.PartitionKeySchemaSize());
-        for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-            // TODO: support pg types
-            schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
-        }
-
-        TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);
-
         for (const auto& partition : pqDesc.GetPartitions()) {
-            const auto partitionId = partition.GetPartitionId();
-            const auto shardId = partition.GetTabletId();
-
-            PartitionToShard.emplace(partitionId, shardId);
-
-            auto keyRange = TPartitionKeyRange::Parse(partition.GetKeyRange());
-            Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
-            Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
-
-            partitions.insert({partitionId, shardId, std::move(keyRange)});
-        }
-
-        // used to validate
-        bool isFirst = true;
-        const TPQPartitionInfo* prev = nullptr;
-
-        TVector<NKikimr::TKeyDesc::TPartitionInfo> partitioning;
-        partitioning.reserve(partitions.size());
-        for (const auto& cur : partitions) {
-            if (isFirst) {
-                isFirst = false;
-                Y_ABORT_UNLESS(!cur.KeyRange.FromBound.Defined());
-            } else {
-                Y_ABORT_UNLESS(cur.KeyRange.FromBound.Defined());
-                Y_ABORT_UNLESS(prev);
-                Y_ABORT_UNLESS(prev->KeyRange.ToBound.Defined());
-                // TODO: compare cells
-            }
-
-            auto& part = partitioning.emplace_back(cur.PartitionId); // TODO: double-check that it is right partitioning
-
-            if (cur.KeyRange.ToBound) {
-                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
-                    .EndKeyPrefix = *cur.KeyRange.ToBound,
-                };
-            } else {
-                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
-            }
-
-            prev = &cur;
-        }
-
-        if (prev) {
-            Y_ABORT_UNLESS(!prev->KeyRange.ToBound.Defined());
+            PartitionToShard.emplace(partition.GetPartitionId(), partition.GetTabletId());
         }
 
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
         TopicVersion = topicVersion;
 
-        KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(schema);
-        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(std::move(partitioning));
+        Y_ABORT_UNLESS(entry.PQGroupInfo->Schema);
+        KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
+        Y_ABORT_UNLESS(entry.PQGroupInfo->Partitioning);
+        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
         if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
-            SetPartitioner(new TBoundaryPartitioner(pqDesc));
+            SetPartitionResolver(new TBoundaryPartitionResolver(pqDesc));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
-            SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
+            SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
         } else {
-            SetPartitioner(new TMd5Partitioner(KeyDesc->GetPartitions().size()));
+            SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
         CreateSenders(MakePartitionIds(*KeyDesc->Partitioning), versionChanged);
@@ -699,8 +627,7 @@ class TCdcChangeSenderMain
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-        ProcessRecords(std::move(records));
+        ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
@@ -720,7 +647,7 @@ class TCdcChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == PathId);
+        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();
@@ -747,10 +674,15 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId)
+        , TChangeSender(this, this, this, this, dataShard.ActorId)
+        , StreamPathId(streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
     {
+    }
+
+    TPathId GetChangeSenderIdentity() const override final {
+        return StreamPathId;
     }
 
     void Bootstrap() {
@@ -780,6 +712,7 @@ public:
     }
 
 private:
+    const TPathId StreamPathId;
     const TDataShardId DataShard;
     mutable TMaybe<TString> LogPrefix;
 

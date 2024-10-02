@@ -64,13 +64,8 @@ int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBus
     return 0;
 }
 
-int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler) {
-    NClient::TKikimr kikimr(CommandConfig.ClientConfig);
-    if (!config.SecurityToken.empty()) {
-        kikimr.SetSecurityToken(config.SecurityToken);
-    }
-
-    if (!config.StaticCredentials.User.empty()) {
+std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config) {
+    if (config.SecurityToken.empty() && !config.StaticCredentials.User.empty()) {
         NYdb::TDriverConfig driverConfig;
         driverConfig.SetEndpoint(TCommandConfig::ParseServerAddress(config.Address).Address);
         NYdb::TDriver connection(driverConfig);
@@ -79,14 +74,32 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
         auto credentialsProviderFactory = NYdb::CreateLoginCredentialsProviderFactory(config.StaticCredentials);
         auto loginProvider = credentialsProviderFactory->CreateProvider(client.GetCoreFacility());
         try {
+            // Note: may throw exceptions
             config.SecurityToken = loginProvider->GetAuthInfo();
-        } catch (yexception& ex) {
-            Cerr << ex.what() << Endl;
+        } catch (...) {
             connection.Stop();
-            return 1;
+            throw;
         }
         connection.Stop();
-        kikimr.SetSecurityToken(config.SecurityToken);
+    }
+
+    if (!config.SecurityToken.empty()) {
+        return config.SecurityToken;
+    } else {
+        return std::nullopt;
+    }
+}
+
+int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler) {
+    NClient::TKikimr kikimr(CommandConfig.ClientConfig);
+
+    try {
+        if (auto token = AcquireSecurityToken(config)) {
+            kikimr.SetSecurityToken(*token);
+        }
+    } catch (const std::exception& e) {
+        Cerr << e.what() << Endl;
+        return 1;
     }
 
     return handler(kikimr);

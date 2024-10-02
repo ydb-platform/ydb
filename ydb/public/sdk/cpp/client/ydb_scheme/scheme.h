@@ -24,6 +24,8 @@ struct TPermissions {
         : Subject(subject)
         , PermissionNames(names)
     {}
+    TPermissions(const ::Ydb::Scheme::Permissions& proto);
+
     TString Subject;
     TVector<TString> PermissionNames;
 
@@ -99,9 +101,7 @@ using TAsyncListDirectoryResult = NThreading::TFuture<TListDirectoryResult>;
 
 struct TMakeDirectorySettings : public TOperationRequestSettings<TMakeDirectorySettings> {};
 
-struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {
-    FLUENT_SETTING_DEFAULT(bool, NotExistsIsOk, false);
-};
+struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {};
 
 struct TDescribePathSettings : public TOperationRequestSettings<TDescribePathSettings> {};
 
@@ -141,6 +141,9 @@ struct TModifyPermissionsSettings : public TOperationRequestSettings<TModifyPerm
     void AddAction(EModifyPermissionsAction action, const TPermissions& permissions) {
         Actions_.emplace_back(std::pair<EModifyPermissionsAction, TPermissions>{action, permissions});
     }
+
+    TModifyPermissionsSettings() = default;
+    explicit TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request);
 };
 
 class TSchemeClient {

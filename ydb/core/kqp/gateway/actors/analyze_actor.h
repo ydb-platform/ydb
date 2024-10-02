@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 
@@ -11,11 +12,11 @@ namespace NKikimr::NKqp {
 
 struct TEvAnalyzePrivate {
     enum EEv {
-        EvAnalyzeStatusCheck = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvAnalyzeRetry = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvEnd
     };
 
-    struct TEvAnalyzeStatusCheck : public TEventLocal<TEvAnalyzeStatusCheck, EvAnalyzeStatusCheck> {};
+    struct TEvAnalyzeRetry : public TEventLocal<TEvAnalyzeRetry, EvAnalyzeRetry> {};
 };
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
@@ -28,8 +29,8 @@ public:
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
-            HFunc(NStat::TEvStatistics::TEvAnalyzeStatusResponse, Handle);
-            HFunc(TEvAnalyzePrivate::TEvAnalyzeStatusCheck, Handle);
+            HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            HFunc(TEvAnalyzePrivate::TEvAnalyzeRetry, Handle);
             default: 
                 HandleUnexpectedEvent(ev->GetTypeRewrite());
         }
@@ -38,17 +39,18 @@ public:
 private:
     void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NStat::TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx);
 
     void HandleUnexpectedEvent(ui32 typeRewrite);
 
+private:
     void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
 
-    void SendAnalyzeStatus();
+    TDuration CalcBackoffTime();
 
 private:
     TString TablePath;
@@ -58,6 +60,15 @@ private:
     std::optional<ui64> StatisticsAggregatorId;
     TPathId PathId;
     TString OperationId;
+
+    // for retries
+    NStat::TEvStatistics::TEvAnalyze Request;
+    TDuration RetryInterval = TDuration::MilliSeconds(5);
+    size_t RetryCount = 0;
+
+    constexpr static size_t MaxRetryCount = 10;
+    constexpr static double UncertainRatio = 0.5;
+    constexpr static double MaxBackoffDurationMs = TDuration::Seconds(15).MilliSeconds();
 };
 
 } // end of NKikimr::NKqp

@@ -75,15 +75,24 @@ def preprocess_args(args):
     args.output_root = os.path.normpath(args.output_root)
     args.import_map = {}
     args.module_map = {}
+
+    def is_valid_cgo_peer(peer):
+        if peer.endswith('.fake.pkg') or peer.endswith('.fake'):
+            return False
+        return True
+
     if args.cgo_peers:
-        args.cgo_peers = [x for x in args.cgo_peers if not x.endswith('.fake.pkg')]
+        args.cgo_peers = list(filter(is_valid_cgo_peer, args.cgo_peers))
 
     srcs = []
     for f in args.srcs:
         if f.endswith('.gosrc'):
             with tarfile.open(f, 'r') as tar:
                 srcs.extend(os.path.join(args.output_root, src) for src in tar.getnames())
-                tar.extractall(path=args.output_root)
+                if sys.version_info >= (3, 12):
+                    tar.extractall(path=args.output_root, filter='data')
+                else:
+                    tar.extractall(path=args.output_root)
         else:
             srcs.append(f)
     args.srcs = srcs

@@ -126,6 +126,9 @@ struct TConfig
 
     TString RemoteTempFilesDirectory;
     TString RemoteTempTablesDirectory;
+    // @brief Keep temp tables produced by TTempTable (despite their name). Should not be used in user programs,
+    // but may be useful for setting via environment variable for debugging purposes.
+    bool KeepTempTables = false;
 
     //
     // Infer schemas for nonexstent tables from typed rows (e.g. protobuf)

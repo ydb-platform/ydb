@@ -94,7 +94,9 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
 
         if (keyCells.GetCells().size() != tableInfo.KeyColumnTypes.size()) {
             status = NKikimrTxDataShard::TEvEraseRowsResponse::SCHEME_ERROR;
-            error = "Cell count doesn't match row scheme";
+            error = TStringBuilder() << "Cell count doesn't match row scheme"
+                    << ": got " << keyCells.GetCells().size()
+                    << ", expected " << tableInfo.KeyColumnTypes.size();
             return EStatus::Error;
         }
 

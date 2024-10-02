@@ -3,23 +3,24 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/phoenix.h>
+
+#include <yt/yt/core/phoenix/context.h>
 
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSaveContext
-    : public NPhoenix::TSaveContext
+    : public NPhoenix2::TSaveContext
 {
 public:
-    using NPhoenix::TSaveContext::TSaveContext;
+    using NPhoenix2::TSaveContext::TSaveContext;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLoadContext
-    : public NPhoenix::TLoadContext
+    : public NPhoenix2::TLoadContext
 {
 public:
     DEFINE_BYVAL_RO_PROPERTY(TRowBufferPtr, RowBuffer);

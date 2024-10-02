@@ -33,12 +33,14 @@ public:
         const NActors::TActorId& ownerId,
         ui32 scanId,
         const TTableId& tableId,
+        const TString& tablePath,
         TVector<TSerializedTableRange> ranges,
         const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(&TSysViewRangesReader::ScanState)
         , OwnerId(ownerId)
         , ScanId(scanId)
         , TableId(tableId)
+        , TablePath(tablePath)
         , Ranges(std::move(ranges))
         , Columns(columns.begin(), columns.end())
     {
@@ -74,7 +76,7 @@ public:
         if (!ScanActorId) {
             if (CurrentRange < Ranges.size()) {
                 auto actor = CreateSystemViewScan(
-                    SelfId(), ScanId, TableId, Ranges[CurrentRange].ToTableRange(),
+                    SelfId(), ScanId, TableId, TablePath, Ranges[CurrentRange].ToTableRange(),
                     Columns);
                 ScanActorId = Register(actor.Release());
                 CurrentRange += 1;
@@ -135,6 +137,7 @@ private:
     TActorId OwnerId;
     ui32 ScanId;
     TTableId TableId;
+    TString TablePath;
     TVector<TSerializedTableRange> Ranges;
     TVector<NMiniKQL::TKqpComputeContextBase::TColumn> Columns;
 
@@ -142,19 +145,29 @@ private:
     TMaybe<TActorId> ScanActorId;
 };
 
-THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    TVector<TSerializedTableRange> ranges, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-{
+THolder<NActors::IActor> CreateSystemViewScan(
+    const NActors::TActorId& ownerId,
+    ui32 scanId,
+    const TTableId& tableId,
+    const TString& tablePath,
+    TVector<TSerializedTableRange> ranges,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns
+) {
     if (ranges.size() == 1) {
-        return CreateSystemViewScan(ownerId, scanId, tableId, ranges[0].ToTableRange(), columns);
+        return CreateSystemViewScan(ownerId, scanId, tableId, tablePath, ranges[0].ToTableRange(), columns);
     } else {
-        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, ranges, columns);
+        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, tablePath, ranges, columns);
     }
 }
 
-THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-{
+THolder<NActors::IActor> CreateSystemViewScan(
+    const NActors::TActorId& ownerId,
+    ui32 scanId,
+    const TTableId& tableId,
+    const TString& tablePath,
+    const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns
+) {
     if (tableId.SysViewInfo == PartitionStatsName) {
         return CreatePartitionStatsScan(ownerId, scanId, tableId, tableRange, columns);
     }
@@ -214,14 +227,14 @@ THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, 
     }
 
     if (tableId.SysViewInfo == PgTablesName) {
-        return CreatePgTablesScan(ownerId, scanId, tableId, tableRange, columns);
+        return CreatePgTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
     }
 
     if (tableId.SysViewInfo == InformationSchemaTablesName) {
-        return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tableRange, columns);
+        return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
     }
         if (tableId.SysViewInfo == PgClassName) {
-        return CreatePgClassScan(ownerId, scanId, tableId, tableRange, columns);
+        return CreatePgClassScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
     }
 
     return {};

@@ -14,7 +14,7 @@ public:
         LOG_S_DEBUG("TTxNotifyTxCompletion.Execute at tablet " << Self->TabletID());
 
         const ui64 txId = Ev->Get()->Record.GetTxId();
-        auto txOperator = Self->ProgressTxController->GetTxOperator(txId);
+        auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(txId);
         if (txOperator) {
             txOperator->RegisterSubscriber(Ev->Sender);
             return true;

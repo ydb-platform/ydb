@@ -106,11 +106,11 @@ TTcpConnection::TTcpConnection(
     TConnectionId id,
     SOCKET socket,
     EMultiplexingBand multiplexingBand,
-    const TString& endpointDescription,
+    const std::string& endpointDescription,
     const IAttributeDictionary& endpointAttributes,
     const TNetworkAddress& endpointNetworkAddress,
-    const std::optional<TString>& endpointAddress,
-    const std::optional<TString>& unixDomainSocketPath,
+    const std::optional<std::string>& endpointAddress,
+    const std::optional<std::string>& unixDomainSocketPath,
     IMessageHandlerPtr handler,
     IPollerPtr poller,
     IPacketTranscoderFactory* packetTranscoderFactory,
@@ -621,18 +621,18 @@ void TTcpConnection::ConnectSocket(const TNetworkAddress& address)
     DialerSession_->Dial();
 }
 
-void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
+void TTcpConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
 {
     YT_LOG_DEBUG("Dialer finished");
 
     DialerSession_.Reset();
 
-    if (!socketOrError.IsOK()) {
+    if (!fdOrError.IsOK()) {
         Abort(TError(
             NBus::EErrorCode::TransportError,
             "Error connecting to %v",
             EndpointDescription_)
-            << socketOrError);
+            << fdOrError);
         return;
     }
 
@@ -643,7 +643,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
             return;
         }
 
-        Socket_ = socketOrError.Value();
+        Socket_ = fdOrError.Value();
 
         auto tosLevel = TosLevel_.load();
         if (tosLevel != DefaultTosLevel) {
@@ -654,7 +654,7 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
     }
 }
 
-const TString& TTcpConnection::GetEndpointDescription() const
+const std::string& TTcpConnection::GetEndpointDescription() const
 {
     return EndpointDescription_;
 }
@@ -664,12 +664,12 @@ const IAttributeDictionary& TTcpConnection::GetEndpointAttributes() const
     return *EndpointAttributes_;
 }
 
-const TString& TTcpConnection::GetEndpointAddress() const
+const std::string& TTcpConnection::GetEndpointAddress() const
 {
     if (EndpointAddress_) {
         return *EndpointAddress_;
     } else {
-        static const TString EmptyAddress;
+        static const std::string EmptyAddress;
         return EmptyAddress;
     }
 }

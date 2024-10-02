@@ -905,10 +905,10 @@ class TPermissionValidatingYPathService
 public:
     TPermissionValidatingYPathService(
         IYPathServicePtr underlyingService,
-        TCallback<void(const TString&, EPermission)> validationCallback)
+        TPermissionValidator validator)
         : UnderlyingService_(std::move(underlyingService))
-        , ValidationCallback_(std::move(validationCallback))
-        , PermissionValidator_(this, EPermissionCheckScope::This)
+        , Validator_(std::move(validator))
+        , CachingPermissionValidator_(this, EPermissionCheckScope::This)
     { }
 
     TResolveResult Resolve(
@@ -925,30 +925,30 @@ public:
 
 private:
     const IYPathServicePtr UnderlyingService_;
-    const TCallback<void(const TString&, EPermission)> ValidationCallback_;
+    const TPermissionValidator Validator_;
 
-    TCachingPermissionValidator PermissionValidator_;
+    TCachingPermissionValidator CachingPermissionValidator_;
 
     void ValidatePermission(
         EPermissionCheckScope /*scope*/,
         EPermission permission,
-        const TString& user) override
+        const std::string& user) override
     {
-        ValidationCallback_.Run(user, permission);
+        Validator_.Run(user, permission);
     }
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         // TODO(max42): choose permission depending on method.
-        PermissionValidator_.Validate(EPermission::Read, context->GetAuthenticationIdentity().User);
+        CachingPermissionValidator_.Validate(EPermission::Read, context->GetAuthenticationIdentity().User);
         ExecuteVerb(UnderlyingService_, context);
         return true;
     }
 };
 
-IYPathServicePtr IYPathService::WithPermissionValidator(TCallback<void(const TString&, EPermission)> validationCallback)
+IYPathServicePtr IYPathService::WithPermissionValidator(TPermissionValidator validator)
 {
-    return New<TPermissionValidatingYPathService>(this, std::move(validationCallback));
+    return New<TPermissionValidatingYPathService>(this, std::move(validator));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

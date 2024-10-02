@@ -21,11 +21,11 @@ Recommendations for use:
 
 {% note warning %}
 
-Use FOLDER with attributes containing large values with caution (`schema` could be one of those). A query with FOLDER applied to a folder with a large number of tables and a heavy attribute can create a heavy load on the YT wizard.
+Use `FOLDER` with attributes containing large values with caution (`schema` could be one of those). A query with FOLDER applied to a folder with a large number of tables and a heavy attribute can create a heavy load on the YT wizard.
 
 {% endnote %}
 
-**Examples:**
+### Examples
 
 ```yql
 USE hahn;

@@ -6,8 +6,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
-
-#include <library/cpp/disjoint_sets/disjoint_sets.h>
+#include <util/string/join.h>
+#include <util/string/printf.h>
 
 const TString& ToString(NYql::EJoinKind);
 const TString& ToString(NYql::EJoinAlgoType);
@@ -74,20 +74,30 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     stream << *Stats << "\n";
 }
 
-TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool nonReorderable) :
-    IBaseOptimizerNode(JoinNodeType),
-    LeftArg(left),
-    RightArg(right),
-    JoinConditions(joinConditions),
-    JoinType(joinType),
-    JoinAlgo(joinAlgo) {
-        IsReorderable = !nonReorderable;
-        for (auto [l,r] : joinConditions ) {
-            LeftJoinKeys.push_back(l.AttributeName);
-            RightJoinKeys.push_back(r.AttributeName);
-        }
+TJoinOptimizerNode::TJoinOptimizerNode(
+    const std::shared_ptr<IBaseOptimizerNode>& left, 
+    const std::shared_ptr<IBaseOptimizerNode>& right,
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, 
+    const EJoinKind joinType, 
+    const EJoinAlgoType joinAlgo, 
+    bool leftAny,
+    bool rightAny, 
+    bool nonReorderable
+)   : IBaseOptimizerNode(JoinNodeType)
+    , LeftArg(left)
+    , RightArg(right)
+    , JoinConditions(joinConditions)
+    , JoinType(joinType)
+    , JoinAlgo(joinAlgo)
+    , LeftAny(leftAny)
+    , RightAny(rightAny)
+    , IsReorderable(!nonReorderable)
+{
+    for (const auto& [l,r] : joinConditions ) {
+        LeftJoinKeys.push_back(l.AttributeName);
+        RightJoinKeys.push_back(r.AttributeName);
     }
+}
 
 TVector<TString> TJoinOptimizerNode::Labels() {
     auto res = LeftArg->Labels();
@@ -101,7 +111,14 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "    ";
     }
 
-    stream << "Join: (" << ToString(JoinType) << "," << ToString(JoinAlgo) << ") ";
+    stream << "Join: (" << ToString(JoinType) << "," << ToString(JoinAlgo);
+    if (LeftAny) {
+        stream << ",LeftAny";
+    }
+    if (RightAny) {
+        stream << ",RightAny";
+    }
+    stream << ") ";
 
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
@@ -286,45 +303,28 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
-TCardinalityHints::TCardinalityHints(const TString& json) {
-    auto jsonValue = NJson::TJsonValue();
-    NJson::ReadJsonTree(json, &jsonValue, true);
+TVector<TString> TOptimizerHints::GetUnappliedString() {
+    TVector<TString> res;
 
-    for (auto s : jsonValue.GetArraySafe()) {
-        auto h = s.GetMapSafe();
-
-        TCardinalityHints::TCardinalityHint hint;
-
-        for (auto t : h.at("labels").GetArraySafe()) {
-            hint.JoinLabels.push_back(t.GetStringSafe());
+    for (const auto& hint: JoinAlgoHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
         }
-
-        auto op = h.at("op").GetStringSafe();
-        hint.Operation = HintOpMap.at(op);
-
-        hint.Value = h.at("value").GetDoubleSafe();
-        Hints.push_back(hint);
     }
-}
 
-TJoinAlgoHints::TJoinAlgoHints(const TString& json) {
-    auto jsonValue = NJson::TJsonValue();
-    NJson::ReadJsonTree(json, &jsonValue, true);
-
-    for (auto s : jsonValue.GetArraySafe()) {
-        auto h = s.GetMapSafe();
-
-        TJoinAlgoHints::TJoinAlgoHint hint;
-
-        for (auto t : h.at("labels").GetArraySafe()) {
-            hint.JoinLabels.push_back(t.GetStringSafe());
+    for (const auto& hint: JoinOrderHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
         }
-
-        auto algo = h.at("algo").GetStringSafe();
-        hint.JoinHint = FromString<EJoinAlgoType>(algo);
-
-        Hints.push_back(hint);
     }
+
+    for (const auto& hint: CardinalityHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
+        }
+    }
+
+    return res;
 }
 
 } // namespace NYql

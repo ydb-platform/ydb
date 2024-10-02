@@ -32,7 +32,7 @@ using ::NThreading::TFuture;
 using ::NThreading::TPromise;
 using ::NThreading::NewPromise;
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TBatchRequest::TBatchRequest(const TTransactionId& defaultTransaction, ::TIntrusivePtr<TClient> client)
     : DefaultTransaction_(defaultTransaction)

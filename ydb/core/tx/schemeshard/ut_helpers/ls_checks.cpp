@@ -506,6 +506,21 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
     };
 }
 
+TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasTable());
+        NKikimrSchemeOp::TTableDescription table = descr.GetTable();
+        UNIT_ASSERT(table.ColumnsSize());
+
+        const auto& col = table.GetColumns(columnIndex);
+        UNIT_ASSERT_VALUES_EQUAL(col.GetType(), columnTypename);
+    };
+}
+
+
 void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     const NKikimrSchemeOp::TPathDescription& descr = record.GetPathDescription();
     THashMap<ui32, NScheme::TTypeInfo> colTypes;
@@ -1207,9 +1222,9 @@ TCheckFunc HasOwner(const TString& owner) {
     };
 }
 
-void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
+void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave, bool isEffective) {
     const auto& self = record.GetPathDescription().GetSelf();
-    TSecurityObject src(self.GetOwner(), self.GetEffectiveACL(), false);
+    TSecurityObject src(self.GetOwner(), isEffective ? self.GetEffectiveACL() : self.GetACL(), false);
 
     NACLib::TSecurityObject required;
     required.FromString(right);
@@ -1233,13 +1248,29 @@ void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, c
     }
 }
 
+TCheckFunc HasRight(const TString& right) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckRight(record, right, true, true);
+    };
+}
+
+TCheckFunc HasNoRight(const TString& right) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckRight(record, right, false, true);
+    };
+}
+
+void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
+    CheckRight(record, right, mustHave, true);
+}
+
 TCheckFunc HasEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         CheckEffectiveRight(record, right, true);
     };
 }
 
-TCheckFunc HasNotEffectiveRight(const TString& right) {
+TCheckFunc HasNoEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         CheckEffectiveRight(record, right, false);
     };

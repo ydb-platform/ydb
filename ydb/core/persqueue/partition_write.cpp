@@ -472,20 +472,14 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
         // If supportive - update counters only prior to write, otherwise - only after writes;
         return;
     }
-    if (BytesWrittenGrpc)
-        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
-    if (BytesWrittenTotal)
-        BytesWrittenTotal.Inc(WriteNewSize);
-
-    if (BytesWrittenUncompressed)
-        BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
+    BytesWrittenGrpc.Inc(WriteNewSizeInternal);
+    BytesWrittenTotal.Inc(WriteNewSize);
+    BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
     if (BytesWrittenComp)
         BytesWrittenComp.Inc(WriteCycleSize);
-    if (MsgsWrittenGrpc)
-        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
-    if (MsgsWrittenTotal) {
-        MsgsWrittenTotal.Inc(WriteNewMessages);
-    }
+
+    MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
+    MsgsWrittenTotal.Inc(WriteNewMessages);
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
@@ -1066,16 +1060,16 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
         }
         if (!DataKeysBody.empty() && CompactedKeys.empty()) {
             Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+                           "PQ: %" PRIu64 ", Partition: %s, "
                            "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
+                           TabletID, Partition.ToString().c_str(),
                            DataKeysBody.back().Key.ToString().c_str(),
                            Head.Offset,
                            x.NewKey.ToString().c_str());
         }
-        LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "writing blob: topic '" << TopicName() << "' partition " << Partition
-                    << " " << x.OldKey.ToString() << " size " << x.Size << " WTime " << ctx.Now().MilliSeconds()
-                   );
+        PQ_LOG_D("writing blob: topic '" << TopicName() << "' partition " << Partition <<
+                 " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
+                 " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
         CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
@@ -1122,6 +1116,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
+    Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
+                         "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
+                         TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                         WriteInflightSize, p.Msg.Data.size());
     WriteInflightSize -= p.Msg.Data.size();
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
@@ -1540,6 +1538,10 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
+                                 "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
+                                 TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                                 WriteInflightSize, msg.Data.size());
             WriteInflightSize -= msg.Data.size();
         }
 

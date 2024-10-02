@@ -1,5 +1,7 @@
 #include "resource_pool_classifier_settings.h"
 
+#include <ydb/library/aclib/aclib.h>
+
 
 namespace NKikimr::NResourcePool {
 
@@ -32,9 +34,16 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
     std::unordered_map<TString, TProperty> properties = {
         {"rank", &Rank},
         {"resource_pool", &ResourcePool},
-        {"membername", &Membername}
+        {"member_name", &MemberName}
     };
     return properties;
+}
+
+void TClassifierSettings::Validate() const {
+    NACLib::TUserToken token(MemberName, TVector<NACLib::TSID>{});
+    if (token.IsSystemUser()) {
+        throw yexception() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << MemberName;
+    }
 }
 
 }  // namespace NKikimr::NResourcePool

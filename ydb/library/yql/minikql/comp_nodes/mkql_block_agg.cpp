@@ -752,7 +752,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(state, ctx);
 
             auto& s = *static_cast<TState*>(state.AsBoxed().Get());
@@ -1638,7 +1638,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(state, ctx);
 
             auto& s = *static_cast<TState*>(state.AsBoxed().Get());

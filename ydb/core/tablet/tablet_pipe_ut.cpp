@@ -1151,6 +1151,120 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         UNIT_ASSERT_C(handle->Recipient == sender2, "Event recipient " << handle->Recipient << " != " << sender2);
     }
 
+    class TTabletWithVersionInfo
+        : public TActor<TTabletWithVersionInfo>
+        , public NTabletFlatExecutor::TTabletExecutedFlat
+    {
+    public:
+        TTabletWithVersionInfo(const TActorId &tablet, TTabletStorageInfo *info)
+            : TActor(&TThis::StateInit)
+            , TTabletExecutedFlat(info, tablet, nullptr)
+        {}
+
+    private:
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
+        void OnActivateExecutor(const TActorContext& ctx) override {
+            Become(&TThis::StateWork);
+            SignalTabletActive(ctx, "my version info");
+        }
+
+        void OnDetach(const TActorContext &ctx) override {
+            return Die(ctx);
+        }
+
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx) override {
+            return Die(ctx);
+        }
+
+        STFUNC(StateInit) {
+            StateInitImpl(ev, SelfId());
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+            default:
+                HandleDefaultEvents(ev, SelfId());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TestPipeWithVersionInfo) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+
+        CreateTestBootstrapper(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId & tablet, TTabletStorageInfo* info) {
+                return new TTabletWithVersionInfo(tablet, info);
+            });
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto client = runtime.Register(NTabletPipe::CreateClient(sender, TTestTxConfig::TxTablet0));
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(msg->VersionInfo, "my version info");
+        }
+        Y_UNUSED(client);
+    }
+
+    class THintedTabletActor : public TActor<THintedTabletActor> {
+    public:
+        THintedTabletActor()
+            : TActor(&TThis::StateWork)
+        {}
+
+    private:
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTabletPipe::TEvConnect, Handle);
+            }
+        }
+
+        void Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
+            auto* msg = ev->Get();
+            auto tabletId = msg->Record.GetTabletId();
+            auto clientId = ActorIdFromProto(msg->Record.GetClientId());
+            Send(ev->Sender,
+                new TEvTabletPipe::TEvConnectResult(NKikimrProto::OK,
+                    tabletId, clientId, /* serverId */ SelfId(),
+                    /* leader */ true,
+                    /* generation */ 1,
+                    /* versionInfo */ "hint actor"));
+        }
+    };
+
+    Y_UNIT_TEST(TestPipeConnectToHint) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+
+        auto hint = runtime.Register(new THintedTabletActor());
+        auto sender = runtime.AllocateEdgeActor();
+        auto client = runtime.Register(NTabletPipe::CreateClient(sender, 12345, NTabletPipe::TClientConfig{
+            .HintTablet = hint,
+        }));
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ServerId, hint);
+            UNIT_ASSERT_VALUES_EQUAL(msg->VersionInfo, "hint actor");
+        }
+        Y_UNUSED(client);
+    }
+
 }
 
 }

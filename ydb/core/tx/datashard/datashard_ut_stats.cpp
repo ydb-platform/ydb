@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         UpsertRows(server, sender);
 
-        TBlockEvents<NSharedCache::TEvResult> block(runtime, [&](NSharedCache::TEvResult::TPtr& event) {
+        TBlockEvents<NSharedCache::TEvResult> block(runtime, [&](const NSharedCache::TEvResult::TPtr& event) {
             return runtime.FindActorName(event->GetRecipientRewrite()) == "DATASHARD_STATS_BUILDER";
         });
 

@@ -14,9 +14,9 @@ message TMemoryStats {
     optional uint64 SoftLimit = 8;
     optional uint64 TargetUtilization = 9;
 
-    optional uint64 ConsumersConsumption = 10;
-    optional uint64 ConsumersLimit = 11;
-    optional uint64 OtherConsumption = 12;
+    reserved 10;
+    reserved 11;
+    reserved 12;
     optional uint64 ExternalConsumption = 13;
 
     optional uint64 SharedCacheConsumption = 14;

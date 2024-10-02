@@ -190,10 +190,10 @@ namespace NYql {
             TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseDescriptions_;
             NThreading::TFuture<void> AsyncFuture_;
         };
-    }
+    } // namespace
 
     THolder<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state) {
         return THolder(new TGenericIODiscoveryTransformer(std::move(state)));
     }
 
-}
+} // namespace NYql

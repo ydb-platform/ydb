@@ -14,10 +14,11 @@ class TGroupGuard {
 private:
     const NActors::TActorId ActorId;
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY(ui64, ExternalScopeId, 0);
     YDB_READONLY(ui64, GroupId, 0);
 
 public:
-    TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 groupId);
+    TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 externalScopeId, const ui64 groupId);
 
     ~TGroupGuard();
 };
@@ -33,18 +34,32 @@ public:
     ~TProcessGuard();
 };
 
+class TScopeGuard {
+private:
+    const NActors::TActorId ActorId;
+    YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY(ui64, ScopeId, 0);
+
+public:
+    TScopeGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 scopeId);
+
+    ~TScopeGuard();
+};
+
 class TAllocationGuard {
 private:
     const NActors::TActorId ActorId;
     YDB_READONLY(ui64, ProcessId, 0)
+    YDB_READONLY(ui64, ScopeId, 0)
     YDB_READONLY(ui64, AllocationId, 0)
     YDB_READONLY(ui64, Memory, 0)
     bool Released = false;
 
 public:
-    TAllocationGuard(const ui64 processId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory)
+    TAllocationGuard(const ui64 processId, const ui64 scopeId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory)
         : ActorId(actorId)
         , ProcessId(processId)
+        , ScopeId(scopeId)
         , AllocationId(allocationId)
         , Memory(memory) {
     }

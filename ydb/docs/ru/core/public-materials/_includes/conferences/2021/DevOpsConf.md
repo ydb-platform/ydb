@@ -1,4 +1,4 @@
-### Распределенная трассировка с помощью Jaeger и {{ ydb-name }}. Опыт Auto.ru и Yandex Cloud. {#2021-conf-devops-jaeger}
+## Распределенная трассировка с помощью Jaeger и {{ ydb-name }}. Опыт Auto.ru и Yandex Cloud. {#2021-conf-devops-jaeger}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 

@@ -56,16 +56,20 @@ public:
     {
     }
 
-    void RegisterGroup(const ui64 externalProcessId, const ui64 externalGroupId);
-    void UnregisterGroup(const ui64 externalProcessId, const ui64 externalGroupId);
+    void RegisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId);
+    void UnregisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId);
+
+    void RegisterProcessScope(const ui64 externalProcessId, const ui64 externalScopeId);
+    void UnregisterProcessScope(const ui64 externalProcessId, const ui64 externalScopeId);
 
     void RegisterProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
     void UnregisterProcess(const ui64 externalProcessId);
 
-    void RegisterAllocation(const ui64 externalProcessId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task,
+    void RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
+        const std::shared_ptr<IAllocation>& task,
         const std::optional<ui32>& stageIdx);
-    void UnregisterAllocation(const ui64 externalProcessId, const ui64 allocationId);
-    void UpdateAllocation(const ui64 externalProcessId, const ui64 allocationId, const ui64 volume);
+    void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
+    void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
 
     bool IsEmpty() const {
         return Processes.empty();

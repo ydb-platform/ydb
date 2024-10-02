@@ -1,8 +1,3 @@
----
-title: "Instructions for authenticating using environment variables in {{ ydb-short-name }}"
-description: "The section describes examples of the authentication code using environment variables in different {{ ydb-short-name }} SDKs."
----
-
 # Authentication using environment variables
 
 {% include [work in progress message](_includes/addition.md) %}
@@ -179,7 +174,7 @@ Below are examples of the code for authentication using environment variables in
           'insecure' => true,
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new EnvironCredentials()
   ];
 

@@ -164,7 +164,7 @@ public:
     }
 
     TFuture<TNetworkAddress> Resolve(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options) override
     {
         EnsureRunning();
@@ -191,7 +191,7 @@ private:
         TAresDnsResolver* Owner;
         TGuid RequestId;
         TPromise<TNetworkAddress> Promise;
-        TString HostName;
+        std::string HostName;
         TDnsResolveOptions Options;
         NProfiling::TWallTimer Timer;
         TDelayedExecutorCookie TimeoutCookie;
@@ -594,7 +594,7 @@ private:
     }
 
     std::unique_ptr<TResolveRequest> PrepareRequest(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options)
     {
         auto requestId = TGuid::Create();

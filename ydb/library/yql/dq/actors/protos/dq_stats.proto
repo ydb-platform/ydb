@@ -335,6 +335,11 @@ message TDqStageStats {
     TDqStatsAggr EgressBytes = 30;
     TDqStatsAggr EgressRows = 31;
 
+    TDqStatsAggr SpillingComputeBytes = 39;
+    TDqStatsAggr SpillingChannelBytes = 40;
+    TDqStatsAggr SpillingComputeTimeUs = 41;
+    TDqStatsAggr SpillingChannelTimeUs = 42;
+
     reserved 13; // FirstRowTimeMs
     reserved 14; // FinishTimeMs
     reserved 21; // StartTimeMs
@@ -372,7 +377,7 @@ message TDqExecutionStats {
     uint64 CpuTimeUs = 1;  // total cpu time, executer + compute actors + ...
     uint64 DurationUs = 2; // execution wall time
 
-    // these feilds are never used, needs to be reviewed
+    // these fields are never used, needs to be reviewed
     reserved 3; // uint64 ResultRows = 3;
     reserved 4; // uint64 ResultBytes = 4;
 

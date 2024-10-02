@@ -19,7 +19,7 @@ using namespace NYPath;
 
 using NYT::FromProto;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TTableMountCache
     : public TTableMountCacheBase
@@ -66,7 +66,8 @@ private:
 
                 tableInfo->UpstreamReplicaId = FromProto<TTableReplicaId>(rsp->upstream_replica_id());
                 tableInfo->Dynamic = rsp->dynamic();
-                tableInfo->NeedKeyEvaluation = primarySchema->HasComputedColumns();
+                // Non-materialized computed columns are always non-key columns.
+                tableInfo->NeedKeyEvaluation = primarySchema->HasMaterializedComputedColumns();
 
                 if (rsp->has_physical_path()) {
                     tableInfo->PhysicalPath = rsp->physical_path();

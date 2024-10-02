@@ -261,7 +261,7 @@ void ToProto(NBundleController::NProto::TBundleConfigConstraints* protoBundleCon
 
 void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints)
 {
-    auto rpcProxySizes = protoBundleConfigConstraints->get_arr_rpc_proxy_sizes();
+    auto rpcProxySizes = protoBundleConfigConstraints->rpc_proxy_sizes();
 
     for (auto instance : rpcProxySizes) {
         auto newInstance = New<TInstanceSize>();
@@ -269,7 +269,7 @@ void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundl
         bundleConfigConstraints->RpcProxySizes.push_back(newInstance);
     }
 
-    auto tabletNodeSizes = protoBundleConfigConstraints->get_arr_tablet_node_sizes();
+    auto tabletNodeSizes = protoBundleConfigConstraints->tablet_node_sizes();
 
     for (auto instance : tabletNodeSizes) {
         auto newInstance = New<TInstanceSize>();

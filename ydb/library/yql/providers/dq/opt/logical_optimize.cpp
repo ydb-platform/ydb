@@ -114,7 +114,6 @@ public:
         , TypesCtx(*typeCtx)
     {
 #define HNDL(name) "DqsLogical-"#name, Hndl(&TDqsLogicalOptProposalTransformer::name)
-        AddHandler(0, &TCoUnorderedBase::Match, HNDL(SkipUnordered));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
         AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
@@ -146,15 +145,6 @@ public:
     }
 
 protected:
-    TMaybeNode<TExprBase> SkipUnordered(TExprBase node, TExprContext& ctx) {
-        Y_UNUSED(ctx);
-        const auto unordered = node.Cast<TCoUnorderedBase>();
-        if (unordered.Input().Maybe<TDqConnection>()) {
-            return unordered.Input();
-        }
-        return node;
-    }
-
     TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
         return NDq::UnorderedOverDqReadWrap(node, ctx, getParents, Config->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate), TypesCtx);
     }
@@ -205,7 +195,8 @@ protected:
                 bool syncActor = Config->ComputeActorType.Get() != "async";
                 return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode, syncActor);
             } else {
-                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false));
+                NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());
+                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false), spillingSettings.IsAggregationSpillingEnabled());
             }
         }
         return node;
@@ -251,7 +242,7 @@ protected:
             return node;
         }
 
-        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>() 
+        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>()
             ? LookupSourceFromSource(right.Cast<TDqSourceWrap>(), ctx)
             : LookupSourceFromRead(right.Cast<TDqReadWrap>(), ctx)
         ;

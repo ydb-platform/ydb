@@ -196,7 +196,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
-    NCommon::TConfSetting<bool, true> _ForceJobSizeAdjuster;
+    NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
     NCommon::TConfSetting<size_t, true> DQRPCReaderInflight;
@@ -280,6 +280,7 @@ struct TYtSettings {
     NCommon::TConfSetting<EColumnGroupMode, false> ColumnGroupMode;
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
+    NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

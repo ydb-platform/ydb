@@ -350,6 +350,7 @@ runs:
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
           # Can be used in tests in which you want to publish the results in s3 for each retry separately
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 
           if [ ${{ inputs.testman_token }} ]; then
@@ -401,6 +402,7 @@ runs:
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"

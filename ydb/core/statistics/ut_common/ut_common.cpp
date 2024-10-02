@@ -80,8 +80,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
-    CSController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-    CSController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+    CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
     CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);

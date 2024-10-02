@@ -28,25 +28,25 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             auto tx = result.GetTransaction();
 
             result = session.ExecuteQuery(Q_(R"(
-                SELECT * FROM `/Root/Test` WHERE Group = 1;
+                SELECT * FROM `/Root/Test` WHERE Group = 1 ORDER BY Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[3500u];["None"];[1u];["Anna"]];
-                [[300u];["None"];[1u];["Paul"]]
+                [[3500u];["None"];1u;"Anna"];
+                [[300u];["None"];1u;"Paul"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto commitResult = tx->Commit().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
             result = session.ExecuteQuery(Q_(R"(
-                SELECT * FROM `/Root/Test` WHERE Group = 1;
+                SELECT * FROM `/Root/Test` WHERE Group = 1 ORDER BY Name;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[3500u];["None"];[1u];["Anna"]];
-                [[300u];["None"];[1u];["Paul"]];
-                [#;#;[1u];["Sergey"]]
+                [[3500u];["None"];1u;"Anna"];
+                [[300u];["None"];1u;"Paul"];
+                [#;#;1u;"Sergey"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
@@ -54,6 +54,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(DeferredEffects) {
         TDeferredEffects tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapDeferredEffects) {
+        TDeferredEffects tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -86,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 SELECT * FROM `/Root/KV` WHERE Value = "New";
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[10u;["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             commitResult = tx.Commit().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
@@ -97,6 +103,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(ExplicitTcl) {
         TExplicitTcl tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapExplicitTcl) {
+        TExplicitTcl tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -156,6 +168,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapLocksAbortOnCommit) {
+        TLocksAbortOnCommit tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TInvalidateOnError : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -187,6 +205,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapInvalidateOnError) {
+        TInvalidateOnError tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TInteractive : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -209,12 +233,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(R"(
-                SELECT * FROM `/Root/KV` WHERE Key < 3
+                SELECT * FROM `/Root/KV` WHERE Key < 3 ORDER BY Key
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
-                [[1u];["New"]];
-                [[2u];["Two"]]
+                [1u;["New"]];
+                [2u;["Two"]]
                 ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
@@ -222,6 +246,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(Interactive) {
         TInteractive tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapInteractive) {
+        TInteractive tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -236,7 +266,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 SELECT * FROM KV WHERE Key = 2;
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[2u;["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
             // Read Distributed
             result = session.ExecuteQuery(Q1_(R"(
@@ -263,6 +293,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(OlapSnapshotRO) {
+        TSnapshotRO tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TSnapshotROInteractive1 : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -274,7 +310,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             )");
 
             auto readResult = R"([
-                [[1u];["One"]]
+                [1u;["One"]]
             ])";
 
             auto result = session.ExecuteQuery(readQuery,
@@ -302,6 +338,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(SnapshotROInteractive1) {
         TSnapshotROInteractive1 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapSnapshotROInteractive1) {
+        TSnapshotROInteractive1 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 
@@ -348,6 +390,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     Y_UNIT_TEST(SnapshotROInteractive2) {
         TSnapshotROInteractive2 tester;
         tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapSnapshotROInteractive2) {
+        TSnapshotROInteractive2 tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

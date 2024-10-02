@@ -23,11 +23,11 @@ bool CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOpe
         << ", tx# " << tx.ShortDebugString());
 
     const auto acceptExisted = !tx.GetFailOnExist();
-    // const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    const auto workingDirPath = TPath::Resolve("/Root", context.SS);
-    // const auto& cbOp = tx.GetCreateContinuousBackup();
-    // const auto& tableName = cbOp.GetTableName();
-    const TString tableName = "table";
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    // const auto workingDirPath = TPath::Resolve("/Root", context.SS);
+    const auto& cbOp = tx.GetCreateContinuousBackup();
+    const auto& tableName = cbOp.GetTableName();
+    // const TString tableName = "table";
 
     const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {

@@ -47,13 +47,14 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
-    if (!schemeTx.HasSendSnapshot())
+    if (!schemeTx.HasSendSnapshot() && !schemeTx.HasCreateIncrementalBackupSrc())
         return EExecutionStatus::Executed;
 
     if (!op->IsWaitingForSnapshot()) {
-        ui64 tableId = schemeTx.GetSendSnapshot().GetTableId_Deprecated();
-        if (schemeTx.GetSendSnapshot().HasTableId()) {
-            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == schemeTx.GetSendSnapshot().GetTableId().GetOwnerId());
+        auto& snapshot = schemeTx.HasSendSnapshot() ? schemeTx.GetSendSnapshot() : schemeTx.GetCreateIncrementalBackupSrc().GetSendSnapshot();
+        ui64 tableId = snapshot.GetTableId_Deprecated();
+        if (snapshot.HasTableId()) {
+            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
             tableId = schemeTx.GetSendSnapshot().GetTableId().GetTableId();
         }
 

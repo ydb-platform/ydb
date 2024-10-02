@@ -451,6 +451,11 @@ message TMoveIndex {
     optional TRemapIndexPathId ReMapIndex = 3;
 }
 
+message TCreateIncrementalBackupSrc {
+    optional TSendSnapshot SendSnapshot = 1;
+    optional TCreateCdcStreamNotice CreateCdcStreamNotice = 2;
+}
+
 message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
     optional NKikimrSchemeOp.TTableDescription DropTable = 2;
@@ -483,7 +488,7 @@ message TFlatSchemeTransaction {
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
     // FIXME(+active)
-    optional TCreateCdcStreamNotice CreateIncrementalBackupSrc = 23;
+    optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
 }
 
 message TDistributedEraseTransaction {

@@ -226,7 +226,7 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
     OnPartitionResult(event, decision);
 }
 
-void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPartitions::TPartitionInfo& partition) {
+void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPartitions::TPartitionInfo& partition) {
     NKikimrPQ::TPartitions::TPartitionInfo* info = nullptr;
     for (auto& p : *partitionsData.MutablePartition()) {
         if (p.GetPartitionId() == partition.GetPartitionId()) {
@@ -240,7 +240,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, const NKikimrP
     *info = std::move(partition);
 }
 
-void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
+void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
 
@@ -292,9 +292,12 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
         }
 
         NKikimrPQ::TPartitions d;
-        data.GetData().UnpackTo(&d);
+        if (data.HasData()) {
+            auto r = data.GetData().UnpackTo(&d);
+            Y_ABORT_UNLESS(r, "Unexpected data");
+        }
 
-        for (auto& v : d.GetPartition()) {
+        for (auto& v : *d.MutablePartition()) {
             UpdatePartitionsData(PartitionsData, v);
         }
     } else {

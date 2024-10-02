@@ -3582,7 +3582,7 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 
 void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx)
 {
-    const TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
+    TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
 
     PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfigResult" <<
              " Step " << event.Step <<

@@ -17,9 +17,9 @@ using TLimitsMap = TMap<EPDiskState, ui32>;
 
 class TPDiskStatusComputer {
 public:
-    explicit TPDiskStatusComputer(const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
+    explicit TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
 
-    void AddState(EPDiskState state);
+    void AddState(EPDiskState state, bool isNodeLocked);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
 
     EPDiskState GetState() const;
@@ -33,20 +33,23 @@ public:
 
 private:
     const ui32& DefaultStateLimit;
+    const ui32& GoodStateLimit;
     const TLimitsMap& StateLimits;
 
     EPDiskState State = NKikimrBlobStorage::TPDiskState::Unknown;
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
+    
+    mutable bool HadBadStateRecently = false;
 
 }; // TPDiskStatusComputer
 
 class TPDiskStatus: public TPDiskStatusComputer {
 public:
-    explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
+    explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
 
-    void AddState(EPDiskState state);
+    void AddState(EPDiskState state, bool isNodeLocked);
     bool IsChanged() const;
     void ApplyChanges(TString& reason);
     void ApplyChanges();
@@ -93,13 +96,13 @@ struct TPDiskInfo
     ui32 PrevStatusChangeAttempt = 0;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
-    explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
+    explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
 
     bool IsTouched() const { return Touched; }
     void Touch() { Touched = true; }
     void ClearTouched() { Touched = false; }
 
-    void AddState(EPDiskState state);
+    void AddState(EPDiskState state, bool isNodeLocked);
 
 private:
     bool Touched;

@@ -53,7 +53,7 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
-IF (SANITIZER_TYPE == "thread")
+IF (SANITIZER_TYPE)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)

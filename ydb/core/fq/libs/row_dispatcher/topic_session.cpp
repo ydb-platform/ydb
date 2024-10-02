@@ -444,7 +444,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TTopicSession::HandleNewEvents() {
-    for (ui64 i = 0; i < MaxHandledEvents; ++i {
+    for (ui64 i = 0; i < MaxHandledEvents; ++i) {
         if (!ReadSession) {
             return;
         }

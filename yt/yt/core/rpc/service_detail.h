@@ -295,6 +295,7 @@ public:
         return *Response_;
     }
 
+
     using IServiceContext::Reply;
 
     void Reply()
@@ -313,6 +314,7 @@ public:
             this->DoReply(error);
         }
     }
+
 
     const THandlerInvocationOptions& GetOptions() const
     {

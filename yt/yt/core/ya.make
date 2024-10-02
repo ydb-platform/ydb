@@ -12,6 +12,7 @@ ENDIF()
 NO_LTO()
 
 SRCS(
+    actions/cancelation_token.cpp
     actions/cancelable_context.cpp
     actions/current_invoker.cpp
     actions/future.cpp

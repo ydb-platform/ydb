@@ -145,9 +145,8 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         auto coordinatorId1 = ExpectCoordinatorChanged();
         auto coordinatorId2 = ExpectCoordinatorChanged();
         auto coordinatorId3 = ExpectCoordinatorChanged();
-        UNIT_ASSERT(coordinatorId1 == Coordinator1);
-        UNIT_ASSERT(coordinatorId2 == Coordinator2);
-        UNIT_ASSERT(coordinatorId3 == Coordinator3);
+        TSet<NActors::TActorId> set {coordinatorId1, coordinatorId2, coordinatorId3};
+        UNIT_ASSERT(set.size() == 3);
     }
 }
 

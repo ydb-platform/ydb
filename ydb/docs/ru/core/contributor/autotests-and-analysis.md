@@ -45,7 +45,7 @@
 
   * Запускается для каждого запуска тестов во всех типах проверок (Nightly, PR-Check, Postcommit)
 
-Аналитика (стабильность, срезы по дням, определение owner'a тестов etc) собирается в GitHub Action через workflow [Collect-analytics-run](../../../../../.github/workflows/collect_analytics.yml)
+Аналитика (стабильность, срезы по дням, определение owner'a тестов etc) собирается в GitHub Action через workflow
 
   * Выполняется каждый час
 

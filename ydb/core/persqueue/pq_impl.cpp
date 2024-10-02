@@ -4032,7 +4032,9 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
 {
     NKikimrTx::TReadSetData data;
     data.SetDecision(tx.SelfDecision);
-    data.MutableData()->PackFrom(tx.PartitionsData);
+    if (tx.PartitionsData.PartitionSize()) {
+        data.MutableData()->PackFrom(tx.PartitionsData);
+    }
 
     TString body;
     Y_ABORT_UNLESS(data.SerializeToString(&body));

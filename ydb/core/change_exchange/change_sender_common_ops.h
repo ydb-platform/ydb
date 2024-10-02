@@ -413,18 +413,28 @@ protected:
     }
 
     TActorId GetChangeServer() const { return ChangeServer; }
-    void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) {
-        if (partitioningChanged) {
+
+private:
+    void CreateSendersImpl(const TVector<ui64>& partitionIds) {
+        if (partitionIds) {
             CreateMissingSenders(partitionIds);
         } else {
-            RecreateSenders(GonePartitions);
+            RecreateSenders(std::exchange(GonePartitions, {}));
         }
-
-        GonePartitions.clear();
 
         if (!Enqueued || !RequestRecords()) {
             SendRecords();
         }
+    }
+
+protected:
+    void CreateSenders(const TVector<ui64>& partitionIds) {
+        Y_ABORT_UNLESS(partitionIds);
+        CreateSendersImpl(partitionIds);
+    }
+
+    void CreateSenders() {
+        CreateSendersImpl({});
     }
 
     void KillSenders() {

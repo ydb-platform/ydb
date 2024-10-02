@@ -6,6 +6,7 @@
 
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
+#include <ydb/core/change_exchange/util.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
@@ -390,16 +391,6 @@ class TCdcChangeSenderMain
         return false;
     }
 
-    static TVector<ui64> MakePartitionIds(const TVector<NKikimr::TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(Reserve(partitions.size()));
-
-        for (const auto& partition : partitions) {
-            result.push_back(partition.ShardId);
-        }
-
-        return result;
-    }
-
     /// ResolveCdcStream
 
     void ResolveCdcStream() {
@@ -521,6 +512,14 @@ class TCdcChangeSenderMain
             return;
         }
 
+        const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
+        if (TopicVersion && TopicVersion == topicVersion) {
+            CreateSenders();
+            return Become(&TThis::StateMain);
+        }
+
+        TopicVersion = topicVersion;
+
         const auto& pqDesc = entry.PQGroupInfo->Description;
         const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
@@ -529,16 +528,12 @@ class TCdcChangeSenderMain
             PartitionToShard.emplace(partition.GetPartitionId(), partition.GetTabletId());
         }
 
-        const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
-        const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
-        TopicVersion = topicVersion;
-
         Y_ABORT_UNLESS(entry.PQGroupInfo->Schema);
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ABORT_UNLESS(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
-        CreateSenders(MakePartitionIds(*KeyDesc->Partitioning), versionChanged);
+        CreateSenders(NChangeExchange::MakePartitionIds(*KeyDesc->Partitioning));
         Become(&TThis::StateMain);
     }
 

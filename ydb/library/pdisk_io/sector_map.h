@@ -145,7 +145,7 @@ private:
         if (size == 0) {
             return;
         }
-        
+
         ui64 beginSector = offset / NSectorMap::SECTOR_SIZE;
         ui64 endSector = (offset + size + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE;
         ui64 midSector = (beginSector + endSector) / 2;
@@ -262,7 +262,7 @@ public:
             offset += NSectorMap::SECTOR_SIZE;
             data += NSectorMap::SECTOR_SIZE;
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
@@ -295,9 +295,9 @@ public:
                 data += NSectorMap::SECTOR_SIZE;
             }
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
-            SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+            SectorOperationThrottler->ThrottleWrite(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
     }
 

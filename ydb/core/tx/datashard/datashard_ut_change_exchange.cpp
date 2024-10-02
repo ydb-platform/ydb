@@ -842,6 +842,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
+                .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)
                 .SetEnablePQConfigTransactionsAtSchemeShard(true)
@@ -1974,6 +1975,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"timestamp_value", "Timestamp", false, false},
                 {"interval_value", "Interval", false, false},
                 {"decimal_value", "Decimal", false, false},
+                {"decimal35_value", "Decimal(35, 10)", false, false},
                 {"dynumber_value", "DyNumber", false, false},
                 {"string_value", "String", false, false},
                 {"utf8_value", "Utf8", false, false},
@@ -2006,6 +2008,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"(UPSERT INTO `/Root/Table` (key, timestamp_value) VALUES (11, CAST("2020-08-12T12:34:56.123456Z" AS Timestamp));)",
             R"(UPSERT INTO `/Root/Table` (key, interval_value) VALUES (12, CAST(-300500 AS Interval));)",
             R"(UPSERT INTO `/Root/Table` (key, decimal_value) VALUES (13, CAST("3.321" AS Decimal(22, 9)));)",
+            R"(UPSERT INTO `/Root/Table` (key, decimal35_value) VALUES (13, CAST("355555555555555.321" AS Decimal(35, 10)));)",
             R"(UPSERT INTO `/Root/Table` (key, dynumber_value) VALUES (14, CAST(".3321e1" AS DyNumber));)",
             R"(UPSERT INTO `/Root/Table` (key, string_value) VALUES (15, CAST("lorem ipsum" AS String));)",
             R"(UPSERT INTO `/Root/Table` (key, utf8_value) VALUES (16, CAST("lorem ipsum" AS Utf8));)",
@@ -2037,6 +2040,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[11],"update":{"timestamp_value":"2020-08-12T12:34:56.123456Z"}})",
             R"({"key":[12],"update":{"interval_value":-300500}})",
             R"({"key":[13],"update":{"decimal_value":"3.321"}})",
+            R"({"key":[13],"update":{"decimal35_value":"355555555555555.321"}})",
             R"({"key":[14],"update":{"dynumber_value":".3321e1"}})",
             Sprintf(R"({"key":[15],"update":{"string_value":"%s"}})", Base64Encode("lorem ipsum").c_str()),
             R"({"key":[16],"update":{"utf8_value":"lorem ipsum"}})",

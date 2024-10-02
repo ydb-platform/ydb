@@ -114,7 +114,7 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             serialized = cell.ToStream<i64>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Decimal:
-            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString);
+            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString, column.Type);
             break;
         case NScheme::NTypeIds::DyNumber:
             serialized = DyNumberToStream(cell.AsBuf(), out, ErrorString);

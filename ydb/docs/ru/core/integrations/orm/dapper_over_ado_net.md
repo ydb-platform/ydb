@@ -18,42 +18,42 @@ YDB SDK C# поставляет набор классов реализующих
 
 1. **Использование конструктора без параметров**:
 
-    Следующий код создаёт подключение с настройками по умолчанию:
+   Следующий код создаёт подключение с настройками по умолчанию:
 
     ```c#
     await using var ydbConnection = new YdbConnection();
     await ydbConnection.OpenAsync();
     ```
 
-    Этот вариант создаёт подключение к базе данных по URL: `grpc://localhost:2136/local`, с анонимной аутентификацией.
+   Этот вариант создаёт подключение к базе данных по URL: `grpc://localhost:2136/local`, с анонимной аутентификацией.
 
 2. **Использование конструктора со строкой подключения**:
 
-    В следующем примере происходит создание подключения при помощи строки подключения:
+   В следующем примере происходит создание подключения при помощи строки подключения:
 
-    ```C#
-    await using var ydbConnection = new YdbConnection(
-       "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
-    await ydbConnection.OpenAsync();
-    ```
+   ```C#
+   await using var ydbConnection = new YdbConnection(
+      "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
+   await ydbConnection.OpenAsync();
+   ```
 
-    В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:2135/root/database-sample`. При использовании метода со строкой подключения параметры задаются в виде пар ключ=значение, разделённые точкой с запятой (`key1=value1;key2=value2`). Набор ключей имеет фиксированные значения, которые будут детально рассмотрены в следующих разделах.
+   В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:2135/root/database-sample`. При использовании метода со строкой подключения параметры задаются в виде пар ключ=значение, разделённые точкой с запятой (`key1=value1;key2=value2`). Набор ключей имеет фиксированные значения, которые будут детально рассмотрены в следующих разделах.
 
 3. **Использование конструктора с аргументом `YdbConnectionStringBuilder`**:
 
-    Вариант с использованием `YdbConnectionStringBuilder` демонстрируется в коде ниже:
+   Вариант с использованием `YdbConnectionStringBuilder` демонстрируется в коде ниже:
 
-    ```c#
-    var ydbConnectionBuilder = new YdbConnectionStringBuilder
-    {
-        Host = "server",
-        Port = 2135,
-        Database = "/ru-prestable/my-table",
-        UseTls = true
-    };
-    await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
-    await ydbConnection.OpenAsync();
-    ```
+   ```c#
+   var ydbConnectionBuilder = new YdbConnectionStringBuilder
+   {
+       Host = "server",
+       Port = 2135,
+       Database = "/ru-prestable/my-table",
+       UseTls = true
+   };
+   await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
+   await ydbConnection.OpenAsync();
+   ```
 
 ### Параметры подключения
 
@@ -246,9 +246,9 @@ catch (YdbException e)
 
 ## Интеграция YDB и Dapper
 
-Чтобы начать работу требуется дополнительная зависимость [Dapper](https://www.nuget.org/packages/Dapper/). 
+Чтобы начать работу требуется дополнительная зависимость [Dapper](https://www.nuget.org/packages/Dapper/).
 
-Рассмотрим полный пример: 
+Рассмотрим полный пример:
 
 ```c#
 await using var connection = await new YdbDataSource().OpenConnectionAsync();
@@ -282,7 +282,7 @@ internal class User
 }
 ```
 
-За дополнительной информацией обратитесь к официальной [документации](https://dappertutorial.net/). 
+За дополнительной информацией обратитесь к официальной [документации](https://dappertutorial.net/).
 
 ### Важные аспекты
 

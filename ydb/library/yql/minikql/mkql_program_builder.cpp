@@ -5753,14 +5753,31 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<u
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
+    Cerr << "Pgm: BlockCombineHashed: Runtime version" << RuntimeVersion << "\n";
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
+    const auto streamType = stream.GetStaticType();
+    Cerr << "stream type: " << streamType->GetKindAsStr() << " return type: " << returnType->GetKindAsStr() << "\n";
+    if constexpr (RuntimeVersion < 52U) {
+        Cerr << "Wrapping with to/from flow\n";
+        Cerr << streamType->IsFlow() << " " << returnType->IsFlow() << "\n";
+        if (streamType->IsFlow()) {
+            // MKQL_ENSURE(streamType->IsFlow(), "Expected flow");
+            MKQL_ENSURE(returnType->IsFlow(), "Expected flow as return type");
+            const auto streamReturnType = NewStreamType(AS_TYPE(TFlowType, returnType)->GetItemType());
+            return ToFlow(BlockCombineHashed(FromFlow(stream), filterColumn, keys, aggs, streamReturnType));
+        }
+    }
+
+    MKQL_ENSURE(streamType->IsStream(), "Expected stream");
+    MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
+
     TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(flow);
+    builder.Add(stream);
     if (!filterColumn) {
         builder.Add(NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
     } else {

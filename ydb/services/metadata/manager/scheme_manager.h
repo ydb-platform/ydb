@@ -28,7 +28,7 @@ public:
     using TExternalModificationContext = typename IOperationsManager::TExternalModificationContext;
     using TOperationParsingResult = TOperationParsingResult;
     using IPreprocessingController = IPreprocessingController;
-    using TObjectDependencies = std::vector<TPathId>;
+    using TObjectDependencies = THashSet<TPathId>;
 
 protected:
     virtual void DoPreprocessSettings(
@@ -51,6 +51,11 @@ public:
     TConclusion<TObjectDependencies> ValidateOperation(
         const TString& objectId, const TBaseObject::TPtr& object, EActivityType activity, NSchemeShard::TSchemeShard& context) const {
         return DoValidateOperation(objectId, object, activity, context);
+    }
+
+    TObjectDependencies GetDependenciesVerified(
+        const TString& objectId, const TBaseObject::TPtr& object, NSchemeShard::TSchemeShard& context) const {
+        return DoValidateOperation(objectId, object, EActivityType::Undefined, context).GetResult();
     }
 
 protected:

@@ -169,14 +169,14 @@ public:
             return result;
         }
 
-        if (auto status = NAbstractObject::ValidateOperation(
+        const auto dependenciesOrError = NAbstractObject::ValidateOperation(
                 name, buildResult.GetResult(), NMetadata::NModifications::IOperationsManager::EActivityType::Create, *context.SS);
-            status.IsFail()) {
-            result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, status.GetErrorMessage());
+        if (dependenciesOrError.IsFail()) {
+            result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, dependenciesOrError.GetErrorMessage());
             return result;
         }
 
-        const TAbstractObjectInfo::TPtr abstractObjectInfo = NAbstractObject::CreateAbstractObject(buildResult.GetResult(), 1);
+        const TAbstractObjectInfo::TPtr abstractObjectInfo = NAbstractObject::CreateAbstractObject(buildResult.GetResult(), 1, {});
 
         AddPathInSchemeShard(result, dstPath, owner);
         const TPathElement::TPtr abstractObject = CreateAbstractObjectPathElement(dstPath);
@@ -186,6 +186,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
         NAbstractObject::AdvanceTransactionStateToPropose(OperationId, context, db);
         NAbstractObject::PersistAbstractObject(OperationId, context, db, abstractObject, abstractObjectInfo, acl);
+        NAbstractObject::PersistReferences(abstractObject->PathId, dependenciesOrError.GetResult(), {}, context, db);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 

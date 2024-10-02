@@ -179,11 +179,14 @@ public:
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         const auto* object = context.SS->AbstractObjects.FindPtr(dstPath.Base()->PathId);
+        THashSet<TPathId> oldDependencies;
         if (object) {
-            if (auto status = NAbstractObject::ValidateOperation(
-                    name, (*object)->Config, NMetadata::NModifications::IOperationsManager::EActivityType::Drop, *context.SS);
-                status.IsFail()) {
-                result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, status.GetErrorMessage());
+            const auto dependenciesOrError = NAbstractObject::ValidateOperation(
+                name, (*object)->Config, NMetadata::NModifications::IOperationsManager::EActivityType::Drop, *context.SS);
+            if (dependenciesOrError.IsSuccess()) {
+                oldDependencies = dependenciesOrError.GetResult();
+            } else {
+                result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, dependenciesOrError.GetErrorMessage());
                 return result;
             }
         } else {
@@ -205,6 +208,9 @@ public:
         PersistDropAbstractObject(context, dstPath);
         CreateTransaction(context, dstPath.Base()->PathId);
         DropAbstractObjectPathElement(dstPath);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        NAbstractObject::PersistReferences(dstPath.Base()->PathId, {}, oldDependencies, context, db);
 
         context.OnComplete.ActivateTx(OperationId);
 

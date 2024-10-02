@@ -36,7 +36,7 @@ private:
         });
     }
 
-    ::NKikimrSchemeOp::TModifyACL MakeModifyACL(const TString& objectId) const {
+    ::NKikimrSchemeOp::TModifyACL MakeModifyACL(const TString& objectId, const std::optional<NACLib::TUserToken>& owner) const {
         NACLib::TDiffACL diffAcl;
         for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
             diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericFull, usedSid);
@@ -54,8 +54,8 @@ private:
 
         modifyACL.SetName(objectId);
         modifyACL.SetDiffACL(diffAcl.SerializeAsString());
-        if (const auto& userToken = Context.GetExternalData().GetUserToken()) {
-            modifyACL.SetNewOwner(userToken->GetUserSID());
+        if (owner) {
+            modifyACL.SetNewOwner(owner->GetUserSID());
         }
 
         return modifyACL;
@@ -74,8 +74,9 @@ private:
         modifyScheme.SetSuccessOnNotExist(settings.GetExistingOk());
         switch (Context.GetActivityType()) {
             case IOperationsManager::EActivityType::Create:
+                ev->Record.SetUserToken(NACLib::TSystemUsers::Metadata().GetSerializedToken());
                 *modifyScheme.MutableModifyAbstractObject() = settings.SerializeToProto();
-                *modifyScheme.MutableModifyACL() = MakeModifyACL(settings.GetObjectId());
+                *modifyScheme.MutableModifyACL() = MakeModifyACL(settings.GetObjectId(), Context.GetExternalData().GetUserToken());
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateAbstractObject);
                 break;
             case IOperationsManager::EActivityType::Alter:

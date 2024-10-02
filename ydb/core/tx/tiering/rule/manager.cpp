@@ -76,6 +76,6 @@ TConclusion<TTieringRulesManager::TObjectDependencies> TTieringRulesManager::DoV
         tiers.emplace(tierPath->PathId);
     }
 
-    return TObjectDependencies(tiers.begin(), tiers.end());
+    return tiers;
 }
 }

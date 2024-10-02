@@ -80,19 +80,26 @@ TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(co
     }
 }
 
-TConclusionStatus ValidateOperation(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object,
+TConclusion<THashSet<TPathId>> ValidateOperation(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object,
     const NMetadata::NModifications::IOperationsManager::EActivityType activity, TSchemeShard& context) {
-    return GetOperationsManagerVerified(object->GetObjectManager()->GetTypeId())->ValidateOperation(name, object, activity, context);
+    const auto& manager = GetOperationsManagerVerified(object->GetObjectManager()->GetTypeId());
+    return manager->ValidateOperation(name, object, activity, context);
 }
 
-TAbstractObjectInfo::TPtr CreateAbstractObject(const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion) {
-    return MakeIntrusive<TAbstractObjectInfo>(alterVersion, metadata);
+THashSet<TPathId> GetObjectDependenciesVerified(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object, TSchemeShard& context) {
+    const auto& manager = GetOperationsManagerVerified(object->GetObjectManager()->GetTypeId());
+    return manager->GetDependenciesVerified(name, object, context);
+}
+
+TAbstractObjectInfo::TPtr CreateAbstractObject(
+    const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion, THashSet<TPathId> references) {
+    return MakeIntrusive<TAbstractObjectInfo>(alterVersion, metadata, std::move(references));
 }
 
 TAbstractObjectInfo::TPtr ModifyAbstractObject(
     const NMetadata::NModifications::TBaseObject::TPtr& metadata, const TAbstractObjectInfo::TPtr oldAbstractObjectInfo) {
     AFL_VERIFY(oldAbstractObjectInfo);
-    return CreateAbstractObject(metadata, oldAbstractObjectInfo->AlterVersion + 1);
+    return CreateAbstractObject(metadata, oldAbstractObjectInfo->AlterVersion + 1, oldAbstractObjectInfo->ReferencesFromObjects);
 }
 
 bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TProposeResponse>& result, const TOperationContext& context) {
@@ -140,6 +147,34 @@ void PersistAbstractObject(const TOperationId& operationId, const TOperationCont
     context.SS->PersistPath(db, abstractObjectPathId);
     context.SS->PersistAbstractObject(db, abstractObjectPathId, abstractObjectInfo);
     context.SS->PersistTxState(db, operationId);
+}
+
+void PersistReferences(const TPathId& object, const THashSet<TPathId>& dependencies, const THashSet<TPathId>& oldDependencies,
+    const TOperationContext& context, NIceDb::TNiceDb& db) {
+    std::vector<std::pair<TPathId, TAbstractObjectInfo::TPtr>> updatedObjects;
+
+    for (const TPathId& dependency : dependencies) {
+        if (!oldDependencies.contains(dependency)) {
+            auto* dependencyObject = context.SS->AbstractObjects.FindPtr(dependency);
+            Y_ABORT_UNLESS(dependencyObject);
+            Y_ABORT_UNLESS((*dependencyObject)->ReferencesFromObjects.emplace(object).second);
+            updatedObjects.emplace_back(dependency, *dependencyObject);
+        }
+    }
+
+    std::vector<TPathId> removeDependencies;
+        for (const TPathId& dependency : oldDependencies) {
+            if (!dependencies.contains(dependency)) {
+                auto* dependencyObject = context.SS->AbstractObjects.FindPtr(dependency);
+                Y_ABORT_UNLESS(dependencyObject);
+                Y_ABORT_UNLESS((*dependencyObject)->ReferencesFromObjects.erase(object));
+                updatedObjects.emplace_back(dependency, *dependencyObject);
+        }
+    }
+
+    for (const auto& [pathId, object] : updatedObjects) {
+        context.SS->PersistAbstractObject(db, pathId, object);
+    }
 }
 
 }   // namespace NKikimr::NSchemeShard::NAbstractObject

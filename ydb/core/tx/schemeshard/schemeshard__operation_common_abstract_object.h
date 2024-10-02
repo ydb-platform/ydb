@@ -19,10 +19,13 @@ bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& par
 TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(const NKikimrSchemeOp::TModifyAbstractObject& description,
     TSchemeShard& context, const NMetadata::NModifications::TBaseObject::TPtr& oldMetadata);
 
-TConclusionStatus ValidateOperation(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object,
+TConclusion<THashSet<TPathId>> ValidateOperation(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object,
     const NMetadata::NModifications::IOperationsManager::EActivityType activity, TSchemeShard& context);
 
-TAbstractObjectInfo::TPtr CreateAbstractObject(const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion);
+THashSet<TPathId> GetObjectDependenciesVerified(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object, TSchemeShard& context);
+
+TAbstractObjectInfo::TPtr CreateAbstractObject(
+    const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion, THashSet<TPathId> references);
 
 TAbstractObjectInfo::TPtr ModifyAbstractObject(
     const NMetadata::NModifications::TBaseObject::TPtr& metadata, const TAbstractObjectInfo::TPtr oldAbstractObjectInfo);
@@ -38,5 +41,8 @@ void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOp
 
 void PersistAbstractObject(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db,
     const TPathElement::TPtr& abstractObjectPath, const TAbstractObjectInfo::TPtr& abstractObjectInfo, const TString& acll);
+
+void PersistReferences(const TPathId& object, const THashSet<TPathId>& dependencies, const THashSet<TPathId>& oldDependencies,
+    const TOperationContext& context, NIceDb::TNiceDb& db);
 
 }   // namespace NKikimr::NSchemeShard::NAbstractObject

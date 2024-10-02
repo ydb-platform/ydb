@@ -139,6 +139,7 @@ public:
 
         const auto& oldAbstractObjectInfo = context.SS->AbstractObjects.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldAbstractObjectInfo);
+        const auto& oldDependencies = NAbstractObject::GetObjectDependenciesVerified(name, oldAbstractObjectInfo->Config, *context.SS);
 
         const auto buildResult = NAbstractObject::BuildObjectMetadata(abstractObjectDescription, *context.SS, nullptr);
         if (buildResult.IsFail()) {
@@ -146,10 +147,10 @@ public:
             return result;
         }
 
-        if (auto status = NAbstractObject::ValidateOperation(
+        const auto dependenciesOrError = NAbstractObject::ValidateOperation(
                 name, buildResult.GetResult(), NMetadata::NModifications::IOperationsManager::EActivityType::Alter, *context.SS);
-            status.IsFail()) {
-            result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, status.GetErrorMessage());
+        if (dependenciesOrError.IsFail()) {
+            result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, dependenciesOrError.GetErrorMessage());
             return result;
         }
 
@@ -164,6 +165,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
         NAbstractObject::AdvanceTransactionStateToPropose(OperationId, context, db);
         NAbstractObject::PersistAbstractObject(OperationId, context, db, abstractObject, abstractObjectInfo, acl);
+        NAbstractObject::PersistReferences(abstractObject->PathId, dependenciesOrError.GetResult(), oldDependencies, context, db);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 

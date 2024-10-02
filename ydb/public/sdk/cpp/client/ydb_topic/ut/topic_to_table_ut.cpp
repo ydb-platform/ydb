@@ -172,7 +172,7 @@ protected:
     void CheckTabletKeys(const TString& topicName);
     void DumpPQTabletKeys(const TString& topicName);
 
-    void ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
+    NTable::TDataQueryResult ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
 
 private:
     template<class E>
@@ -1537,10 +1537,11 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
     }
 }
 
-void TFixture::ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control)
+NTable::TDataQueryResult TFixture::ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control)
 {
     auto status = session.ExecuteDataQuery(query, control).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    return status;
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
@@ -2191,6 +2192,31 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
     ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx).CommitTx(true));
 
     auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
+{
+    CreateTopic("topic_A", TEST_CONSUMER);
+
+    NTable::TSession tableSession = CreateTableSession();
+
+    auto result = ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::BeginTx());
+
+    NTable::TTransaction tx = *result.GetTransaction();
+
+    for (size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), &tx);
+    }
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+
+    ExecuteDataQuery(tableSession, "SELECT 2", NTable::TTxControl::Tx(tx).CommitTx(true));
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
 }
 

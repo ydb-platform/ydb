@@ -1,5 +1,4 @@
 #include "batch_slice.h"
-#include "simple.h"
 #include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap {
@@ -148,7 +147,8 @@ bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& fe
     return true;
 }
 
-TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
+TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+    NArrow::NSplitter::ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
     : Schema(schema)
     , Counters(counters) {
     std::optional<ui32> recordsCount;
@@ -169,58 +169,12 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vecto
     RecordsCount = *recordsCount;
 }
 
-TGeneralSerializedSlice::TGeneralSerializedSlice(const ui32 recordsCount, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
+TGeneralSerializedSlice::TGeneralSerializedSlice(
+    const ui32 recordsCount, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
     : RecordsCount(recordsCount)
     , Schema(schema)
     , Counters(counters)
 {
-}
-
-TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters,
-    const NSplitter::TSplitSettings& settings)
-    : TBase(TValidator::CheckNotNull(batch)->num_rows(), schema, counters)
-    , Batch(batch)
-{
-    Y_ABORT_UNLESS(batch);
-    Data.reserve(batch->num_columns());
-    for (auto&& i : batch->schema()->fields()) {
-        TSplittedEntity c(schema->GetColumnId(i->name()));
-        Data.emplace_back(std::move(c));
-    }
-
-    ui32 idx = 0;
-    for (auto&& i : batch->columns()) {
-        auto& c = Data[idx];
-        auto columnSaver = schema->GetColumnSaver(c.GetEntityId());
-        auto stats = schema->GetColumnSerializationStats(c.GetEntityId());
-        TSimpleSplitter splitter(columnSaver, Counters);
-        splitter.SetStats(stats);
-        std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
-        for (auto&& i : splitter.Split(i, Schema->GetField(c.GetEntityId()), settings.GetMaxBlobSize())) {
-            chunks.emplace_back(std::make_shared<TSplittedColumnChunk>(c.GetEntityId(), i, Schema));
-        }
-        c.SetChunks(chunks);
-        Size += c.GetSize();
-        ++idx;
-    }
-}
-
-std::vector<NKikimr::NOlap::TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(const std::shared_ptr<arrow::RecordBatch>& batch, const NSplitter::TSplitSettings& settings, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const ISchemaDetailInfo::TPtr& schemaInfo) {
-    std::vector<TBatchSerializedSlice> slices;
-    auto stats = schemaInfo->GetBatchSerializationStats(batch);
-    ui32 recordsCount = settings.GetMinRecordsCount();
-    if (stats) {
-        const ui32 recordsCountForMinSize = stats->PredictOptimalPackRecordsCount(batch->num_rows(), settings.GetMinBlobSize()).value_or(recordsCount);
-        const ui32 recordsCountForMaxPortionSize = stats->PredictOptimalPackRecordsCount(batch->num_rows(), settings.GetMaxPortionSize()).value_or(recordsCount);
-        recordsCount = std::min(recordsCountForMaxPortionSize, std::max(recordsCount, recordsCountForMinSize));
-    }
-    auto linearSplitInfo = TSimpleSplitter::GetOptimalLinearSplitting(batch->num_rows(), recordsCount);
-    for (auto it = linearSplitInfo.StartIterator(); it.IsValid(); it.Next()) {
-        std::shared_ptr<arrow::RecordBatch> current = batch->Slice(it.GetPosition(), it.GetCurrentPackSize());
-        TBatchSerializedSlice slice(current, schemaInfo, counters, settings);
-        slices.emplace_back(std::move(slice));
-    }
-    return slices;
 }
 
 void TGeneralSerializedSlice::MergeSlice(TGeneralSerializedSlice&& slice) {

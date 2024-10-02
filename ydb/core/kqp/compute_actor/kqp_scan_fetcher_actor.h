@@ -50,7 +50,7 @@ private:
     const NMiniKQL::TScanDataMetaFull ScanDataMeta;
     const NYql::NDq::TComputeRuntimeSettings RuntimeSettings;
     const NYql::NDq::TTxId TxId;
-    const ui64 LockTxId;
+    const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -58,7 +58,7 @@ public:
     }
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,
-        std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const ui64 lockTxId, const ui32 lockNodeId,
+        std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
         const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
         const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId);
 
@@ -169,6 +169,9 @@ private:
     std::deque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;
     std::deque<TShardState> PendingShards;
     std::deque<TShardState> PendingResolveShards;
+
+    static inline TAtomicCounter ScanIdCounter = 0;
+    const ui64 ScanId = ScanIdCounter.Inc();
 
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;

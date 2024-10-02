@@ -25,6 +25,7 @@ def generate(junit_path, output_dir):
     root = tree.getroot()
 
     tree_paths = []
+    tree_paths.append([["/", "dir", 0]])
 
     for suite in root.findall("testsuite"):
         suite_name = suite.get("name")

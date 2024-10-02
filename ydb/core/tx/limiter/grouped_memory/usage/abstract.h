@@ -16,6 +16,7 @@ private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY(ui64, ExternalScopeId, 0);
     YDB_READONLY(ui64, GroupId, 0);
+    bool isRegistered = false;
 
 public:
     TGroupGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 externalScopeId, const ui64 groupId);
@@ -28,6 +29,8 @@ private:
     const NActors::TActorId ActorId;
     YDB_READONLY(ui64, ProcessId, 0);
 
+    bool isRegistered = false;
+
 public:
     TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
 
@@ -39,6 +42,7 @@ private:
     const NActors::TActorId ActorId;
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY(ui64, ScopeId, 0);
+    bool isRegistered = false;
 
 public:
     TScopeGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 scopeId);
@@ -54,6 +58,7 @@ private:
     YDB_READONLY(ui64, AllocationId, 0)
     YDB_READONLY(ui64, Memory, 0)
     bool Released = false;
+    bool isRegistered = false;
 
 public:
     TAllocationGuard(const ui64 processId, const ui64 scopeId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory)

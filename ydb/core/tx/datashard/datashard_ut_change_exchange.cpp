@@ -5,6 +5,7 @@
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
@@ -29,6 +30,7 @@ namespace NKikimr {
 using namespace NDataShard;
 using namespace NDataShard::NKqpHelpers;
 using namespace Tests;
+using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     void SenderShouldBeActivated(const TString& path, const TShardedTableOptions& opts) {
@@ -841,7 +843,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
                 .SetEnableParameterizedDecimal(true)
-                .SetEnablePgSyntax(true);
+                .SetEnablePgSyntax(true)
+                .SetEnableTopicSplitMerge(true)
+                .SetEnablePQConfigTransactionsAtSchemeShard(true)
+                .SetEnableTopicAutopartitioningForCDC(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -976,6 +981,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     TCdcStream WithInitialScan(TCdcStream streamDesc) {
         streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
+        return streamDesc;
+    }
+
+    TCdcStream WithTopicAutoPartitioning(bool value, TCdcStream streamDesc) {
+        streamDesc.TopicAutoPartitioning = value;
         return streamDesc;
     }
 
@@ -2054,7 +2064,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     // Schema snapshots
     using TActionFunc = std::function<ui64(TServer::TPtr)>;
 
-    ui64 ResolvePqTablet(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+    auto GetTopicDescription(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
         auto streamDesc = Ls(runtime, sender, path);
 
         const auto& streamEntry = streamDesc->ResultSet.at(0);
@@ -2069,7 +2079,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& topicEntry = topicDesc->ResultSet.at(0);
         UNIT_ASSERT(topicEntry.PQGroupInfo);
 
-        const auto& pqDesc = topicEntry.PQGroupInfo->Description;
+        return topicEntry.PQGroupInfo->Description;
+    }
+
+    ui64 ResolvePqTablet(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+        const auto& pqDesc = GetTopicDescription(runtime, sender, path);
         for (const auto& partition : pqDesc.GetPartitions()) {
             if (partitionId == partition.GetPartitionId()) {
                 return partition.GetTabletId();
@@ -2081,6 +2095,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     auto GetRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+        Cerr << ">>>>> GetRecords path=" << path << " partitionId=" << partitionId << Endl << Flush;
         NKikimrClient::TPersQueueRequest request;
         request.MutablePartitionRequest()->SetTopic(path);
         request.MutablePartitionRequest()->SetPartition(partitionId);
@@ -2109,17 +2124,25 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     TVector<NJson::TJsonValue> WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
+        const auto& pqDesc = GetTopicDescription(*server->GetRuntime(), sender, path);
+        size_t partitionCount = pqDesc.GetPartitions().size();
+
         while (true) {
-            const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
-            for (ui32 i = 0; i < std::min(records.size(), expected.size()); ++i) {
-                AssertJsonsEqual(records.at(i).second, expected.at(i));
+            TVector<std::pair<TString, TString>> result;
+            for (size_t p = 0; p < partitionCount; ++p) {
+                const auto records = GetRecords(*server->GetRuntime(), sender, path, p);
+                result.insert(result.end(), records.begin(), records.end());
             }
 
-            if (records.size() >= expected.size()) {
-                UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expected.size(),
-                    "Unexpected record: " << records.at(expected.size()).second);
+            if (result.size() >= expected.size()) {
+                for (ui32 i = 0; i < std::min(result.size(), expected.size()); ++i) {
+                    AssertJsonsEqual(result.at(i).second, expected.at(i));
+                }
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.size(), expected.size(),
+                    "Unexpected record: " << result.at(expected.size()).second);
                 TVector<NJson::TJsonValue> values;
-                for (const auto& pr : records) {
+                for (const auto& pr : result) {
                     bool ok = NJson::ReadJsonTree(pr.second, &values.emplace_back());
                     Y_ABORT_UNLESS(ok);
                 }
@@ -2195,18 +2218,55 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    Y_UNIT_TEST(AddColumn) {
+    void AddColumnTest(bool topicAutoPartitioning) {
         auto action = [](TServer::TPtr server) {
             return AsyncAlterAddExtraColumn(server, "/Root", "Table");
         };
 
-        ShouldDeliverChanges(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), action, {
+        ShouldDeliverChanges(SimpleTable(), WithTopicAutoPartitioning(topicAutoPartitioning, Updates(NKikimrSchemeOp::ECdcStreamFormatJson)), action, {
             R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)",
         }, {
             R"(UPSERT INTO `/Root/Table` (key, value, extra) VALUES (2, 20, 200);)",
         }, {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"extra":200,"value":20},"key":[2]})",
+        });
+    }
+
+    Y_UNIT_TEST(AddColumn) {
+        AddColumnTest(false);
+    }
+
+    Y_UNIT_TEST(AddColumn_TopicAutoPartitioning) {
+        AddColumnTest(true);
+    }
+
+    Y_UNIT_TEST(SplitTopicPartition_TopicAutoPartitioning) {
+        auto streamDesc = WithTopicAutoPartitioning(true, Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
+        auto action = [&](TServer::TPtr server) {
+            server->GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+
+            ui64 txId = 100;
+
+            AsyncSend(*server->GetRuntime(), 72057594046644480ull, InternalTransaction(AlterPQGroupRequest(++txId, "/Root/Table/Stream", R"(
+                Name: "streamImpl"
+                Split {
+                    Partition: 0
+                    SplitBoundary: 'a'
+                }
+            )")));
+            TestModificationResults(*server->GetRuntime(), txId, {NKikimrScheme::StatusAccepted});
+
+            return txId;
+        };
+
+        ShouldDeliverChanges(SimpleTable(), streamDesc, action, {
+            R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)",
+        }, {
+            R"(UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);)",
+        }, {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
         });
     }
 
@@ -2782,13 +2842,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    void InitialScanTest(bool withTopicSchemeTx) {
+    void InitialScanTest(bool withTopicSchemeTx, bool topicAutoPartitioning) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnablePQConfigTransactionsAtSchemeShard(withTopicSchemeTx)
+            .SetEnableTopicSplitMerge(topicAutoPartitioning)
+            .SetEnableTopicAutopartitioningForCDC(true)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2805,8 +2867,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )");
 
-        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
-            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        auto streamDescr = WithTopicAutoPartitioning(topicAutoPartitioning, WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", streamDescr));
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"update":{"value":10},"key":[1]})",
@@ -2832,11 +2894,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(InitialScan) {
-        InitialScanTest(false);
+        InitialScanTest(false, false);
     }
 
     Y_UNIT_TEST(InitialScan_WithTopicSchemeTx) {
-        InitialScanTest(true);
+        InitialScanTest(true, false);
+    }
+
+    Y_UNIT_TEST(InitialScan_TopicAutoPartitioning) {
+        InitialScanTest(true, true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

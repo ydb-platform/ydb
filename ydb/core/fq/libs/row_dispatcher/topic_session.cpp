@@ -472,11 +472,6 @@ void TTopicSession::CloseTopicSession() {
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
     Self.Metrics.RowsRead->Add(event.GetMessages().size());
     for (const auto& message : event.GetMessages()) {
-<<<<<<< HEAD
-=======
-        const std::string& data = message.GetData();
-        Self.IngressStats.Bytes += data.size();
->>>>>>> c992f57381 (Copied changes from ydb-cpp-sdk repo and fixed build after rebase)
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
         Self.IngressStats.Bytes += message.GetData().size();
@@ -522,11 +517,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 }
 
 std::pair<NYql::NUdf::TUnboxedValuePod, i64> TTopicSession::CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-<<<<<<< HEAD
-    const TString& data = message.GetData();
-=======
     const std::string& data = message.GetData();
->>>>>>> c992f57381 (Copied changes from ydb-cpp-sdk repo and fixed build after rebase)
     i64 usedSpace = data.size();
     NYql::NUdf::TUnboxedValuePod item = NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.data(), data.size()));
     return std::make_pair(item, usedSpace);

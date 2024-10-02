@@ -83,6 +83,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
             "generic - use generic queries.")
         .DefaultValue("generic").StoreResult(&QueryExecuterType);
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
+
+    config.Opts->AddLongOption("global-timeout", "Timeout for perform all request")
+        .StoreResult(&GlobalTimeout);
+
+    config.Opts->AddLongOption("request-timeout", "Timeout for perform each iteration of each request")
+        .StoreResult(&RequestTimeout);
+
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -304,7 +311,8 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
 
     std::map<ui32, TTestInfo> queryRuns;
     auto qIter = qtokens.cbegin();
-    for (ui32 queryN = 0; queryN < qtokens.size(); ++queryN, ++qIter) {
+    GlobalDeadline = (GlobalTimeout != TDuration::Zero()) ? Now() + GlobalTimeout : TInstant::Max();
+    for (ui32 queryN = 0; queryN < qtokens.size() && Now() < GlobalDeadline; ++queryN, ++qIter) {
         const auto& qInfo = *qIter;
         if (!NeedRun(queryN)) {
             continue;
@@ -334,18 +342,18 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         if (PlanFileName) {
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
-                res = Explain(query, client);
+                res = Explain(query, client, GetDeadline());
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             SavePlans(res, queryN, "explain");
         }
 
-        for (ui32 i = 0; i < IterationsCount; ++i) {
+        for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
             auto t1 = TInstant::Now();
             TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
-                res = Execute(query, client);
+                res = Execute(query, client, GetDeadline());
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
@@ -476,6 +484,20 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
         TFileOutput out(planFName + "ast");
         out << res.GetPlanAst();
     }
+}
+
+BenchmarkUtils::TQueryBenchmarkDeadline TWorkloadCommandBenchmark::GetDeadline() const {
+    BenchmarkUtils::TQueryBenchmarkDeadline result;
+    if (GlobalDeadline != TInstant::Max()) {
+        result.Deadline = GlobalDeadline;
+        result.Name = "Global ";
+    }
+    TInstant requestDeadline = (RequestTimeout == TDuration::Zero()) ? TInstant::Max() : (Now() + RequestTimeout);
+    if (requestDeadline < result.Deadline) {
+        result.Deadline = requestDeadline;
+        result.Name = "Request";
+    }
+    return result;
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {

@@ -2487,6 +2487,11 @@ void TPDisk::ProcessFastOperationsQueue() {
                 break;
             case ERequestType::RequestContinueReadMetadata:
                 static_cast<TContinueReadMetadata&>(*req).Execute(PCtx->ActorSystem);
+            case ERequestType::RequestReadFormat:
+                InitiateReadFormat(static_cast<TReadFormat&>(*req).Sender);
+                break;
+            case ERequestType::RequestReadSysLog:
+                InitiateReadSysLog(static_cast<TReadSysLog&>(*req).Sender);
                 break;
             default:
                 Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
@@ -3082,6 +3087,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestReadMetadata:
         case ERequestType::RequestWriteMetadata:
         case ERequestType::RequestContinueReadMetadata:
+        case ERequestType::RequestReadFormat:
+        case ERequestType::RequestReadSysLog:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();

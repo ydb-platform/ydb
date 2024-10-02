@@ -205,7 +205,9 @@ void TPDisk::GetStartingPoints(NPDisk::TOwner owner, TMap<TLogSignature, NPDisk:
     }
 }
 
-void TPDisk::ReadSysLog(const TActorId &pDiskActor) {
+void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
+    Format.InitMagic();
+
     TIntrusivePtr<TSysLogReader> sysLogReader(new TSysLogReader(this, PCtx->ActorSystem, pDiskActor,
                 TReqId(TReqId::ReadSysLog, 0)));
     sysLogReader->Start();
@@ -1310,7 +1312,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 }
 
 // Schedules EvReadLogResult event for the system log
-void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
+void TPDisk::InitiateReadFormat(const TActorId &pDiskActor) {
     Y_VERIFY_S(PDiskThread.Running(), "expect PDiskThread to be running");
     Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, "expect InitPhase to be Uninitialized, but InitPhase# "
             << InitPhase);

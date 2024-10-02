@@ -1074,11 +1074,11 @@ void TPathDescriber::DescribeAbstractObject(TPathId pathId, TPathElement::TPtr p
 
     auto entry = Result->Record.MutablePathDescription()->MutableAbstractObjectDescription();
     entry->SetName(pathEl->Name);
-    entry->SetType(abstractObjectInfo->Object->GetObjectManager()->GetTypeId());
+    entry->SetType(abstractObjectInfo->Config->GetObjectManager()->GetTypeId());
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(abstractObjectInfo->AlterVersion);
-    const auto manager = abstractObjectInfo->Object->GetObjectManager();
-    *entry->MutableProperties()->MutableProperties() = manager->SerializeToRecord(abstractObjectInfo->Object).SerializeToProto();
+    const auto manager = abstractObjectInfo->Config->GetObjectManager();
+    *entry->MutableProperties()->MutableProperties() = manager->SerializeToRecord(abstractObjectInfo->Config).SerializeToProto();
 }
 
 static bool ConsiderAsDropped(const TPath& path) {

@@ -80,6 +80,11 @@ TConclusion<NMetadata::NModifications::TBaseObject::TPtr> BuildObjectMetadata(co
     }
 }
 
+TConclusionStatus ValidateOperation(const TString& name, const NMetadata::NModifications::TBaseObject::TPtr& object,
+    const NMetadata::NModifications::IOperationsManager::EActivityType activity, TSchemeShard& context) {
+    return GetOperationsManagerVerified(object->GetObjectManager()->GetTypeId())->ValidateOperation(name, object, activity, context);
+}
+
 TAbstractObjectInfo::TPtr CreateAbstractObject(const NMetadata::NModifications::TBaseObject::TPtr& metadata, const ui64 alterVersion) {
     return MakeIntrusive<TAbstractObjectInfo>(alterVersion, metadata);
 }

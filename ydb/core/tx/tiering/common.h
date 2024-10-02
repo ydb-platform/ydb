@@ -15,7 +15,7 @@ enum EEvents {
     EvTiersManagerReadyForUsage,
     EvWatchSchemeObjects,
     EvNotifyTierUpdated,
-    EvNotifyTieringUpdated,
+    EvNotifyTieringRuleUpdated,
     EvNotifyObjectDeleted,
     EvObjectResolutionFailed,
     EvEnd

@@ -36,6 +36,31 @@ private:
         });
     }
 
+    ::NKikimrSchemeOp::TModifyACL MakeModifyACL(const TString& objectId) const {
+        NACLib::TDiffACL diffAcl;
+        for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericFull, usedSid);
+        }
+
+        auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;
+        for (const auto& userSID : AppData()->DefaultUserSIDs) {
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, userSID);
+        }
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
+
+        auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
+        ::NKikimrSchemeOp::TModifyACL modifyACL;
+
+        modifyACL.SetName(objectId);
+        modifyACL.SetDiffACL(diffAcl.SerializeAsString());
+        if (const auto& userToken = Context.GetExternalData().GetUserToken()) {
+            modifyACL.SetNewOwner(userToken->GetUserSID());
+        }
+
+        return modifyACL;
+    }
+
     TConclusion<THolder<TEvTxUserProxy::TEvProposeTransaction>> MakeRequest(const NYql::TObjectSettingsImpl& settings) const {
         auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         ev->Record.SetDatabaseName(Context.GetExternalData().GetDatabase());
@@ -50,6 +75,7 @@ private:
         switch (Context.GetActivityType()) {
             case IOperationsManager::EActivityType::Create:
                 *modifyScheme.MutableModifyAbstractObject() = settings.SerializeToProto();
+                *modifyScheme.MutableModifyACL() = MakeModifyACL(settings.GetObjectId());
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateAbstractObject);
                 break;
             case IOperationsManager::EActivityType::Alter:

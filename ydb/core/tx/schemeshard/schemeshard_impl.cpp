@@ -3010,18 +3010,24 @@ void TSchemeShard::PersistAbstractObject(NIceDb::TNiceDb& db, TPathId pathId, co
     Y_ABORT_UNLESS(path->second && path->second->IsAbstractObject());
 
     Y_ABORT_UNLESS(abstractObject);
-    Y_ABORT_UNLESS(abstractObject->Object);
-    const auto objectManager = abstractObject->Object->GetObjectManager();
+    Y_ABORT_UNLESS(abstractObject->Config);
+    const auto objectManager = abstractObject->Config->GetObjectManager();
     Y_ABORT_UNLESS(objectManager);
     const TString typeId = objectManager->GetTypeId();
-    const auto record = objectManager->SerializeToRecord(abstractObject->Object);
+    const auto record = objectManager->SerializeToRecord(abstractObject->Config);
     const ui64 alterVersion = abstractObject->AlterVersion;
-    const Ydb::Value recordRow = record.BuildRow();
+    NKikimrSchemeOp::TAbstractObjectProperties properties;
+    *properties.MutableProperties() = record.SerializeToProto();
+    NKikimrSchemeOp::TAbstractObjectReferences references;
+    for (const TPathId& referer : abstractObject->ReferencesFromObjects) {
+        PathIdFromPathId(referer, references.AddReferers());
+    }
 
     db.Table<Schema::AbstractObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::AbstractObjects::AlterVersion>(alterVersion),
         NIceDb::TUpdate<Schema::AbstractObjects::TypeId>(typeId),
-        NIceDb::TUpdate<Schema::AbstractObjects::Properties>(recordRow.SerializeAsString())
+        NIceDb::TUpdate<Schema::AbstractObjects::Properties>(properties.SerializeAsString()),
+        NIceDb::TUpdate<Schema::AbstractObjects::References>(references.SerializeAsString())
     );
 }
 

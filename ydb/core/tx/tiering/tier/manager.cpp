@@ -3,17 +3,15 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
+void TTiersManager::DoPreprocessSettings(
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IPreprocessingController::TPtr controller) const {
+    TActivationContext::Register(new TTierPreprocessingActor(settings, controller, context));
+}
+
 TTiersManager::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
     const NYql::TObjectSettingsImpl& settings, NSchemeShard::TSchemeShard& /*context*/) const {
-    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
-        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
-    }
-
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
-    if (settings.GetObjectId().StartsWith("$") || settings.GetObjectId().StartsWith("_")) {
-        return TConclusionStatus::Fail("tier name cannot start with '$', '_' characters");
-    }
     {
         const std::optional<TString>& fConfig = settings.GetFeaturesExtractor().Extract(TTierConfig::TDecoder::TierConfig);
         if (fConfig) {
@@ -24,13 +22,20 @@ TTiersManager::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
             result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));
         }
     }
-    // TODO: Validate tier against schema
     return result;
-
 }
 
-void TTiersManager::DoPreprocessSettings(
-    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IPreprocessingController::TPtr controller) const {
-    TActivationContext::Register(new TTierPreprocessingActor(settings, controller, context));
+TConclusion<TTiersManager::TObjectDependencies> TTiersManager::DoValidateOperation(
+    const TString& objectId, const NMetadata::NModifications::TBaseObject::TPtr& /*object*/, EActivityType /*activity*/,
+    NSchemeShard::TSchemeShard& /*context*/) const {
+    if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
+        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+    }
+
+    if (objectId.StartsWith("$") || objectId.StartsWith("_")) {
+        return TConclusionStatus::Fail("tier name cannot start with '$', '_' characters");
+    }
+
+    return TObjectDependencies();
 }
 }

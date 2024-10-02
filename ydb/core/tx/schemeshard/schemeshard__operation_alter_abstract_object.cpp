@@ -146,6 +146,13 @@ public:
             return result;
         }
 
+        if (auto status = NAbstractObject::ValidateOperation(
+                name, buildResult.GetResult(), NMetadata::NModifications::IOperationsManager::EActivityType::Alter, *context.SS);
+            status.IsFail()) {
+            result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, status.GetErrorMessage());
+            return result;
+        }
+
         const TAbstractObjectInfo::TPtr abstractObjectInfo = NAbstractObject::ModifyAbstractObject(buildResult.GetResult(), oldAbstractObjectInfo);
         Y_ABORT_UNLESS(abstractObjectInfo);
 

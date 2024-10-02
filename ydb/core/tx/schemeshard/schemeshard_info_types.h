@@ -3422,18 +3422,25 @@ struct TAbstractObjectInfo : TSimpleRefCount<TAbstractObjectInfo> {
     using TPtr = TIntrusivePtr<TAbstractObjectInfo>;
 
     ui64 AlterVersion = 0;
-    NMetadata::NModifications::TBaseObject::TPtr Object;
+    NMetadata::NModifications::TBaseObject::TPtr Config;
+    THashSet<TPathId> ReferencesFromObjects;
 
-    TAbstractObjectInfo(const ui64 alterVersion, NMetadata::NModifications::TBaseObject::TPtr object)
+    TAbstractObjectInfo(const ui64 alterVersion, NMetadata::NModifications::TBaseObject::TPtr config, THashSet<TPathId> references)
         : AlterVersion(alterVersion)
-        , Object(std::move(object)) {
+        , Config(std::move(config))
+        , ReferencesFromObjects(std::move(references)) {
     }
 
     template <typename T>
     std::shared_ptr<T> GetAsVerified() const {
-        auto converted = std::dynamic_pointer_cast<T>(Object);
+        auto converted = std::dynamic_pointer_cast<T>(Config);
         AFL_VERIFY(converted);
         return converted;
+    }
+
+    template <typename T>
+    bool Is() const {
+        return !!std::dynamic_pointer_cast<T>(Config);
     }
 };
 

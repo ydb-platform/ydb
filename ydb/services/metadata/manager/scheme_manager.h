@@ -28,11 +28,14 @@ public:
     using TExternalModificationContext = typename IOperationsManager::TExternalModificationContext;
     using TOperationParsingResult = TOperationParsingResult;
     using IPreprocessingController = IPreprocessingController;
+    using TObjectDependencies = std::vector<TPathId>;
 
 protected:
-    virtual TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings, NSchemeShard::TSchemeShard& context) const = 0;
     virtual void DoPreprocessSettings(
         const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IPreprocessingController::TPtr controller) const = 0;
+    virtual TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings, NSchemeShard::TSchemeShard& context) const = 0;
+    virtual TConclusion<TObjectDependencies> DoValidateOperation(
+        const TString& objectId, const TBaseObject::TPtr& object, EActivityType activity, NSchemeShard::TSchemeShard& context) const = 0;
 
 public:
     TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings, NSchemeShard::TSchemeShard& context) const {
@@ -43,6 +46,11 @@ public:
             }
         }
         return result;
+    }
+
+    TConclusion<TObjectDependencies> ValidateOperation(
+        const TString& objectId, const TBaseObject::TPtr& object, EActivityType activity, NSchemeShard::TSchemeShard& context) const {
+        return DoValidateOperation(objectId, object, activity, context);
     }
 
 protected:

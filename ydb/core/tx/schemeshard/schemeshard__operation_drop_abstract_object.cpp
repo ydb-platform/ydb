@@ -178,6 +178,29 @@ public:
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
+        const auto* object = context.SS->AbstractObjects.FindPtr(dstPath.Base()->PathId);
+        if (object) {
+            if (auto status = NAbstractObject::ValidateOperation(
+                    name, (*object)->Config, NMetadata::NModifications::IOperationsManager::EActivityType::Drop, *context.SS);
+                status.IsFail()) {
+                result->SetStatus(NKikimrScheme::EStatus::StatusInvalidParameter, status.GetErrorMessage());
+                return result;
+            }
+        } else {
+            if (!Transaction.GetSuccessOnNotExist()) {
+                result->SetStatus(NKikimrScheme::EStatus::StatusPathDoesNotExist, "Object does not exist");
+                return result;
+            }
+        }
+
+        for (const auto& pathId : (*object)->ReferencesFromObjects) {
+            const TPath dependent = TPath::Init(pathId, context.SS);
+            if (dependent.IsResolved() && !dependent.IsDeleted()) {
+                result->SetStatus(NKikimrScheme::EStatus::StatusPathDoesNotExist, "Object is used by " + dependent.PathString());
+                return result;
+            }
+        }
+
         auto guard = context.DbGuard();
         PersistDropAbstractObject(context, dstPath);
         CreateTransaction(context, dstPath.Base()->PathId);

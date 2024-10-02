@@ -2226,9 +2226,14 @@ message TAbstractObjectDescription {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
+    optional TAbstractObjectReferences References = 4;
 
-    optional string Type = 4;
-    optional TAbstractObjectProperties Properties = 5;
+    optional string Type = 5;
+    optional TAbstractObjectProperties Properties = 6;
+}
+
+message TAbstractObjectReferences {
+    repeated NKikimrProto.TPathID Referers = 1;
 }
 
 message TAbstractObjectProperties {

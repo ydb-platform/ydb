@@ -91,6 +91,9 @@ concept RecordSerializableObject = std::derived_from<T, TBaseObject> && requires
 
 template <class TDerived>
 class TObject: public TBaseObject {
+private:
+    static inline const auto ObjectManager = std::make_shared<TObjectManager<TDerived>>();
+
 protected:
     TObject() {
         static_assert(RecordSerializableObject<TDerived>, "Object implementations must satisfy RecordSerializableObject");
@@ -102,7 +105,7 @@ public:
     }
 
     IObjectManager::TPtr GetObjectManager() const override {
-        return std::make_shared<TObjectManager<TDerived>>();
+        return ObjectManager;
     }
 };
 }

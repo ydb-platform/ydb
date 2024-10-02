@@ -1827,11 +1827,12 @@ struct Schema : NIceDb::Schema {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct TypeId : Column<4, NScheme::NTypeIds::String> {};
-        struct Properties : Column<5, NScheme::NTypeIds::String> {}; // TAbstractObjectProperties
+        struct References : Column<4, NScheme::NTypeIds::String> {}; // TAbstractObjectReferences
+        struct TypeId : Column<5, NScheme::NTypeIds::String> {};
+        struct Properties : Column<6, NScheme::NTypeIds::String> {}; // TAbstractObjectProperties
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, TypeId, Properties>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, References, TypeId, Properties>;
     };
 
     using TTables = SchemaTables<

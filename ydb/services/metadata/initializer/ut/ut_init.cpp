@@ -27,8 +27,6 @@
 
 namespace NKikimr {
 
-using namespace NColumnShard;
-
 Y_UNIT_TEST_SUITE(Initializer) {
 
     class TTestInitializer: public NMetadata::NInitializer::IInitializationBehaviour {

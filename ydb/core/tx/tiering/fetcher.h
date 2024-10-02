@@ -21,23 +21,23 @@ enum ESchemeObject {
 
 class TEvWatchSchemeObjects: public TEventLocal<TEvWatchSchemeObjects, NTiers::EvWatchSchemeObjects> {
 private:
-    YDB_READONLY_DEF(std::vector<TString>, Tierings);
+    YDB_READONLY_DEF(std::vector<TString>, TieringRules);
     YDB_READONLY_DEF(std::vector<TString>, Tiers);
 
 public:
-    TEvWatchSchemeObjects(std::vector<TString> tierings, std::vector<TString> tiers)
-        : Tierings(std::move(tierings))
+    TEvWatchSchemeObjects(std::vector<TString> tieringRules, std::vector<TString> tiers)
+        : TieringRules(std::move(tieringRules))
         , Tiers(std::move(tiers)) {
     }
 };
 
-class TEvNotifyTieringUpdated: public TEventLocal<TEvNotifyTieringUpdated, NTiers::EvNotifyTieringUpdated> {
+class TEvNotifyTieringRuleUpdated: public TEventLocal<TEvNotifyTieringRuleUpdated, NTiers::EvNotifyTieringRuleUpdated> {
 private:
     YDB_READONLY_DEF(TString, Id);
     YDB_READONLY_DEF(NTiers::TTieringRule, Config);
 
 public:
-    TEvNotifyTieringUpdated(const TString& id, NTiers::TTieringRule config)
+    TEvNotifyTieringRuleUpdated(const TString& id, NTiers::TTieringRule config)
         : Id(id)
         , Config(std::move(config)) {
     }
@@ -93,7 +93,7 @@ class TTieringFetcher: public TActorBootstrapped<TTieringFetcher> {
 private:
     TActorId Owner;
     THashSet<TString> WatchedTiers;
-    THashSet<TString> WatchedTierings;
+    THashSet<TString> WatchedTieringRules;
 
 private:
     template <typename T>
@@ -108,14 +108,14 @@ private:
         return *castObject;
     }
 
-    void InitializeTierings(const std::vector<TString>& tierings) {
-        std::vector<TString> newTierings;
-        for (const TString& tieringId : tierings) {
-            if (WatchedTierings.emplace(tieringId).second) {
-                newTierings.emplace_back(tieringId);
+    void InitializeTieringRules(const std::vector<TString>& tieringRules) {
+        std::vector<TString> newTieringRules;
+        for (const TString& tieringRuleId : tieringRules) {
+            if (WatchedTieringRules.emplace(tieringRuleId).second) {
+                newTieringRules.emplace_back(tieringRuleId);
             }
         }
-        RequestPaths(newTierings, {});
+        RequestPaths(newTieringRules, {});
     }
 
     void InitializeTiers(const std::vector<TString>& tiers) {
@@ -147,13 +147,13 @@ private:
         return request;
     }
 
-    void RequestPaths(const std::vector<TString>& tierings, const std::vector<TString>& tiers) {
+    void RequestPaths(const std::vector<TString>& tieringRules, const std::vector<TString>& tiers) {
         TVector<TVector<TString>> paths;
         {
             const TString storagePath = NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath();
-            for (const TString& tieringId : tierings) {
+            for (const TString& tieringRuleId : tieringRules) {
                 paths.emplace_back(SplitPath(storagePath));
-                paths.back().emplace_back(tieringId);
+                paths.back().emplace_back(tieringRuleId);
             }
         }
         {
@@ -194,7 +194,7 @@ private:
         const TString storageDirectory = TString(ExtractParent(path));
         const TString objectId = TString(ExtractBase(path));
         if (IsEqualPaths(storageDirectory, NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath())) {
-            WatchedTierings.erase(objectId);
+            WatchedTieringRules.erase(objectId);
             Send(Owner, new NTiers::TEvObjectResolutionFailed(NTiers::ESchemeObject::TIERING, objectId, reason));
         } else if (IsEqualPaths(storageDirectory, NTiers::TTierConfig::GetBehaviour()->GetStorageTablePath())) {
             WatchedTiers.erase(objectId);
@@ -208,16 +208,16 @@ private:
         Send(Owner, new NTiers::TEvNotifyTierUpdated(tierName, std::move(config)));
     }
 
-    void OnTieringFetched(const TString& tieringId, NTiers::TTieringRule config) {
-        Send(Owner, new NTiers::TEvNotifyTieringUpdated(tieringId, std::move(config)));
+    void OnTieringRuleFetched(const TString& tieringRuleId, NTiers::TTieringRule config) {
+        Send(Owner, new NTiers::TEvNotifyTieringRuleUpdated(tieringRuleId, std::move(config)));
     }
 
     void OnTierDeleted(const TString& tierName) {
         Send(Owner, new NTiers::TEvNotifyObjectDeleted(NTiers::ESchemeObject::TIER, tierName));
     }
 
-    void OnTieringDeleted(const TString& tieringId) {
-        Send(Owner, new NTiers::TEvNotifyObjectDeleted(NTiers::ESchemeObject::TIERING, tieringId));
+    void OnTieringRuleDeleted(const TString& tieringRuleId) {
+        Send(Owner, new NTiers::TEvNotifyObjectDeleted(NTiers::ESchemeObject::TIERING, tieringRuleId));
     }
 
 public:
@@ -285,7 +285,7 @@ public:
         if (typeId == NTiers::TTierConfig::GetTypeId()) {
             OnTierFetched(objectId, DeserializeObject<NTiers::TTierConfig>(abstractObject.GetProperties()));
         } else if (typeId == NTiers::TTieringRule::GetTypeId()) {
-            OnTieringFetched(objectId, DeserializeObject<NTiers::TTieringRule>(abstractObject.GetProperties()));
+            OnTieringRuleFetched(objectId, DeserializeObject<NTiers::TTieringRule>(abstractObject.GetProperties()));
         } else {
             AFL_VERIFY(false)("type_id", typeId);
         }
@@ -299,7 +299,7 @@ public:
                 OnTierDeleted(objectName);
                 break;
             case NTiers::ESchemeObject::TIERING:
-                OnTieringDeleted(objectName);
+                OnTieringRuleDeleted(objectName);
                 break;
             default:
                 AFL_VERIFY(false)("key", record->Key);
@@ -312,8 +312,8 @@ public:
     }
 
     void Handle(NTiers::TEvWatchSchemeObjects::TPtr& ev) {
-        if (const auto& tierings = ev->Get()->GetTierings(); !tierings.empty()) {
-            InitializeTierings(tierings);
+        if (const auto& tieringRules = ev->Get()->GetTieringRules(); !tieringRules.empty()) {
+            InitializeTieringRules(tieringRules);
         }
         if (const auto& tiers = ev->Get()->GetTiers(); !tiers.empty()) {
             InitializeTiers(tiers);

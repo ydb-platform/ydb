@@ -7,10 +7,11 @@ namespace NKikimr::NColumnShard::NTiers {
 
 class TTiersManager: public NMetadata::NModifications::TSchemeObjectOperationsManager {
 public:
+    void DoPreprocessSettings(const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context,
+        IPreprocessingController::TPtr controller) const override;
     TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings, NSchemeShard::TSchemeShard& context) const override;
-
-    void DoPreprocessSettings(
-        const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IPreprocessingController::TPtr controller) const override;
+    TConclusion<TObjectDependencies> DoValidateOperation(
+        const TString& objectId, const NMetadata::NModifications::TBaseObject::TPtr& object, EActivityType activity, NSchemeShard::TSchemeShard& context) const override;
 };
 
 }

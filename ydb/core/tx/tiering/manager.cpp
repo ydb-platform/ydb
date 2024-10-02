@@ -17,7 +17,7 @@ private:
 
     std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
     THashMap<TString, NTiers::TTierConfig> Tiers;
-    THashMap<TString, NTiers::TTieringRule> Tierings;
+    THashMap<TString, NTiers::TTieringRule> TieringRules;
 
 private:
     TActorId GetExternalDataActorId() const {
@@ -25,7 +25,7 @@ private:
     }
 
     void UpdateSnapshot() const {
-        Owner->TakeConfigs(NTiers::TConfigsSnapshot(Tiers, Tierings), SecretsSnapshot);
+        Owner->TakeConfigs(NTiers::TConfigsSnapshot(Tiers, TieringRules), SecretsSnapshot);
     }
 
     void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchSchemeObjects> ev) const {
@@ -38,7 +38,7 @@ private:
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             hFunc(NTiers::TEvWatchSchemeObjects, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(NTiers::TEvNotifyTieringUpdated, Handle);
+            hFunc(NTiers::TEvNotifyTieringRuleUpdated, Handle);
             hFunc(NTiers::TEvNotifyTierUpdated, Handle);
             hFunc(NTiers::TEvNotifyObjectDeleted, Handle);
             hFunc(NTiers::TEvObjectResolutionFailed, Handle);
@@ -72,7 +72,7 @@ private:
         UpdateSnapshot();
     }
 
-    void Handle(NTiers::TEvNotifyTieringUpdated::TPtr& ev) {
+    void Handle(NTiers::TEvNotifyTieringRuleUpdated::TPtr& ev) {
         const auto& config = ev->Get()->GetConfig();
         {
             std::vector<TString> uninitializedTiers;
@@ -84,7 +84,7 @@ private:
             WatchTiers(std::move(uninitializedTiers));
         }
 
-        Tierings.emplace(ev->Get()->GetId(), config);
+        TieringRules.emplace(ev->Get()->GetId(), config);
         UpdateSnapshot();
     }
 
@@ -96,7 +96,7 @@ private:
                 Tiers.erase(ev->Get()->GetObjectId());
                 break;
             case NTiers::TIERING:
-                Tierings.erase(ev->Get()->GetObjectId());
+                TieringRules.erase(ev->Get()->GetObjectId());
                 break;
         }
         UpdateSnapshot();
@@ -141,7 +141,7 @@ public:
         Send(TieringFetcher, new NTiers::TEvWatchSchemeObjects({}, std::move(tiers)));
     }
 
-    void WatchTierings(std::vector<TString> tierings) {
+    void WatchTieringRules(std::vector<TString> tierings) {
         Send(TieringFetcher, new NTiers::TEvWatchSchemeObjects(std::move(tierings), {}));
     }
 
@@ -310,7 +310,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
 void TTiersManager::EnablePathId(const ui64 pathId, const TString& tieringId) {
     PathIdTiering.emplace(pathId, tieringId);
     if (!Snapshot.GetTieringById(tieringId)) {
-        Actor->WatchTierings({tieringId});
+        Actor->WatchTieringRules({tieringId});
         HasCompleteData = false;
     }
 }

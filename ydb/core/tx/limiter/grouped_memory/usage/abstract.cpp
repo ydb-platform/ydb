@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TAllocationGuard::~TAllocationGuard() {
-    if (Released || !isRegistered) {
+    if (Released || !IsRegistered) {
         return;
     }
     AFL_VERIFY(TlsActivationContext);
@@ -18,7 +18,7 @@ void TAllocationGuard::Update(const ui64 newVolume) {
     AFL_VERIFY(!Released);
     Memory = newVolume;
     if (TlsActivationContext) {
-        isRegistered = true;
+        IsRegistered = true;
         NActors::TActivationContext::AsActorContext().Send(
             ActorId, std::make_unique<NEvents::TEvExternal::TEvUpdateTask>(ProcessId, ScopeId, AllocationId, newVolume));
     }
@@ -33,7 +33,7 @@ bool IAllocation::OnAllocated(std::shared_ptr<TAllocationGuard>&& guard, const s
 }
 
 TGroupGuard::~TGroupGuard() {
-    if (!isRegistered) {
+    if (!IsRegistered) {
         return;
     }
     AFL_VERIFY(TlsActivationContext);
@@ -46,13 +46,13 @@ TGroupGuard::TGroupGuard(const NActors::TActorId& actorId, const ui64 processId,
     , ExternalScopeId(externalScopeId)
     , GroupId(groupId) {
     if (TlsActivationContext) {
-        isRegistered = true;
+        IsRegistered = true;
         NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartGroup>(ProcessId, ExternalScopeId, GroupId));
     }
 }
 
 TProcessGuard::~TProcessGuard() {
-    if (!isRegistered) {
+    if (!IsRegistered) {
         return;
     }
     AFL_VERIFY(TlsActivationContext);
@@ -63,13 +63,13 @@ TProcessGuard::TProcessGuard(const NActors::TActorId& actorId, const ui64 proces
     : ActorId(actorId)
     , ProcessId(processId) {
     if (TlsActivationContext) {
-        isRegistered = true;
+        IsRegistered = true;
         NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcess>(ProcessId, stages));
     }
 }
 
 TScopeGuard::~TScopeGuard() {
-    if (!isRegistered) {
+    if (!IsRegistered) {
         return;
     }
     AFL_VERIFY(TlsActivationContext);
@@ -81,7 +81,7 @@ TScopeGuard::TScopeGuard(const NActors::TActorId& actorId, const ui64 processId,
     , ProcessId(processId)
     , ScopeId(scopeId) {
     if (TlsActivationContext) {
-        isRegistered = true;
+        IsRegistered = true;
         NActors::TActivationContext::AsActorContext().Send(ActorId, std::make_unique<NEvents::TEvExternal::TEvStartProcessScope>(ProcessId, ScopeId));
     }
 }

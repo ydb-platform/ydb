@@ -444,8 +444,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TTopicSession::HandleNewEvents() {
-    ui64 counter = MaxHandledEvents;
-    while (true) {
+    for (ui64 counter = 0; i < MaxHandledEvents; ++i {
         if (!ReadSession) {
             return;
         }
@@ -458,9 +457,6 @@ void TTopicSession::HandleNewEvents() {
             break;
         }
         std::visit(TTopicEventProcessor{*this, LogPrefix}, *event);
-        if (!counter--) {
-            break;
-        }
     } 
 }
 
@@ -546,7 +542,6 @@ void TTopicSession::SendToParsing(ui64 offset, const TString& message) {
     }
 
     if (ClientsWithoutPredicate.size() == Clients.size()) {
-        Cerr << "ClientsWithoutPredicate" << Endl;
         return;
     }
 

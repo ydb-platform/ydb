@@ -1275,7 +1275,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                                             strategy == ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP ||
                                             strategy == ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
             }
-
         }
 
 
@@ -1312,6 +1311,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                             pqTabletConfig->MutablePartitionStrategy()->SetScaleThresholdSeconds(settings.alter_auto_partitioning_settings().set_partition_write_speed().set_stabilization_window().seconds());
                         }
                     }
+
+                    auto oldStrategy = pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType();
+
                     if (settings.alter_auto_partitioning_settings().has_set_strategy()) {
                         switch(settings.alter_auto_partitioning_settings().set_strategy()) {
                             case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
@@ -1327,6 +1329,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                                 pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
                                 break;
                         }
+                    }
+
+                    if (oldStrategy == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED &&
+                        pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                        CHECK_CDC;
                     }
                 }
             }

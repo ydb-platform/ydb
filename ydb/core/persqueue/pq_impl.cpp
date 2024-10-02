@@ -121,6 +121,29 @@ static bool IsDirectReadCmd(const auto& cmd) {
     return cmd.GetDirectReadId() != 0;
 }
 
+
+TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData) {
+    TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
+
+    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
+        TPartitionKeyRange keyRange;
+        if (mg.HasKeyRange()) {
+            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+        }
+
+        (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
+    }
+
+    for (const auto& p : partitionsData.GetPartition()) {
+        for (const auto& g : p.GetMessageGroup()) {
+            auto& group = (*explicitMessageGroups)[g.GetId()];
+            group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+        }
+    }
+
+    return explicitMessageGroups;
+}
+
 /******************************************************* ReadProxy *********************************************************/
 //megaqc - remove it when LB will be ready
 class TReadProxy : public TActorBootstrapped<TReadProxy> {
@@ -690,12 +713,15 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ApplyNewConfig(NewConfig, ctx);
     ClearNewConfig();
 
+    auto explicitMessageGroups = CreateExplicitMessageGroups(BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig(),
+                                                         PartitionsDataConfigTx ? *PartitionsDataConfigTx : NKikimrPQ::TPartitions());
+
     for (auto& p : Partitions) { //change config for already created partitions
         if (p.first.IsSupportivePartition()) {
             continue;
         }
 
-        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig()));
+        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
     ChangePartitionConfigInflight += Partitions.size();
 
@@ -1797,6 +1823,7 @@ void TPersQueue::BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
     AddCmdWriteConfig(request.Get(),
                       cfg,
                       bootstrapCfg,
+                      NKikimrPQ::TPartitions(),
                       ctx);
     Y_ABORT_UNLESS((ui64)request->Record.GetCmdWrite().size() == (ui64)bootstrapCfg.GetExplicitMessageGroups().size() * cfg.PartitionsSize() + 1);
 
@@ -1806,6 +1833,7 @@ void TPersQueue::BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
 void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
                                    const NKikimrPQ::TPQTabletConfig& cfg,
                                    const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+                                   const NKikimrPQ::TPartitions& partitionsData,
                                    const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(request);
@@ -1818,14 +1846,11 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
     write->SetValue(str);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 
-    TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
-    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
-        TMaybe<TPartitionKeyRange> keyRange;
-        if (mg.HasKeyRange()) {
-            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
-        }
+    auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData);
 
-        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange), false);
+    TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
+    for (const auto& [id, mg] : *explicitMessageGroups) {
+        sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
     }
 
     for (const auto& partition : cfg.GetPartitions()) {
@@ -3559,7 +3584,7 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 
 void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx)
 {
-    const TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
+    TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
 
     PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfigResult" <<
              " Step " << event.Step <<
@@ -3916,10 +3941,12 @@ void TPersQueue::ProcessConfigTx(const TActorContext& ctx,
     AddCmdWriteConfig(request,
                       *TabletConfigTx,
                       *BootstrapConfigTx,
+                      *PartitionsDataConfigTx,
                       ctx);
 
     TabletConfigTx = Nothing();
     BootstrapConfigTx = Nothing();
+    PartitionsDataConfigTx = Nothing();
 }
 
 void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request)
@@ -4007,6 +4034,9 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
 {
     NKikimrTx::TReadSetData data;
     data.SetDecision(tx.SelfDecision);
+    if (tx.PartitionsData.PartitionSize()) {
+        data.MutableData()->PackFrom(tx.PartitionsData);
+    }
 
     TString body;
     Y_ABORT_UNLESS(data.SerializeToString(&body));
@@ -4125,8 +4155,9 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 {
     PQ_LOG_T("Commit tx " << tx.TxId);
 
+    auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData);
     for (ui32 partitionId : tx.Partitions) {
-        auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId);
+        auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
         auto p = Partitions.find(TPartitionId(partitionId));
         Y_ABORT_UNLESS(p != Partitions.end(),
@@ -4387,6 +4418,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                 ApplyNewConfig(tx.TabletConfig, ctx);
                 TabletConfigTx = tx.TabletConfig;
                 BootstrapConfigTx = tx.BootstrapConfig;
+                PartitionsDataConfigTx = tx.PartitionsData;
+
                 break;
             case NKikimrPQ::TTransaction::KIND_UNKNOWN:
                 Y_ABORT_UNLESS(false);
@@ -4571,6 +4604,8 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
+    auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData);
+
     for (auto& [partitionId, partition] : Partitions) {
         if (partitionId.IsSupportivePartition()) {
             continue;
@@ -4580,7 +4615,6 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
 
         event->TopicConverter = tx.TopicConverter;
         event->Config = tx.TabletConfig;
-        event->BootstrapConfig = tx.BootstrapConfig;
 
         ctx.Send(partition.Actor, std::move(event));
     }

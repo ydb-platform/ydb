@@ -29,7 +29,7 @@ struct TDistributedTransaction {
                               ui64 extractTabletId);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
-    void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
+    void OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event);
     void OnReadSet(const NKikimrTx::TEvReadSet& event,
                    const TActorId& sender,
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
@@ -66,6 +66,7 @@ struct TDistributedTransaction {
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
     NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimrPQ::TPartitions PartitionsData;
 
     bool WriteInProgress = false;
 

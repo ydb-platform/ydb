@@ -333,6 +333,12 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
     }
+    if (desc.Settings.TopicAutoPartitioning) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("topic_auto_partitioning"), desc.Settings.TopicAutoPartitioning)));
+    }
+    if (desc.Settings.TopicMaxActivePartitions) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("topic_max_active_partitions"), desc.Settings.TopicMaxActivePartitions)));
+    }
     if (desc.Settings.TopicPartitions) {
         settings = node.L(settings, node.Q(node.Y(node.Q("topic_min_active_partitions"), desc.Settings.TopicPartitions)));
     }

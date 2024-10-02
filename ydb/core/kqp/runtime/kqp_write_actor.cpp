@@ -1337,9 +1337,8 @@ public:
     }
 
     void ProcessWrite() {
-        // TODO: early flush
-        //Y_ABORT_UNLESS(GetTotalFreeSpace() <= 0);
-        const bool needToFlush = /*GetTotalFreeSpace() <= 0*/ false
+        Y_ABORT_UNLESS(GetTotalFreeSpace() > 0); // TODO: delete
+        const bool needToFlush = GetTotalFreeSpace() <= 0
             || State == EState::FLUSHING
             || State == EState::PREPARING
             || State == EState::COMMITTING

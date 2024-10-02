@@ -915,7 +915,7 @@ public:
                 ++BatchesInFlight;
             }
             YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).GetMemory() <= maxDataSize);
-            Y_ABORT_UNLESS(BatchesInFlight == Batches.size());
+            Y_ABORT_UNLESS(BatchesInFlight == Batches.size());  // TODO: delete
         }
 
         const TBatchWithMetadata& GetBatch(size_t index) const {

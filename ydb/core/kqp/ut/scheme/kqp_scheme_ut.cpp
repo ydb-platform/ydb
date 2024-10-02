@@ -8060,9 +8060,148 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.BulkUpsert(testTable, batch);
 
         auto alterQueryAdd = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN int_column;";
-        Cerr << alterQueryAdd << Endl;
         auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+        csController->WaitIndexation(TDuration::Seconds(5));
+    }
+
+    void TestInsertAddInsertDrop(
+        bool autoIndexation, bool indexationAfterInsertAddColumn, bool indexationAfterInsertDropColumn, bool indexationInEnd) {
+        using namespace NArrow;
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        if (!autoIndexation) {
+            csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+        }
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("int_column").SetType(NScheme::NTypeIds::Int32).SetNullable(true)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
+        dataBuilders.push_back(
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+        dataBuilders.push_back(
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
+
+        for (ui32 i = 0; i < 5; i++) {
+            testHelper.BulkUpsert(testTable, batch);
+            auto alterQueryAdd = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN column" << i << " Uint64;";
+            auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
+
+            if (!autoIndexation && indexationAfterInsertAddColumn) {
+                csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+                csController->WaitIndexation(TDuration::Seconds(5));
+                csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            }
+
+            testHelper.BulkUpsert(testTable, batch);
+            auto alterQueryDrop = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << i << ";";
+            auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
+
+            if (!autoIndexation && indexationAfterInsertDropColumn) {
+                csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+                csController->WaitIndexation(TDuration::Seconds(5));
+                csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            }
+        }
+
+        if (!autoIndexation && indexationInEnd) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->WaitIndexation(TDuration::Seconds(5));
+        }
+    }
+
+    Y_UNIT_TEST(InsertAddInsertDrop) {
+        TestInsertAddInsertDrop(true, false, false, false);
+        for (i32 i = 0; i < 8; i++) {
+            TestInsertAddInsertDrop(false, i & 1, i & 2, i & 3);
+        }
+    }
+
+    Y_UNIT_TEST(DropTableAfterInsert) {
+        using namespace NArrow;
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("int_column").SetType(NScheme::NTypeIds::Int32).SetNullable(true)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
+        dataBuilders.push_back(
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+        dataBuilders.push_back(
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
+
+        testHelper.BulkUpsert(testTable, batch);
+
+        auto alterQueryDrop = TStringBuilder() << "DROP TABLE `" << testTable.GetName() << "`;";
+        auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+        csController->WaitIndexation(TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(InsertDropAddColumn) {
+        using namespace NArrow;
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("int_column").SetType(NScheme::NTypeIds::Int32).SetNullable(true)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
+        dataBuilders.push_back(
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+        dataBuilders.push_back(
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+        auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
+
+        testHelper.BulkUpsert(testTable, batch);
+
+        auto alterQueryDrop = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN int_column;";
+        auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
+
+        auto alterQueryAdd = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN int_column Int32;";
+        auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->WaitIndexation(TDuration::Seconds(5));

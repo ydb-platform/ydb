@@ -1602,7 +1602,7 @@ public:
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
 
         if (!QueryState || !QueryState->TxCtx || QueryState->TxCtx->BufferActorId != ev->Sender) {
-            //LOG_W(logMsg <<  ": Old error, current bufferActor=" << QueryState->TxCtx->BufferActorId);
+            LOG_W(logMsg <<  ": Old error, current bufferActor.");
             return;
         } else {
             LOG_W(logMsg);

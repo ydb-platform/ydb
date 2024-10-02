@@ -50,15 +50,15 @@ jobs:
         run: |
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux", "runner": "ubuntu-latest", "shell": "bash", "binary": "ydb"}]')
             echo "Matrix after adding linux: $MATRIX"
           fi
           if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash", "binary": "ydb"}]')
             echo "Matrix after adding darwin-amd: $MATRIX"
           fi
           if [ "${{ inputs.build-windows }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows", "runner": "windows-latest", "shell": "bash", "binary": "ydb.exe"}]')
             echo "Matrix after adding windows: $MATRIX"
           fi
 
@@ -71,7 +71,7 @@ jobs:
   build-platform-specific-binary:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
-    name: Build YDB CLI for ${{ matrix.os }}
+    name: Build ${{ matrix.os }} YDB CLI binary
     needs: build-matrix
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -87,13 +87,14 @@ jobs:
       run: |
         uname -a
         cat ydb/apps/ydb/version.txt
-      
-    - name: Build windows binary with ya make
+
+    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
+    - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows' }}
       shell: cmd
-      run: python ya make ydb/apps/ydb -r -DUSE_SSE4=no
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
     
-    - name: Build binary with ya make
+    - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no
 
@@ -101,7 +102,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.os }}-binary
-        path: ydb/apps/ydb/ydb
+        path: ydb/apps/ydb/${{ matrix.binary }}
         if-no-files-found: error
         retention-days: 1
 
@@ -147,7 +148,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-binary
-          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned/
 
       - name: Print resulting file hierarchy
         run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
@@ -163,5 +164,5 @@ jobs:
           cd ..
 
       - name: Upload to S3
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket=${{ inputs.s3_dns_host_bucket }} --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="${{ inputs.s3_dns_host_bucket }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
       

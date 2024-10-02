@@ -19,41 +19,41 @@ A connection to YDB is established using YdbConnection.
 1. **Using the parameterless constructor**:
 
    The following code creates a connection with default settings:
-   
-  ```c#
-  await using var ydbConnection = new YdbConnection();
-  await ydbConnection.OpenAsync();
-  ```
-   
+
+    ```c#
+    await using var ydbConnection = new YdbConnection();
+    await ydbConnection.OpenAsync();
+    ```
+
    This option creates a connection to the database at the URL: `grpc://localhost:2136/local`, with anonymous authentication.
 
 2. **Using the constructor with a connection string**:
 
    In the following example, a connection is created using a connection string:
 
-  ```c#
-  await using var ydbConnection = new YdbConnection(
-      "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
-  await ydbConnection.OpenAsync();
-  ```
+   ```c#
+   await using var ydbConnection = new YdbConnection(
+       "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
+   await ydbConnection.OpenAsync();
+   ```
 
    In this case, the connection will be established at the URL: `grpc://database-sample-grpc:2135/root/database-sample`. When using the connection string method, parameters are specified as key=value pairs separated by a semicolon (`key1=value1;key2=value2`). The set of keys has fixed values, which will be discussed in detail in the following sections.
 
 3. **Using the constructor with a `YdbConnectionStringBuilder` argument**:
 
    The example using `YdbConnectionStringBuilder` is demonstrated in the code below:
-   
-  ```c#
-  var ydbConnectionBuilder = new YdbConnectionStringBuilder
-  {
-      Host = "server",
-      Port = 2135,
-      Database = "/ru-prestable/my-table",
-      UseTls = true
-  };
-  await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
-  await ydbConnection.OpenAsync();
-  ```
+
+    ```c#
+    var ydbConnectionBuilder = new YdbConnectionStringBuilder
+    {
+        Host = "server",
+        Port = 2135,
+        Database = "/ru-prestable/my-table",
+        UseTls = true
+    };
+    await using var ydbConnection = new YdbConnection(ydbConnectionBuilder);
+    await ydbConnection.OpenAsync();
+    ```
 
 ### Connection Parameters
 

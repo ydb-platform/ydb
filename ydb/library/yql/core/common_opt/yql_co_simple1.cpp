@@ -3371,10 +3371,13 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .ListHandlerLambda()
             .Args(streamArg)
             .template Body<TCoForwardList>()
-                .Stream(multiHoppingCoreBuilder
-                    .template Input<TCoIterator>()
-                        .List(streamArg)
-                        .Build()
+                .Stream(Build<TCoMap>(ctx, pos)
+                    .Input(multiHoppingCoreBuilder
+                        .template Input<TCoIterator>()
+                            .List(streamArg)
+                            .Build()
+                        .Done())
+                    .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
                     .Done())
                 .Build()
             .Build()
@@ -5190,7 +5193,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto hopping = RewriteAsHoppingWindow(node, ctx)) {
-            YQL_CLOG(DEBUG, Core) << "RewriteAggregate";
+            YQL_CLOG(DEBUG, Core) << "RewriteAsHoppingWindow";
             return hopping;
         }
 

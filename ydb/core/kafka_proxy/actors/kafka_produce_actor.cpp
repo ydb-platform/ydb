@@ -262,6 +262,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
 
     for (const auto& record : batch->Records) {
         NKikimrPQClient::TDataChunk proto;
+        proto.set_codec(Ydb::Topic::CODEC_RAW);
         for(auto& h : record.Headers) {
                 auto res = proto.AddMessageMeta();
             if (h.Key) {

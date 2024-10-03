@@ -31,24 +31,30 @@ def allure_test_description(
     test_info.update(addition_table_strings)
     monitoring_start = int((start_time) * 1000)
     monitoring_end = int((end_time) * 1000)
-    # monitoring does not show intervals less 30s.
-    monitoring_addition = 30000 - (monitoring_end - monitoring_start)
+    # monitoring does not show intervals less 1 minute.
+    monitoring_addition = 60000 - (monitoring_end - monitoring_start)
     if monitoring_addition > 0:
         monitoring_start -= monitoring_addition
         monitoring_end += monitoring_addition
 
     service_url = YdbCluster._get_service_url()
+
+    def _get_monitoring_link(monitoring: YdbCluster.MonitoringUrl):
+        return f"<a target='_blank' href='{monitoring.url.format(
+            database='/' + test_info['database'],
+            start_time=monitoring_start,
+            end_time=monitoring_end
+        )}'>{monitoring.caption}</a>"
+
+    monitoring = ', '.join([
+        _get_monitoring_link(monitoring)
+        for monitoring in YdbCluster.get_monitoring_urls()
+    ])
+
     test_info.update(
         {
             'table_path': YdbCluster.tables_path,
-            'monitoring': ', '.join([
-                f"<a target='_blank' href='{monitoring.url.format(
-                    database='/' + test_info['database'],
-                    start_time=monitoring_start,
-                    end_time=monitoring_end
-                    )}'>{monitoring.caption}</a>"
-                for monitoring in YdbCluster.get_monitoring_urls()
-            ]),
+            'monitoring': monitoring,
             'coredumps': f"<a target='_blank' href='{core_link}'>link</a>",
             'db_admin': (
                 f"<a target='_blank' href='{service_url}/monitoring/tenant?"

@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                     ["1.123456789";"1000.123456789";"10.123456789";"1000000.123456789";1u];
                     ["2.123456789";"2000.123456789";"20.123456789";"2000000.123456789";2u]        
                 ]
-            )", res);
+            )", TString{res});
         }
 
         // Good case: lookup overflowed decimal
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
-            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", res);
+            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", TString{res});
         }        
     }
 

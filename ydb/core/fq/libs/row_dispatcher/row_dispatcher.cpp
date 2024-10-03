@@ -591,7 +591,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
-        commonConfig,
         credentialsProviderFactory,
         yqSharedResources,
         credentialsFactory,

@@ -325,8 +325,8 @@ private:
     TLight BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
 
-    TMemorizableControlWrapper BurstThresholdNs;
-    TMemorizableControlWrapper DiskTimeAvailableScale;
+    TControlWrapper BurstThresholdNs;
+    TControlWrapper DiskTimeAvailableScale;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
@@ -352,7 +352,7 @@ public:
     }
 
     void CountRequest(ui64 cost) {
-        i64 bucketCapacity = GetDiskTimeAvailableScale() * BurstThresholdNs.Update(TAppData::TimeProvider->Now());
+        i64 bucketCapacity = GetDiskTimeAvailableScale() * BurstThresholdNs;
         BucketUpperLimit.store(bucketCapacity);
         BucketLowerLimit.store(bucketCapacity * -BucketRelativeMinimum);
         Bucket.FillAndTake(cost);
@@ -417,7 +417,7 @@ public:
 
 private:
     float GetDiskTimeAvailableScale() {
-        return 0.001 * DiskTimeAvailableScale.Update(TAppData::TimeProvider->Now());
+        return 0.001 * DiskTimeAvailableScale;
     }
 };
 

@@ -339,4 +339,12 @@ message TTableServiceConfig {
     }
 
     optional TWriteActorSettings WriteActorSettings = 72;
+
+    enum EBlockTrackingMode {
+        BLOCK_TRACKING_NONE      = 0;
+        BLOCK_TRACKING_SERIALIZE = 1;
+        BLOCK_TRACKING_DEEP_COPY = 2;
+    }
+
+    optional EBlockTrackingMode BlockTrackingMode = 73 [ default = BLOCK_TRACKING_SERIALIZE ];
 };

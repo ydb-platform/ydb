@@ -60,8 +60,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             0, 64 * 1024 * 1024);
     ForsetiMaxLogBatchNs = TControlWrapper((PDiskCategory.IsSolidState() ? 50'000ll : 500'000ll), 0, 100'000'000ll);
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, 512 * 1024);
-    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, 512 * 1024);
+    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
+    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
 
     if (Cfg->SectorMap) {
@@ -2485,6 +2485,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestPushUnformattedMetadataSector:
                 ProcessPushUnformattedMetadataSector(static_cast<TPushUnformattedMetadataSector&>(*req));
                 break;
+            case ERequestType::RequestContinueReadMetadata:
+                static_cast<TContinueReadMetadata&>(*req).Execute(PCtx->ActorSystem);
+                break;
             default:
                 Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
                 break;
@@ -3078,6 +3081,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestReadMetadata:
         case ERequestType::RequestWriteMetadata:
+        case ERequestType::RequestContinueReadMetadata:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();

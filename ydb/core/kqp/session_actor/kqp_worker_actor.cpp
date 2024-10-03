@@ -194,7 +194,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
-            QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry, 
+            QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
             !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
@@ -959,7 +959,7 @@ private:
                 // If we have result it must be allocated on protobuf arena
                 Y_ASSERT(result->GetArena());
                 Y_ASSERT(resp->GetArena() == result->GetArena());
-                resp->AddResults()->Swap(result);
+                resp->AddYdbResults()->Swap(result);
             }
         } else {
             auto resp = ev.MutableResponse();

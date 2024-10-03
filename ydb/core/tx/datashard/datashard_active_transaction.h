@@ -278,7 +278,7 @@ public:
     }
 
     void ReleaseTxData();
-    bool IsTxDataReleased() const { return IsReleased; }
+    bool GetIsReleased() const { return IsReleased; }
 
     bool IsTxInfoLoaded() const { return TxInfo().Loaded; }
 

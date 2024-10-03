@@ -540,7 +540,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
                                        const TActorContext &ctx) {
     ReleasedTxDataSize = provider.GetMemoryLimit() + provider.GetRequestedMemory();
 
-    if (!DataTx || DataTx->IsTxDataReleased())
+    if (!DataTx || DataTx->GetIsReleased())
         return;
 
     DataTx->ReleaseTxData();

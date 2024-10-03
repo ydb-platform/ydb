@@ -42,6 +42,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         TEnv env(TFeatureFlags()
             .SetEnableTableDatetime64(true)
             .SetEnableTablePgTypes(true)
+            .SetEnableParameterizedDecimal(true)
             .SetEnablePgSyntax(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
@@ -80,6 +81,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 {.Name = "pgfloat8_value", .Type = "pgfloat8"},
                 {.Name = "pgbytea_value", .Type = "pgbytea"},
                 {.Name = "pgtext_value", .Type = "pgtext"},
+                {.Name = "decimal35_value", .Type = "Decimal(35,10)"},
             },
         }));
 
@@ -118,6 +120,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(28, R"({"key":[28], "update":{"pgfloat8_value":"2.718"}})"),
             TRecord(29, R"({"key":[29], "update":{"pgbytea_value":"\\x6c6f72656d2022697073756d22"}})"),
             TRecord(30, R"({"key":[30], "update":{"pgtext_value":"lorem \"ipsum\""}})"),
+            TRecord(31, R"({"key":[31], "update":{"decimal35_value":"355555555555555.321"}})"),
         }));
     }
 }

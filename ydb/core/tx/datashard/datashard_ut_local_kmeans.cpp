@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     static void CreateLevelTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options) {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {LevelTable_ParentIdColumn, "Uint32", true, true},
+            {LevelTable_ParentColumn, "Uint32", true, true},
             {LevelTable_IdColumn, "Uint32", true, true},
             {LevelTable_EmbeddingColumn, "String", false, true},
         });
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     static void CreatePostingTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options) {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentIdColumn, "Uint32", true, true},
+            {PostingTable_ParentColumn, "Uint32", true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentIdColumn, "Uint32", true, true},
+            {PostingTable_ParentColumn, "Uint32", true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},

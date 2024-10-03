@@ -28,6 +28,7 @@ one_time_waiter = scenario.OneTimeWaiter(
         "pushdown",
         "unsupported_types",
         "json",
+        "dummy_table",
     ]
 )
 

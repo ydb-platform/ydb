@@ -28,7 +28,6 @@ class QuerySessionPool:
         :param size: Size of session pool
         """
 
-        logger.warning("QuerySessionPool is an experimental API, which could be changed.")
         self._driver = driver
         self._size = size
         self._should_stop = asyncio.Event()
@@ -44,9 +43,7 @@ class QuerySessionPool:
         return session
 
     async def acquire(self) -> QuerySession:
-        """WARNING: This API is experimental and could be changed.
-
-        Acquire a session from Session Pool.
+        """Acquire a session from Session Pool.
 
         :return A QuerySession object.
         """
@@ -86,28 +83,20 @@ class QuerySessionPool:
         return session
 
     async def release(self, session: QuerySession) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Release a session back to Session Pool.
-        """
+        """Release a session back to Session Pool."""
 
         self._queue.put_nowait(session)
         logger.debug("Session returned to queue: %s", session._state.session_id)
 
     def checkout(self) -> "SimpleQuerySessionCheckoutAsync":
-        """WARNING: This API is experimental and could be changed.
-
-        Return a Session context manager, that acquires session on enter and releases session on exit.
-        """
+        """Return a Session context manager, that acquires session on enter and releases session on exit."""
 
         return SimpleQuerySessionCheckoutAsync(self)
 
     async def retry_operation_async(
         self, callee: Callable, retry_settings: Optional[RetrySettings] = None, *args, **kwargs
     ):
-        """WARNING: This API is experimental and could be changed.
-
-        Special interface to execute a bunch of commands with session in a safe, retriable way.
+        """Special interface to execute a bunch of commands with session in a safe, retriable way.
 
         :param callee: A function, that works with session.
         :param retry_settings: RetrySettings object.
@@ -131,9 +120,7 @@ class QuerySessionPool:
         *args,
         **kwargs,
     ) -> List[convert.ResultSet]:
-        """WARNING: This API is experimental and could be changed.
-
-        Special interface to execute a one-shot queries in a safe, retriable way.
+        """Special interface to execute a one-shot queries in a safe, retriable way.
         Note: this method loads all data from stream before return, do not use this
         method with huge read queries.
 

@@ -757,7 +757,7 @@ public:
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
-        Y_ABORT_UNLESS(!metadata->IsFinal || isPrepare || isImmediateCommit);
+        Y_ABORT_UNLESS(!metadata->IsFinal || isPrepare || isImmediateCommit || Mode == EMode::WRITE); // TODO: delete
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
@@ -1002,6 +1002,9 @@ private:
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
+        if (!WriteTableActor) {
+            return {};
+        }
         NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
         for (const auto& lock : WriteTableActor->GetLocks()) {
             resultInfo.AddLocks()->CopyFrom(lock);
@@ -1057,7 +1060,10 @@ private:
     }
 
     void PassAway() override {
-        WriteTableActor->Terminate();
+        if (WriteTableActor) {
+            WriteTableActor->Terminate();
+            //WriteTableActor->PassAway();
+        }
         TActorBootstrapped<TKqpDirectWriteActor>::PassAway();
     }
 
@@ -1547,6 +1553,7 @@ public:
         for (auto& [_, info] : WriteInfos) {
             if (info.WriteTableActor) {
                 info.WriteTableActor->Terminate();
+                //info.WriteTableActor->PassAway();
             }
         }
         TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
@@ -1828,8 +1835,10 @@ public:
             CA_LOG_D("OnCommitted: ignored");
             return;
         }
+        CA_LOG_D("Recv committed");
         Y_UNUSED(shardId, dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
+            CA_LOG_D("Committed");
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
             ExecuterActorId = {};
@@ -1844,6 +1853,7 @@ public:
     }
 
     void OnFlushed() {
+        CA_LOG_D("Flushed");
         State = EState::WRITING;
         Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         ExecuterActorId = {};
@@ -2037,7 +2047,6 @@ private:
         if (!Data) {
             Data = std::make_shared<TVector<NMiniKQL::TUnboxedValueBatch>>();
         }
-
         Data->emplace_back(std::move(data));
         DataSize += size;
 

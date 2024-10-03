@@ -1241,7 +1241,6 @@ public:
                     request.LocksOp = ELocksOp::Commit;
                 }
             } else {
-                const bool hasLocks = txCtx.TxManager ? !txCtx.TxManager->HasLocks() : txCtx.Locks.HasLocks();
                 if (hasLocks || txCtx.TopicOperations.HasOperations()) {
                     if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
                         LOG_D("TExecPhysicalRequest, tx has commit locks");

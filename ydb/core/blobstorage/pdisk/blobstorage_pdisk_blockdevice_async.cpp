@@ -111,14 +111,14 @@ class TRealBlockDevice : public IBlockDevice {
         // Schedule action execution
         // pass action = nullptr to quit
         void Schedule(TCompletionAction *action) noexcept {
-            TAtomicBase queueActions = AtomicIncrement(QueuedActions);
-            if (queueActions >= MaxQueuedActions) {
+            if (AtomicGet(QueuedActions) >= MaxQueuedActions) {
                 Device.Mon.L7.Set(true, AtomicGetAndIncrement(SeqnoL7));
                 while (AtomicGet(QueuedActions) >= MaxQueuedActions) {
                     SpinLockPause();
                 }
                 Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
             }
+            AtomicIncrement(QueuedActions);
             CompletionActions.Push(action);
             return;
         }

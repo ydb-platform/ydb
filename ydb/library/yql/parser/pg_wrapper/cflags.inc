@@ -36,6 +36,7 @@ CFLAGS(
 ENDIF()
 
 CFLAGS(
+    -Dmonths=yql_months
     -Darray_length=yql_array_length
     -Dpg_encoding_max_length=yql_pg_encoding_max_length
     -Dpg_encoding_mblen=yql_pg_encoding_mblen

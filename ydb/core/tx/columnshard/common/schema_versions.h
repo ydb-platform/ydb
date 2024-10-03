@@ -37,12 +37,16 @@ public:
     void VersionAddRef(ui64 version) {
         ui32 count = ++VersionCounts[version];
         Y_UNUSED(count);
-//        LOG_S_DEBUG("VersionAddRef, version " <<  version << " ref_count " << count);
+        if (TlsActivationContext != nullptr) { // Can be null in tests
+            LOG_S_DEBUG("VersionAddRef, version " <<  version << " ref_count " << count << " this " << (ui64)this);
+        }
     }
 
     ui32 VersionRemoveRef(ui64 version) {
         ui32& count = VersionCounts[version];
-//        LOG_S_DEBUG("VersionRemoveRef, version " <<  version << " ref_count " << count - 1);
+        if (TlsActivationContext != nullptr) { // Can be null in tests
+            LOG_S_DEBUG("VersionRemoveRef, version " <<  version << " ref_count " << count - 1 << " this " << (ui64)this);
+        }
         if (--count == 0) {
             VersionsToErase.insert(version);
         }

@@ -13,13 +13,37 @@ LOGGER = logging.getLogger()
 
 
 class YdbCluster:
+    class MonitoringUrl:
+        def __init__(self, url:str, caption: str = 'link') -> None:
+            self.url = url
+            if self.url.find('://') < 0:
+                self.url = f'https://{self.url}'
+            self.caption = caption
+
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     tables_path = get_external_param('tables-path', 'olap_yatests')
-    monitoring_cluster = get_external_param('monitoring_cluster', 'olap_testing_vla')
+    _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
+
+    @classmethod
+    def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
+        def _process_url(url: str) -> YdbCluster.MonitoringUrl:
+             spl = url.split('::', 2)
+             if len(spl) == 1:
+                 return YdbCluster.MonitoringUrl(spl[0])
+             return YdbCluster.MonitoringUrl(spl[1], spl[0])
+        if cls._monitoring_urls is None:
+             cls._monitoring_urls = [
+                 _process_url(url)
+                 for url in get_external_param('monitoring_urls',
+                    ('monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?'
+                    'p.cluster=olap_testing_vla&p.database=/{database}&from={start_time}&to={end_time}')
+                    ).split(',')
+             ]
+        return cls._monitoring_urls
 
     @classmethod
     def _get_service_url(cls):
@@ -66,7 +90,6 @@ class YdbCluster:
                 'version': version,
                 'name': cluster_name,
                 'nodes_wilcard': nodes_wilcard,
-                'service_url': cls._get_service_url(),
             }
         return deepcopy(cls._cluster_info)
 

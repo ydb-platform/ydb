@@ -174,7 +174,7 @@ size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize)
     size_t offset = 0;
 
     for (auto &col: cols) {
-        const ui32 fixed = NScheme::GetFixedSize(col.TypeInfo);
+        const ui32 fixed = NScheme::GetFixedSize(col.TypeInfo.GetTypeId());
 
         col.Offset = offset;
         col.IsFixed = fixed > 0;

@@ -228,7 +228,7 @@ std::vector<TRawTypeValue> ToRawTypeValue(
     result.reserve(keyCells.size());
 
     for (ui32 i = 0; i < keyCells.size(); ++i) {
-        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i]));
+        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
     }
 
     // note that currently without nulls it is [prefix, +inf, +inf],

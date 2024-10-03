@@ -497,7 +497,6 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr GetThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Completion2ThreadCPU;
 
     TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 

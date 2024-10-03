@@ -223,7 +223,7 @@ class TRealBlockDevice : public IBlockDevice {
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
         TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> OperationsToBeSubmit;
-        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 20;
+        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 15;
         TMutex SubmitMtx;
         TCondVar SubmitCondVar;
         TAtomicBlockCounter SubmitQuitCounter;
@@ -754,7 +754,7 @@ class TRealBlockDevice : public IBlockDevice {
                 if (actionCount > 0) {
                     for (TAtomicBase idx = 0; idx < actionCount; ++idx) {
                         IAsyncIoOperation *op = TrimOperations.Pop();
-                        if (!op) {
+                        if (op == nullptr) {
                             return;
                         }
                         Y_ABORT_UNLESS(op->GetType() == IAsyncIoOperation::EType::PTrim);

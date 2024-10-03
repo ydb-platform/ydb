@@ -102,7 +102,7 @@ public:
             NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
             ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
-            NConfig::TCommonConfig commonConfig;
+            NFq::NConfig::TCommonConfig commonConfig;
             auto rowDispatcher = NFq::NewRowDispatcherService(
                 fqConfig.GetRowDispatcher(),
                 commonConfig,

@@ -86,6 +86,7 @@ public:
         AddHandler({TYtDqWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<false>));
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
+        AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
     }
 
 private:
@@ -2066,6 +2067,37 @@ private:
         input.Ptr()->SetTypeAnn(input.Ref().Head().GetTypeAnn());
         return TStatus::Ok;
     }
+
+    TStatus HandleMaterialize(TExprBase input, TExprContext& ctx) {
+        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOpBase(input.Ptr(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSeqOrOptionalType(*input.Ref().Child(TYtMaterialize::idx_Input), ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto& itemType = GetSeqItemType(*input.Ref().Child(TYtMaterialize::idx_Input)->GetTypeAnn());
+        if (!EnsurePersistableType(input.Ref().Head().Pos(), itemType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // Basic Settings validation
+        if (!EnsureTuple(*input.Ref().Child(TYtMaterialize::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingTypes{}, ctx)) {
+            return TStatus::Error;
+        }
+
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        return TStatus::Ok;
+    }
+
 private:
     const TYtState::TPtr State_;
 };

@@ -30,8 +30,7 @@ void TGUCSettings::RollBack() {
     Settings_ = SessionSettings_ = RollbackSettings_;
 }
 
-TString TGUCSettings::SerializeToString() const {
-    NJson::TJsonValue gucJson;
+void TGUCSettings::ExportToJson(NJson::TJsonValue& value) const {
     NJson::TJsonValue settings(NJson::JSON_MAP);
     for (const auto& setting : Settings_) {
         settings[setting.first] = setting.second;
@@ -48,7 +47,12 @@ TString TGUCSettings::SerializeToString() const {
     gucSettings.InsertValue("settings", std::move(settings));
     gucSettings.InsertValue("rollback_settings", std::move(rollbackSettings));
     gucSettings.InsertValue("session_settings", std::move(sessionSettings));
-    gucJson.InsertValue("guc_settings", std::move(gucSettings));
+    value.InsertValue("guc_settings", std::move(gucSettings));
+}
+
+TString TGUCSettings::SerializeToString() const {
+    NJson::TJsonValue gucJson;
+    this->ExportToJson(gucJson);
     return WriteJson(gucJson);
 }
 

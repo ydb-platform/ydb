@@ -399,7 +399,7 @@ struct TPDiskConfig : public TThrRefBase {
         }
 
         if (cfg->HasCompletionThreadsCount()) {
-            CompletionThreadsCount = Min<ui32>(cfg->GetCompletionThreadsCount(), 4);
+            CompletionThreadsCount = cfg->GetCompletionThreadsCount();
         }
     }
 };

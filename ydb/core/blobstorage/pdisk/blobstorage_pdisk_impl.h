@@ -168,7 +168,7 @@ public:
 
     // Initialization data
     ui64 InitialSysLogWritePosition = 0;
-    EInitPhase InitPhase = EInitPhase::Uninitialized;
+    std::atomic<EInitPhase> InitPhase = EInitPhase::Uninitialized;
     TBuffer *InitialTailBuffer = nullptr;
     TLogPosition InitialLogPosition{0, 0};
     volatile ui64 InitialPreviousNonce = 0;

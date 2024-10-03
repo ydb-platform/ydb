@@ -30,8 +30,6 @@
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 
-#include <thread>
-
 namespace NKikimr {
 namespace NPDisk {
 

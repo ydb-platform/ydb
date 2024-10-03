@@ -281,7 +281,6 @@ public:
             P_LOG(PRI_CRIT, BPD01, str.Str());
         } else {
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TReadFormat>(SelfId()));
-            // PDisk->InitiateReadFormat(SelfId());
             StateErrorReason =
                 "PDisk is in StateInit, wait for PDisk to read sys log. Did you ckeck EvYardInit result? Marker# BSY09";
             Become(&TThis::StateInit);
@@ -558,7 +557,7 @@ public:
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-                    //PDisk->ReadSysLog(SelfId());
+
                     PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TReadSysLog>(SelfId()));
                 }
             }

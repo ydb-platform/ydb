@@ -298,7 +298,7 @@ private:
         request.StatType = ev->Get()->StatType;
         request.StatRequests.swap(ev->Get()->StatRequests);
 
-        if (!EnableStatistics) {
+        if (!EnableStatistics || IsStatisticsDisabledInSA) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -463,6 +463,8 @@ private:
 
         Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
 
+        IsStatisticsDisabledInSA = false;
+
         auto* record = ev->Get()->MutableRecord();
         for (const auto& entry : record->GetEntries()) {
             ui64 schemeShardId = entry.GetSchemeShardId();
@@ -547,6 +549,7 @@ private:
             << ", status = " << ev->Get()->Status);
 
         if (ev->Get()->Status != NKikimrProto::OK) {
+            IsStatisticsDisabledInSA = false;
             SAPipeClientId = TActorId();
             ConnectToSA();
             SyncNode();
@@ -560,12 +563,14 @@ private:
             << ", client id = " << ev->Get()->ClientId
             << ", server id = " << ev->Get()->ServerId);
 
+        IsStatisticsDisabledInSA = false;
         SAPipeClientId = TActorId();
         ConnectToSA();
         SyncNode();
     }
 
     void Handle(TEvStatistics::TEvStatisticsIsDisabled::TPtr&) {
+        IsStatisticsDisabledInSA = true;
         ReplyAllFailed();
     }
 
@@ -839,6 +844,7 @@ private:
 private:
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
+    bool IsStatisticsDisabledInSA = false;
 
     static constexpr size_t StatFanOut = 10;
 

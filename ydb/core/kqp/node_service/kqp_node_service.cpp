@@ -10,6 +10,7 @@
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
@@ -194,8 +195,11 @@ private:
 
         NComputeActor::TComputeStagesWithScan computesByStage;
 
-        const TString& serializedGUCSettings = ev->Get()->Record.HasSerializedGUCSettings() ?
-            ev->Get()->Record.GetSerializedGUCSettings() : "";
+        std::shared_ptr<TGUCSettings> GUCSettings;
+        if (ev->Get()->Record.HasGUCSettings()) {
+            GUCSettings = std::make_shared<TGUCSettings>();
+            ImportFromProto(*GUCSettings, ev->Get()->Record.GetGUCSettings());
+        }
 
         auto schedulerNow = TlsActivationContext->Monotonic();
 
@@ -259,7 +263,7 @@ private:
                 .RuntimeSettings = runtimeSettingsBase,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
-                .SerializedGUCSettings = serializedGUCSettings,
+                .GUCSettings = GUCSettings,
                 .NumberOfTasks = tasksCount,
                 .OutputChunkMaxSize = msg.GetOutputChunkMaxSize(),
                 .MemoryPool = memoryPool,

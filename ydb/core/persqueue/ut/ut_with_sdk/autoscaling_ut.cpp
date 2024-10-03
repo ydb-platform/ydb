@@ -74,18 +74,15 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto writeSession = CreateWriteSession(client, "producer-1");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
-        Sleep(TDuration::Seconds(1));
 
         ui64 txId = 1006;
         SplitPartition(setup, ++txId, 0, "a");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_2.1", 3)));
-        Sleep(TDuration::Seconds(1));
 
         SplitPartition(setup, ++txId, 2, "d");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
-        Sleep(TDuration::Seconds(1));
 
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK });
         readSession->Run();

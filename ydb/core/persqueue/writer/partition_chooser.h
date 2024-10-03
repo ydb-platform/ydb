@@ -72,9 +72,9 @@ std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp:
 
 NActors::IActor* CreatePartitionChooserActor(TActorId parentId,
                                              const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                             const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
                                              NPersQueue::TTopicConverterPtr& fullConverter,
                                              const TString& sourceId,
-                                             std::optional<ui32> preferedPartition,
-                                             bool withoutHash = false);
+                                             std::optional<ui32> preferedPartition);
 
 } // namespace NKikimr::NPQ

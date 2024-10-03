@@ -49,11 +49,10 @@ std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp:
 
 IActor* CreatePartitionChooserActor(TActorId parentId,
                                     const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                    const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
                                     NPersQueue::TTopicConverterPtr& fullConverter,
                                     const TString& sourceId,
-                                    std::optional<ui32> preferedPartition,
-                                    bool withoutHash) {
-    auto chooser = CreatePartitionChooser(config, withoutHash);
+                                    std::optional<ui32> preferedPartition) {
     if (SplitMergeEnabled(config.GetPQTabletConfig())) {
         return new NPartitionChooser::TSMPartitionChooserActor<NTabletPipe::TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
     } else {

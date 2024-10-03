@@ -565,6 +565,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     }
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     Config = std::move(entry.PQGroupInfo->Description);
+    Chooser = entry.PQGroupInfo->PartitionChooser;
     Y_ABORT_UNLESS(Config.PartitionsSize() > 0);
     Y_ABORT_UNLESS(Config.HasPQTabletConfig());
     InitialPQTabletConfig = Config.GetPQTabletConfig();
@@ -634,7 +635,7 @@ void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, FullConverter, SourceId, preferedPartition));
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, Chooser, FullConverter, SourceId, preferedPartition));
 }
 
 template<bool UseMigrationProtocol>

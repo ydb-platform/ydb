@@ -1559,6 +1559,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     NPQ::Migrate(*pathDesc.MutablePersQueueGroup()->MutablePQTabletConfig());
                     FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
                     FillTopicPartitioning(PQGroupInfo->Description, PQGroupInfo->Schema, PQGroupInfo->Partitioning);
+                    PQGroupInfo->PartitionChooser = NPQ::CreatePartitionChooser(PQGroupInfo->Description);
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeCdcStream:

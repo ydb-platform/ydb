@@ -1095,5 +1095,27 @@ public:
     }
 };
 
+class TContinueReadMetadata : public TRequestBase {
+    std::function<void(bool, TActorSystem*)> Callback;
+
+public:
+    TContinueReadMetadata(std::function<void(bool, TActorSystem*)> callback, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::ContinueReadMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Callback(std::move(callback))
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestContinueReadMetadata;
+    }
+
+    void Execute(TActorSystem *actorSystem) {
+        Callback(true, actorSystem);
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        Callback(false, actorSystem);
+    }
+};
+
 } // NPDisk
 } // NKikimr

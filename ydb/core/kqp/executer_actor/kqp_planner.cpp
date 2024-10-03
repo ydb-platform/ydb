@@ -226,8 +226,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetOutputChunkMaxSize(OutputChunkMaxSize);
     }
 
-    if (SerializedGUCSettings) {
-        request.SetSerializedGUCSettings(SerializedGUCSettings);
+    if (GUCSettings) {
+        ExportToProto(*GUCSettings, *request.MutableGUCSettings());
     }
 
     request.SetSchedulerGroup(UserRequestContext->PoolId);
@@ -455,7 +455,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .RuntimeSettings = settings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
-        .SerializedGUCSettings = SerializedGUCSettings,
+        .GUCSettings = GUCSettings,
         .NumberOfTasks = computeTasksSize,
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .MemoryPool = NRm::EKqpMemoryPool::DataQuery,

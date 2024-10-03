@@ -7,10 +7,9 @@
 
 #include <util/generic/hash.h>
 
-#include <ydb/core/protos/kqp.pb.h>
+#include <library/cpp/json/json_writer.h>
 
-class TGUCSettings {
-public:
+struct TGUCSettings {
     TGUCSettings() = default;
 
     using TPtr = std::shared_ptr<TGUCSettings>;
@@ -19,12 +18,11 @@ public:
     void Set(const std::string&, const std::string&, bool isLocal = false);
     void Commit();
     void RollBack();
-    void ExportToProto(NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value) const;
-    void ImportFromProto(const NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value);
+    TString SerializeToString() const;
 
     size_t GetHash() const noexcept;
     bool operator==(const TGUCSettings& other) const;
-private:
+
     std::unordered_map<std::string, std::string> Settings_;
     std::unordered_map<std::string, std::string> RollbackSettings_;
     std::unordered_map<std::string, std::string> SessionSettings_;

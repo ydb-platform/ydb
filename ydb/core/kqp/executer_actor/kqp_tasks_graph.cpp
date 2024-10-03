@@ -993,6 +993,30 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
     }
 }
 
+void ImportFromProto(TGUCSettings& settings, const NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& proto) {
+    for (const auto& [settingName, settingValue] : proto.GetSettings()) {
+        settings.Settings_[settingName] = settingValue;
+    }
+    for (const auto& [settingName, settingValue] : proto.GetRollbackSettings()) {
+        settings.RollbackSettings_[settingName] = settingValue;
+    }
+    for (const auto& [settingName, settingValue] : proto.GetSessionSettings()) {
+        settings.SessionSettings_[settingName] = settingValue;
+    }
+}
+
+void ExportToProto(const TGUCSettings& settings, NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& proto) {
+    for (const auto& setting : settings.Settings_) {
+        proto.MutableSettings()->insert({setting.first.c_str(), setting.second.c_str()});
+    }
+    for (const auto& setting : settings.RollbackSettings_) {
+        proto.MutableRollbackSettings()->insert({setting.first.c_str(), setting.second.c_str()});
+    }
+    for (const auto& setting : settings.SessionSettings_) {
+        proto.MutableSessionSettings()->insert({setting.first.c_str(), setting.second.c_str()});
+    }
+}
+
 void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, bool enableSpilling) {
     switch (output.Type) {
         case TTaskOutputType::Map:

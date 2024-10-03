@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
     ydb/core/kqp/counters
+    ydb/core/kqp/executer_actor
     ydb/core/mind
     ydb/core/protos
     ydb/core/tablet

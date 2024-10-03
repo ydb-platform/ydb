@@ -1,4 +1,5 @@
 #include "guc_settings.h"
+#include <library/cpp/json/json_reader.h>
 
 
 void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& runtimeSettings) {
@@ -29,29 +30,26 @@ void TGUCSettings::RollBack() {
     Settings_ = SessionSettings_ = RollbackSettings_;
 }
 
-void TGUCSettings::ExportToProto(NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value) const {
+TString TGUCSettings::SerializeToString() const {
+    NJson::TJsonValue gucJson;
+    NJson::TJsonValue settings(NJson::JSON_MAP);
     for (const auto& setting : Settings_) {
-        value.MutableSettings()->insert({setting.first.c_str(), setting.second.c_str()});
+        settings[setting.first] = setting.second;
     }
+    NJson::TJsonValue rollbackSettings(NJson::JSON_MAP);
     for (const auto& setting : RollbackSettings_) {
-        value.MutableRollbackSettings()->insert({setting.first.c_str(), setting.second.c_str()});
+        rollbackSettings[setting.first] = setting.second;
     }
+    NJson::TJsonValue sessionSettings(NJson::JSON_MAP);
     for (const auto& setting : SessionSettings_) {
-        value.MutableSessionSettings()->insert({setting.first.c_str(), setting.second.c_str()});
+        sessionSettings[setting.first] = setting.second;
     }
-}
-
-void TGUCSettings::ImportFromProto(const NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& value)
-{
-    for (const auto& [settingName, settingValue] : value.GetSettings()) {
-        Settings_[settingName] = settingValue;
-    }
-    for (const auto& [settingName, settingValue] : value.GetRollbackSettings()) {
-        RollbackSettings_[settingName] = settingValue;
-    }
-    for (const auto& [settingName, settingValue] : value.GetSessionSettings()) {
-         SessionSettings_[settingName] = settingValue;
-    }
+    NJson::TJsonValue gucSettings(NJson::JSON_MAP);
+    gucSettings.InsertValue("settings", std::move(settings));
+    gucSettings.InsertValue("rollback_settings", std::move(rollbackSettings));
+    gucSettings.InsertValue("session_settings", std::move(sessionSettings));
+    gucJson.InsertValue("guc_settings", std::move(gucSettings));
+    return WriteJson(gucJson);
 }
 
 bool TGUCSettings::operator==(const TGUCSettings& other) const {

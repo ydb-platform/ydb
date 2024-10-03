@@ -270,6 +270,9 @@ void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransact
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling);
 
+void ImportFromProto(TGUCSettings& settings, const NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& proto);
+void ExportToProto(const TGUCSettings& settings, NKikimrKqp::TEvStartKqpTasksRequest::TGUCSettings& proto);
+
 template<typename Proto>
 TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
     TVector<TTaskMeta::TColumn> columns;

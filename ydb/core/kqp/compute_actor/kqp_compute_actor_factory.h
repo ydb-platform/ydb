@@ -115,7 +115,7 @@ public:
         const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
-        const TString& SerializedGUCSettings;
+        const TGUCSettings::TPtr GUCSettings;
         const ui32 NumberOfTasks;
         const ui64 OutputChunkMaxSize;
         const NKikimr::NKqp::NRm::EKqpMemoryPool MemoryPool;

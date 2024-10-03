@@ -457,9 +457,8 @@ message TChooseProxyRequest {
 }
 
 message TBlobStorageConfigRequest {
-    optional uint32 Domain = 1;
-    optional NKikimrBlobStorage.TConfigRequest Request = 2;
-    optional string SecurityToken = 3;
+    optional NKikimrBlobStorage.TConfigRequest Request = 1;
+    optional string SecurityToken = 2;
 }
 
 message TDrainNodeRequest {

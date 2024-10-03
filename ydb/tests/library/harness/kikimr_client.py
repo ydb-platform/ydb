@@ -127,16 +127,14 @@ class KiKiMRMessageBusClient(object):
     def close(self):
         self._channel.close()
 
-    def update_self_heal(self, enable, domain=1):
+    def update_self_heal(self, enable):
         request = msgbus.TBlobStorageConfigRequest()
-        request.Domain = domain
         command = request.Request.Command.add()
         command.EnableSelfHeal.Enable = enable
         return self.send(request, 'BlobStorageConfig')
 
-    def read_drive_status(self, hostname, interconnect_port, drive_path=None, domain=1):
+    def read_drive_status(self, hostname, interconnect_port, drive_path=None):
         request = msgbus.TBlobStorageConfigRequest()
-        request.Domain = domain
         command = request.Request.Command.add()
         host_key = blobstorage_config_pb2.THostKey(Fqdn=hostname, IcPort=interconnect_port)
         command.ReadDriveStatus.HostKey.MergeFrom(host_key)
@@ -145,10 +143,9 @@ class KiKiMRMessageBusClient(object):
         response = self.send(request, 'BlobStorageConfig')
         return response
 
-    def update_drive_status(self, hostname, interconnect_port, drive_path, status, domain=1):
+    def update_drive_status(self, hostname, interconnect_port, drive_path, status):
         request = msgbus.TBlobStorageConfigRequest()
         command = request.Request.Command.add()
-        request.Domain = domain
         host_key = blobstorage_config_pb2.THostKey(Fqdn=hostname, IcPort=interconnect_port)
         command.UpdateDriveStatus.Path = drive_path
         command.UpdateDriveStatus.HostKey.MergeFrom(host_key)

@@ -26,11 +26,12 @@ private:
         TBalancerConfig(
             ui64 pathId,
             int version,
-            const NKikimrPQ::TPQTabletConfig& config
+            const NKikimrPQ::TPQTabletConfig& config,
+            const TPartitionGraph& partitionGraph
         )
             : PathId(pathId)
             , PathVersion(version)
-            , PartitionGraph(MakePartitionGraph(config))
+            , PartitionGraph(&partitionGraph)
             , MaxActivePartitions(config.GetPartitionStrategy().GetMaxPartitionCount())
             , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
             , CurPartitions(std::count_if(config.GetAllPartitions().begin(), config.GetAllPartitions().end(), [](auto& p) {
@@ -40,20 +41,20 @@ private:
 
         ui64 PathId;
         int PathVersion;
-        TPartitionGraph PartitionGraph;
+        const TPartitionGraph* PartitionGraph;
         ui64 MaxActivePartitions;
         ui64 MinActivePartitions;
         ui64 CurPartitions;
     };
 
 public:
-    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
+    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
     void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void TrySendScaleRequest(const TActorContext& ctx);
-    void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
+    void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
     void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
 

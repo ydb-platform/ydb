@@ -47,13 +47,6 @@ public:
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
-        NYql::TPqGatewayServices pqServices(
-            yqSharedResources->UserSpaceYdbDriver,
-            nullptr,
-            nullptr,
-            std::make_shared<NYql::TPqGatewayConfig>(),
-            nullptr);
-
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
             Config,
@@ -61,8 +54,7 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(pqServices)
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 

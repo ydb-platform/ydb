@@ -33,8 +33,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
-        const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
-        const NYql::IPqGateway::TPtr& /*pqGateway*/) const override {
+        const ::NMonitoring::TDynamicCounterPtr& /*counters*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
         return actorId;
@@ -73,13 +72,6 @@ public:
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
-        
-        NYql::TPqGatewayServices pqServices(
-            yqSharedResources->UserSpaceYdbDriver,
-            nullptr,
-            nullptr,
-            std::make_shared<NYql::TPqGatewayConfig>(),
-            nullptr);
 
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
@@ -89,8 +81,7 @@ public:
             credentialsFactory,
             "Tenant",
             TestActorFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(pqServices)
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

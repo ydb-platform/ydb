@@ -120,7 +120,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NFq::NRowDispatcher::IActorFactory::TPtr ActorFactory;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TRowDispatcherMetrics Metrics;
-    NYql::IPqGateway::TPtr PqGateway;
 
     struct ConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -178,8 +177,7 @@ public:
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway);
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
 
@@ -242,8 +240,7 @@ TRowDispatcher::TRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -253,8 +250,7 @@ TRowDispatcher::TRowDispatcher(
     , Tenant(tenant)
     , ActorFactory(actorFactory)
     , Counters(counters)
-    , Metrics(counters)
-    , PqGateway(pqGateway) {
+    , Metrics(counters) {
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -598,8 +594,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -609,8 +604,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         credentialsFactory,
         tenant,
         actorFactory,
-        counters,
-        pqGateway));
+        counters));
 }
 
 } // namespace NFq

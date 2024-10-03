@@ -18,8 +18,7 @@ struct IActorFactory : public TThrRefBase {
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway) const = 0;
+        const ::NMonitoring::TDynamicCounterPtr& counters) const = 0;
 };
 
 IActorFactory::TPtr CreateActorFactory();

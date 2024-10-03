@@ -190,13 +190,6 @@ void Init(
     }
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
-        NYql::TPqGatewayServices pqServices(
-            yqSharedResources->UserSpaceYdbDriver,
-            nullptr,
-            nullptr,
-            std::make_shared<NYql::TPqGatewayConfig>(),
-            nullptr);
-
         auto rowDispatcher = NFq::NewRowDispatcherService(
             protoConfig.GetRowDispatcher(),
             protoConfig.GetCommon(),
@@ -204,8 +197,7 @@ void Init(
             yqSharedResources,
             credentialsFactory,
             tenant,
-            yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            CreatePqNativeGateway(pqServices));
+            yqCounters->GetSubgroup("subsystem", "row_dispatcher"));
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 

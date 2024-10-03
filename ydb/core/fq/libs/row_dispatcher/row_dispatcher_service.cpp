@@ -16,8 +16,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
     return NewRowDispatcher(
         config,
@@ -27,8 +26,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         credentialsFactory,
         tenant,
         NFq::NRowDispatcher::CreateActorFactory(),
-        counters,
-        pqGateway);
+        counters);
 }
 
 } // namespace NFq

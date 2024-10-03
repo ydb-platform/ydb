@@ -108,6 +108,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
 
     NConfig::TRowDispatcherConfig Config;
+    NConfig::TCommonConfig CommonConfig;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> CoordinatorActorId;
@@ -171,6 +172,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 public:
     explicit TRowDispatcher(
         const NConfig::TRowDispatcherConfig& config,
+        const NConfig::TCommonConfig& commonConfig,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -234,6 +236,7 @@ public:
 
 TRowDispatcher::TRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
+    const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -242,6 +245,7 @@ TRowDispatcher::TRowDispatcher(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : Config(config)
+    , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
@@ -588,6 +592,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
+    const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -598,6 +603,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
+        commonConfig,
         credentialsProviderFactory,
         yqSharedResources,
         credentialsFactory,

@@ -35,7 +35,7 @@ public:
         IMetricsRegistryPtr metricsRegistry,
         const std::function<IActor*(void)>& metricsPusherFactory,
         bool withSpilling,
-        NFq::NConfig::TConfig fqConfig,
+        const NFq::NConfig::TConfig& fqConfig,
         const NYql::IPqGateway::TPtr& pqGateway)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
@@ -103,8 +103,10 @@ public:
             NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
             ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
+            NConfig::TCommonConfig commonConfig;
             auto rowDispatcher = NFq::NewRowDispatcherService(
                 fqConfig.GetRowDispatcher(),
+                commonConfig,
                 NKikimr::CreateYdbCredentialsProviderFactory,
                 yqSharedResources,
                 credentialsFactory,
@@ -276,7 +278,7 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling,
-    NFq::NConfig::TConfig fqConfig,
+    const NFq::NConfig::TConfig& fqConfig,
     const NYql::IPqGateway::TPtr& pqGateway)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
@@ -300,7 +302,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory,
-    NFq::NConfig::TConfig fqConfig,
+    const NFq::NConfig::TConfig& fqConfig,
     const NYql::IPqGateway::TPtr& pqGateway)
 {
     int startPort = 31337;

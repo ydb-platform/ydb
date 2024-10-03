@@ -7,9 +7,10 @@
 
 namespace NKikimr::NOlap {
 
-bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
+bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data, TVersionCounts* versionCounts) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
+        versionCounts->VersionAddRef(dataPtr->GetSchemaVersion());
         dbTable.Insert(*dataPtr);
         return true;
     } else {
@@ -100,8 +101,9 @@ void TInsertTable::EraseCommittedOnExecute(
     }
 }
 
-void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data) {
+void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data, TVersionCounts* versionCounts) {
     if (Summary.EraseCommitted(data)) {
+        versionCounts->VersionRemoveRef(data.GetSchemaVersion());
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }
@@ -114,8 +116,9 @@ void TInsertTable::EraseAbortedOnExecute(
     }
 }
 
-void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
+void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data, TVersionCounts* versionCounts) {
     if (Summary.EraseAborted(data.GetInsertWriteId())) {
+        versionCounts->VersionRemoveRef(data.GetSchemaVersion());
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }

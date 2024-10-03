@@ -11,7 +11,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
 
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
+    bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData), Self->TablesManager.MutablePrimaryIndex().MutableVersionCounts());
     if (ok) {
         Self->UpdateInsertTableCounters();
         return true;

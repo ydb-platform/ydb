@@ -731,13 +731,14 @@ int RunMain(int argc, const char* argv[])
 #ifdef __unix__
         struct rlimit rl;
 
-        if (getrlimit(RLIMIT_AS, &rl)) {
+        if (getrlimit(RLIMIT_DATA, &rl)) {
             ythrow TSystemError() << "Cannot getrlimit(RLIMIT_RSS)";
         }
 
         rl.rlim_cur = memLimit * 1024 * 1024;
-        if (setrlimit(RLIMIT_AS, &rl)) {
-            ythrow TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimit << " mbytes";
+        rl.rlim_max = memLimit * 1024 * 1024;
+        if (auto v = setrlimit(RLIMIT_DATA, &rl)) {
+            ythrow TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimit << " mbytes " << v;
         }
 #else
         Cerr << "Memory limit can not be set on this platfrom" << Endl;

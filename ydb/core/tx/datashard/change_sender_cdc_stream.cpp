@@ -521,7 +521,6 @@ class TCdcChangeSenderMain
         TopicVersion = topicVersion;
 
         const auto& pqDesc = entry.PQGroupInfo->Description;
-        const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
         PartitionToShard.clear();
         for (const auto& partition : pqDesc.GetPartitions()) {

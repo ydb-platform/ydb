@@ -342,7 +342,7 @@ class TLocalTableWriter
         if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
             Y_ABORT_UNLESS(Initialized);
             Resolving = false;
-            return CreateSenders();
+            return this->CreateSenders();
         }
 
         auto schema = MakeIntrusive<TLightweightSchema>();

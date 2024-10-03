@@ -4800,6 +4800,16 @@
                 "ColumnId": 33,
                 "ColumnName": "AlterMainTableTxDone",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "LockIndexTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "LockIndexTxDone",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4838,7 +4848,9 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,

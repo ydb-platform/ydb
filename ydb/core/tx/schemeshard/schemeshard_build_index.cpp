@@ -160,6 +160,16 @@ void TSchemeShard::PersistBuildIndexLockTxDone(NIceDb::TNiceDb& db, const TIndex
         NIceDb::TUpdate<Schema::IndexBuild::LockTxDone>(indexInfo.LockTxDone));
 }
 
+void TSchemeShard::PersistBuildIndexLockIndexTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::LockIndexTxStatus>(indexInfo.LockIndexTxStatus));
+}
+
+void TSchemeShard::PersistBuildIndexLockIndexTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::LockIndexTxDone>(indexInfo.LockIndexTxDone));
+}
+
 void TSchemeShard::PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::UnlockTxDone>(indexInfo.UnlockTxDone));

@@ -1304,6 +1304,9 @@ public:
     void PersistBuildIndexLockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexLockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
+    void PersistBuildIndexLockIndexTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexLockIndexTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
     void PersistBuildIndexApplyTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexApplyTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexApplyTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

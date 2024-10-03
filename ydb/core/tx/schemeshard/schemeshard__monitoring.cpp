@@ -748,6 +748,9 @@ private:
                     << "InitiateTxStatus:              " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus) << Endl
                     << "InitiateTxDone                 " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
 
+                    << "LockIndexTxStatus:             " << NKikimrScheme::EStatus_Name(info.LockIndexTxStatus) << Endl
+                    << "LockIndexTxDone                " << (info.LockIndexTxDone ? "DONE" : "not done") << Endl
+
                     << "ApplyTxId:                     " << info.ApplyTxId << Endl
                     << "ApplyTxStatus:                 " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus) << Endl
                     << "ApplyTxDone                    " << (info.ApplyTxDone ? "DONE" : "not done") << Endl

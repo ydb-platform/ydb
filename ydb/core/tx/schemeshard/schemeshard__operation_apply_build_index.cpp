@@ -15,11 +15,17 @@ namespace NKikimr {
 namespace NSchemeShard {
 namespace {
 
-ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId) {
+ISubOperation::TPtr FinalizeIndexImplTable(
+    TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId,
+    const NKikimrSchemeOp::TLockGuard* lockGuard = nullptr
+) {
     Y_ABORT_UNLESS(index.Child(name)->PathId == pathId);
     Y_ABORT_UNLESS(index.Child(name).LeafName() == name);
     TTableInfo::TPtr table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
+    if (lockGuard) {
+        *transaction.MutableLockGuard() = *lockGuard;
+    }
     auto operation = transaction.MutableAlterTable();
     operation->SetName(name);
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(table->PartitionConfig().GetCompactionPolicy());
@@ -28,7 +34,10 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
-ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, bool& rejected) {
+ISubOperation::TPtr DropIndexImplTable(
+    const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, bool& rejected,
+    const NKikimrSchemeOp::TLockGuard* lockGuard = nullptr
+) {
     TPath implTable = index.Child(name);
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
@@ -46,6 +55,9 @@ ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& n
     }
     rejected = false;
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+    if (lockGuard) {
+        *transaction.MutableLockGuard() = *lockGuard;
+    }
     auto operation = transaction.MutableDrop();
     operation->SetName(name);
     return CreateDropTable(partId, transaction);
@@ -91,18 +103,24 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
+        const bool isVectorIndex = index.Base()->GetChildren().size() > 1; // TO DO: consider locking vector index tables too
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
             if (NTableIndex::IsBuildImplTable(indexImplTableName)) {
                 bool rejected = false;
-                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, rejected);
+                auto op = DropIndexImplTable(
+                    index, nextId, partId, indexImplTableName, indexChildItems.second, rejected
+                );
                 if (rejected) {
                     return {std::move(op)};
                 }
                 result.push_back(std::move(op));
             } else {
-                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
+                result.push_back(FinalizeIndexImplTable(
+                    context, index, partId, indexImplTableName, indexChildItems.second,
+                    isVectorIndex ? nullptr : &tx.GetLockGuard()
+                ));
             }
         }
     }
@@ -151,7 +169,9 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
             bool rejected = false;
-            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, rejected);
+            auto op = DropIndexImplTable(
+                index, nextId, partId, indexChildItems.first, indexChildItems.second, rejected, &tx.GetLockGuard()
+            );
             if (rejected) {
                 return {std::move(op)};
             }

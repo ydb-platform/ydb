@@ -205,6 +205,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::Locking:
     case TIndexBuildInfo::EState::GatheringStatistics:
     case TIndexBuildInfo::EState::Initiating:
+    case TIndexBuildInfo::EState::LockingIndex:
         index.SetState(Ydb::Table::IndexBuildState::STATE_PREPARING);
         index.SetProgress(0.0);
         break;

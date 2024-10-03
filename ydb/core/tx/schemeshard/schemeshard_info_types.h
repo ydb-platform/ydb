@@ -2909,6 +2909,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Locking = 10,
         GatheringStatistics = 20,
         Initiating = 30,
+        LockingIndex = 35,
         Filling = 40,
         DropBuild = 45,
         CreateBuild = 46,
@@ -2994,7 +2995,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         // pools
         ui32 Ids = 0;
-        
+
         // progress
         ui32 Level = 0;
         ui32 Parent = 0;
@@ -3015,6 +3016,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     bool AlterMainTableTxDone = false;
     bool LockTxDone = false;
     bool InitiateTxDone = false;
+    bool LockIndexTxDone = false;
     bool ApplyTxDone = false;
     bool UnlockTxDone = false;
 
@@ -3029,6 +3031,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus LockIndexTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
 
@@ -3230,6 +3233,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->InitiateTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::InitiateTxDone>(
                 indexInfo->InitiateTxDone);
+
+        indexInfo->LockIndexTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::LockIndexTxStatus>(
+                indexInfo->LockIndexTxStatus);
+        indexInfo->LockIndexTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::LockIndexTxDone>(
+                indexInfo->LockIndexTxDone);
 
         indexInfo->Limits.MaxBatchRows =
             row.template GetValue<Schema::IndexBuild::MaxBatchRows>();
@@ -3482,6 +3492,9 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", InitiateTxId: " << info.InitiateTxId;
     o << ", InitiateTxStatus: " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus);
     o << ", InitiateTxDone: " << info.InitiateTxDone;
+
+    o << ", LockIndexTxStatus: " << NKikimrScheme::EStatus_Name(info.LockIndexTxStatus);
+    o << ", LockIndexTxDone: " << info.LockIndexTxDone;
 
     o << ", SnapshotStepId: " << info.SnapshotStep;
 

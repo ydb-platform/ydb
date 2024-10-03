@@ -32,6 +32,8 @@ static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
         return "GatheringStatistics";
     case TIndexBuildInfo::EState::Initiating:
         return "Initiating";
+    case TIndexBuildInfo::EState::LockingIndex:
+        return "LockingIndex";
     case TIndexBuildInfo::EState::Filling:
         return "Filling";
     case TIndexBuildInfo::EState::DropBuild:
@@ -102,7 +104,7 @@ protected:
 
     NDataShard::TUploadRetryLimits Limits;
 
-    TActorId ResponseActorId;  
+    TActorId ResponseActorId;
     ui64 BuildIndexId = 0;
     TIndexBuildInfo::TSampleK::TRows Init;
 
@@ -126,8 +128,8 @@ public:
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
     {
-        LogPrefix = TStringBuilder() 
-            << "TUploadSampleK: BuildIndexId: " << BuildIndexId 
+        LogPrefix = TStringBuilder()
+            << "TUploadSampleK: BuildIndexId: " << BuildIndexId
             << " ResponseActorId: " << ResponseActorId;
         Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
@@ -251,19 +253,34 @@ private:
     }
 };
 
+void FillCreateLock(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TPath& path) {
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLock);
+    modifyScheme.SetInternal(true);
+
+    modifyScheme.SetWorkingDir(path.Parent().PathString());
+    modifyScheme.MutableLockConfig()->SetName(path.LeafName());
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.LockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(false);
 
-    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLock);
-    modifyScheme.SetInternal(true);
+    TPath tablePath = TPath::Init(buildInfo.TablePathId, ss);
+    FillCreateLock(*propose->Record.AddTransaction(), tablePath);
 
-    TPath path = TPath::Init(buildInfo.TablePathId, ss);
-    modifyScheme.SetWorkingDir(path.Parent().PathString());
-    modifyScheme.MutableLockConfig()->SetName(path.LeafName());
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockIndexPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.LockTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(false);
+
+    TPath indexTable = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
+    FillCreateLock(*propose->Record.AddTransaction(), indexTable);
 
     return propose;
 }
@@ -451,23 +468,31 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     return propose;
 }
 
+void FillDropLock(NKikimrSchemeOp::TModifyScheme& modifyScheme, TTxId lockTxId, const TPath& path) {
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
+    modifyScheme.SetInternal(true);
+
+    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
+
+    modifyScheme.SetWorkingDir(path.Parent().PathString());
+
+    auto& lockConfig = *modifyScheme.MutableLockConfig();
+    lockConfig.SetName(path.LeafName());
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
-    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
-    modifyScheme.SetInternal(true);
+    TPath table = TPath::Init(buildInfo.TablePathId, ss);
+    FillDropLock(*propose->Record.AddTransaction(), buildInfo.LockTxId, table);
 
-    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
-
-    TPath path = TPath::Init(buildInfo.TablePathId, ss);
-    modifyScheme.SetWorkingDir(path.Parent().PathString());
-
-    auto& lockConfig = *modifyScheme.MutableLockConfig();
-    lockConfig.SetName(path.LeafName());
+    if (!buildInfo.IsBuildVectorIndex()) {
+        table.Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
+        FillDropLock(*propose->Record.AddTransaction(), buildInfo.LockTxId, table);
+    }
 
     return propose;
 }
@@ -528,7 +553,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());        
+        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
 
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
@@ -592,7 +617,7 @@ private:
 
         ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
     }
-    
+
     bool SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.Rows.empty()) {
             return false;
@@ -666,9 +691,22 @@ public:
                     Y_ASSERT(buildInfo.KMeans.NeedsAnotherLevel());
                     ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
                 } else {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                    ChangeState(BuildId, TIndexBuildInfo::EState::LockingIndex);
                 }
 
+                Progress(BuildId);
+            }
+
+            break;
+        case TIndexBuildInfo::EState::LockingIndex:
+            Y_ASSERT(!buildInfo.IsBuildVectorIndex());
+            Y_ASSERT(buildInfo.LockTxId != InvalidTxId);
+            if (buildInfo.LockIndexTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), LockIndexPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.LockIndexTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
             }
 
@@ -815,7 +853,7 @@ public:
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
                 ++buildInfo.KMeans.Level;
-                
+
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
                 Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
@@ -1050,6 +1088,7 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::LockingIndex:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
@@ -1202,6 +1241,7 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::LockingIndex:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
@@ -1281,6 +1321,7 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::LockingIndex:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
@@ -1458,6 +1499,7 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::LockingIndex:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
@@ -1487,7 +1529,7 @@ public:
         : TTxReply(self)
         , CompletedTxId(completedTxId)
     {}
- 
+
     bool DoExecute(TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
         const auto txId = CompletedTxId;
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
@@ -1535,6 +1577,14 @@ public:
 
             buildInfo.InitiateTxDone = true;
             Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
+            break;
+        }
+        case TIndexBuildInfo::EState::LockingIndex:
+        {
+            Y_ABORT_UNLESS(txId == buildInfo.LockTxId);
+
+            buildInfo.LockIndexTxDone = true;
+            Self->PersistBuildIndexLockIndexTxDone(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
@@ -1704,6 +1754,16 @@ public:
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
         }
+        case TIndexBuildInfo::EState::LockingIndex:
+        {
+            Y_ABORT_UNLESS(txId == buildInfo.LockTxId);
+
+            buildInfo.LockIndexTxStatus = record.GetStatus();
+            Self->PersistBuildIndexLockIndexTxStatus(db, buildInfo);
+
+            replyOnCreation();
+            break;
+        }
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::Applying:
@@ -1838,6 +1898,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
+        case TIndexBuildInfo::EState::LockingIndex:
         case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:

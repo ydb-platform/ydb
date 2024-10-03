@@ -119,6 +119,28 @@ public:
     static void AbortDelete(TRequestBase* request, TActorSystem* actorSystem);
 };
 
+class TReadFormat : public TRequestBase {
+public:
+    TReadFormat(TActorId pdiskActor, TAtomicBase reqIdx)
+        : TRequestBase(pdiskActor, TReqId(TReqId::ReadFormatInfo, reqIdx), 0, 0, NPriInternal::Other)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestReadFormat;
+    }
+};
+
+class TReadSysLog : public TRequestBase {
+public:
+    TReadSysLog(TActorId pdiskActor, TAtomicBase reqIdx)
+        : TRequestBase(pdiskActor, TReqId(TReqId::ReadSysLog, reqIdx), 0, 0, NPriInternal::Other)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestReadSysLog;
+    }
+};
+
 //
 // TYardInit
 //

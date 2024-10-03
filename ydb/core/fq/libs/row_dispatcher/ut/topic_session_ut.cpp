@@ -41,7 +41,7 @@ public:
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(true);
-   
+
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
             Config,

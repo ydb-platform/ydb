@@ -1076,7 +1076,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // 4. Restart hive
         // 5. Ensure node is not down (by creating tablets)
         const int NUM_NODES = 3;
-        const int NUM_TABLETS = 3;
+        const int NUM_TABLETS = 10;
         TTestBasicRuntime runtime(NUM_NODES, false);
         Setup(runtime, true, 2, [](TAppPrepare& app) {
             app.HiveConfig.SetNodeDeletePeriod(1);
@@ -1111,10 +1111,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         createTablets();
 
-        ui32 nodeId = runtime.GetNodeId(0);
+        ui32 nodeId = runtime.GetNodeId(2);
         {
+            Ctest << "1. Drain a node\n";
 
             runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvDrainNode(nodeId));
+
+            Ctest << "2. Kill it & wait for hive to delete it\n";
 
             SendKillLocal(runtime, 0);
             {
@@ -1140,6 +1143,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return empty;
         };
 
+        Ctest << "3. Start the node again\n";
         CreateLocal(runtime, 0);
 
         {
@@ -1148,12 +1152,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }
 
+        Ctest << "4. Restart hive\n";
+
         runtime.Register(CreateTabletKiller(hiveTablet));
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStatus);
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
             runtime.DispatchEvents(options);
         }
+
+        Ctest << "5. Ensure node is not down (by creating tablets)\n";
+
         createTablets();
 
         UNIT_ASSERT(!isNodeEmpty(nodeId));

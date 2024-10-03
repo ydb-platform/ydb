@@ -322,7 +322,6 @@ public:
                     // That was not persisted to avoid issues with downgrades
                     node.Down = true;
                 }
-                BLOG_TRACE("node " << nodeId << " has " << node.Down << " / " << node.BecomeUpOnRestart);
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {

@@ -22,7 +22,6 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
-        BLOG_TRACE("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute - old local: " << node.Local << ", new local: " << Local);
         if (node.Local != Local) {
             TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());

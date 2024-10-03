@@ -779,10 +779,6 @@ private:
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
-    std::set<TString> Threads;
-    std::vector<TString> ThreadsHistory;
-    TMutex ThreadsCheckLock;
-
     std::optional<TDriveData> DriveData;
 
 public:
@@ -953,31 +949,11 @@ protected:
         }
     }
 
-    void CheckThread() {
-        TGuard<TMutex> g(ThreadsCheckLock);
-        auto name = TThread::CurrentThreadName();
-        Threads.emplace(name);
-        ThreadsHistory.emplace_back(name);
-        //if (name == "ydb-core-blobst") {
-        //    Y_FAIL();
-        //}
-
-        if (Threads.size() > 1) {
-            TStringStream str;
-            for (auto& thread : ThreadsHistory) {
-                str << thread << " ";
-            }
-            Y_VERIFY_S(false, str.Str());
-        }
-    }
-
     void Submit(IAsyncIoOperation *op) {
         if (QuitCounter.IsBlocked()) {
             FreeOperation(op);
             return;
         }
-
-        CheckThread();
 
         const ui64 size = op->GetSize();
         const ui64 type = static_cast<ui64>(op->GetType());

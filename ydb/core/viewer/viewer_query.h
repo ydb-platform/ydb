@@ -546,7 +546,7 @@ private:
     void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
-        if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
+        if (response.YdbResultsSize() > 0 || response.ResultsSize() > 0) {
             try {
                 for (const auto& result : response.GetResults()) {
                     Ydb::ResultSet resultSet;

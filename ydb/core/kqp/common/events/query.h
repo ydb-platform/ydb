@@ -70,7 +70,9 @@ public:
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
         const TString& poolId = "");
 
-    TEvQueryRequest() = default;
+    TEvQueryRequest() {
+        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+    }
 
     bool IsSerializable() const override {
         return true;

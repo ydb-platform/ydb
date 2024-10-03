@@ -1,0 +1,229 @@
+<svg width='1024' height='1301' xmlns='http://www.w3.org/2000/svg'>
+<clipPath id='clipTextPath'><rect x='0' y='0' width='284' height='1301'/></clipPath>
+<rect x='0' y='27' width='284' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='27' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='27' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='8' cy='60' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='8' y='64'>0</text>
+<rect x='0' y='96' width='284' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='96' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='96' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='8' cy='129' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='8' y='133'>0</text>
+<rect x='0' y='165' width='284' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='165' width='128' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='165' width='590' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='0' y='247' width='8' height='1054' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='8' cy='206' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='8' y='210'>0</text>
+<rect x='11' y='250' width='273' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='250' width='128' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='250' width='590' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='11' y='332' width='8' height='807' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='19' cy='291' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='19' y='295'>0</text>
+<rect x='22' y='335' width='262' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='335' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='335' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='30' cy='368' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='30' y='372'>0</text>
+<rect x='22' y='404' width='262' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='404' width='128' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='404' width='590' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='22' y='486' width='8' height='653' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='30' cy='445' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='30' y='449'>0</text>
+<rect x='33' y='489' width='251' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='489' width='128' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='489' width='590' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='33' y='571' width='8' height='499' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='41' cy='530' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='41' y='534'>0</text>
+<rect x='44' y='574' width='240' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='574' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='574' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='52' cy='607' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='52' y='611'>0</text>
+<rect x='44' y='643' width='240' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='643' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='643' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='52' cy='676' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='52' y='680'>0</text>
+<rect x='44' y='712' width='240' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='712' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='712' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='52' cy='745' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='52' y='749'>0</text>
+<rect x='44' y='781' width='240' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='781' width='128' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='781' width='590' height='82' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='44' y='863' width='8' height='207' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='52' cy='822' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='52' y='826'>0</text>
+<rect x='55' y='866' width='229' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='866' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='866' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='63' cy='899' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='63' y='903'>0</text>
+<rect x='55' y='935' width='229' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='935' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='935' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='63' cy='968' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='63' y='972'>0</text>
+<rect x='55' y='1004' width='229' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='1004' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='1004' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='63' cy='1037' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='63' y='1041'>0</text>
+<rect x='33' y='1073' width='251' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='1073' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='1073' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='41' cy='1106' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='41' y='1110'>0</text>
+<rect x='11' y='1142' width='273' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='1142' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='1142' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='19' cy='1175' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='19' y='1179'>0</text>
+<rect x='11' y='1211' width='273' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='303' y='1211' width='128' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<rect x='434' y='1211' width='590' height='66' stroke-width='0' fill='var(--stage-dark, #F2F2F2)'/>
+<circle cx='19' cy='1244' r='7' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='19' y='1248'>0</text>
+<rect x='11' y='1280' width='273' height='18' stroke-width='1' stroke='var(--stage-dark, #F2F2F2)' fill='var(--stage-dark, #D9D9D9'/>
+<rect x='303' y='1280' width='128' height='18' stroke-width='1' stroke='var(--stage-dark, #F2F2F2)' fill='var(--stage-dark, #D9D9D9'/>
+<rect x='434' y='1280' width='590' height='18' stroke-width='1' stroke='var(--stage-dark, #F2F2F2)' fill='var(--stage-dark, #D9D9D9'/>
+<circle cx='35' cy='1289' r='6' stroke='var(--stage-dark, #F2F2F2)' stroke-width='1' fill='var(--stage-dark, #D9D9D9' />
+<text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='35' y='1293'>0</text>
+
+<line x1='434' y1='0' x2='434' y2='1301' stroke-width='1' stroke='var(--stage-grid, #B2B2B2' stroke-dasharray='1,2'/>
+<text font-family='Verdana' font-size='8px' x='436' y='12'>0:00</text>
+<text font-family='Verdana' font-size='8px' x='0' y='11'>ResultSet</text>
+<text text-anchor='end' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='300' y='11'>0</text>
+<g><title>Ingress 0B, Rows 0, Avg 0B/s</title>
+  <rect x='303' y='3' width='41' height='10' stroke-width='0' fill='var(--ingress-medium, #82723C)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='305' y='11'>0B</text>
+</g>
+<g><title>CPU Usage 0.00s, Avg 0.00 CPU/s</title>
+  <rect x='346' y='3' width='42' height='10' stroke-width='0' fill='var(--cpu-medium, #EA0703)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='348' y='11'>0.00s</text>
+</g>
+<g><title>Memory 0B</title>
+  <rect x='390' y='3' width='41' height='10' stroke-width='0' fill='var(--mem-medium, #543B70)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='392' y='11'>0B</text>
+</g>
+<g><title>Duration: 1.00, Total 1.00</title>
+  <rect x='983' y='3' width='41' height='10' stroke-width='0' fill='var(--stage-grid, #B2B2B2'/>
+  <text text-anchor='end' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='1022' y='11'>1.00</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='18' y='38'>Stage</text>
+<g><title>Connection: Merge</title>
+  <polygon points='16,110 0,110 0,96 8,92 16,96' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='8' y='106'>Me</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='18' y='107'>Sort</text>
+<g><title>Connection: HashShuffle KeyColumns: o_year</title>
+  <polygon points='16,179 0,179 0,165 8,161 16,165' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='8' y='175'>H</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='18' y='176'>Aggregate</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='18' y='186'>InnerJoin (Grace) on l.l_suppkey = s.s_suppkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='18' y='196'>Est: 240.59G Rows: 14.99G Size: 910.20GB</text>
+<g><title>Connection: HashShuffle KeyColumns: l.l_suppkey</title>
+  <polygon points='27,264 11,264 7,257 11,250 27,250' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='19' y='260'>H</text>
+</g>
+<g><title>Connection: HashShuffle KeyColumns: s.s_suppkey</title>
+  <polygon points='27,1156 11,1156 7,1149 11,1142 27,1142' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='19' y='1152'>H</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='261'>InnerJoin (Grace) on l.l_partkey = p.p_partkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='271'>Est: 194.99G Rows: 14.99G Size: 910.20GB</text>
+<g><title>Connection: HashShuffle KeyColumns: p_partkey</title>
+  <polygon points='38,349 22,349 18,342 22,335 38,335' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='30' y='345'>H</text>
+</g>
+<g><title>Connection: HashShuffle KeyColumns: l.l_partkey</title>
+  <polygon points='38,418 22,418 18,411 22,404 38,404' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='30' y='414'>H</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='40' y='346'>Filter: p_type == ECONOMY PLATED COPPER</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='40' y='356'>Est: 0 Rows: 2.00G Size: 135.39GB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='40' y='366'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='40' y='376'>Est: 0 Rows: 2.00G Size: 135.39GB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='40' y='415'>InnerJoin (Grace) on l.l_orderkey = o.o_orderkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='40' y='425'>Est: 143.99G Rows: 14.99G Size: 910.20GB</text>
+<g><title>Connection: HashShuffle KeyColumns: o.o_orderkey</title>
+  <polygon points='49,503 33,503 29,496 33,489 49,489' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='41' y='499'>H</text>
+</g>
+<g><title>Connection: HashShuffle KeyColumns: l_orderkey</title>
+  <polygon points='49,1087 33,1087 29,1080 33,1073 49,1073' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='41' y='1083'>H</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='51' y='500'>InnerJoin (Grace) on o.o_custkey = c.c_custkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='51' y='510'>Est: 20.25G Rows: 3.75G Size: 217.56GB</text>
+<g><title>Connection: HashShuffle KeyColumns: o_custkey</title>
+  <polygon points='60,588 44,588 40,581 44,574 60,574' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='52' y='584'>H</text>
+</g>
+<g><title>Connection: HashShuffle KeyColumns: c.c_custkey</title>
+  <polygon points='60,657 44,657 40,650 44,643 60,643' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='52' y='653'>H</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='585'>Filter: o_orderdate >= "9131" And o_orderdate &lt;= "9861"</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='595'>Est: 0 Rows: 3.75G Size: 217.56GB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='605'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='615'>Est: 0 Rows: 15.00G Size: 870.25GB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='654'>InnerJoin (MapJoin) on c.c_nationkey = n.n_nationkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='664'>Est: 4.50G Rows: 1.50G Size: 146.54GB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='674'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='684'>Est: 0 Rows: 1.50G Size: 146.54GB</text>
+<g><title>Connection: Broadcast</title>
+  <polygon points='60,726 44,726 44,712 52,708 60,712' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='52' y='722'>B</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='723'>Stage</text>
+<g><title>Connection: UnionAll</title>
+  <polygon points='60,795 44,795 44,781 52,777 60,781' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='52' y='791'>U</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='792'>InnerJoin (MapJoin) on n.n_regionkey = r.r_regionkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='62' y='802'>Est: 88 Rows: 25 Size: 3.67KB</text>
+<g><title>Connection: Map</title>
+  <polygon points='71,880 55,880 51,873 55,866 71,866' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='63' y='876'>Ma</text>
+</g>
+<g><title>Connection: Broadcast</title>
+  <polygon points='71,949 55,949 51,942 55,935 71,935' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='63' y='945'>B</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='877'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='887'>Est: 0 Rows: 25 Size: 3.67KB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='946'>Stage</text>
+<g><title>Connection: UnionAll</title>
+  <polygon points='71,1018 55,1018 55,1004 63,1000 71,1004' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='63' y='1014'>U</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='1015'>Filter: r_name == AFRICA</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='1025'>Est: 0 Rows: 5 Size: 1.25KB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='1035'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='73' y='1045'>Est: 0 Rows: 5 Size: 1.25KB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='51' y='1084'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='51' y='1094'>Est: 0 Rows: 59.99G Size: 3.55TB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='1153'>InnerJoin (MapJoin) on s.s_nationkey = n_1.n_nationkey</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='1163'>Est: 300.00M Rows: 100.00M Size: 8.84GB</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='1173'>TableFullScan</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='1183'>Est: 0 Rows: 100.00M Size: 8.84GB</text>
+<g><title>Connection: Broadcast</title>
+  <polygon points='27,1225 11,1225 11,1211 19,1207 27,1211' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='19' y='1221'>B</text>
+</g>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='29' y='1222'>Stage</text>
+<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='8px' fill='var(--stage-text, #262626)' x='45' y='1291'>TableFullScan</text>
+<g><title>Connection: UnionAll</title>
+  <polygon points='27,1294 11,1294 11,1280 19,1276 27,1280' stroke-width='1' stroke='var(--conn-line, #BFBFBF)' fill='var(--conn-fill, #BFBFBF)'/>
+  <text text-anchor='middle' font-family='Verdana' font-size='6px' fill='var(--conn-text, #393939)' x='19' y='1290'>U</text>
+</g>
+
+</svg>

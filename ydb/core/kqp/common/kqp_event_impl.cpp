@@ -90,6 +90,14 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetPoolId(PoolId);
         }
 
+<<<<<<< HEAD
+=======
+        if (!DatabaseId.empty()) {
+            Record.MutableRequest()->SetDatabaseId(DatabaseId);
+        }
+
+        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+>>>>>>> a491b73df3 (get rid of mkql results in scripting (#9997))
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);

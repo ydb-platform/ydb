@@ -113,6 +113,9 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
         db.Snap(tableId).Compact(tableId, false);
 
         readDatabase();
+
+        db.Replay(NTest::EPlay::Boot);
+        db.Replay(NTest::EPlay::Redo);
     }
 }
 

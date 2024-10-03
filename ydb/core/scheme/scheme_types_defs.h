@@ -54,13 +54,15 @@ class TStepOrderId : public IIntegerPair<ui64, ui64, NTypeIds::StepOrderId, NNam
 
 ////////////////////////////////////////////////////////
 
-inline ui32 GetFixedSize(TTypeInfo typeInfo) {
-    switch (typeInfo.GetTypeId()) {
+inline ui32 GetFixedSize(TTypeId typeId) {
+    switch (typeId) {
 #define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
     case NTypeIds::Pg:
-        return NPg::TypeDescGetStoredSize(typeInfo.GetPgTypeDesc());
+        // We can't get fixed size for Pg
+        // Redo log (NTable::NRedo::TValue) doesn't contain pg type descriptor
+        return 0;
     default:
         return 0;
     }
@@ -78,7 +80,7 @@ inline ui32 GetFixedSize(TTypeInfo typeInfo) {
  * 
  * Returns empty string on success or an error description in case of failure
  */
-::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, TTypeInfo typeInfo);
+::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, const TTypeInfo& typeInfo);
 
 } // namespace NScheme
 } // namespace NKikimr

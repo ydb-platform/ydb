@@ -127,12 +127,15 @@ public:
     }
 
     void UnregisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
-        const ui64 internalGroupId = GroupIds.ExtractInternalIdVerified(externalGroupId);
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
-            "internal_group_id", internalGroupId);
-        UnregisterGroupImpl(internalGroupId);
-        if (isPriorityProcess && (internalGroupId < GroupIds.GetMinInternalIdDef(internalGroupId))) {
-            Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
+        if (auto internalGroupId = GroupIds.GetInternalIdOptional()) {
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
+                "internal_group_id", internalGroupId);
+            UnregisterGroupImpl(*internalGroupId);
+            if (isPriorityProcess && (*internalGroupId < GroupIds.GetMinInternalIdDef(*internalGroupId))) {
+                Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
+            }
+        } else {
+            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_absent_group")("external_group_id", externalGroupId);
         }
     }
 

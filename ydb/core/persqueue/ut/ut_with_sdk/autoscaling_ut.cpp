@@ -17,8 +17,6 @@ using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NPQ::NTest;
 
-// for resetart tests
-
 Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void SimpleTest(SdkVersion sdk, bool autoscaleAwareSDK) {

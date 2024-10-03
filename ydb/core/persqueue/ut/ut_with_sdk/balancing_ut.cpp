@@ -143,6 +143,9 @@ Y_UNIT_TEST_SUITE(Balancing) {
             UNIT_ASSERT_VALUES_EQUAL(5, p[TEST_TOPIC].size());
             UNIT_ASSERT_VALUES_EQUAL(5, p["other-test-topic"].size());
         }
+
+        readSession0->Close();
+        readSession1->Close();
     }
 
     Y_UNIT_TEST(Balancing_ManyTopics_TopicApi) {

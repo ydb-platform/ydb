@@ -9,6 +9,10 @@ import traceback
 import time
 import ydb
 from collections import Counter
+import pandas as pd
+
+
+
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -69,12 +73,12 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))        
-        .add_column("days_in_status", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("success_rate", ydb.OptionalType(ydb.PrimitiveType.Uint64))
     )
     table_client.bulk_upsert(table_path, rows, column_types)
 
-
+         
 def main():
     parser = argparse.ArgumentParser()
 
@@ -107,12 +111,9 @@ def main():
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
         
         # settings, paths, consts
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
+        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
         
         table_path = f'test_results/analytics/flaky_tests_monitor_window_{history_for_n_day}_days'
@@ -120,26 +121,7 @@ def main():
         today = datetime.date.today()
  
         query_get_history = f"""
-    $status_changes  = (
-        SELECT test_name, 
-            suite_folder, 
-            full_name, 
-            date_window, 
-            build_type, 
-            branch, 
-            owners, 
-            days_ago_window, 
-            history, 
-            history_class, 
-            pass_count, 
-            mute_count, 
-            fail_count, 
-            skip_count,
-            state_detailed,
-            LAG(state_detailed) OVER (PARTITION BY build_type,full_name,branch ORDER BY date_window) AS previous_status,
-
-        from(
-            SELECT 
+            SELECT
                 hist.branch AS branch,
                 hist.build_type AS build_type,
                 hist.date_window AS date_window, 
@@ -155,37 +137,19 @@ def main():
                 COALESCE(owners_t.is_muted, NULL) AS is_muted,
                 hist.skip_count AS skip_count,
                 hist.suite_folder AS suite_folder,
-                hist.test_name AS test_name,
-                CASE
-                    WHEN (String::Contains(hist.history_class, 'failure') AND NOT String::Contains(hist.history_class, 'mute')) THEN 'Flaky'
-                    WHEN String::Contains(hist.history_class, 'pass') THEN 'Passed'
-                    WHEN (String::Contains(hist.history_class, 'skipped') OR hist.history_class IS NULL OR hist.history_class = '') THEN 'Skipped'
-                    ELSE hist.history_class
-                END AS state_detailed_basic,
-                CASE
-                    WHEN owners_t.is_muted = 1 THEN
-                        CASE
-                            WHEN String::Contains(hist.history_class, 'mute') THEN 'Muted Flaky'
-                            WHEN String::Contains(hist.history_class, 'pass') THEN 'Muted Stable'
-                            WHEN (String::Contains(hist.history_class, 'skipped') OR hist.history_class IS NULL OR hist.history_class = '') THEN 'Skipped'
-                            ELSE hist.history_class
-                        END
-                    ELSE
-                        CASE
-                            WHEN (String::Contains(hist.history_class, 'failure') AND NOT String::Contains(hist.history_class, 'mute')) THEN 'Flaky'
-                            WHEN String::Contains(hist.history_class, 'mute') THEN 'Muted'
-                            WHEN (String::Contains(hist.history_class, 'skipped') OR hist.history_class IS NULL OR hist.history_class = '') THEN 'Skipped'
-                            WHEN String::Contains(hist.history_class, 'pass') THEN 'Passed'
-                            ELSE hist.history_class
-                        END
-                END AS state_detailed
+                hist.test_name AS test_name
+            
             FROM (
                 SELECT * FROM
                 `test_results/analytics/flaky_tests_window_{history_for_n_day}_days` 
                 WHERE 
                 --date_window >= Date('{today}') - 30*Interval("P1D")
+                --and 
                 build_type = '{build_type}'
                 AND branch = '{branch}'
+                and full_name in ('ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/[9/10] chunk chunk',
+                'ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/RetryPolicy.TWriteSession_RetryOnTargetCluster')
+                
             ) AS hist 
             LEFT JOIN (
                 SELECT 
@@ -197,6 +161,8 @@ def main():
                     date
                 FROM 
                     `test_results/all_tests_with_owner_and_mute`
+                WHERE 
+                    branch = '{branch}'
             ) AS owners_t
             ON 
                 hist.test_name = owners_t.test_name
@@ -215,48 +181,8 @@ def main():
                 AND hist.suite_folder = fallback_t.suite_folder
             WHERE
                 owners_t.test_name IS NOT NULL OR fallback_t.test_name IS NOT NULL
-        )
-    );
-    $state_streaks = (
-        SELECT
-            test_name,
-            suite_folder,
-            full_name,
-            date_window,
-            build_type,
-            branch,
-            owners,
-            days_ago_window,
-            history,
-            history_class,
-            pass_count,
-            mute_count,
-            fail_count,
-            skip_count,
-            state_detailed,
-            SUM(CASE WHEN state_detailed = previous_status THEN 0 ELSE 1 END) OVER (PARTITION BY full_name,branch,build_type  ORDER BY date_window ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS streak_id
-        FROM
-            $status_changes
-    );
-    SELECT
-        test_name,
-        suite_folder,
-        full_name,
-        date_window,
-        build_type,
-        branch,
-        owners,
-        days_ago_window,
-        history,
-        history_class,
-        pass_count,
-        mute_count,
-        fail_count,
-        skip_count,
-        state_detailed as state,
-        ROW_NUMBER() OVER (PARTITION BY build_type,full_name, state_detailed, streak_id ORDER BY date_window)  AS days_in_status
-    FROM
-        $state_streaks
+        
+    
         """
         query = ydb.ScanQuery(query_get_history, {})
         # start transaction time
@@ -274,6 +200,165 @@ def main():
                 break
         end_time = time.time()
         print(f'transaction duration: {end_time - start_time}')
+        data = {
+            'test_name': [],
+            'suite_folder': [],
+            'full_name': [],
+            'date_window': [],
+            'build_type': [],
+            'branch': [],
+            'owners': [],
+            'days_ago_window': [],
+            'history': [],
+            'history_class': [],
+            'pass_count': [],
+            'mute_count': [],
+            'fail_count': [],
+            'skip_count': [],
+            'is_muted': []
+        }
+        base_date = datetime.datetime(1970, 1, 1)
+        # Преобразуем данные в DataFrame
+        pd.set_option("display.max_rows", None)
+
+        # Пример, как данные могли быть извлечены из result_set.rows и добавлены в словарь data
+        for row in results:
+            data['test_name'].append(row['test_name'].decode('utf-8') if isinstance(row['test_name'], bytes) else row['test_name'])
+            data['suite_folder'].append(row['suite_folder'].decode('utf-8') if isinstance(row['suite_folder'], bytes) else row['suite_folder'])
+            data['full_name'].append(row['full_name'].decode('utf-8') if isinstance(row['full_name'], bytes) else row['full_name'])
+            data['date_window'].append(base_date + datetime.timedelta(days=row['date_window']))
+            data['build_type'].append(row['build_type'].decode('utf-8') if isinstance(row['build_type'], bytes) else row['build_type'])
+            data['branch'].append(row['branch'].decode('utf-8') if isinstance(row['branch'], bytes) else row['branch'])
+            data['owners'].append(row['owners'].decode('utf-8') if isinstance(row['owners'], bytes) else row['owners'])
+            data['days_ago_window'].append(row['days_ago_window'])
+            data['history'].append(row['history'].decode('utf-8') if isinstance(row['history'], bytes) else row['history'])
+            data['history_class'].append(row['history_class'].decode('utf-8') if isinstance(row['history_class'], bytes) else row['history_class'])
+            data['pass_count'].append(row['pass_count'])
+            data['mute_count'].append(row['mute_count'])
+            data['fail_count'].append(row['fail_count'])
+            data['skip_count'].append(row['skip_count'])
+            data['is_muted'].append(row['is_muted'])
+
+        df = pd.DataFrame(data)
+
+        # Сортируем по full_name и date_window для корректного определения предыдущих статусов и дат
+        df = df.sort_values(by=['full_name', 'date_window'])
+
+        def determine_state(row):
+            history_class = row['history_class']
+            is_muted = row['is_muted']
+            
+            if is_muted == 1:
+                if 'mute' in history_class:
+                    return 'Muted Flaky'
+                elif 'pass' in history_class:
+                    return 'Muted Stable'
+                elif 'skipped' in history_class or not history_class:
+                    return 'Skipped'
+                else:
+                    return history_class
+            else:
+                if 'failure' in history_class and 'mute' not in history_class:
+                    return 'Flaky'
+                elif 'mute' in history_class:
+                    return 'Muted'
+                elif 'skipped' in history_class or not history_class:
+                    return 'Skipped'
+                elif 'pass' in history_class:
+                    return 'Passed'
+                else:
+                    return history_class
+
+        
+        # Определяем флаг для стрика
+        def calculate_streak_flag(row):
+            if row['state'] == row['previous_state'] :
+                return 0
+            else:
+                return 1     
+        # Определяем флаг для стрика
+        def calculate_filled_streak_flag(row):
+            if row['state_filled'] == row['previous_state'] :
+                return 0
+            else:
+                return 1
+
+        def calculate_success_rate(row):
+            total_count = row['pass_count'] + row['mute_count'] + row['fail_count']
+            if total_count == 0:
+                return 0.0
+            else:
+                return (row['pass_count'] / total_count) * 100
+            
+        def calculate_summary(row):
+            return 'Pass:'+ str(row['pass_count']) + ' Fail:'+ str(row['fail_count']) + ' Mute:'+ str(row['mute_count'])  + ' Skip:'+ str(row['skip_count']) 
+        
+        def compute_owner(owner):
+            if not owner or owner == '':  
+                return 'Unknown'
+            elif ';;' in owner:  
+                parts = owner.split(';;', 1)
+                if 'TEAM' in parts[0]:
+                    return parts[0]
+                else:
+                    return parts[1]
+            else:
+                return owner
+
+
+        df['success_rate'] = df.apply(calculate_success_rate, axis=1)
+        df['summary'] = df.apply(calculate_summary, axis=1)
+        df['owner'] = df['owners'].apply(compute_owner)
+        df['is_test_chunk'] = df['full_name'].str.contains('chunk chunk|chunk\+chunk', regex=True)
+        df['state'] = df.apply(determine_state, axis=1)
+        
+             # Определяем предыдущий статус и предыдущую дату
+        previous_state_list = []
+        state_change_date_list = []
+        state_filled_prev_results_list= []
+        for name, group in df.groupby('full_name'):
+            prev_status = None
+            prev_date = None
+            prev_valid_status = None
+            is_first_row = True
+            for index, row in group.iterrows():
+                if is_first_row :
+                    prev_valid_status = row['state']
+                    is_first_row = False
+                if row['state'] not in ('Skipped', 'no_runs'):
+                    prev_valid_status = row['state']
+                    state_filled_prev_results_list.append(row['state'])
+                else:
+                    state_filled_prev_results_list.append(prev_valid_status)
+                    
+                previous_state_list.append(prev_status)
+                state_change_date_list.append(prev_date)
+                
+                if row['state'] != prev_status:
+
+                    prev_status = row['state']
+                    prev_date = row['date_window']
+    
+        df['previous_state'] = previous_state_list
+        # Рассчитываем streak_flag и streak_id
+        df['streak_flag'] = df.apply(calculate_streak_flag, axis=1)
+        df['streak_id'] = df.groupby('full_name')['streak_flag'].cumsum()
+        df['days_in_state'] = df.groupby(['full_name', 'streak_id']).cumcount() + 1
+
+        # Добавляем столбцы previous_state и state_change_date в DataFrame
+
+        df['state_change_date'] = state_change_date_list
+        df['state_filled'] = state_filled_prev_results_list
+
+        # Финальный результат
+        result = df[[
+            'test_name', 'date_window', 'state','success_rate','summary', 'owner','is_test_chunk',
+            'previous_state', 'state_change_date', 'days_in_state','state_filled'
+        ]]
+
+        # Сортируем по full_name и state_change_date
+       # result = result.sort_values(by=['full_name', 'state_change_date'])
+        print(result)
 
         print(f'monitor data data captured, {len(results)} rows')
         for row in results: 
@@ -291,9 +376,13 @@ def main():
                 'mute_count': row['mute_count'],
                 'fail_count': row['fail_count'],
                 'skip_count': row['skip_count'],
+                'success_rate': row['success_rate'],
+                'summary': row['summary'],
+                'owner': row['owner'],
+                'is_test_chunk': row['is_test_chunk'],
                 'state': row['state'],
-                'days_in_status': row['days_in_status'],
-                'success_rate': 0.0 if row['pass_count'] + row['mute_count'] + row['fail_count'] == 0  else  row['pass_count']/(row['pass_count'] + row['mute_count'] + row['fail_count'])*100
+                'previous_state': row['previous_state'],
+                'days_in_state': row['days_in_state'],
             })
         print(f'upserting monitor data')
         with ydb.SessionPool(driver) as pool:

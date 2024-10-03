@@ -14,7 +14,7 @@ LOGGER = logging.getLogger()
 
 class YdbCluster:
     class MonitoringUrl:
-        def __init__(self, url:str, caption: str = 'link') -> None:
+        def __init__(self, url: str, caption: str = 'link') -> None:
             self.url = url
             if self.url.find('://') < 0:
                 self.url = f'https://{self.url}'
@@ -31,18 +31,18 @@ class YdbCluster:
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
         def _process_url(url: str) -> YdbCluster.MonitoringUrl:
-             spl = url.split('::', 2)
-             if len(spl) == 1:
-                 return YdbCluster.MonitoringUrl(spl[0])
-             return YdbCluster.MonitoringUrl(spl[1], spl[0])
+            spl = url.split('::', 2)
+            if len(spl) == 1:
+                return YdbCluster.MonitoringUrl(spl[0])
+            return YdbCluster.MonitoringUrl(spl[1], spl[0])
         if cls._monitoring_urls is None:
-             cls._monitoring_urls = [
-                 _process_url(url)
-                 for url in get_external_param('monitoring_urls',
-                    ('monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?'
+            cls._monitoring_urls = [
+                _process_url(url)
+                for url in get_external_param('monitoring_urls', (
+                    'monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?'
                     'p.cluster=olap_testing_vla&p.database=/{database}&from={start_time}&to={end_time}')
                     ).split(',')
-             ]
+            ]
         return cls._monitoring_urls
 
     @classmethod

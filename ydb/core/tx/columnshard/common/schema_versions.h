@@ -57,7 +57,7 @@ public:
     void EnumerateVersionsToErase(Processor&& processor) const {
         for (ui64 version: VersionsToErase) {
             auto iter = VersionToKey.find(version);
-            Y_VERIFY(iter != VersionToKey.end());
+            AFL_VERIFY(iter != VersionToKey.end());
             for (auto& key: iter->second) {
                 processor(version, key);
             }

@@ -31,7 +31,7 @@ void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSha
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
         for (const auto& insertedData : DataToIndex) {
-            self->InsertTable->EraseCommittedOnComplete(insertedData);
+            self->InsertTable->EraseCommittedOnComplete(insertedData, self->TablesManager.MutablePrimaryIndex().MutableVersionCounts());
         }
         if (!DataToIndex.empty()) {
             self->UpdateInsertTableCounters();

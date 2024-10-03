@@ -161,4 +161,18 @@ const TInsertedData* TInsertionSummary::AddInserted(TInsertedData&& data, const 
     return insertInfo;
 }
 
+void TInsertionSummary::CalcVersionCounts(TVersionCounts* versionCounts) {
+    for (auto& [_, data]: Inserted) {
+        versionCounts->VersionAddRef(data.GetSchemaVersion());
+    }
+    for (auto& [_, data]: Aborted) {
+        versionCounts->VersionAddRef(data.GetSchemaVersion());
+    }
+    for (auto& [_, path]: PathInfo) {
+        for (auto& data: path.GetCommitted()) {
+            versionCounts->VersionAddRef(data.GetSchemaVersion());
+        }
+    }
+}
+
 }

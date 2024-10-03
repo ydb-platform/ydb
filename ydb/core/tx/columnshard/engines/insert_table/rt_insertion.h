@@ -3,6 +3,7 @@
 #include "path_info.h"
 
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -222,6 +223,8 @@ public:
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;
     }
+
+    void CalcVersionCounts(TVersionCounts* versionCounts);
 };
 
 }   // namespace NKikimr::NOlap

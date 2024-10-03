@@ -7,6 +7,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
@@ -99,7 +100,7 @@ public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 
-    bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
+    bool Insert(IDbWrapper& dbTable, TInsertedData&& data, TVersionCounts* versionCounts);
     TInsertionSummary::TCounters Commit(
         IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
     TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
@@ -111,10 +112,10 @@ public:
 
     void EraseCommittedOnExecute(
         IDbWrapper& dbTable, const TCommittedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
-    void EraseCommittedOnComplete(const TCommittedData& key);
+    void EraseCommittedOnComplete(const TCommittedData& key, TVersionCounts* versionCounts);
 
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
-    void EraseAbortedOnComplete(const TInsertedData& key);
+    void EraseAbortedOnComplete(const TInsertedData& key, TVersionCounts* versionCounts);
 
     std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
         const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
@@ -122,6 +123,9 @@ public:
 
     TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
     TInsertWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
+    void CalcVersionCounts(TVersionCounts* versionCounts) {
+        Summary.CalcVersionCounts(versionCounts);
+    }
 };
 
 }   // namespace NKikimr::NOlap

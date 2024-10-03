@@ -18,6 +18,7 @@ struct TGUCSettings {
     void Set(const std::string&, const std::string&, bool isLocal = false);
     void Commit();
     void RollBack();
+    void ExportToJson(NJson::TJsonValue& value) const;
     TString SerializeToString() const;
 
     size_t GetHash() const noexcept;

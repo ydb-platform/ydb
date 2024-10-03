@@ -14,9 +14,14 @@ SRCS(
     tcmalloc.cpp
 )
 
+IF (OS_LINUX AND ARCH_X86_64)
+    PEERDIR(
+        library/cpp/dwarf_backtrace
+    )
+ENDIF()
+
 PEERDIR(
     contrib/libs/tcmalloc/malloc_extension
-    library/cpp/dwarf_backtrace
     library/cpp/html/pcdata
     library/cpp/lfalloc/alloc_profiler
     library/cpp/lfalloc/dbg_info

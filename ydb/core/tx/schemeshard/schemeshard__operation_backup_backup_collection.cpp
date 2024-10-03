@@ -97,6 +97,8 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
+    size_t cutLen = bcPath.GetDomainPathString().size() + 1;
+
     TVector<ISubOperation::TPtr> result;
 
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
@@ -105,9 +107,9 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
         modifyScheme.SetInternal(true);
         auto& cb = *modifyScheme.MutableAlterContinuousBackup();
-        cb.SetTableName(item.GetPath().substr(6, item.GetPath().size() - 6));
+        cb.SetTableName(item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
         auto& ib = *cb.MutableTakeIncrementalBackup();
-        ib.SetDstPath(bcPathStr.substr(6, bcPathStr.size() - 6) + "/0_incremental" + item.GetPath());
+        ib.SetDstPath(bcPathStr.substr(cutLen, bcPathStr.size() - cutLen) + "/0_incremental" + item.GetPath());
 
         if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result)) {
             return result;

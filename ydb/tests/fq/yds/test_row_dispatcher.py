@@ -346,7 +346,7 @@ class TestPqRowDispatcher(TestYdsBase):
         sql3 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
         query_id3 = start_yds_query(kikimr, client, sql3)
 
         data = [

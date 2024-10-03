@@ -125,6 +125,7 @@ private:
         bool DataArrivedSent = false;
         TMaybe<ui64> NextMessageOffset;
         ui64 LastSendedNextMessageOffset = 0;
+        TVector<ui64> FieldsIds;
     };
 
     struct TTopicEventProcessor {
@@ -142,7 +143,7 @@ private:
     };
 
     struct TParserSchema {
-        THashMap<TString, ui64> FieldOffsets;
+        TVector<ui64> FieldsMap;    // index - FieldId (from FieldsIndexes), value - parsing schema offset
         TParserInputType InputType;
     };
 
@@ -156,7 +157,8 @@ private:
     const i64 BufferSize;
     TString LogPrefix;
     NYql::NDq::TDqAsyncStats IngressStats;
-    ui64 LastMessageOffset = 0;
+    ui64 LastReceivedMessageOffset = 0;
+    ui64 LastParsedMessageOffset = 0;
     bool IsWaitingEvents = false;
     THashMap<NActors::TActorId, ClientsInfo> Clients;
     THashSet<NActors::TActorId> ClientsWithoutPredicate;
@@ -166,7 +168,8 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
     ui64 ParserCookie = 0;
-    THashMap<ui64, TParserSchema> ParserSchemes;
+    TParserSchema ParserSchema;
+    THashMap<TString, ui64> FieldsIndexes;
 
 public:
     explicit TTopicSession(
@@ -217,8 +220,9 @@ private:
 
     void PrintInternalState();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TJson RebuildJson(const ClientsInfo& info, const TJson& json, ui64 schemaVersion);
+    TJson RebuildJson(const ClientsInfo& info, const TJson& json);
     void UpdateParserSchema(const TParserInputType& inputType);
+    void UpdateFieldsIds(ClientsInfo& clientInfo);
 
 private:
 
@@ -382,24 +386,29 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json, ui64 schemaVersion) {
+TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json) {
     TJson result;
-    Y_ENSURE(ParserSchemes.count(schemaVersion), "Internal error: unknown parser schema, version " << schemaVersion);
 
-    auto& offsets = ParserSchemes[schemaVersion].FieldOffsets;
-    for (auto name : info.Settings.GetSource().GetColumns()) {
-        auto offset = offsets[name];
+    const auto& offsets = ParserSchema.FieldsMap;
+    for (auto fieldId : info.FieldsIds) {
+        Y_ENSURE(fieldId < offsets.size());
+        auto offset = offsets.at(fieldId);
         auto it = json.begin();
         std::advance(it, offset);
         result.push_back(*it);
     }
     LOG_ROW_DISPATCHER_TRACE("RebuildJson " << JoinSeq(',', result));
-
     return result;
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset);
+    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset << ", cookie " << ev->Get()->Cookie);
+
+    LastParsedMessageOffset = ev->Get()->Offset;
+    if (ev->Get()->Cookie < ParserCookie) {
+        LOG_ROW_DISPATCHER_TRACE("Ignore message");
+        return;
+    }
 
     for (auto v: ev->Get()->Value) {
         LOG_ROW_DISPATCHER_TRACE("v " << v);
@@ -410,7 +419,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
             if (!info.Filter) {
                 continue;
             }
-            auto json = RebuildJson(info, ev->Get()->Value, ev->Get()->Cookie);
+            auto json = RebuildJson(info, ev->Get()->Value);
             info.Filter->Push(ev->Get()->Offset, json);
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter);
@@ -508,7 +517,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         TString item = message.GetData();
         item.Detach();
         Self.SendToParsing(message.GetOffset(), item);
-        Self.LastMessageOffset = message.GetOffset();
+        Self.LastReceivedMessageOffset = message.GetOffset();
     }
 }
 
@@ -616,6 +625,19 @@ void TTopicSession::SendData(ClientsInfo& info) {
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
+void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
+    for (auto name : info.Settings.GetSource().GetColumns()) {
+        auto it = FieldsIndexes.find(name);
+        if (it == FieldsIndexes.end()) {
+            auto nextIndex = FieldsIndexes.size();
+            info.FieldsIds.push_back(nextIndex);
+            FieldsIndexes[name] = nextIndex;
+        } else {
+            info.FieldsIds.push_back(it->second);
+        }
+    }
+}
+
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
@@ -634,6 +656,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
             std::forward_as_tuple(ev)).first->second;
+        UpdateFieldsIds(clientInfo);
 
         TString predicate = clientInfo.Settings.GetSource().GetPredicate();
         if (!predicate.empty()) {
@@ -649,8 +672,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         }
 
         if (ReadSession) {
-            if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
-                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+            if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastReceivedMessageOffset)) {
+                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastReceivedMessageOffset << "), stop (restart) topic session");
                 StopReadSession();
             }
         }
@@ -696,7 +719,6 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     UpdateParser();
 }
 
-
 void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSet<std::pair<TString, TString>>& columns) {
     auto size = sourceParams.GetColumns().size();
     Y_ENSURE(size == sourceParams.GetColumnTypes().size());
@@ -710,14 +732,15 @@ void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSe
 
 void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
     ++ParserCookie;
-    auto& schema = ParserSchemes[ParserCookie];
-
-    schema.FieldOffsets.clear();
+    ParserSchema.FieldsMap.clear();
+    ParserSchema.FieldsMap.resize(FieldsIndexes.size());
     ui64 offset = 0;
     for (const auto& [name, type]: inputType) {
-        schema.FieldOffsets[name] = offset++;
+        Y_ENSURE(FieldsIndexes.contains(name));
+        ui64 index = FieldsIndexes[name];
+        ParserSchema.FieldsMap[index] = offset++;
     }
-    schema.InputType = inputType;
+    ParserSchema.InputType = inputType;
 }
 
 void TTopicSession::UpdateParser() {
@@ -726,8 +749,7 @@ void TTopicSession::UpdateParser() {
         CollectColumns(info.Settings.GetSource(), namesWithTypes);
     }
 
-    if (namesWithTypes == ParserSchemes[ParserCookie].InputType) {
-    //    LOG_ROW_DISPATCHER_TRACE("Same: ");
+    if (namesWithTypes == ParserSchema.InputType) {
         return;
     }
     if (namesWithTypes.empty()) {
@@ -737,6 +759,10 @@ void TTopicSession::UpdateParser() {
     }
 
     try {
+        if (ReadSession && LastParsedMessageOffset != LastReceivedMessageOffset) {
+            LOG_ROW_DISPATCHER_INFO("Inflate parsing data (" << (LastReceivedMessageOffset - LastParsedMessageOffset) << "), restart topic session");
+            StopReadSession();
+        }
         UpdateParserSchema(namesWithTypes);
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
 

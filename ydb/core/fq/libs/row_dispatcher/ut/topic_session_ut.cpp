@@ -285,6 +285,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
     Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
         const TString topicName = "topic7";
+        PQCreateStream(topicName);
         Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
@@ -378,23 +379,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectNewDataArrived({ReadActorId2});
         ExpectMessageBatch(ReadActorId2, { "{\"dt\":102,\"field1\":\"value2_field1\",\"value\":\"value3\"}" });
 
-
-        // auto source4 = BuildSource(topicName);
-        // source4.ClearColumns();
-        // source4.ClearColumnTypes();
-        // source4.AddColumns("dt");
-        // source4.AddColumnTypes("Uint64");
-
-        // auto readActorId4 = Runtime.AllocateEdgeActor();
-        // StartSession(readActorId4, source4);
-
-        // TString json3 = "{\"dt\":101,\"value\":\"value2\", \"field1\":\"field11\", \"field2\":\"field2\"}";
-
-
         StopSession(ReadActorId1, source1);
         StopSession(ReadActorId2, source2);
-    //    StopSession(readActorId3, source3);
-      //  StopSession(readActorId4, source4);
     }
 }
 

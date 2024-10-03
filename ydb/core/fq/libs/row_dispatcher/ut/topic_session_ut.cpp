@@ -285,7 +285,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
     Y_UNIT_TEST_F(ReadNonExistentTopic, TFixture) {
         const TString topicName = "topic7";
-        PQCreateStream(topicName);
         Init(topicName);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);

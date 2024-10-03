@@ -60,7 +60,10 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
 
 void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType,
                                             const TPortionInfo* exPortionInfo) {
+    auto before = Counters.Active();
     UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
+    auto after = Counters.Active();
+    LOG_S_DEBUG("PortionStats updated, type " << (ui32)updateType << " pathId " << portionInfo.GetPathId() << " portion " << portionInfo.GetPortionId() << " size " << before.Bytes << "->" << after.Bytes << " row count " << before.Rows << "->" << after.Rows);
 
     const ui64 pathId = portionInfo.GetPathId();
     Y_ABORT_UNLESS(pathId);

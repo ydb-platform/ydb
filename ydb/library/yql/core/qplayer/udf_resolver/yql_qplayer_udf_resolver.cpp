@@ -67,7 +67,7 @@ public:
 
     TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "can't replay LoadRichMetadata";
+            ythrow yexception() << "Can't replay LoadRichMetadata";
         }
 
         return Inner_->LoadRichMetadata(imports);
@@ -75,7 +75,7 @@ public:
 
     bool ContainsModule(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "can't replay ContainsModule";
+            ythrow yexception() << "Can't replay ContainsModule";
         }
 
         return Inner_->ContainsModule(moduleName);

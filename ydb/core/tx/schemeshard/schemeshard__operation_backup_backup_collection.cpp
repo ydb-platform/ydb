@@ -10,6 +10,10 @@
 
 namespace NKikimr::NSchemeShard {
 
+TString ToX509String(const TInstant& datetime) {
+    return datetime.FormatLocalTime("%Y%m%d%H%M%SZ");
+}
+
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_UNUSED(opId, tx, context);
 
@@ -20,6 +24,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     auto& cct = *modifyScheme.MutableCreateConsistentCopyTables();
     auto& copyTables = *cct.MutableCopyTableDescriptions();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+
     // Y_ABORT("%s %s", tx.GetWorkingDir().c_str(), tx.GetBackupBackupCollection().GetName().c_str());
     // FIXME(+active)
 
@@ -37,6 +42,10 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     TVector<ISubOperation::TPtr> result;
 
+    size_t cutLen = bcPath.GetDomainPathString().size() + 1;
+
+    auto now = ToX509String(TlsActivationContext->AsActorContext().Now());
+
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
         NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
         createCdcStreamOp.SetTableName(item.GetPath());
@@ -50,7 +59,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
        auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
-        desc.SetDstPath("0" + item.GetPath());
+        desc.SetDstPath(now + "_full/" + item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
         // desc.SetIsBackup(true);
@@ -101,6 +110,8 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
     TVector<ISubOperation::TPtr> result;
 
+    auto now = ToX509String(TlsActivationContext->AsActorContext().Now());
+
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
         NKikimrSchemeOp::TModifyScheme modifyScheme;
         modifyScheme.SetWorkingDir(tx.GetWorkingDir());
@@ -109,7 +120,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         auto& cb = *modifyScheme.MutableAlterContinuousBackup();
         cb.SetTableName(item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
         auto& ib = *cb.MutableTakeIncrementalBackup();
-        ib.SetDstPath(bcPathStr.substr(cutLen, bcPathStr.size() - cutLen) + "/0_incremental" + item.GetPath());
+        ib.SetDstPath(bcPathStr.substr(cutLen, bcPathStr.size() - cutLen) + "/" + now + "_incremental/" + item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
 
         if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result)) {
             return result;

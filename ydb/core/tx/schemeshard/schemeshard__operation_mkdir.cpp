@@ -103,7 +103,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        const auto acceptExisted = !Transaction.GetFailOnExist();
+        // const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetMkDir().GetName();
 
@@ -150,19 +150,31 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
         NSchemeShard::TPath dstPath = parentPath.Child(name);
+
+        if (dstPath.IsResolved() && dstPath.Base()->PathState != NKikimrSchemeOp::EPathState::EPathStateNotExist) {
+            result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+            context.OnComplete.ActivateTx(OperationId);
+
+            TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMkDir, dstPath.Base()->PathId);
+            txState.State = TTxState::Propose;
+
+            SetState(NextState());
+            return result;
+        }
+
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
                 checks
                     .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist({
-                            TPathElement::EPathType::EPathTypeDir,
-                            TPathElement::EPathType::EPathTypeSubDomain,
-                            TPathElement::EPathType::EPathTypeExtSubDomain,
-                            TPathElement::EPathType::EPathTypeColumnStore
-                        }, acceptExisted);
+                    .NotUnderDeleting();
+                    // .FailOnExist({
+                    //         TPathElement::EPathType::EPathTypeDir,
+                    //         TPathElement::EPathType::EPathTypeSubDomain,
+                    //         TPathElement::EPathType::EPathTypeExtSubDomain,
+                    //         TPathElement::EPathType::EPathTypeColumnStore
+                    //     }, acceptExisted);
             } else {
                 checks
                     .NotEmpty()

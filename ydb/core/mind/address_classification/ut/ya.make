@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/core/mind/address_classification)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
-ENDIF()
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(1200)
     SIZE(LARGE)

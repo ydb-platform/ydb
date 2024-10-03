@@ -89,4 +89,32 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     return result;
 }
 
+TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_UNUSED(opId, tx, context);
+
+    TString bcPathStr = JoinPath({tx.GetWorkingDir().c_str(), tx.GetBackupIncrementalBackupCollection().GetName().c_str()});
+
+    const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+    TVector<ISubOperation::TPtr> result;
+
+    for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
+        NKikimrSchemeOp::TModifyScheme modifyScheme;
+        modifyScheme.SetWorkingDir(tx.GetWorkingDir());
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
+        modifyScheme.SetInternal(true);
+        auto& cb = *modifyScheme.MutableAlterContinuousBackup();
+        cb.SetTableName(item.GetPath().substr(6, item.GetPath().size() - 6));
+        auto& ib = *cb.MutableTakeIncrementalBackup();
+        ib.SetDstPath(bcPathStr.substr(6, bcPathStr.size() - 6) + "/0_incremental" + item.GetPath());
+
+        if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result)) {
+            return result;
+        }
+    }
+
+    return result;
+}
+
 }  // namespace NKikimr::NSchemeShard

@@ -375,9 +375,9 @@ public:
                 break;
             }
 
-            // FIXME(+active)
+            // FIXME(+active): maybe done
             case NKqpProto::TKqpSchemeOperation::kBackupIncremental: {
-                const auto& modifyScheme = schemeOp.GetCreateBackupCollection();
+                const auto& modifyScheme = schemeOp.GetBackupIncremental();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

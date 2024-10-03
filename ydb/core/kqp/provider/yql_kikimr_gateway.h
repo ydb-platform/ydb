@@ -1064,6 +1064,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> BackupIncremental(const TString& cluster, const TBackupSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;

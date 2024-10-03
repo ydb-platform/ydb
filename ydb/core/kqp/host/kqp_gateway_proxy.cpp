@@ -2430,7 +2430,55 @@ public:
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
                 auto& phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-                phyTx.MutableSchemeOperation()->MutableCreateBackupCollection()->Swap(&tx);
+                phyTx.MutableSchemeOperation()->MutableBackup()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> BackupIncremental(const TString& cluster, const NYql::TBackupSettings& settings) override {
+        CHECK_PREPARED_DDL(Backup);
+
+        // FIXME(+active)
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            TString path;
+
+            if (!settings.Name.StartsWith(SessionCtx->GetDatabase())) {
+                path = JoinPath({SessionCtx->GetDatabase(), ".backups/collections", settings.Name});
+            } else {
+                path = settings.Name;
+            }
+
+            TString error;
+            std::pair<TString, TString> pathPair;
+            if (!NSchemeHelpers::SplitTablePath(path, GetDatabase(), pathPair, error, true)) {
+                return MakeFuture(ResultFromError<TGenericResult>(error));
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(pathPair.first);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection);
+
+            auto& op = *tx.MutableBackupIncrementalBackupCollection();
+            op.SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableBackupIncremental()->Swap(&tx);
 
                 TGenericResult result;
                 result.SetSuccess();

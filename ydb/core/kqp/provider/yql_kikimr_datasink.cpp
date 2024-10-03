@@ -245,6 +245,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleBackupIncremental(TKiBackupIncremental node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     static void HandleDropTable(TIntrusivePtr<TKikimrSessionContext>& ctx, const NCommon::TWriteTableSettings& settings,
         const TKikimrKey& key, const TStringBuf& cluster)
     {
@@ -605,7 +611,9 @@ public:
             return true;
         }
 
-        if (node.IsCallable(TKiBackup::CallableName())) {
+        if (node.IsCallable(TKiBackup::CallableName())
+            || node.IsCallable(TKiBackupIncremental::CallableName())
+        ) {
             return true;
         }
 
@@ -1500,6 +1508,14 @@ public:
                         .Prefix().Build(key.GetBackupCollectionPath().Prefix)
                         .Done()
                         .Ptr();
+                } else if (mode == "backupIncremental") {
+                    return Build<TKiBackupIncremental>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .BackupCollection().Build(key.GetBackupCollectionPath().Name)
+                        .Prefix().Build(key.GetBackupCollectionPath().Prefix)
+                        .Done()
+                        .Ptr();
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unknown operation type for backup collection: " << TString(mode)));
                     return nullptr;
@@ -1709,6 +1725,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiBackup>(input)) {
         return HandleBackup(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiBackupIncremental>(input)) {
+        return HandleBackupIncremental(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

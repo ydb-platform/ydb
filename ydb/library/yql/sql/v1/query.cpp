@@ -3479,10 +3479,11 @@ public:
         keys = L(keys, Q(Y(Q("backup"), Y("String", BuildQuotedAtom(Pos, Id)), Y("String", BuildQuotedAtom(Pos, Prefix)))));
 
         auto opts = Y();
-        opts->Add(Q(Y(Q("mode"), Q("backup"))));
 
         if (Params.Incremental) {
-            opts->Add(Q(Y(Q("incremental"))));
+            opts->Add(Q(Y(Q("mode"), Q("backupIncremental"))));
+        } else {
+            opts->Add(Q(Y(Q("mode"), Q("backup"))));
         }
 
         Add("block", Q(Y(

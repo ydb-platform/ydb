@@ -1675,6 +1675,8 @@ enum EOperationType {
     ESchemeOpAlterBackupCollection = 106;
     ESchemeOpDropBackupCollection = 107;
     ESchemeOpBackupBackupCollection = 108;
+    ESchemeOpBackupIncrementalBackupCollection = 109;
+    ESchemeOpRestoreBackupCollection = 110;
 }
 
 message TApplyIf {
@@ -1900,6 +1902,8 @@ message TModifyScheme {
     optional TBackupCollection AlterBackupCollection = 75;
     optional TBackupCollection DropBackupCollection = 76;
     optional TBackupCollection BackupBackupCollection = 77;
+    optional TBackupCollection BackupIncrementalBackupCollection = 78;
+    optional TBackupCollection RestoreBackupCollection = 79;
 }
 
 message TCopySequence {

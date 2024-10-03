@@ -78,6 +78,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiAlterBackupCollection::CallableName());
         DataSinkNames.insert(TKiDropBackupCollection::CallableName());
         DataSinkNames.insert(TKiBackup::CallableName());
+        DataSinkNames.insert(TKiBackupIncremental::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -128,7 +129,8 @@ struct TKikimrData {
             TYdbOperation::CreateBackupCollection |
             TYdbOperation::AlterBackupCollection |
             TYdbOperation::DropBackupCollection |
-            TYdbOperation::Backup;
+            TYdbOperation::Backup |
+            TYdbOperation::BackupIncremental;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}

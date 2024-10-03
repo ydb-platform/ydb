@@ -122,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument("--yexport_bin", help="Path to yexport binary")
     parser.add_argument("--tmp", help="Path to tmp dir")
     parser.add_argument(
-        "-k", "--keep-going", action="store_true", default=True, help="Ignore unknown build graph errors and try to perform export")
+        "-k", "--keep-going", action="store_true", default=False, help="Ignore unknown build graph errors and try to perform export")
     parser.add_argument(
         "--debug", action="store_true", default=False, help="Run script in debug mode"
     )
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
         # In original script there are targets kikimr/docs/ru/docs_oss ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin
         generate_graph_command = f'{ymake_binary_path} --build-root "{ydb_tmp_folder_path}" --config "{dump_export_path}"\
-            --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going \
+            --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going\
             ydb ydb/tests/oss/launch tools/rescompiler/bin > {graph_export_path}'
         print(f"Generate graph command {generate_graph_command}")
 

@@ -43,9 +43,6 @@ public:
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(true);
-
-        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,

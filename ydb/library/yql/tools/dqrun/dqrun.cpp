@@ -1087,7 +1087,7 @@ int RunMain(int argc, const char* argv[])
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
-                metricsRegistry, metricsPusherFactory, fqConfig, pqGateway);
+                metricsRegistry, metricsPusherFactory, fqConfig);
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

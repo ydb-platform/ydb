@@ -391,8 +391,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 source.GetAddBearerToToken()),
-            Counters,
-            PqGateway
+            Counters
             );
         SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
         sessionInfo.Consumers[ev->Sender] = consumerInfo;

@@ -5,7 +5,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 
 namespace NActors {
 class IActor;

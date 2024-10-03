@@ -16,6 +16,8 @@
 
 #include <util/string/cast.h>
 
+#include <fstream>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -379,6 +381,10 @@ public:
         Extract,
         Finish
     };
+
+    std::vector<std::pair<ui64, ui64>> memUsageInMemory;
+    std::vector<std::pair<ui64, ui64>> memUsageSplitting;
+    std::vector<std::pair<ui64, ui64>> memUsageSpilling;
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
@@ -403,8 +409,56 @@ public:
         Throat = InMemoryProcessingState.Throat;
     }
 
+    void WriteMemInfo() {
+        std::ofstream inmemfile("memUsageInMemory.csv");
+        inmemfile << "usage,limit" << std::endl;
+        for (const auto &val : memUsageInMemory) {
+            inmemfile << val.first << "," << val.second << std::endl;
+        }
+
+        std::ofstream splitfile("memUsageSplitting.csv");
+        splitfile << "usage,limit" << std::endl;
+        for (const auto &val : memUsageSplitting) {
+            splitfile << val.first << "," << val.second << std::endl;
+        }
+
+        std::ofstream spillfile("memUsageSpilling.csv");
+        spillfile << "usage,limit" << std::endl;
+        for (const auto &val : memUsageSpilling) {
+            spillfile << val.first << "," << val.second << std::endl;
+        }
+    }
+
+    void AddOnlyNewValueToMem(ui64 used, ui64 limit, std::vector<std::pair<ui64, ui64>>& memvec) {
+        if (memvec.empty()) {
+            memvec.push_back({used, limit});
+            return;
+        }
+
+        const auto& lastval = memvec.back();
+        if (lastval.first == used && lastval.second == limit) return;
+
+        memvec.push_back({used, limit});
+    }
+
+    void SaveMemoryDump() {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        if (GetMode() == EOperatingMode::InMemory) {
+            AddOnlyNewValueToMem(used, limit, memUsageInMemory);
+        } else if (GetMode() == EOperatingMode::SplittingState) {
+            AddOnlyNewValueToMem(used, limit, memUsageSplitting);
+        } else {
+            AddOnlyNewValueToMem(used, limit, memUsageSpilling);
+        }
+    }
+
     EUpdateResult Update() {
-        if (IsEverythingExtracted) return EUpdateResult::Finish;
+        SaveMemoryDump();
+        if (IsEverythingExtracted)  {
+            WriteMemInfo();
+            return EUpdateResult::Finish;
+        }
 
         switch (GetMode()) {
             case EOperatingMode::InMemory: {
@@ -539,6 +593,7 @@ private:
             bucket.AsyncWriteOperation = std::nullopt;
 
             while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
+                SaveMemoryDump();
                 bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
                 for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //releasing values stored in unsafe TUnboxedValue buffer
@@ -554,6 +609,8 @@ private:
             bucket.InMemoryProcessingState->ReadMore<false>();
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
+            SaveMemoryDump();
+
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
@@ -586,11 +643,12 @@ private:
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
-            if (!HasMemoryForProcessing()) {
+            if (!HasMemoryForProcessing() && InMemoryBucketsCount >= SpilledBucketCount / 2) {
+                //  no memory for processing" << std::endl;
 
                 i64 bucketNumToSpill = -1;
                 ui64 sizeToSpill = 0;
-                for (ui64 i = 0; i < SpillingBucketsCount; ++i) {
+                for (ui64 i = 0; i < SpilledBucketCount; ++i) {
                     if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
                         if (SpilledBuckets[i].LineCount >= sizeToSpill) {
                             bucketNumToSpill = i;
@@ -598,9 +656,14 @@ private:
                         }
                     }
                 }
-                if (bucketNumToSpill == -1) continue;
+                if (bucketNumToSpill == -1) {
+                    // std::cerr << "MISHA no bucket to spill" << std::endl;
+                    continue;
+                }
 
                 SplitStateSpillingBucket = bucketNumToSpill;
+                InMemoryBucketsCount--;
+                std::cerr << "MISHA spilling bucket during split: " << SplitStateSpillingBucket << std::endl;
 
                 auto& bucket = SpilledBuckets[bucketNumToSpill];
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
@@ -613,10 +676,27 @@ private:
                     }
                     if (bucket.AsyncWriteOperation) return true;
 
-                    bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
-                    if (bucket.AsyncWriteOperation) return true;
                 }
 
+                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                if (bucket.AsyncWriteOperation) return true;
+
+            }
+        }
+
+        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+            auto& bucket = SpilledBuckets[i];
+            if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) {
+                if (bucket.AsyncWriteOperation.has_value()) {
+                    if (!bucket.AsyncWriteOperation->HasValue()) return true;
+                    bucket.SpilledState->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
+                    bucket.AsyncWriteOperation = std::nullopt;
+                }                
+
+                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                if (bucket.AsyncWriteOperation) return true;
+
+                bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
             }
         }
 
@@ -627,6 +707,7 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
+        //std::cerr << "MISHA spill: " << AllowSpilling << Ctx.SpillerFactory << IsSwitchToSpillingModeCondition() << std::endl;
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             LogMemoryUsage();
 
@@ -792,6 +873,7 @@ private:
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
+                break;
             }
             case EOperatingMode::Spilling: {
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";

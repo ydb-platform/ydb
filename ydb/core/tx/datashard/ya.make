@@ -305,7 +305,6 @@ RECURSE_FOR_TESTS(
     ut_change_collector
     ut_change_exchange
     ut_column_stats
-    ut_common
     ut_compaction
     ut_erase_rows
     ut_followers

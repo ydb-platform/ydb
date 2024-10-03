@@ -193,7 +193,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Failed to unwrap empty optional" in issues, "Incorrect Issues: " + issues
+        assert "Cannot parse JSON string" in issues, "Incorrect Issues: " + issues
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)

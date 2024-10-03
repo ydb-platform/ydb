@@ -68,12 +68,14 @@ struct TEvPrivate {
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
-        TEvDataParsed(ui64 offset, TJson&& value) 
+        TEvDataParsed(ui64 offset, TJson&& value, ui64 cookie) 
             : Offset(offset)
             , Value(std::move(value))
+            , Cookie(cookie)
         {}
-        ui64 Offset = 0; 
+        ui64 Offset; 
         TJson Value;
+        ui64 Cookie;
     };
 
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
@@ -139,6 +141,11 @@ private:
         const TString& LogPrefix;    
     };
 
+    struct TParserSchema {
+        THashMap<TString, ui64> FieldOffsets;
+        TParserInputType InputType;
+    };
+
     const TString TopicPath;
     NActors::TActorId RowDispatcherActorId;
     ui32 PartitionId;
@@ -156,11 +163,10 @@ private:
     std::unique_ptr<TJsonParser> Parser;
     NConfig::TRowDispatcherConfig Config;
     ui64 UsedSize = 0;
-    TMaybe<TParserInputType> CurrentParserTypes;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
-    NYql::IPqGateway::TPtr PqGateway;
-    THashMap<TString, ui64> FieldParserOffsets;
+    ui64 ParserCookie = 0;
+    THashMap<ui64, TParserSchema> ParserSchemes;
 
 public:
     explicit TTopicSession(
@@ -211,8 +217,8 @@ private:
 
     void PrintInternalState();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TJson RebuildJson(const ClientsInfo& info, const TJson& json);
-    void UpdateFieldOffsets();
+    TJson RebuildJson(const ClientsInfo& info, const TJson& json, ui64 schemaVersion);
+    void UpdateParserSchema(const TParserInputType& inputType);
 
 private:
 
@@ -376,11 +382,13 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json) {
+TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json, ui64 schemaVersion) {
     TJson result;
+    Y_ENSURE(ParserSchemes.count(schemaVersion), "Internal error: unknown parser schema, version " << schemaVersion);
 
+    auto& offsets = ParserSchemes[schemaVersion].FieldOffsets;
     for (auto name : info.Settings.GetSource().GetColumns()) {
-        auto offset = FieldParserOffsets[name];
+        auto offset = offsets[name];
         auto it = json.begin();
         std::advance(it, offset);
         result.push_back(*it);
@@ -402,7 +410,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
             if (!info.Filter) {
                 continue;
             }
-            auto json = RebuildJson(info, ev->Get()->Value);
+            auto json = RebuildJson(info, ev->Get()->Value, ev->Get()->Cookie);
             info.Filter->Push(ev->Get()->Offset, json);
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter);
@@ -615,7 +623,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         return;
     }
 
-    LOG_ROW_DISPATCHER_INFO("New client, read actor id " << ev->Sender.ToString());
+    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " 
+        << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
 
     auto columns = GetVector(ev->Get()->Record.GetSource().GetColumns());
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
@@ -639,11 +648,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
 
-        LOG_ROW_DISPATCHER_INFO("New client: offset " << clientInfo.NextMessageOffset << ", predicate: " << clientInfo.Settings.GetSource().GetPredicate());
-
         if (ReadSession) {
             if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
-                LOG_ROW_DISPATCHER_INFO("New client has less offset than the last message, stop (restart) topic session");
+                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 StopReadSession();
             }
         }
@@ -678,11 +685,15 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings"); // TODO
+        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
         return;
     }
     Clients.erase(it);
     ClientsWithoutPredicate.erase(ev->Sender);
+    if (Clients.empty()) {
+        StopReadSession();
+    }
+    UpdateParser();
 }
 
 
@@ -697,13 +708,16 @@ void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSe
     }
 }
 
-void TTopicSession::UpdateFieldOffsets() {
-    FieldParserOffsets.clear();
-    Y_ENSURE(CurrentParserTypes);
+void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
+    ++ParserCookie;
+    auto& schema = ParserSchemes[ParserCookie];
+
+    schema.FieldOffsets.clear();
     ui64 offset = 0;
-    for (const auto& [name, type]: *CurrentParserTypes) {
-        FieldParserOffsets[name] = offset++;
+    for (const auto& [name, type]: inputType) {
+        schema.FieldOffsets[name] = offset++;
     }
+    schema.InputType = inputType;
 }
 
 void TTopicSession::UpdateParser() {
@@ -711,13 +725,19 @@ void TTopicSession::UpdateParser() {
     for (auto& [readActorId, info] : Clients) {
         CollectColumns(info.Settings.GetSource(), namesWithTypes);
     }
-    if (namesWithTypes == CurrentParserTypes) {
+
+    if (namesWithTypes == ParserSchemes[ParserCookie].InputType) {
+    //    LOG_ROW_DISPATCHER_TRACE("Same: ");
+        return;
+    }
+    if (namesWithTypes.empty()) {
+        LOG_ROW_DISPATCHER_INFO("No columns to parse, reset parser");
+        Parser.reset();
         return;
     }
 
     try {
-        CurrentParserTypes = namesWithTypes;
-        UpdateFieldOffsets();
+        UpdateParserSchema(namesWithTypes);
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
 
         TVector<TString> names;
@@ -728,12 +748,11 @@ void TTopicSession::UpdateParser() {
         }
 
         LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
-
         Parser = NewJsonParser(
             names,
             types,
-            [actorSystem, selfId = SelfId()](ui64 offset, TJson&& value){
-                actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(offset, std::move(value)));
+            [actorSystem, selfId = SelfId(), cookie = ParserCookie](ui64 offset, TJson&& value){
+                actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(offset, std::move(value), cookie));
             });
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues());

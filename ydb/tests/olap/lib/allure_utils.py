@@ -34,7 +34,7 @@ def allure_test_description(
         {
             'table_path': YdbCluster.tables_path,
             'monitoring': (
-                f"<a target='_blank' href='https://monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?"
+                f"<a target='_blank' href='https://monitoring.yandex-team.ru/projects/ydb-testing/dashboards/monk5amv10ia2f61ifpv?"
                 f"p.cluster={monitoring_cluster}&p.database=/{test_info['database']}&from={int(start_time * 1000)}&to={int(end_time * 1000)}'>link</a>"
             ),
             'coredumps': f"<a target='_blank' href='{core_link}'>link</a>",

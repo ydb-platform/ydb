@@ -188,9 +188,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto description = res->Record.GetPathDescription().GetColumnTableDescription();
             auto indexes = description.GetSchema().GetIndexes();
             UNIT_ASSERT(indexes.size() == 5);
+
+            std::unordered_set<TString> indexNames{"cms_ts", "cms_res_id", "cms_uid", "cms_level", "cms_message"};
             for (const auto& i : indexes) {
                 Cerr << ">>> " << i.GetName() << " of class name " << i.GetClassName() << Endl;
+                UNIT_ASSERT(i.GetClassName() == "COUNT_MIN_SKETCH");
+                UNIT_ASSERT(indexNames.erase(i.GetName()));
             }
+            UNIT_ASSERT(indexNames.empty());
         }
 
         {

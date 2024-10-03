@@ -106,7 +106,10 @@ public:
     bool UnregisterAllocation(const ui64 allocationId) {
         ui64 memoryAllocated = 0;
         auto it = AllocationInfo.find(allocationId);
-        AFL_VERIFY(it != AllocationInfo.end());
+        if (it == AllocationInfo.end()) {
+            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "unregister_absent_allocation")("allocation_id", allocationId);
+            return;
+        }
         bool waitFlag = false;
         const ui64 internalGroupId = it->second->GetAllocationInternalGroupId();
         switch (it->second->GetAllocationStatus()) {

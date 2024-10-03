@@ -560,7 +560,7 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .NoArgument()
         .SetFlag(&runOptions.Sql);
-    opts.AddLongOption('l', "rlimit", "Resource (memory) limit, mb")
+    opts.AddLongOption("mem-limit", "Resource (memory) limit, mb")
         .Optional()
         .StoreResult(&memLimit);
     opts.AddLongOption("pg", "Program has PG syntax").NoArgument().SetFlag(&runOptions.Pg);
@@ -731,13 +731,13 @@ int RunMain(int argc, const char* argv[])
 #ifdef __unix__
         struct rlimit rl;
 
-        if (getrlimit(RLIMIT_DATA, &rl)) {
+        if (getrlimit(RLIMIT_AS, &rl)) {
             ythrow TSystemError() << "Cannot getrlimit(RLIMIT_RSS)";
         }
 
         rl.rlim_cur = memLimit * 1024 * 1024;
         rl.rlim_max = memLimit * 1024 * 1024;
-        if (auto v = setrlimit(RLIMIT_DATA, &rl)) {
+        if (auto v = setrlimit(RLIMIT_AS, &rl)) {
             ythrow TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimit << " mbytes " << v;
         }
 #else
@@ -851,7 +851,7 @@ int RunMain(int argc, const char* argv[])
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
         TVector<NYql::NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
-        NYql::NPg::RegisterExtensions(extensions, false,
+        NYql::NPg::RegisterExtensions(extensions, qContext.CanRead(),
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }

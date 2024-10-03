@@ -3679,7 +3679,7 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
                 throw yexception() << "Duplicated extension install name: " << e.InstallName;
             }
 
-            if (e.LibraryMD5.empty()) {
+            if (e.LibraryMD5.empty() && !e.LibraryPath.empty()) {
                 e.LibraryMD5 = MD5::File(e.LibraryPath);
             }
 
@@ -3691,7 +3691,7 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
             }
 
             parser.Parse(i + 1, sqls, catalog);
-            if (loader && !e.TypesOnly) {
+            if (loader && !e.TypesOnly && !e.LibraryPath.empty()) {
                 loader->Load(i + 1, e.Name, e.LibraryPath);
             }
         }

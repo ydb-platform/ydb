@@ -461,9 +461,6 @@ void TTopicSession::HandleNewEvents() {
             break;
         }
         std::visit(TTopicEventProcessor{*this, LogPrefix}, *event);
-        if (!maxHandledEvents--) {
-            break;
-        }
     }
 }
 

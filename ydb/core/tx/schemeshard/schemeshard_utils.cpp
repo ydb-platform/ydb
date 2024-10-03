@@ -458,11 +458,11 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -500,7 +500,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
     }
@@ -517,7 +517,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -554,7 +554,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
 
         NScheme::TTypeInfo typeInfo;
-        if (!typeRegistry->GetTypeInfo(typeName, columnName, typeInfo, explain)) {
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
             return false; 
         }
 

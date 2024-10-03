@@ -92,6 +92,7 @@ struct TEvPrivate {
 
 ui64 PrintStatePeriodSec = 60;
 ui64 MaxBatchSizeBytes = 10000000;
+ui64 MaxHandledEvents = 1000;
 
 TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& value) {
     return {value.begin(), value.end()};
@@ -447,8 +448,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TTopicSession::HandleNewEvents() {
-    ui64 maxHandledEvents = 50;
-    while (true) {
+    for (ui64 i = 0; i < MaxHandledEvents; ++i) {
         if (!ReadSession) {
             return;
         }
@@ -484,7 +484,6 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
         TString item = message.GetData();
-        item.Detach();
         Self.SendToParsing(message.GetOffset(), item);
         Self.LastMessageOffset = message.GetOffset();
     }
@@ -547,6 +546,10 @@ void TTopicSession::SendToParsing(ui64 offset, const TString& message) {
             LOG_ROW_DISPATCHER_TRACE("Send message to client without parsing/filtering");
             AddDataToClient(info, offset, message);
         }
+    }
+
+    if (ClientsWithoutPredicate.size() == Clients.size()) {
+        return;
     }
 
     try {
@@ -685,6 +688,7 @@ void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& source
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         Parser = NewJsonParser(
             GetVector(sourceParams.GetColumns()),
+            GetVector(sourceParams.GetColumnTypes()),
             [actorSystem, selfId = SelfId()](ui64 offset, TList<TString>&& value){
                 actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(offset, std::move(value)));
             });

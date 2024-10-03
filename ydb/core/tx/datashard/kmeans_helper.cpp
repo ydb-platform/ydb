@@ -1,6 +1,7 @@
 #include "kmeans_helper.h"
 
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr::NDataShard::NKMeans {
 
@@ -27,7 +28,7 @@ NTable::TLead CreateLeadFrom(const TTableRange& range) {
     return lead;
 }
 
-void AddRowMain2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -46,7 +47,7 @@ void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell>
                   TSerializedCellVec::Serialize((*row).Slice(dataPos)));
 }
 
-void AddRowTmp2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -54,7 +55,7 @@ void AddRowTmp2Tmp(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key,
     buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
 }
 
-void AddRowTmp2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                        ui32 dataPos)
 {
     std::array<TCell, 1> cells;
@@ -96,12 +97,12 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 
     Ydb::Type type;
     type.set_type_id(Ydb::Type::UINT32);
-    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, type);
+    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
         Y_ABORT_UNLESS(it != types.end());
-        ProtoYdbTypeFromTypeInfo(&type, it->second);
+        NScheme::ProtoFromTypeInfo(it->second, type);
         uploadTypes->emplace_back(it->first, type);
         types.erase(it);
     };
@@ -109,12 +110,12 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
         addType(table.Columns.at(column).Name);
     }
     switch (uploadState) {
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_TMP:
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_TMP_TO_TMP:
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD:
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD:
             addType(embedding);
             [[fallthrough]];
         case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING:
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_TMP_TO_POSTING: {
+        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING: {
             for (const auto& column : data) {
                 addType(column);
             }

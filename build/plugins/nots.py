@@ -603,6 +603,8 @@ def _setup_stylelint(unit):
     if not test_files:
         return
 
+    unit.on_peerdir_ts_resource("stylelint")
+
     from lib.nots.package_manager import constants
 
     recipes_value = unit.get("TEST_RECIPES_VALUE")

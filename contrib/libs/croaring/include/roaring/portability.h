@@ -585,6 +585,8 @@ static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
 
 #if defined(__GNUC__) || defined(__clang__)
 #define CROARING_DEPRECATED __attribute__((deprecated))
+#elif defined(_MSC_VER)
+#define CROARING_DEPRECATED __declspec(deprecated)
 #else
 #define CROARING_DEPRECATED
 #endif  // defined(__GNUC__) || defined(__clang__)

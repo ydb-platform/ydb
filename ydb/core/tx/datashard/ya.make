@@ -126,7 +126,6 @@ SRCS(
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_subdomain_path_id.cpp
-    datashard_switch_mvcc_state.cpp
     datashard_trans_queue.cpp
     datashard_trans_queue.h
     datashard_txs.h
@@ -259,7 +258,6 @@ PEERDIR(
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
-    ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/tablet

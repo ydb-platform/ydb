@@ -145,6 +145,8 @@ class TJsonNodes : public TViewerPipeClient {
     bool OffloadMerge = true;
     size_t OffloadMergeAttempts = 2;
 
+    using TGroupSortKey = std::variant<TString, ui64, float>;
+
     struct TNode {
         TEvInterconnect::TNodeInfo NodeInfo;
         NKikimrWhiteboard::TSystemStateInfo SystemState;
@@ -429,29 +431,65 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetGroupName(ENodeFields groupBy, TInstant now) const {
+            TString groupName;
             switch (groupBy) {
                 case ENodeFields::NodeId:
-                    return ToString(GetNodeId());
+                    groupName = ToString(GetNodeId());
+                    break;
                 case ENodeFields::HostName:
-                    return GetHostName();
+                    groupName = GetHostName();
+                    break;
                 case ENodeFields::NodeName:
-                    return GetNodeName();
+                    groupName = GetNodeName();
+                    break;
                 case ENodeFields::Database:
-                    return Database;
+                    groupName = Database;
+                    break;
                 case ENodeFields::DiskSpaceUsage:
-                    return GetDiskUsageForGroup();
+                    groupName = GetDiskUsageForGroup();
+                    break;
                 case ENodeFields::DC:
-                    return GetDataCenter();
+                    groupName = GetDataCenter();
+                    break;
                 case ENodeFields::Rack:
-                    return GetRack();
+                    groupName = GetRack();
+                    break;
                 case ENodeFields::Missing:
-                    return ToString(MissingDisks);
+                    groupName = ToString(MissingDisks);
+                    break;
                 case ENodeFields::Uptime:
-                    return GetUptimeForGroup(now);
+                    groupName = GetUptimeForGroup(now);
+                    break;
                 case ENodeFields::Version:
-                    return GetVersionForGroup();
+                    groupName = GetVersionForGroup();
+                    break;
                 default:
-                    return {};
+                    break;
+            }
+            if (groupName.empty()) {
+                groupName = "unknown";
+            }
+            return groupName;
+        }
+
+        TGroupSortKey GetGroupSortKey(ENodeFields groupBy, TInstant now) const {
+            switch (groupBy) {
+                case ENodeFields::NodeId:
+                case ENodeFields::HostName:
+                case ENodeFields::NodeName:
+                case ENodeFields::Database:
+                case ENodeFields::DC:
+                case ENodeFields::Rack:
+                case ENodeFields::Version:
+                    return GetGroupName(groupBy, now);
+                case ENodeFields::DiskSpaceUsage:
+                    return DiskSpaceUsage;
+                case ENodeFields::Missing:
+                    return MissingDisks;
+                case ENodeFields::Uptime:
+                    return static_cast<ui64>(now.Seconds()) - (Disconnected ? SystemState.GetDisconnectTime() : SystemState.GetStartTime());
+                default:
+                    return TString();
             }
         }
 
@@ -462,11 +500,6 @@ class TJsonNodes : public TViewerPipeClient {
             CalcCpuUsage();
             CalcLoadAverage();
         }
-    };
-
-    struct TNodeGroup {
-        TString Name;
-        std::vector<TNode*> Nodes;
     };
 
     struct TNodeBatch {
@@ -485,6 +518,12 @@ class TJsonNodes : public TViewerPipeClient {
 
     using TNodeData = std::vector<TNode>;
     using TNodeView = std::deque<TNode*>;
+
+    struct TNodeGroup {
+        TString Name;
+        TGroupSortKey SortKey;
+        TNodeView Nodes;
+    };
 
     TNodeData NodeData;
     TNodeView NodeView;
@@ -1016,6 +1055,7 @@ public:
                 nodeGroups.emplace(gb, NodeGroups.size());
                 nodeGroup = &NodeGroups.emplace_back();
                 nodeGroup->Name = gb;
+                nodeGroup->SortKey = node->GetGroupSortKey(GroupBy, now);
             } else {
                 nodeGroup = &NodeGroups[it->second];
             }
@@ -1037,7 +1077,7 @@ public:
                 case ENodeFields::Uptime:
                 case ENodeFields::Version:
                     GroupCollection();
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
+                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; });
                     NeedGroup = false;
                     break;
                 case ENodeFields::NodeInfo:

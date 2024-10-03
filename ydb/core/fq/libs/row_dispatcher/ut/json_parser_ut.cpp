@@ -6,6 +6,9 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
+
+#include <ydb/library/yql/public/purecalc/common/interface.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace {
@@ -31,10 +34,19 @@ public:
         }
     }
 
+    void MakeParser(TVector<TString> columns, TVector<TString> types, NFq::TJsonParser::TCallback callback) {
+        try {
+            Parser = NFq::NewJsonParser(
+                columns,
+                types,
+                callback);
+        } catch (NYql::NPureCalc::TCompileError compileError) {
+            UNIT_ASSERT_C(false, TStringBuilder() << "Failed to create json parser: " << compileError.what() << "\nQuery text:\n" << compileError.GetYql() << "Reason:\n" << compileError.GetIssues());
+        }
+    }
+
     void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
-        Parser = NFq::NewJsonParser(
-            columns,
-            callback);
+        MakeParser(columns, TVector<TString>(columns.size(), "String"), callback);
     }
 
     TActorSystemStub actorSystemStub;
@@ -46,11 +58,11 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) { 
         TList<TString> result;
         ui64 resultOffset;
-        MakeParser({"a1", "a2"}, [&](ui64 offset, TList<TString>&& value){
+        MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"}, [&](ui64 offset, TList<TString>&& value){
                 resultOffset = offset;
                 result = std::move(value);
             });
-        Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
+        Parser->Push(5, R"({"a1": "hello1", "a2": 101,  "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
@@ -102,7 +114,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
 
         MakeParser({"a2", "a1"}, [&](ui64, TList<TString>&&){ });
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, " Failed to unwrap empty optional");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, "DB::ParsingException: Cannot parse input: expected '{' before: 'ydb': (at row 1)");
     }
 }
 

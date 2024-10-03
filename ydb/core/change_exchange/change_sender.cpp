@@ -61,18 +61,25 @@ void TChangeSender::RecreateSenders(const TVector<ui64>& partitionIds) {
     }
 }
 
-void TChangeSender::CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged) {
-    if (partitioningChanged) {
+void TChangeSender::CreateSendersImpl(const TVector<ui64>& partitionIds) {
+    if (partitionIds) {
         CreateMissingSenders(partitionIds);
     } else {
-        RecreateSenders(GonePartitions);
+        RecreateSenders(std::exchange(GonePartitions, {}));
     }
-
-    GonePartitions.clear();
 
     if (!Enqueued || !RequestRecords()) {
         SendRecords();
     }
+}
+
+void TChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
+    Y_ABORT_UNLESS(partitionIds);
+    CreateSendersImpl(partitionIds);
+}
+
+void TChangeSender::CreateSenders() {
+    CreateSendersImpl({});
 }
 
 void TChangeSender::KillSenders() {
@@ -303,6 +310,7 @@ void TChangeSender::OnGone(ui64 partitionId) {
     if (it->second.Ready) {
         --ReadySenders;
     }
+
     Senders.erase(it);
     GonePartitions.push_back(partitionId);
 

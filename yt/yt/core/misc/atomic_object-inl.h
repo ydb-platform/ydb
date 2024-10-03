@@ -54,11 +54,19 @@ bool TAtomicObject<T>::CompareExchange(T& expected, const T& desired)
 }
 
 template <class T>
-template <class F>
+template <CInvocable<void(T&)> F>
 void TAtomicObject<T>::Transform(const F& func)
 {
     auto guard = WriterGuard(Spinlock_);
     func(Object_);
+}
+
+template <class T>
+template <class R, CInvocable<R(const T&)> F>
+R TAtomicObject<T>::Read(const F& func) const
+{
+    auto guard = ReaderGuard(Spinlock_);
+    return func(Object_);
 }
 
 template <class T>

@@ -115,6 +115,10 @@
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
 #endif
 
+#ifdef __unix__
+#include <sys/resource.h>
+#endif
+
 using namespace NKikimr;
 using namespace NYql;
 
@@ -561,6 +565,7 @@ int RunMain(int argc, const char* argv[])
     TQContext qContext;
     TString ysonAttrs;
     TVector<TString> pqFileList;
+    size_t memLimit = 0;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
@@ -571,6 +576,9 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .NoArgument()
         .SetFlag(&runOptions.Sql);
+    opts.AddLongOption("mem-limit", "Resource (memory) limit, mb")
+        .Optional()
+        .StoreResult(&memLimit);
     opts.AddLongOption("pg", "Program has PG syntax").NoArgument().SetFlag(&runOptions.Pg);
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
@@ -739,6 +747,24 @@ int RunMain(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
+    if (memLimit > 0) {
+#ifdef __unix__
+        struct rlimit rl;
+
+        if (getrlimit(RLIMIT_AS, &rl)) {
+            ythrow TSystemError() << "Cannot getrlimit(RLIMIT_RSS)";
+        }
+
+        rl.rlim_cur = memLimit * 1024 * 1024;
+        if (auto v = setrlimit(RLIMIT_AS, &rl)) {
+            ythrow TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimit << " mbytes " << v;
+        }
+#else
+        Cerr << "Memory limit can not be set on this platfrom" << Endl;
+        return 1;
+#endif
+    }
+
     if (!res.Has("program") && !res.Has("replay")) {
         YQL_LOG(ERROR) << "Either program or replay option should be specified";
         return 1;
@@ -844,7 +870,7 @@ int RunMain(int argc, const char* argv[])
         Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
         TVector<NYql::NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
-        NYql::NPg::RegisterExtensions(extensions, false,
+        NYql::NPg::RegisterExtensions(extensions, qContext.CanRead(),
             *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }

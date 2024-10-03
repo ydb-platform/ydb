@@ -1509,10 +1509,10 @@ message TEvLocalKMeansRequest {
         UNSPECIFIED = 0;
         SAMPLE = 1;
         KMEANS = 2;
-        UPLOAD_MAIN_TO_TMP = 3;
+        UPLOAD_MAIN_TO_BUILD = 3;
         UPLOAD_MAIN_TO_POSTING = 4;
-        UPLOAD_TMP_TO_TMP = 5;
-        UPLOAD_TMP_TO_POSTING = 6;
+        UPLOAD_BUILD_TO_BUILD = 5;
+        UPLOAD_BUILD_TO_POSTING = 6;
         DONE = 7;
     };
     optional EState Upload = 11;

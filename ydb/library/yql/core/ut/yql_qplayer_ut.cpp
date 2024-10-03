@@ -55,6 +55,7 @@ struct TRunSettings {
     TMaybe<TString> ParametersYson;
     THashMap<TString, TString> StaticFiles, DynamicFiles;
     bool ChangeTime = false;
+    TVector<std::pair<TString, TCredential>> Credentials;
 };
 
 TUserDataTable MakeUserTables(const THashMap<TString, TString>& map) {
@@ -105,6 +106,15 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
 
     if (!replay && !runSettings.StaticFiles.empty()) {
         factory.AddUserDataTable(MakeUserTables(runSettings.StaticFiles));
+    }
+
+    if (!replay && !runSettings.Credentials.empty()) {
+        auto credentials = MakeIntrusive<TCredentials>();
+        for (const auto& x : runSettings.Credentials) {
+            credentials->AddCredential(x.first, x.second);
+        }
+        
+        factory.SetCredentials(credentials);
     }
 
     TProgramPtr program = factory.Create("-stdin-", query, "", EHiddenMode::Disable, qContext);
@@ -287,6 +297,13 @@ SELECT State FROM plato.WalkFolders(``, $postHandler AS PostHandler);
         auto s = "select EvaluateExpr(CurrentUtcDate())";
         TRunSettings runSettings;
         runSettings.ChangeTime = true;
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Credentials) {
+        auto s = "select SecureParam('token:foo');";
+        TRunSettings runSettings;
+        runSettings.Credentials.push_back(std::make_pair("foo",TCredential("C","S","V")));
         CheckProgram(s, runSettings);
     }
 }

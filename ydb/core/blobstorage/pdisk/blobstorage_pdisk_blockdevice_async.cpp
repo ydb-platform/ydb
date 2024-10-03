@@ -802,6 +802,8 @@ protected:
     TPDiskMon &Mon;
     TString Path;
 
+    TPDiskConfig cfg{0, 0, 0};
+
 private:
     THolder<TCompletionThreads> CompletionThreads;
     THolder<TTrimThread> TrimThread;
@@ -816,7 +818,8 @@ private:
     ui64 Reordering;
     ui64 SeekCostNs;
     bool IsTrimEnabled;
-    ui32 MaxQueuedCompletionActions; // for all threads
+    const ui32 MaxQueuedCompletionActions; // for all threads
+    const ui32 CompletionThreadsCount;
 
     TIdleCounter IdleCounter; // Includes reads, writes and trims
 
@@ -827,7 +830,6 @@ private:
 
     static constexpr int WaitTimeoutMs = 1;
     static constexpr int MaxEvents = 32;
-    const size_t CompletionThreadsCount = 3;
 
     ui64 DeviceInFlight;
     TFlightControl FlightControl;
@@ -841,7 +843,7 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            TIntrusivePtr<TSectorMap> sectorMap)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -855,6 +857,7 @@ public:
         , SeekCostNs(seekCostNs)
         , IsTrimEnabled(true)
         , MaxQueuedCompletionActions(maxQueuedCompletionActions)
+        , CompletionThreadsCount(completionThreadsCount)
         , IdleCounter(Mon.IdleLight)
         , Flags(flags)
         , SectorMap(sectorMap)
@@ -1345,9 +1348,9 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, sectorMap)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap)
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1483,14 +1486,14 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, sectorMap, pdisk);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
         TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, sectorMap, pdisk);
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk);
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

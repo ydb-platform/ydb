@@ -31,7 +31,7 @@ namespace NNames {
         ::TString result;
 
         if (value) {
-            const ui32 fixedSize = GetFixedSize(typeInfo.GetTypeId());
+            const ui32 fixedSize = GetFixedSize(typeInfo);
             if (fixedSize > 0 && value.Size() != fixedSize) {
                 result = ::TStringBuilder()
                     << "Cell with declared type " << NScheme::TypeName(typeInfo)

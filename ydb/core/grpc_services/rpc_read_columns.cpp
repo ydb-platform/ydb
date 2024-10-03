@@ -513,8 +513,8 @@ private:
 
         for (size_t i = 0; i < cells.size(); ++i) {
             if (!cells[i].IsNull() &&
-                NScheme::GetFixedSize(types[i].GetTypeId()) != 0 &&
-                NScheme::GetFixedSize(types[i].GetTypeId()) != cells[i].Size())
+                NScheme::GetFixedSize(types[i]) != 0 &&
+                NScheme::GetFixedSize(types[i]) != cells[i].Size())
             {
                 return false;
             }

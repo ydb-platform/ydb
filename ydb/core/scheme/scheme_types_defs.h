@@ -59,10 +59,18 @@ inline ui32 GetFixedSize(TTypeId typeId) {
 #define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
-    case NTypeIds::Pg:
-        // We can't get fixed size for Pg
-        // Redo log (NTable::NRedo::TValue) doesn't contain pg type descriptor
+    default:
         return 0;
+    }
+}
+
+inline ui32 GetFixedSize(const TTypeInfo& typeInfo) {
+    switch (typeInfo.GetTypeId()) {
+#define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
+    KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
+#undef KIKIMR_TYPE_MACRO
+    case NTypeIds::Pg:
+        return NPg::TypeDescGetStoredSize(typeInfo.GetPgTypeDesc());
     default:
         return 0;
     }

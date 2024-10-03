@@ -58,6 +58,8 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     if (tx.HasWriteId()) {
         WriteId = GetWriteId(tx);
     }
+
+    PartitionsData = std::move(tx.GetPartitions());
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -224,9 +226,25 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
     OnPartitionResult(event, decision);
 }
 
-void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event)
+void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPartitions::TPartitionInfo& partition) {
+    NKikimrPQ::TPartitions::TPartitionInfo* info = nullptr;
+    for (auto& p : *partitionsData.MutablePartition()) {
+        if (p.GetPartitionId() == partition.GetPartitionId()) {
+            info = &p;
+            break;
+        }
+    }
+    if (!info) {
+        info = partitionsData.AddPartition();
+    }
+    *info = std::move(partition);
+}
+
+void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
     PQ_LOG_D("Handle TEvProposePartitionConfigResult");
+
+    UpdatePartitionsData(PartitionsData, event.Data);
 
     OnPartitionResult(event,
                       NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -271,6 +289,16 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             ++ReadSetCount;
 
             PQ_LOG_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
+        }
+
+        NKikimrPQ::TPartitions d;
+        if (data.HasData()) {
+            auto r = data.GetData().UnpackTo(&d);
+            Y_ABORT_UNLESS(r, "Unexpected data");
+        }
+
+        for (auto& v : *d.MutablePartition()) {
+            UpdatePartitionsData(PartitionsData, v);
         }
     } else {
         Y_DEBUG_ABORT("unknown sender tablet %" PRIu64, event.GetTabletProducer());
@@ -373,6 +401,8 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
 
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
+
+    *tx.MutablePartitions() = PartitionsData;
 
     PQ_LOG_D("save tx " << tx.ShortDebugString());
 

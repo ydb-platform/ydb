@@ -543,6 +543,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
+    app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
+    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

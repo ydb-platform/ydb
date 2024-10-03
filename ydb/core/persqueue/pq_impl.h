@@ -286,6 +286,8 @@ private:
     THashSet<ui64> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
+    TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
+
     bool WriteTxsInProgress = false;
 
     struct TReplyToActor;
@@ -387,6 +389,7 @@ private:
     void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
                            const NKikimrPQ::TPQTabletConfig& cfg,
                            const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+                           const NKikimrPQ::TPartitions& partitionsData,
                            const TActorContext& ctx);
 
     void ClearNewConfig();

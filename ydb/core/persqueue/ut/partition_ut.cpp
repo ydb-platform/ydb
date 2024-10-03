@@ -988,8 +988,7 @@ void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
     auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
                                                                                         config.Consumers,
                                                                                         1,
-                                                                                        config.MeteringMode),
-                                                                            NKikimrPQ::TBootstrapConfig());
+                                                                                        config.MeteringMode));
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 

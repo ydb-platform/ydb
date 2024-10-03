@@ -391,7 +391,7 @@ private:
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
-                                  NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
+                                  const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -786,6 +786,7 @@ private:
     TMaybe<ui64> TxId;
     bool TxIdHasChanged = false;
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
+    TEvPQ::TMessageGroupsPtr PendingExplicitMessageGroups;
     TVector<THolder<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
     bool ChangingConfig = false;
     bool SendChangeConfigReply = true;

@@ -1627,14 +1627,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Datetime64Column Datetime64,
                 PRIMARY KEY (Key)
             ) WITH (
-                TTL = Interval("P1D") ON Datetime64Column 
-            ))";   
-            Cerr << query << Endl;             
+                TTL = Interval("P1D") ON Datetime64Column
+            ))";
+            Cerr << query << Endl;
         {
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-    }    
+    }
 
     void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
@@ -2468,7 +2468,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );
             auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            
+
             // It was discovered that TModifyACL scheme operation returns successfully without waiting for
             // SchemeBoard replicas to acknowledge the path updates. This can cause the SchemeCache to reply
             // with outdated entries, even if the SyncVersion flag is enabled.
@@ -4052,6 +4052,64 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicAutoPartitioning) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // Uint64 key
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table_tap` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 7,  TOPIC_MAX_ACTIVE_PARTITIONS = 777, TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 777);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp);
+        }
+
+        { // disabled
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_2` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_AUTO_PARTITIONING='DISABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::Disabled);
         }
     }
 

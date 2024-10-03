@@ -5,10 +5,11 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
-#include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/metering_sink.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/write_id.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -293,6 +294,14 @@ struct TEvPQ {
         ui64 LastOffset;
     };
 
+    struct TMessageGroup {
+        ui64 SeqNo;
+        NPQ::TPartitionKeyRange KeyRange;
+    };
+
+    using TMessageGroups = std::unordered_map<TString, TMessageGroup>;
+    using TMessageGroupsPtr = std::shared_ptr<TMessageGroups>;
+
     struct TEvDirectReadBase {
         TEvDirectReadBase(ui64 cookie, const NPQ::TDirectReadKey& readKey, const TActorId& pipeClient)
             : Cookie(cookie)
@@ -576,15 +585,13 @@ struct TEvPQ {
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
-        TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TBootstrapConfig& bootstrapConfig)
+        TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config)
             : TopicConverter(topicConverter)
             , Config(config)
-            , BootstrapConfig(bootstrapConfig)
         {}
 
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
-        NKikimrPQ::TBootstrapConfig BootstrapConfig;
     };
 
     struct TEvPartitionConfigChanged : public TEventLocal<TEvPartitionConfigChanged, EvPartitionConfigChanged> {
@@ -847,7 +854,6 @@ struct TEvPQ {
         ui64 TxId;
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
-        NKikimrPQ::TBootstrapConfig BootstrapConfig;
     };
 
     struct TEvProposePartitionConfigResult : public TEventLocal<TEvProposePartitionConfigResult, EvProposePartitionConfigResult> {
@@ -861,17 +867,22 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         NPQ::TPartitionId Partition;
+
+        NKikimrPQ::TPartitions::TPartitionInfo Data;
     };
 
     struct TEvTxCommit : public TEventLocal<TEvTxCommit, EvTxCommit> {
-        TEvTxCommit(ui64 step, ui64 txId) :
-            Step(step),
-            TxId(txId)
+        TEvTxCommit(ui64 step, ui64 txId, TMessageGroupsPtr explicitMessageGroups = nullptr)
+            : Step(step)
+            , TxId(txId)
+            , ExplicitMessageGroups(std::move(explicitMessageGroups))
         {
         }
 
         ui64 Step;
         ui64 TxId;
+
+        TMessageGroupsPtr ExplicitMessageGroups;
     };
 
     struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {

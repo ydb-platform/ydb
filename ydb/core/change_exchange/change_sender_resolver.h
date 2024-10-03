@@ -15,10 +15,6 @@ public:
     virtual void Resolve() = 0;
     virtual bool IsResolving() const = 0;
     virtual bool IsResolved() const = 0;
-
-    virtual const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const = 0;
-    virtual const TVector<NScheme::TTypeInfo>& GetSchema() const = 0;
-    virtual NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const = 0;
 };
 
 } // NKikimr::NChangeExchange

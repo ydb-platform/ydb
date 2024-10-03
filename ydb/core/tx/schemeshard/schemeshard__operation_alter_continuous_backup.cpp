@@ -165,7 +165,10 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     const auto& cbOp = tx.GetAlterContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
+    const auto tablePathNameX = workingDirPath.Child(tableName);
+    const auto tablePathName = TPath::Resolve(tablePathNameX.PathString(), context.SS);
+
+    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, tablePathName.Parent(), tablePathName.LeafName(), NBackup::CB_CDC_STREAM_NAME);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         result = {std::get<ISubOperation::TPtr>(checksResult)};
         return false;
@@ -200,7 +203,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     }
 
     NKikimrSchemeOp::TAlterCdcStream alterCdcStreamOp;
-    alterCdcStreamOp.SetTableName(tableName);
+    alterCdcStreamOp.SetTableName(tablePathName.LeafName());
     alterCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
 
     switch (cbOp.GetActionCase()) {
@@ -214,7 +217,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         return false;
     }
 
-    NCdc::DoAlterStream(result, alterCdcStreamOp, opId, workingDirPath, tablePath);
+    NCdc::DoAlterStream(result, alterCdcStreamOp, opId, tablePathName.Parent(), tablePath);
 
     if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup) {
         DoCreateIncrBackupTable(opId, backupTablePath, schema, result);

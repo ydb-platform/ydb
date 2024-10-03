@@ -7560,7 +7560,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     STORAGE = 'cluster',
                     INCREMENTAL_BACKUP_ENABLED = 'true'
                 )
-                    TABLE `/Root/table`;
+                    TABLE `/Root/somepath/table`;
             )";
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -7569,7 +7569,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 --!syntax_v1
-                CREATE TABLE `table` (
+                CREATE TABLE `somepath/table` (
                     `test` Uint64,
                     PRIMARY KEY (`test`)
                 )

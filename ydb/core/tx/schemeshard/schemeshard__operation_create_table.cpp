@@ -413,6 +413,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = schema.GetName();
 
+
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateTable Propose"
                         << ", path: " << parentPathStr << "/" << name
@@ -435,6 +436,10 @@ public:
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        if (parentPathStr.StartsWith(parentPath.GetDomainPathString() + "/.backups")) {
+            schema.SetSystemColumnNamesAllowed(true);
+        }
+
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

@@ -1161,6 +1161,13 @@ struct TEvBufferWrite : public TEventLocal<TEvBufferWrite, TKqpEvents::EvBufferW
     std::optional<TWriteSettings> Settings;
     std::shared_ptr<TVector<NMiniKQL::TUnboxedValueBatch>> Data;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+
+    ~TEvBufferWrite() {
+        if (Alloc) {
+            TGuard guard(*Alloc);
+            Data = nullptr;
+        }
+    }
 };
 
 struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvents::EvBufferWriteResult> {
@@ -1270,6 +1277,9 @@ public:
         message.Close = ev->Get()->Close;
         message.Data = ev->Get()->Data;
         message.Alloc = ev->Get()->Alloc;
+
+        ev->Get()->Data = nullptr;
+        ev->Get()->Alloc = nullptr;
         
         Process();
     }

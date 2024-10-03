@@ -19,6 +19,7 @@ struct TGUCSettings {
     void Commit();
     void RollBack();
     void ExportToJson(NJson::TJsonValue& value) const;
+    void ImportFromJson(const NJson::TJsonValue& value);
     TString SerializeToString() const;
 
     size_t GetHash() const noexcept;

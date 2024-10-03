@@ -50,6 +50,31 @@ void TGUCSettings::ExportToJson(NJson::TJsonValue& value) const {
     value.InsertValue("guc_settings", std::move(gucSettings));
 }
 
+void TGUCSettings::ImportFromJson(const NJson::TJsonValue& value)
+{
+    Settings_.clear();
+    RollbackSettings_.clear();
+    SessionSettings_.clear();
+    if (value.Has("guc_settings")) {
+        auto gucSettings = value["guc_settings"];
+        if (gucSettings.Has("settings")) {
+            for (const auto& [settingName, settingValue] : gucSettings["settings"].GetMapSafe()) {
+                Settings_[settingName] = settingValue.GetStringSafe();
+            }
+        }
+        if (gucSettings.Has("rollback_settings")) {
+            for (const auto& [settingName, settingValue] : gucSettings["rollback_settings"].GetMapSafe()) {
+                RollbackSettings_[settingName] = settingValue.GetStringSafe();
+            }
+        }
+        if (gucSettings.Has("session_settings")) {
+            for (const auto& [settingName, settingValue] : gucSettings["session_settings"].GetMapSafe()) {
+                SessionSettings_[settingName] = settingValue.GetStringSafe();
+            }
+        }
+    }
+}
+
 TString TGUCSettings::SerializeToString() const {
     NJson::TJsonValue gucJson;
     this->ExportToJson(gucJson);

@@ -167,6 +167,7 @@ class TCompletionChunkRead : public TCompletionAction {
     TPDisk *PDisk;
     TIntrusivePtr<TChunkRead> Read;
     TBufferWithGaps CommonBuffer;
+    TMutex CommonBufferMutex; // used to protect CommonBuffer when gaps are being add
     TAtomic PartsPending;
     TAtomic Deletes;
     std::function<void()> OnDestroy;
@@ -204,6 +205,11 @@ public:
         return &CommonBuffer;
     }
 
+    void AddGap(ui32 start, ui32 end) {
+        TGuard<TMutex> g(CommonBufferMutex);
+        CommonBuffer.AddGap(start, end);
+    }
+
     ui64 GetChunkNonce() {
         return ChunkNonce;
     }
@@ -226,6 +232,8 @@ class TCompletionChunkReadPart : public TCompletionAction {
     ui64 PayloadReadSize;
     ui64 CommonBufferOffset;
     TCompletionChunkRead *CumulativeCompletion;
+    ui64 ChunkNonce;
+    ui8 *Destination = nullptr;
     TBuffer::TPtr Buffer;
     bool IsTheLastPart;
     TControlWrapper UseT1ha0Hasher;

@@ -157,6 +157,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool ReadOnly = false;
 
+    ui32 CompletionThreadsCount = 1;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
@@ -304,6 +306,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " WarningLogChunksMultiplier# " << WarningLogChunksMultiplier << x;
         str << " YellowLogChunksMultiplier# " << YellowLogChunksMultiplier << x;
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
+        str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << "}";
         return str.Str();
     }
@@ -385,8 +388,11 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasChunkBaseLimit()) {
             ChunkBaseLimit = cfg->GetChunkBaseLimit();
         }
+
+        if (cfg->HasCompletionThreadsCount()) {
+            CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+        }
     }
 };
 
 } // NKikimr
-

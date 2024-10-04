@@ -358,11 +358,12 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
             THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(buffSize, bufferPoolSize, false, {}));
             ui64 inFlight = 128;
             ui32 maxQueuedCompletionActions = bufferPoolSize / 2;
+            ui32 completionThreadsCount = 1;
             ui64 diskSize = 32_GB;
 
             TIntrusivePtr<NPDisk::TSectorMap> sectorMap = new NPDisk::TSectorMap(diskSize, NSectorMap::DM_NONE);
             THolder<NPDisk::IBlockDevice> device(CreateRealBlockDevice("", *mon, 0, 0, inFlight, TDeviceMode::None,
-                    maxQueuedCompletionActions, sectorMap));
+                    maxQueuedCompletionActions, completionThreadsCount, sectorMap));
             device->Initialize(std::make_shared<TPDiskCtx>(creator.GetActorSystem()));
 
             TAtomic counter = 0;

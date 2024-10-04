@@ -7611,17 +7611,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
-            auto query = r"(
+            auto query = R"(
                 --!syntax_v1
-                restore `my_collection2`;
+                RESTORE `my_collection2`;
             )";
 
-            auto result = session.executeschemequery(query).getvaluesync();
-            unit_assert_values_equal_c(result.getstatus(), estatus::bad_request, result.getissues().tostring());
-            unit_assert_string_contains(result.getissues().toonelinestring(), "nothing to restore");
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Nothing to restore");
         }
-
-
         // {
         //     auto query = Sprintf(R"(
         //         --!syntax_v1

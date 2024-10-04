@@ -188,8 +188,11 @@ void TReadSession::CollectOffsets(NTable::TTransaction& tx,
 {
     const TString& sessionId = tx.GetSession().GetId();
     const TString& txId = tx.GetId();
-    TOffsetRanges& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
-    ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+    TOffsetRangesPtr& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
+    if (!ranges) {
+        ranges = std::make_shared<TOffsetRanges>();
+    }
+    (*ranges)[topicPath][partitionId].InsertInterval(offset, offset + 1);
 }
 
 void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
@@ -203,7 +206,7 @@ void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
     }
 
     TVector<TTopicOffsets> topics;
-    for (auto& [path, partitions] : p->second) {
+    for (auto& [path, partitions] : *p->second) {
         TTopicOffsets topic;
         topic.Path = path;
 

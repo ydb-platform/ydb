@@ -64,6 +64,7 @@ private:
 
 private:
     using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
+    using TOffsetRangesPtr = std::shared_ptr<TOffsetRanges>;
 
     void CollectOffsets(NTable::TTransaction& tx,
                         const TReadSessionEvent::TDataReceivedEvent& event);
@@ -74,7 +75,7 @@ private:
     //
     // (session, tx) -> topic -> partition -> (begin, end)
     //
-    THashMap<std::pair<TString, TString>, TOffsetRanges> OffsetRanges;
+    THashMap<std::pair<TString, TString>, TOffsetRangesPtr> OffsetRanges;
 
     TReadSessionSettings Settings;
     const TString SessionId;

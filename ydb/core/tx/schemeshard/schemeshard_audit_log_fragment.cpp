@@ -242,6 +242,13 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
+    // tiering rule
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
+        return "CREATE TIERING RULE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
+        return "DROP TIERING RULE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
+        return "ALTER TIERING RULE";
     // incremental backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
@@ -555,6 +562,15 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
+        result.emplace_back(tx.GetModifyAbstractObject().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
+        result.emplace_back(tx.GetDrop().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
+        result.emplace_back(tx.GetModifyAbstractObject().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:

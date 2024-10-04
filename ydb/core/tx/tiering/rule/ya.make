@@ -4,8 +4,6 @@ SRCS(
     manager.cpp
     object.cpp
     GLOBAL behaviour.cpp
-    initializer.cpp
-    checker.cpp
     ss_checker.cpp
     GLOBAL ss_fetcher.cpp
 )

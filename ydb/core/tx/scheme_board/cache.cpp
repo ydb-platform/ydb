@@ -767,6 +767,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
             BackupCollectionInfo.Drop();
+            AbstractObjectInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1288,6 +1289,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
             DESCRIPTION_PART(BackupCollectionInfo);
+            DESCRIPTION_PART(AbstractObjectInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1624,6 +1626,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindBackupCollection;
                 FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeAbstractObject:
+                Kind = TNavigate::KindAbstractObject;
+                FillInfo(Kind, AbstractObjectInfo, std::move(*pathDesc.MutableAbstractObjectDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1699,6 +1705,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeBackupCollection:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeAbstractObject:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindAbstractObject);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1923,6 +1932,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
             entry.BackupCollectionInfo = BackupCollectionInfo;
+            entry.AbstractObjectInfo = AbstractObjectInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2224,6 +2234,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // BackupCollection specific
         TIntrusivePtr<TNavigate::TBackupCollectionInfo> BackupCollectionInfo;
+
+        // AbstractObject specific
+        TIntrusivePtr<TNavigate::TAbstractObjectInfo> AbstractObjectInfo;
+
     }; // TCacheItem
 
     struct TMerger {

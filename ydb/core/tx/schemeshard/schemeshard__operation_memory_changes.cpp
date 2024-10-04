@@ -112,6 +112,10 @@ void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathI
     Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
 }
 
+void TMemoryChanges::GrabTieringRule(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TTieringRuleInfo>(pathId, ss->TieringRules, TieringRules);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right

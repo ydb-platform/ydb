@@ -24,6 +24,15 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
     return true;
 }
 
+bool TOlapSchema::ValidateTieringColumn(const TString& tieringColumn, IErrorCollector& errors) const {
+    const auto* column = Columns.GetByName(tieringColumn);
+    if (!column) {
+        errors.AddError("Incorrect tiering column - not found in scheme");
+        return false;
+    }
+    return true;
+}
+
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
     if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
         return false;

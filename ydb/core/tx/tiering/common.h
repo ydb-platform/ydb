@@ -13,6 +13,11 @@ enum EEvents {
     EvSSFetchingProblem,
     EvTimeout,
     EvTiersManagerReadyForUsage,
+    EvWatchTieringRules,
+    EvNotifyTieringRuleUpdated,
+    EvNotifyTieringRuleDeleted,
+    EvTieringRuleResulutionFailed,
+    EvListTieringRulesResult,
     EvEnd
 };
 

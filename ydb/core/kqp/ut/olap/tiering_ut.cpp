@@ -20,6 +20,11 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
         TLocalHelper localHelper(testHelper.GetKikimr());
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
+        testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");

@@ -24,6 +24,7 @@ namespace NKikimr::NSchemeShard {
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
         bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
         bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, IErrorCollector& errors) const;
+        bool ValidateTieringColumn(const TString& tieringColumn, IErrorCollector& errors) const;
     };
 
     class TOlapStoreSchemaPreset: public TOlapSchema {

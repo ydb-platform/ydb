@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <ydb/services/metadata/initializer/common.h>
 #include <ydb/services/metadata/request/request_actor.h>
 #include <ydb/services/ext_index/metadata/object.h>
 

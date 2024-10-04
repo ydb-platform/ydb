@@ -1596,6 +1596,11 @@ enum EOperationType {
     ESchemeOpCreateBackupCollection = 105;
     ESchemeOpAlterBackupCollection = 106;
     ESchemeOpDropBackupCollection = 107;
+
+    // Tiering rule
+    ESchemeOpCreateTieringRule = 108;
+    ESchemeOpDropTieringRule = 109;
+    ESchemeOpAlterTieringRule = 110;
 }
 
 message TApplyIf {
@@ -1783,6 +1788,9 @@ message TModifyScheme {
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
+
+    optional TTieringRuleDescription CreateTieringRule = 77;
+    optional TTieringRuleDescription AlterTieringRule = 78;
 }
 
 message TCopySequence {
@@ -1849,6 +1857,7 @@ enum EPathType {
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
+    EPathTypeTieringRule = 23;
 }
 
 enum EPathSubType {
@@ -1906,6 +1915,7 @@ message TPathVersion {
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
+    optional uint64 TieringRuleVersion = 32;
 }
 
 // Describes single path
@@ -1996,6 +2006,7 @@ message TPathDescription {
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
+    optional TTieringRuleDescription TieringRuleDescription = 32;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2171,4 +2182,22 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+}
+
+message TTieringRuleDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+
+    optional string DefaultColumn = 4;
+    optional TTieringIntervals Intervals = 5;
+}
+
+message TTieringIntervals {
+    message TTieringInterval {
+        optional string TierName = 1;
+        optional uint64 EvictionDelayMs = 2;
+    }
+
+    repeated TTieringInterval Intervals = 1;
 }

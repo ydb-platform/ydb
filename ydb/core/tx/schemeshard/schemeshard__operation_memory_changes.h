@@ -58,6 +58,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
     TStack<TBackupCollectionState> BackupCollections;
 
+    using TTieringRuleState = std::pair<TPathId, TTieringRuleInfo::TPtr>;
+    TStack<TTieringRuleState> TieringRules;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -95,6 +98,8 @@ public:
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabTieringRule(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

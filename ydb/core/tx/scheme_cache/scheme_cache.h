@@ -160,6 +160,7 @@ struct TSchemeCacheNavigate {
         KindView = 21,
         KindResourcePool = 22,
         KindBackupCollection = 23,
+        KindTieringRule = 24,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -279,6 +280,10 @@ struct TSchemeCacheNavigate {
     struct TBackupCollectionInfo : public TAtomicRefCount<TBackupCollectionInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TBackupCollectionDescription Description;
+
+    struct TTieringRuleInfo : public TAtomicRefCount<TTieringRuleInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TTieringRuleDescription Description;
     };
 
     struct TEntry {
@@ -335,6 +340,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
         TIntrusiveConstPtr<TBackupCollectionInfo> BackupCollectionInfo;
+        TIntrusiveConstPtr<TTieringRuleInfo> TieringRuleInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

@@ -1104,6 +1104,23 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
     entry->CopyFrom(backupCollectionInfo->Description);
 }
 
+void TPathDescriber::DescribeTieringRule(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->TieringRules.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "TieringRule is not found");
+    TTieringRuleInfo::TPtr tieringRuleInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableTieringRuleDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(tieringRuleInfo->AlterVersion);
+    entry->SetDefaultColumn(tieringRuleInfo->DefaultColumn);
+    for (const auto& interval : tieringRuleInfo->Intervals) {
+        auto* intervalProto = entry->MutableIntervals()->AddIntervals();
+        intervalProto->SetTierName(interval.TierName);
+        intervalProto->SetEvictionDelayMs(interval.EvictionDelay.MilliSeconds());
+    }
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1261,6 +1278,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeTieringRule:
+            DescribeTieringRule(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

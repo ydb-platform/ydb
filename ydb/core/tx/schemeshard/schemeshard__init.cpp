@@ -4895,6 +4895,38 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Tiering rules
+        {
+            auto rowset = db.Table<Schema::TieringRules>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::TieringRules::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::TieringRules::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                const ui64 alterVersion = rowset.GetValue<Schema::TieringRules::AlterVersion>();
+                const TString ttlColumn = rowset.GetValue<Schema::TieringRules::DefaultColumn>();
+
+                const TString intervalsSerialized = rowset.GetValue<Schema::TieringRules::Intervals>();
+                NKikimrSchemeOp::TTieringIntervals intervalsProto;
+                Y_ABORT_UNLESS(intervalsProto.ParseFromString(intervalsSerialized));
+                std::vector<TTieringRuleInfo::TTieringInterval> intervals;
+                for (const auto& interval : intervalsProto.GetIntervals()) {
+                    intervals.emplace_back(interval.GetTierName(), TDuration::MilliSeconds(interval.GetEvictionDelayMs()));
+                }
+
+                Self->TieringRules.emplace(pathId, MakeIntrusive<TTieringRuleInfo>(alterVersion, ttlColumn, intervals));
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         {
             if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
                 return false;

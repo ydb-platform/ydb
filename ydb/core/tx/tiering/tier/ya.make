@@ -5,6 +5,7 @@ SRCS(
     object.cpp
     initializer.cpp
     checker.cpp
+    snapshot.cpp
     GLOBAL behaviour.cpp
 )
 

@@ -176,6 +176,12 @@ public:
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
         db.Table<Schema::SchemaPresetVersionInfo>().Key(11, 1, 1).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
 
+        // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
+        NKikimrTxColumnShard::TTableVersionInfo versionInfo;
+        versionInfo.MutableSchema()->SetVersion(minVersion - 1);
+        Y_ABORT_UNLESS(versionInfo.SerializeToString(&serialized));
+        db.Table<Schema::TableVersionInfo>().Key(1, 1, 1).Update(NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(serialized));
+
         db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
 
     }

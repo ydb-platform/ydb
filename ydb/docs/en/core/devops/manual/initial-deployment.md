@@ -215,7 +215,7 @@ Prepare a configuration file for {{ ydb-short-name }}:
 
 In the traffic encryption mode, make sure that the {{ ydb-short-name }} configuration file specifies paths to key files and certificate files under `interconnect_config` and `grpc_config`:
 
-```json
+```yaml
 interconnect_config:
    start_tcp: true
    encryption_mode: OPTIONAL

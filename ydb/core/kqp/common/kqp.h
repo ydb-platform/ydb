@@ -12,7 +12,6 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
-#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>

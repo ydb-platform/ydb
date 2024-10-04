@@ -524,7 +524,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
-        UNIT_ASSERT_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED);
+        UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
+            descr.GetIndexBuild().GetIssues()
+        );
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,

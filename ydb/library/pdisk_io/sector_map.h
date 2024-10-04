@@ -196,6 +196,12 @@ public:
 
     std::atomic<ui64> AllocatedBytes;
 
+private:
+    THashMap<ui64, TString> Map;
+    NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
+    THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
+
+public:
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
       : DeviceSize(deviceSize)
       , IsLocked(false)
@@ -345,11 +351,6 @@ public:
         }
         return nullptr;
     }
-
-private:
-    THashMap<ui64, TString> Map;
-    NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
-    THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
 };
 
 } // NPDisk

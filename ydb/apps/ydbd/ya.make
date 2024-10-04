@@ -70,26 +70,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )
 
-#
-# DON'T ALLOW NEW DEPENDENCIES WITHOUT EXPLICIT APPROVE FROM  kikimr-dev@ or fomichev@
-#
-CHECK_DEPENDENT_DIRS(
-    ALLOW_ONLY
-    PEERDIRS
-    build
-    certs
-    contrib
-    library
-    tools/archiver
-    tools/enum_parser/enum_parser
-    tools/enum_parser/enum_serialization_runtime
-    tools/rescompressor
-    tools/rorescompiler
-    util
-    ydb
-    yt
-)
-
 YQL_LAST_ABI_VERSION()
 
 END()

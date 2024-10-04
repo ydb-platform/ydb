@@ -32,8 +32,11 @@ namespace NYql::NDq {
  *
  * This class is templated by std::bitset with the largest number of joins we can process
  * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
+ * 
+ * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
+ * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
-template <typename TNodeSet>
+template <typename TNodeSet, bool ProcessCycles>
 class TDPHypSolver {
 public:
     TDPHypSolver(
@@ -58,7 +61,7 @@ private:
 
     void EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x);
 
-    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
+    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge, const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge);
 
 private:
     // Create an exclusion set that contains all the nodes of the graph that are smaller or equal to
@@ -106,12 +109,16 @@ private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
     THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> CardHintsTable_;
     THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint*, std::hash<TNodeSet>> JoinAlgoHintsTable_;
+    
+    using TEdge = TJoinHypergraph<TNodeSet>::TEdge;
+    /* The container, which owns edges. We need it in case of ProcessCycles=true, because we create a new edge and TJoinInternalOptimizerNode doesn't own an object. */
+    std::list<TEdge> Storage_;
 };
 
 /*
  * Count the number of items in the DP table of DPHyp
  */
-template <typename TNodeSet> ui32 TDPHypSolver<TNodeSet>::CountCC(ui32 budget) {
+template <typename TNodeSet, bool ProcessCycles> ui32 TDPHypSolver<TNodeSet, ProcessCycles>::CountCC(ui32 budget) {
     TNodeSet allNodes;
     allNodes.set();
     ui32 cost = 0;
@@ -133,7 +140,7 @@ template <typename TNodeSet> ui32 TDPHypSolver<TNodeSet>::CountCC(ui32 budget) {
 /**
  * Recursively count the nuber of items in the DP table of DPccp
 */
-template <typename TNodeSet> ui32 TDPHypSolver<TNodeSet>::CountCCRec(const TNodeSet& s, const TNodeSet& x, ui32 cost, ui32 budget) {
+template <typename TNodeSet, bool ProcessCycles> ui32 TDPHypSolver<TNodeSet, ProcessCycles>::CountCCRec(const TNodeSet& s, const TNodeSet& x, ui32 cost, ui32 budget) {
     TNodeSet neighs = Neighs(s, x);
 
     if (neighs == TNodeSet{}) {
@@ -159,7 +166,7 @@ template <typename TNodeSet> ui32 TDPHypSolver<TNodeSet>::CountCCRec(const TNode
     return cost;
 }
 
-template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, TNodeSet x) {
+template<typename TNodeSet, bool ProcessCycles> TNodeSet TDPHypSolver<TNodeSet, ProcessCycles>::Neighs(TNodeSet s, TNodeSet x) {
     TNodeSet neighs{};
 
     auto& nodes = Graph_.GetNodes();
@@ -188,11 +195,16 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, 
 }
 
 template<>
-inline std::bitset<64> TDPHypSolver<std::bitset<64>>::NextBitset(const std::bitset<64>& prev, const std::bitset<64>& final) {
+inline std::bitset<64> TDPHypSolver<std::bitset<64>, false>::NextBitset(const std::bitset<64>& prev, const std::bitset<64>& final) {
     return std::bitset<64>((prev | ~final).to_ulong() + 1) & final;
 }
 
-template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::NextBitset(const TNodeSet& prev, const TNodeSet& final) {
+template<>
+inline std::bitset<64> TDPHypSolver<std::bitset<64>, true>::NextBitset(const std::bitset<64>& prev, const std::bitset<64>& final) {
+    return std::bitset<64>((prev | ~final).to_ulong() + 1) & final;
+}
+
+template<typename TNodeSet, bool ProcessCycles> TNodeSet TDPHypSolver<TNodeSet, ProcessCycles>::NextBitset(const TNodeSet& prev, const TNodeSet& final) {
     if (prev == final) {
         return final;
     }
@@ -221,7 +233,7 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::NextBitset(const TN
     return res;
 }
 
-template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::Solve(const TOptimizerHints& hints) {
+template<typename TNodeSet, bool ProcessCycles> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet, ProcessCycles>::Solve(const TOptimizerHints& hints) {
     for (auto& h : hints.CardinalityHints->Hints) {
         TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
         CardHintsTable_[hintSet] = &h;
@@ -268,7 +280,7 @@ template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSo
  * First it emits CSGs that are created by adding neighbors of S to S
  * Then it recurses on the S fused with its neighbors.
  */
-template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x) {
+template <typename TNodeSet, bool ProcessCycles> void TDPHypSolver<TNodeSet, ProcessCycles>::EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x) {
     TNodeSet neighs =  Neighs(s1, x);
 
     if (neighs == TNodeSet{}) {
@@ -311,7 +323,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCsgRec(const 
  * First it iterates through neighbors of the initial set S and emits pairs
  * (S,S2), where S2 is the neighbor of S. Then it recursively emits complement pairs
  */
-template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet& s1) {
+template <typename TNodeSet, bool ProcessCycles> void TDPHypSolver<TNodeSet, ProcessCycles>::EmitCsg(const TNodeSet& s1) {
     TNodeSet x = s1 | MakeBiMin(s1);
     TNodeSet neighs = Neighs(s1, x);
 
@@ -324,8 +336,18 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             TNodeSet s2{};
             s2[i] = 1;
 
-            if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                EmitCsgCmp(s1, s2, edge);
+            if constexpr (ProcessCycles) {
+                if (auto edge = Graph_.FindEdgeWithAllConditionsBetween(s1, s2)) {
+                    Storage_.push_back(std::move(edge.value()));
+                    const auto* e = &Storage_.back();
+                    Storage_.push_back(e->CreateReversed(-1));
+                    const auto* rev = &Storage_.back();
+                    EmitCsgCmp(s1, s2, e, rev);
+                }
+            } else {
+                if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
+                    EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
+                }
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -339,7 +361,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
  * that are obtained by adding S2's neighbors to itself
  * Then it recusrses into pairs (S1,S2+next)
  */
-template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x) {
+template <typename TNodeSet, bool ProcessCycles> void TDPHypSolver<TNodeSet, ProcessCycles>::EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x) {
     TNodeSet neighs = Neighs(s2, x);
 
     if (neighs == TNodeSet{}) {
@@ -353,8 +375,18 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
         next = NextBitset(prev, neighs);
 
         if (DpTable_.contains(s2 | next)) {
-            if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                EmitCsgCmp(s1, s2 | next, edge);
+            if constexpr (ProcessCycles) {
+                if (auto edge = Graph_.FindEdgeWithAllConditionsBetween(s1, s2 | next)) {
+                    Storage_.push_back(std::move(edge.value()));
+                    const auto* e = &Storage_.back();
+                    Storage_.push_back(e->CreateReversed(-1));
+                    const auto* rev = &Storage_.back();
+                    EmitCsgCmp(s1, s2 | next, e, rev);
+                }
+            } else {
+                if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
+                    EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
+                }
             }
         }
 
@@ -379,7 +411,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
     }
 }
 
-template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeBiMin(const TNodeSet& s) {
+template <typename TNodeSet, bool ProcessCycles> TNodeSet TDPHypSolver<TNodeSet, ProcessCycles>::MakeBiMin(const TNodeSet& s) {
     TNodeSet res{};
 
     for (size_t i = 0; i < NNodes_; i++) {
@@ -393,7 +425,7 @@ template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeBiMin(const TN
     return res;
 }
 
-template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeB(const TNodeSet& s, size_t v) {
+template <typename TNodeSet, bool ProcessCycles> TNodeSet TDPHypSolver<TNodeSet, ProcessCycles>::MakeB(const TNodeSet& s, size_t v) {
     TNodeSet res{};
 
     for (size_t i = 0; i < NNodes_; i++) {
@@ -405,7 +437,7 @@ template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeB(const TNodeS
     return res;
 }
 
-template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::PickBestJoin(
+template <typename TNodeSet, bool ProcessCycles> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet, ProcessCycles>::PickBestJoin(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
@@ -461,19 +493,23 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 /* 
  * Emit a single CSG + CMP pair
  */
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
+template<typename TNodeSet, bool ProcessCycles> void TDPHypSolver<TNodeSet, ProcessCycles>::EmitCsgCmp(
+    const TNodeSet& s1, 
+    const TNodeSet& s2, 
+    const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
+    const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
+) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
-    const auto* reversedEdge = &Graph_.GetEdge(csgCmpEdge->ReversedEdgeId);
     auto leftNodes = DpTable_[s1];
     auto rightNodes = DpTable_[s2];
     
     if (csgCmpEdge->IsReversed) {
-        std::swap(csgCmpEdge, reversedEdge);
+        std::swap(csgCmpEdge, reversedCsgCmpEdge);
         std::swap(leftNodes, rightNodes);
     }
 
@@ -503,7 +539,7 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
     #ifndef NDEBUG
         auto pair = std::make_pair(s1, s2);
         Y_ENSURE (!CheckTable_.contains(pair), "Check table already contains pair S1|S2");
-        CheckTable_[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
+        CheckTable_[pair] = true;
     #endif
 }
 

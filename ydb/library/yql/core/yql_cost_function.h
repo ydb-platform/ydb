@@ -51,7 +51,7 @@ struct TJoinColumn {
         return RelName == other.RelName && AttributeName == other.AttributeName;
     }
 
-    struct HashFunction
+    struct THashFunction
     {
         size_t operator()(const TJoinColumn& c) const
         {

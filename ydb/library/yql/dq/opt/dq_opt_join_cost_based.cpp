@@ -249,10 +249,10 @@ public:
 
         if (relsCount <= 64) { // The algorithm is more efficient.
             return JoinSearchImpl<TNodeSet64>(joinTree, hints);
-        }
-
-        if (64 < relsCount && relsCount <= 128) {
+        } else if (64 < relsCount && relsCount <= 128) {
             return JoinSearchImpl<TNodeSet128>(joinTree, hints);
+        } else if (128 < relsCount && relsCount <= 192) {
+            return JoinSearchImpl<TNodeSet192>(joinTree, hints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -262,6 +262,7 @@ public:
 private:
     using TNodeSet64 = std::bitset<64>;
     using TNodeSet128 = std::bitset<128>;
+    using TNodeSet192 = std::bitset<192>;
 
     template <typename TNodeSet>
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
@@ -269,10 +270,23 @@ private:
         const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
-        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
+        if (hypergraph.HasCycles) {
+            return Solve<TNodeSet, /*ProcessCycles=*/true>(hypergraph, joinTree, hints);
+        } else {
+            return Solve<TNodeSet, /*ProcessCycles=*/false>(hypergraph, joinTree, hints);
+        }
+    }
+
+    template <typename TNodeSet, bool ProcessCycles>
+    std::shared_ptr<TJoinOptimizerNode> Solve(
+        TJoinHypergraph<TNodeSet>& hypergraph,
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}
+    ) {
+        TDPHypSolver<TNodeSet, ProcessCycles> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
-            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
+            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }

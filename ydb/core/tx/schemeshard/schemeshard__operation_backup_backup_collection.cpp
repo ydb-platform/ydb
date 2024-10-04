@@ -141,6 +141,17 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     Y_UNUSED(bc);
 
+    // (1) iterate over bc children and find last __full__
+    // (2) save __full__ to var and all consequent __incremental__ to array
+    // (3) run consistent copy-tables in __full__
+    // (3.1) expand consistent copy-tables with restore-list
+
+    // # restore-list
+    // (1) send propose to all __full__ and __incremental__
+    // (2) when __full__ finish with full backup it strongly sends *continue* to first __incremental__
+    // (3) when __incremental__ finishes restore it sends *continue* to next __incremental__
+    // (4) when all parts finished schemeshard finishes the operation
+
     if (!bcPath.Base()->GetChildren().size()) {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Nothing to restore")};
     } else {
@@ -148,6 +159,8 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
             Cerr << child << Endl;
         }
     }
+
+    // copytable last full, then apply ib per-table probably in single transaction
 
     return {};
 }

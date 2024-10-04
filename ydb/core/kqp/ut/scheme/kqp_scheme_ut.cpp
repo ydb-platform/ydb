@@ -7620,6 +7620,41 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Nothing to restore");
         }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `.backups/collections/my_collection2/20241003211554Z_full/somepath/table2` (
+                    `test` Uint64,
+                    PRIMARY KEY (`test`)
+                )
+             )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `.backups/collections/my_collection2/20241003211712Z_incremental/somepath/table2` (
+                    `test` Uint64,
+                    `__ydb_incrBackupImpl_deleted` Bool,
+                    PRIMARY KEY (`test`)
+                )
+             )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                RESTORE `my_collection2`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         // {
         //     auto query = Sprintf(R"(
         //         --!syntax_v1

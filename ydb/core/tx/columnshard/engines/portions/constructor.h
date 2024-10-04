@@ -13,7 +13,7 @@ class ISnapshotSchema;
 class TIndexChunkLoadContext;
 class TGranuleShardingInfo;
 
-class TPortionInfoConstructor: TMoveOnly {
+class TPortionInfoConstructor {
 private:
     YDB_ACCESSOR(ui64, PathId, 0);
     std::optional<ui64> PortionId;
@@ -52,7 +52,20 @@ private:
     std::vector<TAddressBlobId> BlobIdxs;
     bool NeedBlobIdxsSort = false;
 
+    TPortionInfoConstructor(const TPortionInfoConstructor&) = default;
+    TPortionInfoConstructor& operator=(const TPortionInfoConstructor&) = default;
+
 public:
+    TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
+    TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
+
+    class TTestCopier {
+    public:
+        static TPortionInfoConstructor Copy(const TPortionInfoConstructor& source) {
+            return source;
+        }
+    };
+
     void SetPortionId(const ui64 value) {
         AFL_VERIFY(value);
         PortionId = value;

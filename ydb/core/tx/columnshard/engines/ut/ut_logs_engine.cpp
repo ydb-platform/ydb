@@ -157,7 +157,7 @@ public:
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
-                auto copy = portionLocal;
+                auto copy = NOlap::TPortionInfoConstructor::TTestCopier::Copy(portionLocal);
                 copy.MutableRecords().clear();
                 for (const auto& rec : portionLocal.GetRecords()) {
                     auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());

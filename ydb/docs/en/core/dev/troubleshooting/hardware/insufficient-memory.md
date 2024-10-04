@@ -1,4 +1,4 @@
-# Insufficient memory
+# Insufficient memory (RAM)
 
 ## Description
 

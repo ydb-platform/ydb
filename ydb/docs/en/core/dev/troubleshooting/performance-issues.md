@@ -2,11 +2,11 @@
 
 Database performance issues can be classified into several categories based on their nature:
 
-- **Reaching resource limits**. These issues refer to situations when the physical resources allocated to a database system — such as CPU, memory, disk space, and network bandwidth — are insufficient to handle the demands of the workload.
+- **Insufficient resources**. These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database.
 
-- **Schema design issues**. These issues refer to inefficient decisions that were made during the creation of database schemas. Such issues can significantly impact database performance.
+- **Schema design issues**. These issues stem from inefficient decisions made during the creation of tables and indices. They can significantly impact query performance.
 
-- **Query performance issues**. These issues refer to problems that arise when database queries execute slower that expected because of their inefficient design.
+- **Query-related issues**. These issues refer to database queries executing slower than expected because of their inefficient design.
 
 
 

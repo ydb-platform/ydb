@@ -8,7 +8,7 @@
 
 1. To identify the table with an overloaded shard, follow these steps:
 
-    1. In the [Embedded UI](../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click the database.
+    1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click the database.
 
     1. On the **Navigation** tab, ensure the entire database is selected.
 
@@ -22,7 +22,7 @@
 
 1. To pinpoint the schema issue, follow these steps:
 
-    1. Retrieve information about the problematic table using the [{{ ydb-short-name }} CLI](../../../../reference/ydb-cli/index.md). Run the following command:
+    1. Retrieve information about the problematic table using the [{{ ydb-short-name }} CLI](../../../../../reference/ydb-cli/index.md). Run the following command:
 
         ```bash
         ydb scheme describe <table_name>
@@ -33,3 +33,9 @@
         * `Partitioning by size`
         * `Partitioning by load`
         * `Max partitions count`
+
+        If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config)
+
+1. Analyze whether primary key values autoincrement monotonically.
+
+    If they do, see [Recommendations for the imbalanced primary key](../overloaded-shards.md#pk-recommendations)

@@ -8,4 +8,4 @@ High CPU usage can result in slow query processing and increased response times.
 
 ## Recommendation
 
-Add more [database nodes](../../../concepts/glossary.md#database-node).
+Add more [database nodes](../../../../concepts/glossary.md#database-node).

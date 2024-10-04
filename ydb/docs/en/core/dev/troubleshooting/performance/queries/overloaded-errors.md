@@ -1,7 +1,5 @@
 # Overloaded errors
 
-## Description
-
 {{ ydb-short-name }} returns `OVERLOADED` errors in the following cases:
 
 * Overloaded table partitions with over 10k operations in their queue

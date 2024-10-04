@@ -1,7 +1,5 @@
 # Transaction lock invalidation
 
-## Description
-
 Each transaction in {{ ydb-short-name }} uses [optimistic locking](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) to ensure that no other transaction has modified the data it has read or changed. If the locks check reveals conflicting modifications, the committing transaction rolls back and must be restarted. In this case, {{ ydb-short-name }} returns a **transaction locks invalidated** error. Restarting a significant share of transactions can degrade your application's performance.
 
 ## Diagnostics

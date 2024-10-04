@@ -55,7 +55,7 @@ struct TEvPartitionChooser {
 class IPartitionChooser {
 public:
     struct TPartitionInfo {
-        TPartitionInfo(ui32 partitionId = 0, ui64 tabletId = 0)
+        explicit TPartitionInfo(ui32 partitionId = 0, ui64 tabletId = 0)
             : PartitionId(partitionId)
             , TabletId(tabletId) {}
 

@@ -539,7 +539,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (!PartitionsScaleManager) {
             PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, PathId, Version, TabletConfig, PartitionGraph);
         } else {
-            PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig, PartitionGraph);
+            PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
         }
     }
 

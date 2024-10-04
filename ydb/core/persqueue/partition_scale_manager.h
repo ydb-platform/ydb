@@ -26,12 +26,10 @@ private:
         TBalancerConfig(
             ui64 pathId,
             int version,
-            const NKikimrPQ::TPQTabletConfig& config,
-            const TPartitionGraph& partitionGraph
+            const NKikimrPQ::TPQTabletConfig& config
         )
             : PathId(pathId)
             , PathVersion(version)
-            , PartitionGraph(&partitionGraph)
             , MaxActivePartitions(config.GetPartitionStrategy().GetMaxPartitionCount())
             , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
             , CurPartitions(std::count_if(config.GetAllPartitions().begin(), config.GetAllPartitions().end(), [](auto& p) {
@@ -41,7 +39,6 @@ private:
 
         ui64 PathId;
         int PathVersion;
-        const TPartitionGraph* PartitionGraph;
         ui64 MaxActivePartitions;
         ui64 MinActivePartitions;
         ui64 CurPartitions;
@@ -54,7 +51,7 @@ public:
     void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void TrySendScaleRequest(const TActorContext& ctx);
-    void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
+    void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
     void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
 
@@ -80,6 +77,8 @@ private:
     std::unordered_set<ui32> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
+    const TPartitionGraph& PartitionGraph;
+
     bool RequestInflight = false;
 };
 

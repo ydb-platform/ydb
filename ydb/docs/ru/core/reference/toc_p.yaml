@@ -14,7 +14,7 @@ items:
     path: embedded-ui/toc_p.yaml
 - name: Интеграции
   href: ../integrations/index.md
-  include: 
+  include:
     mode: link
     path: ../integrations/toc_p.yaml
 - name: YDB CLI
@@ -32,6 +32,16 @@ items:
   include:
     mode: link
     path: kafka-api/toc_p.yaml
+- name: Конфигурация
+  href: configuration/index.md
+  include:
+    mode: link
+    path: configuration/toc_p.yaml
+- name: Observability
+  href: observability/index.md
+  include:
+    mode: link
+    path: observability/toc_p.yaml
 - name: YDB DStool
   href: ydb-dstool/index.md
   include:
@@ -42,8 +52,3 @@ items:
   include:
     mode: link
     path: ydbops/toc_p.yaml
-- name: Observability
-  href: observability/index.md
-  include:
-    mode: link
-    path: observability/toc_p.yaml

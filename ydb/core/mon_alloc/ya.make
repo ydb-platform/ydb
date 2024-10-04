@@ -15,6 +15,9 @@ SRCS(
 )
 
 IF (OS_LINUX AND ARCH_X86_64)
+    CFLAGS(
+        -DUSE_DWARF_BACKTRACE
+    )
     PEERDIR(
         library/cpp/dwarf_backtrace
     )

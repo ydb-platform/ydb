@@ -5,7 +5,7 @@
 #include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/cache/cache.h>
 
-#if defined(_unix_)
+#if defined(USE_DWARF_BACKTRACE)
 #   include <library/cpp/dwarf_backtrace/backtrace.h>
 #endif
 
@@ -211,7 +211,7 @@ class TAllocationAnalyzer {
     bool Prepared = false;
 
 private:
-#if defined(_unix_)
+#if defined(USE_DWARF_BACKTRACE)
     void PrintBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {

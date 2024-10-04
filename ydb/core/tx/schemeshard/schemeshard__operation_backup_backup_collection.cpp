@@ -162,7 +162,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     // copytable last full, then apply ib per-table probably in single transaction
 
-    return {};
+    return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << "Unimplemented")};
 }
 
 }  // namespace NKikimr::NSchemeShard

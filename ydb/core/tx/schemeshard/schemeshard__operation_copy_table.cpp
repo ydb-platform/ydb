@@ -162,9 +162,9 @@ public:
                 FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
             } else {
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
+                oldShardTx.SetReadOnly(true);
             }
 
-            // oldShardTx.SetReadOnly(true);
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }

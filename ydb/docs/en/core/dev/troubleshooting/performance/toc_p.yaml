@@ -1,0 +1,21 @@
+items:
+  - name: Reaching resource limits
+    items:
+    - name: CPU
+      href: hardware/cpu-bottleneck.md
+    - name: Memory
+      href: hardware/insufficient-memory.md
+    - name: I/O bandwidth
+      href: hardware/io-bandwidth.md
+    - name: Disk space
+      href: hardware/disk-space.md
+  - name: Schema design issues
+    items:
+      - name: Overloaded shards
+        href: schemas/overloaded-shards.md
+  - name: Query performance issues
+    items:
+      - name: Transaction lock invalidation
+        href: queries/transaction-lock-invalidation.md
+      - name: OVERLOADED errors
+        href: queries/overloaded-errors.md

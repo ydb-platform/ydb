@@ -1,24 +1,6 @@
 items:
 - name: Troubleshooting performance issues
-  href: troubleshooting-performance-issues.md
-- name: Performance issues
-  href: performance-issues.md
-  items:
-    - name: Reaching resource limits
-      items:
-      - name: CPU
-        href: hardware/cpu-bottleneck.md
-      - name: Memory
-        href: hardware/insufficient-memory.md
-      - name: I/O capacity
-        href: hardware/io-capacity.md
-    - name: Schema design issues
-      items:
-        - name: Overloaded shards
-          href: schemas/overloaded-shards.md
-    - name: Query performance issues
-      items:
-        - name: Transaction lock invalidation
-          href: queries/transaction-lock-invalidation.md
-        - name: OVERLOADED errors
-          href: queries/overloaded-errors.md
+  href: performance/index.md
+  include:
+    mode: link
+    path: performance/toc_p.yaml

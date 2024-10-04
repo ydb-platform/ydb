@@ -36,23 +36,20 @@ bool TColumnTableUpdate::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataL
     }
 
     if (const TString& tieringId = ttl.GetUseTiering()) {
-        const TPath tieringPath =
+        const TPath path =
             TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), context.GetSSOperationContext()->SS)
                 .Dive(ttl.GetUseTiering());
         {
-            TPath::TChecker checks = tieringPath.Check();
+            TPath::TChecker checks = path.Check();
             checks.NotEmpty().NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved().NotDeleted().IsTieringRule().NotUnderOperation();
             if (!checks) {
                 errors.AddError(checks.GetStatus(), checks.GetError());
             }
-
         }
 
-        const auto* tieringObject = context.GetSSOperationContext()->SS->TieringRules.FindPtr(tieringPath.Base()->PathId);
-        AFL_VERIFY(tieringObject);
-        const TString& defaultColumn = tieringObject->Get()->DefaultColumn;
-
-        if (!schema.ValidateTieringColumn(defaultColumn, errors)) {
+        const auto* tieringRule = context.GetSSOperationContext()->SS->TieringRules.FindPtr(path.Base()->PathId);
+        AFL_VERIFY(tieringRule)("name", tieringId);
+        if (!schema.ValidateTieringColumn(tieringRule->Get()->DefaultColumn, errors)) {
             return false;
         }
     }

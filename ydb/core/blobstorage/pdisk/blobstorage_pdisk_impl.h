@@ -211,7 +211,7 @@ public:
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize, const TMainKey& mainKey); // Called by actor
     bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
-    void InitiateReadSysLog();
+    void ReadSysLog(const TActorId &pDiskActor); // Called by actor
     bool ProcessChunk0(const TEvReadLogResult &readLogResult, TString& errorReason);
     void PrintChunksDebugInfo();
     TRcBuf ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
@@ -394,8 +394,9 @@ public:
     // Internal interface
 
     // Schedules EvReadLogResult event for the system log
+    void ResetInit();
     bool Initialize(); // Called by actor
-    void InitiateReadFormat();
+    void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
 
     NKikimrProto::EReplyStatus ValidateRequest(TLogWrite *logWrite, TStringStream& outErrorReason);
@@ -431,3 +432,4 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
 
 } // NPDisk
 } // NKikimr
+

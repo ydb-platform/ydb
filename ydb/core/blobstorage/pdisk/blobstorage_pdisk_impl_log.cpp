@@ -205,10 +205,8 @@ void TPDisk::GetStartingPoints(NPDisk::TOwner owner, TMap<TLogSignature, NPDisk:
     }
 }
 
-void TPDisk::InitiateReadSysLog() {
-    Format.InitMagic();
-
-    TIntrusivePtr<TSysLogReader> sysLogReader(new TSysLogReader(this, PCtx->ActorSystem, PCtx->PDiskActor,
+void TPDisk::ReadSysLog(const TActorId &pDiskActor) {
+    TIntrusivePtr<TSysLogReader> sysLogReader(new TSysLogReader(this, PCtx->ActorSystem, pDiskActor,
                 TReqId(TReqId::ReadSysLog, 0)));
     sysLogReader->Start();
     return;
@@ -1312,7 +1310,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 }
 
 // Schedules EvReadLogResult event for the system log
-void TPDisk::InitiateReadFormat() {
+void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
     Y_VERIFY_S(PDiskThread.Running(), "expect PDiskThread to be running");
     Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, "expect InitPhase to be Uninitialized, but InitPhase# "
             << InitPhase);
@@ -1320,7 +1318,7 @@ void TPDisk::InitiateReadFormat() {
     THolder<TEvReadFormatResult> evReadFormatResult(new TEvReadFormatResult(formatSectorsSize, UseHugePages));
     ui8 *formatSectors = evReadFormatResult->FormatSectors.Get();
     BlockDevice->PreadAsync(formatSectors, formatSectorsSize, 0,
-        new TCompletionEventSender(this, PCtx->PDiskActor, evReadFormatResult.Release()), TReqId(TReqId::InitialFormatRead, 0), {});
+        new TCompletionEventSender(this, pDiskActor, evReadFormatResult.Release()), TReqId(TReqId::InitialFormatRead, 0), {});
     *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatRead;
     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingFormatRead;
     InitPhase = EInitPhase::ReadingSysLog;

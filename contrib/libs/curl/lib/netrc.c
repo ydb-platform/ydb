@@ -53,6 +53,8 @@ enum host_lookup_state {
 #define NETRC_FAILED -1
 #define NETRC_SUCCESS 0
 
+#define MAX_NETRC_LINE 4096
+
 /*
  * Returns zero on success.
  */
@@ -80,13 +82,14 @@ static int parsenetrc(const char *host,
   file = fopen(netrcfile, FOPEN_READTEXT);
   if(file) {
     bool done = FALSE;
-    char netrcbuffer[4096];
-    int  netrcbuffsize = (int)sizeof(netrcbuffer);
+    struct dynbuf buf;
+    Curl_dyn_init(&buf, MAX_NETRC_LINE);
 
-    while(!done && Curl_get_line(netrcbuffer, netrcbuffsize, file)) {
+    while(!done && Curl_get_line(&buf, file)) {
       char *tok;
       char *tok_end;
       bool quoted;
+      char *netrcbuffer = Curl_dyn_ptr(&buf);
       if(state == MACDEF) {
         if((netrcbuffer[0] == '\n') || (netrcbuffer[0] == '\r'))
           state = NOTHING;
@@ -234,7 +237,7 @@ static int parsenetrc(const char *host,
           else if(strcasecompare("password", tok))
             state_password = 1;
           else if(strcasecompare("machine", tok)) {
-            /* ok, there's machine here go => */
+            /* ok, there is machine here go => */
             state = HOSTFOUND;
             state_our_login = FALSE;
           }
@@ -245,6 +248,7 @@ static int parsenetrc(const char *host,
     } /* while Curl_get_line() */
 
 out:
+    Curl_dyn_free(&buf);
     if(!retcode) {
       /* success */
       if(login_alloc) {
@@ -273,7 +277,7 @@ out:
 /*
  * @unittest: 1304
  *
- * *loginp and *passwordp MUST be allocated if they aren't NULL when passed
+ * *loginp and *passwordp MUST be allocated if they are not NULL when passed
  * in.
  */
 int Curl_parsenetrc(const char *host, char **loginp, char **passwordp,
@@ -320,7 +324,7 @@ int Curl_parsenetrc(const char *host, char **loginp, char **passwordp,
       return retcode; /* no home directory found (or possibly out of
                          memory) */
 
-    filealloc = curl_maprintf("%s%s.netrc", home, DIR_CHAR);
+    filealloc = aprintf("%s%s.netrc", home, DIR_CHAR);
     if(!filealloc) {
       free(homea);
       return -1;
@@ -330,7 +334,7 @@ int Curl_parsenetrc(const char *host, char **loginp, char **passwordp,
 #ifdef _WIN32
     if(retcode == NETRC_FILE_MISSING) {
       /* fallback to the old-style "_netrc" file */
-      filealloc = curl_maprintf("%s%s_netrc", home, DIR_CHAR);
+      filealloc = aprintf("%s%s_netrc", home, DIR_CHAR);
       if(!filealloc) {
         free(homea);
         return -1;

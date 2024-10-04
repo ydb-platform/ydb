@@ -20,8 +20,7 @@ void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxSchemaVersionsCleanup::Complete");
     Self->CompleteSchemaVersionsCleanup(VersionsToRemove);
 
-//    Self->BackgroundController.FinishCleanupInsertTable();
-//    Self->SetupCleanupInsertTable();
+    Self->BackgroundController.FinishActiveCleanupUnusedSchemaVersions();
 }
 
 }

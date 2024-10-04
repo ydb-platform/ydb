@@ -10,7 +10,7 @@ namespace NKikimr::NOlap {
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data, TVersionCounts* versionCounts) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
-        versionCounts->VersionAddRef(dataPtr->GetSchemaVersion());
+        versionCounts->VersionAddRef(dataPtr->GetSchemaVersion(), 1);
         dbTable.Insert(*dataPtr);
         return true;
     } else {
@@ -58,7 +58,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
     return counters;
 }
 
-TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data) {
+TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data, TVersionCounts* versionCounts) {
     TInsertionSummary::TCounters counters;
     counters.Rows += data.GetMeta().GetNumRows();
     counters.RawBytes += data.GetMeta().GetRawBytes();
@@ -69,6 +69,7 @@ TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, 
     auto& pathInfo = Summary.GetPathInfoVerified(pathId);
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
     dbTable.Commit(data);
+    versionCounts->VersionAddRef(data.GetSchemaVersion(), 1);
     pathInfo.AddCommitted(std::move(data));
 
     return counters;
@@ -103,7 +104,7 @@ void TInsertTable::EraseCommittedOnExecute(
 
 void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data, TVersionCounts* versionCounts) {
     if (Summary.EraseCommitted(data)) {
-        versionCounts->VersionRemoveRef(data.GetSchemaVersion());
+        versionCounts->VersionRemoveRef(data.GetSchemaVersion(), 1);
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }
@@ -118,7 +119,7 @@ void TInsertTable::EraseAbortedOnExecute(
 
 void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data, TVersionCounts* versionCounts) {
     if (Summary.EraseAborted(data.GetInsertWriteId())) {
-        versionCounts->VersionRemoveRef(data.GetSchemaVersion());
+        versionCounts->VersionRemoveRef(data.GetSchemaVersion(), 1);
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }

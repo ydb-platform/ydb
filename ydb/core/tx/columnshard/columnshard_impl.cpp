@@ -898,6 +898,11 @@ void TColumnShard::SetupCleanupUnusedSchemaVersions() {
     if (TablesManager.GetPrimaryIndexSafe().IsEmpty()) {
         return;
     }
+    if (BackgroundController.IsActiveCleanupUnusedSchemaVersions()) {
+        ACFL_DEBUG("background", "cleanup_unused_schema_versions")("skip_reason", "in_progress");
+        return;
+    }
+    BackgroundController.StartActiveCleanupUnusedSchemaVersions();
     Execute(new TTxSchemaVersionsCleanup(this));
 }
 
@@ -1246,11 +1251,12 @@ void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui
     });
 }
 
-void TColumnShard::CompleteSchemaVersionsCleanup(const THashSet<ui64>& removedSchemaVersions) {
+void TColumnShard::CompleteSchemaVersionsCleanup(THashSet<ui64>& removedSchemaVersions) {
     for (ui64 version: removedSchemaVersions) {
         LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << TabletID());
         TablesManager.MutablePrimaryIndex().EraseSchemaVersion(version);
     }
+    removedSchemaVersions.clear();
 }
 
 }

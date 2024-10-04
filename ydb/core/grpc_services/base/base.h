@@ -1376,7 +1376,6 @@ private:
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
 class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived> {
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx)
@@ -1415,7 +1414,11 @@ class TGrpcRequestCall
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
 public:
+    template<typename TOptionalArg>
+    static IActor* CreateRpcActor(TRequestIface* msg, TOptionalArg arg);
+
     static IActor* CreateRpcActor(TRequestIface* msg);
+
     static constexpr bool IsOp = IsOperation;
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
@@ -1485,7 +1488,6 @@ class TGRpcRequestWrapper
         TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>
 {
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
@@ -1538,7 +1540,6 @@ class TGRpcRequestValidationWrapper
         TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>
 {
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 

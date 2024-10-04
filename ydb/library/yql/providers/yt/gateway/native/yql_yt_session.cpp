@@ -20,6 +20,7 @@ TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
     , TimeProvider_(std::move(options.TimeProvider()))
     , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     , OperationSemaphore(nullptr)
+    , LocalCalcSemaphore_(nullptr)
     , TxCache_(UserName_)
     , SessionId_(options.SessionId_)
 {
@@ -67,6 +68,15 @@ void TSession::EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings
         if (!OperationSemaphore) {
             const size_t parallelOperationsLimit = settings->ParallelOperationsLimit.Get().GetOrElse(1U << 20);
             OperationSemaphore = NThreading::TAsyncSemaphore::Make(parallelOperationsLimit);
+        }
+    }
+}
+
+void TSession::InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings) {
+    with_lock(Mutex_) {
+        if(!LocalCalcSemaphore_) {
+            const size_t localCalcLimit = settings->LocalCalcLimit.Get().GetOrElse(1U);
+            LocalCalcSemaphore_ = MakeHolder<TFastSemaphore>(localCalcLimit);
         }
     }
 }

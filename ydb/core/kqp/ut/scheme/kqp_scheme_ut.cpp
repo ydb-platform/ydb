@@ -2282,43 +2282,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithDecimalColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(35,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,20),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
 
-        {
+        auto createAndCheck = [&](ui32 precision, ui32 scale) {
+            TString tableName = TStringBuilder() << "/Root/TableWithDecimalColumn" << precision << scale;
+            auto createQuery = TStringBuilder() << Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint64,
+                Value Decimal(%u,%u),
+                PRIMARY KEY (Key)
+            );)", tableName.c_str(), precision, scale);
+            auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+
+            if (precision == 36) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 999) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), " Invalid decimal precision");
+                return;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
             auto tableDesc = describe.GetTableDescription();
             TVector<TTableColumn> columns = tableDesc.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
@@ -2330,9 +2319,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
+        };
+
+        createAndCheck(2, 1);
+        createAndCheck(22, 9);
+        createAndCheck(35, 9);
+        createAndCheck(22, 20);
+        createAndCheck(36, 35);
+        createAndCheck(999, 99);
     }
 
     void AlterTableAddIndex(EIndexTypeSql type) {
@@ -2415,7 +2411,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(std::get<TVectorIndexSettings::ESimilarity>(vectorIndexSettings.Metric), TVectorIndexSettings::ESimilarity::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
-            }            
+            }
         }
     }
 
@@ -2470,7 +2466,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
             auto indexDesc = describe.GetTableDescription();
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetPartitionSizeMb(), partitionSizeMb);
-        }        
+        }
     }
 
     Y_UNIT_TEST(AlterTableAlterVectorIndex) {
@@ -2487,8 +2483,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=cosine, vector_type=bit, vector_dimension=1)
                 );
@@ -2502,7 +2498,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto indexDesc = describe.GetTableDescription();
             constexpr int defaultPartitionSizeMb = 2048;
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetPartitionSizeMb(), defaultPartitionSizeMb);
-        }        
+        }
         {
             auto result = session.ExecuteSchemeQuery(R"(
                         ALTER TABLE `/Root/TestTable` ALTER INDEX vector_idx SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
@@ -2510,13 +2506,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only index with one impl table is supported" );
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterTableAlterMissedIndex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);      
+        CreateSampleTablesWithIndex(session);
         {
             auto result = session.ExecuteSchemeQuery(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX WrongIndexName SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
@@ -2524,7 +2520,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown index name: WrongIndexName");
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterIndexImplTable) {
         TKikimrRunner kikimr;
@@ -2743,13 +2739,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
                 );
             )";
-            
+
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2774,7 +2770,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describeLevelTable.IsSuccess(), describeLevelTable.GetIssues().ToString());
             auto describePostingTable = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPostingTable").GetValueSync();
             UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
-        }   
+        }
     }
 
 
@@ -2793,8 +2789,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Embedding String,
                     Covered String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         COVER (Covered)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
@@ -2820,7 +2816,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
         }
-    } 
+    }
 
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCaseIncentive) {
@@ -2837,15 +2833,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_KMEANS_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_KMEANS_tree
                         ON (Embedding)
                         WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }    
+        }
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexNoFeatureFlag) {
@@ -2860,8 +2856,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Embedding String,
                     Covered String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
                 );
@@ -2870,8 +2866,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
-    } 
-   
+    }
+
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -2885,8 +2881,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
                 .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"},
-                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine, 
-                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 
+                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine,
+                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                       1024});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
@@ -2907,7 +2903,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
         }
-    } 
+    }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCoveredPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -2923,8 +2919,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
                 .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"}, {"Covered"},
-                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine, 
-                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 
+                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine,
+                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                       1024});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
@@ -2946,7 +2942,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
@@ -2957,45 +2953,50 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"(
             CREATE TABLE `)" << tableName << R"(` (
                 Key Uint64,
-                Value1 String,
+                Value String,
                 PRIMARY KEY (Key)
             );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(35,9);
-            )";
+
+        auto addColumn = [&] (ui32 precision, ui32 scale) {
+            TString columnName = TStringBuilder() << "Column" << precision << scale;
+            auto query = TStringBuilder() << Sprintf(R"(
+            ALTER TABLE `%s`
+                 ADD COLUMN %s Decimal(%u,%u)
+            )", tableName.c_str(), columnName.c_str(), precision, scale);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,20);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,9);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+
+            if (precision == 36) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 999) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), " Invalid decimal precision");
+                return;
+            }
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
-            TType valueType = columns[2].Type;
+        };
+
+        addColumn(2, 1);
+        addColumn(22, 9);
+        addColumn(35, 9);
+        addColumn(22, 20);
+        addColumn(36, 35);
+        addColumn(999, 99);
+
+        TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        auto tableDesc = describe.GetTableDescription();
+        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 6);
+
+        auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
+            TType valueType = columns[columnIdx].Type;
             TTypeParser parser(valueType);
             auto optionalKind = parser.GetKind();
             UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
@@ -3003,9 +3004,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto kind = parser.GetKind();
             UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
+            UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
+        };
+
+        checkColumn(2, 2, 1);
+        checkColumn(3, 22, 9);
+        checkColumn(4, 35,9);
+        checkColumn(5, 22, 20);
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {
@@ -4362,6 +4368,64 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedTopicAutoPartitioning) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // Uint64 key
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table_tap` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 7,  TOPIC_MAX_ACTIVE_PARTITIONS = 777, TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 777);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp);
+        }
+
+        { // disabled
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_2` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_AUTO_PARTITIONING='DISABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::Disabled);
         }
     }
 
@@ -8537,7 +8601,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType::Default()).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
@@ -8549,47 +8613,47 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             builder.BeginList();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(1)
-                .AddMember("dec").Decimal(TString("10.1"))
+                .AddMember("dec").Decimal(TDecimalValue("10.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(2)
-                .AddMember("dec").Decimal(TString("inf"))
+                .AddMember("dec").Decimal(TDecimalValue("inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(3)
-                .AddMember("dec").Decimal(TString("-inf"))
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(4)
-                .AddMember("dec").Decimal(TString("nan"))
+                .AddMember("dec").Decimal(TDecimalValue("nan", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(5)
-                .AddMember("dec").Decimal(TString("-nan"))
+                .AddMember("dec").Decimal(TDecimalValue("-nan", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(6)
-                .AddMember("dec").Decimal(TString("1.1"))
+                .AddMember("dec").Decimal(TDecimalValue("1.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(7)
-                .AddMember("dec").Decimal(TString("12.1"))
+                .AddMember("dec").Decimal(TDecimalValue("12.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(8)
-                .AddMember("dec").Decimal(TString("inf"))
+                .AddMember("dec").Decimal(TDecimalValue("inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(9)
-                .AddMember("dec").Decimal(TString("-inf"))
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(10)
-                .AddMember("dec").Decimal(TString("2.1"))
+                .AddMember("dec").Decimal(TDecimalValue("2.1", 22, 9))
             .EndStruct();
             builder.AddListItem().BeginStruct()
                 .AddMember("id").Int64(11)
-                .AddMember("dec").Decimal(TString("15.1"))
+                .AddMember("dec").Decimal(TDecimalValue("15.1", 22, 9))
             .EndStruct();
             builder.EndList();
             const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
@@ -8609,6 +8673,86 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"1.1\"];[\"2.1\"];[\"12.1\"];[\"15.1\"];[\"inf\"]]");
     }
 
+    Y_UNIT_TEST(Decimal35) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType(35, 10)).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec"}).SetSharding({"id", "dec"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(1)
+                .AddMember("dec").Decimal(TDecimalValue("1055555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(2)
+                .AddMember("dec").Decimal(TDecimalValue("inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(3)
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(4)
+                .AddMember("dec").Decimal(TDecimalValue("nan", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(5)
+                .AddMember("dec").Decimal(TDecimalValue("-nan", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(6)
+                .AddMember("dec").Decimal(TDecimalValue("155555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(7)
+                .AddMember("dec").Decimal(TDecimalValue("1255555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(8)
+                .AddMember("dec").Decimal(TDecimalValue("inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(9)
+                .AddMember("dec").Decimal(TDecimalValue("-inf", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(10)
+                .AddMember("dec").Decimal(TDecimalValue("255555555555555.1", 35, 10))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(11)
+                .AddMember("dec").Decimal(TDecimalValue("1555555555555555.1", 35, 10))
+            .EndStruct();
+            builder.EndList();
+            const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"1055555555555555.1\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=4", "[[\"nan\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"nan\"]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"1055555555555555.1\" As Decimal(35, 10))", "[[1]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"inf\" As Decimal(35, 10)) ORDER BY id", "[[2];[8]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-inf\" As Decimal(35, 10)) ORDER BY id", "[[3];[9]]");
+        // Nan cannot by find.
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"nan\" As Decimal(35, 10))", "[]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(35, 10))", "[]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"155555555555555.1\"];[\"255555555555555.1\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"];[\"inf\"]]");
+    }
+        
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -8617,26 +8761,30 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType::Default()).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec35").SetType(NScheme::TDecimalType(35, 10)).SetNullable(false),
         };
 
         TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec"}).SetSharding({"id", "dec"}).SetSchema(schema);
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec", "dec35"}).SetSharding({"id", "dec", "dec35"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
 
         {
             TStringBuilder builder;
-            builder << "1, 10.1" << Endl;
-            builder << "6, 1.1" << Endl;
-            builder << "7, 12.1" << Endl;
-            builder << "10, 2" << Endl;
-            builder << "11, 15.1" << Endl;
+            builder << "1, 10.1, 1055555555555555.1" << Endl;
+            builder << "6, 1.1, 155555555555555.1" << Endl;
+            builder << "7, 12.1, 1255555555555555.1" << Endl;
+            builder << "10, 2, 255555555555555" << Endl;
+            builder << "11, 15.1, 1555555555555555.1" << Endl;
             const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), EDataFormat::CSV, builder).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
         }
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"10.1\"]]");
         testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(22,9))", "[[1]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"1.1\"];[\"2\"];[\"12.1\"];[\"15.1\"]]");
+        testHelper.ReadData("SELECT dec35 FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"1055555555555555.1\"]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec35=CAST(\"1055555555555555.1\" As Decimal(35, 10))", "[[1]]");
+        testHelper.ReadData("SELECT dec35 FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec35", "[[\"155555555555555.1\"];[\"255555555555555\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"]]");
     }
 
     Y_UNIT_TEST(TimestampCmpErr) {

@@ -113,6 +113,7 @@ class TChangeSender {
         THashSet<ui64> CompletedPartitions;
     };
 
+    void CreateSendersImpl(const TVector<ui64>& partitionIds);
     void LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId);
     void RegisterSender(ui64 partitionId);
     void CreateMissingSenders(const TVector<ui64>& partitionIds);
@@ -150,7 +151,8 @@ protected:
         return ChangeServer;
     }
 
-    void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true);
+    void CreateSenders(const TVector<ui64>& partitionIds); // creates senders after partitioning changes
+    void CreateSenders(); // creates senders after connection loss
     void KillSenders();
 
     void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records);

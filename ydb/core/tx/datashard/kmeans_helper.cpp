@@ -1,6 +1,7 @@
 #include "kmeans_helper.h"
 
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr::NDataShard::NKMeans {
 
@@ -96,12 +97,12 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 
     Ydb::Type type;
     type.set_type_id(Ydb::Type::UINT32);
-    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn, type);
+    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
         Y_ABORT_UNLESS(it != types.end());
-        ProtoYdbTypeFromTypeInfo(&type, it->second);
+        NScheme::ProtoFromTypeInfo(it->second, type);
         uploadTypes->emplace_back(it->first, type);
         types.erase(it);
     };

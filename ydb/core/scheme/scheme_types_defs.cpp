@@ -15,10 +15,10 @@ namespace NNames {
         ::TString result;
 
         if (value) {
-            const ui32 fixedSize = GetFixedSize(value.TypeInfo());
+            const ui32 fixedSize = GetFixedSize(value.Type());
             if (fixedSize > 0 && value.Size() != fixedSize) {
                 result = ::TStringBuilder()
-                    << "Value with declared type " << NScheme::TypeName(value.TypeInfo())
+                    << "Value with declared type " << NScheme::TypeName(value.Type())
                     << " has unexpected size " << value.Size()
                     << " (expected " << fixedSize << ")";
             }
@@ -27,7 +27,7 @@ namespace NNames {
         return result;
     }
 
-    ::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, TTypeInfo typeInfo) {
+    ::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, const TTypeInfo& typeInfo) {
         ::TString result;
 
         if (value) {

@@ -88,6 +88,7 @@ struct TReqId {
         WriteMetadata = 69,
         WriteMetadataResult = 70,
         PushUnformattedMetadataSector = 71,
+        ContinueReadMetadata = 72,
     };
 
     // 56 bit idx, 8 bit source
@@ -151,6 +152,9 @@ enum class ERequestType {
     RequestWriteMetadata,
     RequestWriteMetadataResult,
     RequestPushUnformattedMetadataSector,
+    RequestContinueReadMetadata,
+    RequestReadFormat,
+    RequestReadSysLog,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

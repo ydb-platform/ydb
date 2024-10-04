@@ -45,7 +45,7 @@ runs:
       run: |
         set -ex
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "ya_bloat_html/" "$S3_BUCKET_PATH/ya_bloat_html/"
-        echo "[ya bloat tool]($S3_URL_PREFIX/ya_bloat_html/index.html) (better use Safari, because it is too large for Chrome)" >> $GITHUB_STEP_SUMMARY
+        echo "[ya bloat tool]($S3_URL_PREFIX/ya_bloat_html/tree_map.html) (better use Safari, because it is too large for Chrome)" >> $GITHUB_STEP_SUMMARY
 
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat.by_size.txt" "$S3_BUCKET_PATH/template_bloat.by_size.txt"
         TEMPLATE_BLOAT_BY_SIZE_URL=$S3_URL_PREFIX/template_bloat.by_size.txt
@@ -54,13 +54,13 @@ runs:
         TEMPLATE_BLOAT_BY_COUNT_URL=$S3_URL_PREFIX/template_bloat.by_count.txt
 
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "template_bloat_html/" "$S3_BUCKET_PATH/template_bloat_html/"
-        TEMPLATE_BLOAT_TREEMAP_URL=$S3_URL_PREFIX/template_bloat_html/index.html
+        TEMPLATE_BLOAT_TREEMAP_URL=$S3_URL_PREFIX/template_bloat_html/tree_map.html
 
         echo "[template bloat]($TEMPLATE_BLOAT_TREEMAP_URL) ([sorted by size]($TEMPLATE_BLOAT_BY_SIZE_URL), [sorted by count]($TEMPLATE_BLOAT_BY_COUNT_URL))" >> $GITHUB_STEP_SUMMARY
 
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "html_cpp_impact/" "$S3_BUCKET_PATH/html_cpp_impact/"
-        echo "[cpp compilation time]($S3_URL_PREFIX/html_cpp_impact/index.html)" >> $GITHUB_STEP_SUMMARY
+        echo "[cpp compilation time]($S3_URL_PREFIX/html_cpp_impact/tree_map.html)" >> $GITHUB_STEP_SUMMARY
         
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "html_headers_impact/" "$S3_BUCKET_PATH/html_headers_impact/"
-        echo "[headers impact]($S3_URL_PREFIX/html_headers_impact/index.html)" >> $GITHUB_STEP_SUMMARY
+        echo "[headers impact]($S3_URL_PREFIX/html_headers_impact/tree_map.html)" >> $GITHUB_STEP_SUMMARY
 

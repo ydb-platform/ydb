@@ -166,6 +166,12 @@ common:
   - from: /reference/ydb-sdk/example/python/index.md
     to: /dev/example-app/python/index.md
 
+# YQL-related redirects
+  - from: /yql/reference/syntax/alter_topic.md
+    to: /yql/reference/syntax/alter-topic.md
+  - from: /yql/reference/syntax/create_topic.md
+    to: /yql/reference/syntax/create-topic.md
+
 # Security-related redirects
   - from: /cluster/access.md
     to: /security/acess-management.md

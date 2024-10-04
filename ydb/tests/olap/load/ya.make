@@ -2,7 +2,7 @@ PY3TEST()
 
     TAG(ya:manual)
 
-    TIMEOUT(600)
+    SIZE(LARGE)
 
     PY_SRCS (
         conftest.py

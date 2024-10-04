@@ -119,6 +119,28 @@ public:
     static void AbortDelete(TRequestBase* request, TActorSystem* actorSystem);
 };
 
+class TReadFormat : public TRequestBase {
+public:
+    TReadFormat(TActorId pdiskActor, TAtomicBase reqIdx)
+        : TRequestBase(pdiskActor, TReqId(TReqId::ReadFormatInfo, reqIdx), 0, 0, NPriInternal::Other)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestReadFormat;
+    }
+};
+
+class TReadSysLog : public TRequestBase {
+public:
+    TReadSysLog(TActorId pdiskActor, TAtomicBase reqIdx)
+        : TRequestBase(pdiskActor, TReqId(TReqId::ReadSysLog, reqIdx), 0, 0, NPriInternal::Other)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestReadSysLog;
+    }
+};
+
 //
 // TYardInit
 //
@@ -1092,6 +1114,28 @@ public:
 
     ERequestType GetType() const override {
         return ERequestType::RequestPushUnformattedMetadataSector;
+    }
+};
+
+class TContinueReadMetadata : public TRequestBase {
+    std::function<void(bool, TActorSystem*)> Callback;
+
+public:
+    TContinueReadMetadata(std::function<void(bool, TActorSystem*)> callback, TAtomicBase reqIdx)
+        : TRequestBase({}, TReqId(TReqId::ContinueReadMetadata, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , Callback(std::move(callback))
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestContinueReadMetadata;
+    }
+
+    void Execute(TActorSystem *actorSystem) {
+        Callback(true, actorSystem);
+    }
+
+    void Abort(TActorSystem *actorSystem) override {
+        Callback(false, actorSystem);
     }
 };
 

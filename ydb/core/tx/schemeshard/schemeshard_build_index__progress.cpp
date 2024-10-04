@@ -167,7 +167,7 @@ public:
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
         type.set_type_id(Ydb::Type::UINT32);
-        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn, type};
+        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_ParentColumn, type};
         (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
         (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn, type};
@@ -333,9 +333,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
         const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
-        NKikimrScheme::EStatus status;
-        TString errStr;
-        Y_ABORT_UNLESS(NTableIndex::CommonCheck(tableInfo, indexDesc, path.DomainInfo()->GetSchemeLimits(), false, implTableColumns, status, errStr));
+        const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
+        const auto& indexKeys = NTableIndex::ExtractInfo(indexDesc);
+        implTableColumns = CalcTableImplDescription(buildInfo.IndexType, baseTableColumns, indexKeys);
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
+        implTableColumns.Columns.emplace(indexKeys.KeyColumns[0]);
         modifyScheme.ClearInitiateIndexBuild();
     }
 

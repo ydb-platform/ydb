@@ -232,11 +232,11 @@ void TAsyncIndexChangeCollector::AddRawValue(TVector<TUpdateOp>& out, TTag tag, 
     AddValue(out, TUpdateOp(tag, ECellOp::Set, value));
 }
 
-void TAsyncIndexChangeCollector::AddCellValue(TVector<TUpdateOp>& out, TTag tag, const TCell& cell, NScheme::TTypeInfo type) {
-    AddRawValue(out, tag, TRawTypeValue(cell.AsRef(), type));
+void TAsyncIndexChangeCollector::AddCellValue(TVector<TUpdateOp>& out, TTag tag, const TCell& cell, const NScheme::TTypeInfo& type) {
+    AddRawValue(out, tag, TRawTypeValue(cell.AsRef(), type.GetTypeId()));
 }
 
-void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag, NScheme::TTypeInfo type) {
+void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag, const NScheme::TTypeInfo& type) {
     AddCellValue(out, tag, {}, type);
 }
 

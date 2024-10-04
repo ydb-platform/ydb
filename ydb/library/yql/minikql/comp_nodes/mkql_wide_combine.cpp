@@ -584,6 +584,20 @@ private:
 
     i64 SplitStateSpillingBucket = -1;
 
+    ui32 GetLargestInMemoryBucketNumber() const {
+        ui64 maxSize = 0;
+        ui32 largestInMemoryBucketNum = (ui32)-1;
+        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+            if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
+                if (SpilledBuckets[i].LineCount >= maxSize) {
+                    largestInMemoryBucketNum = i;
+                    maxSize = SpilledBuckets[i].LineCount;
+                }
+            }
+        }
+        return largestInMemoryBucketNum;
+    }
+
     bool SplitStateIntoBucketsAndWait() {
         if (SplitStateSpillingBucket != -1) {
             auto& bucket = SpilledBuckets[SplitStateSpillingBucket];
@@ -643,23 +657,8 @@ private:
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
-            if (!HasMemoryForProcessing() && InMemoryBucketsCount >= SpilledBucketCount / 2) {
-                //  no memory for processing" << std::endl;
-
-                i64 bucketNumToSpill = -1;
-                ui64 sizeToSpill = 0;
-                for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-                    if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
-                        if (SpilledBuckets[i].LineCount >= sizeToSpill) {
-                            bucketNumToSpill = i;
-                            sizeToSpill = SpilledBuckets[i].LineCount;
-                        }
-                    }
-                }
-                if (bucketNumToSpill == -1) {
-                    // std::cerr << "MISHA no bucket to spill" << std::endl;
-                    continue;
-                }
+            if (InMemoryBucketsCount && !HasMemoryForProcessing()) {
+                ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
                 SplitStateSpillingBucket = bucketNumToSpill;
                 InMemoryBucketsCount--;
@@ -781,15 +780,7 @@ private:
             return true;
         }
         while (InMemoryBucketsCount > 0) {
-            ui64 maxLineCount = 0;
-            ui32 maxLineBucketInd = (ui32)-1;
-            for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-                const auto& bucket = SpilledBuckets[i];
-                if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory && (maxLineBucketInd == (ui32)-1 || bucket.LineCount > maxLineCount)) {
-                    maxLineCount = bucket.LineCount;
-                    maxLineBucketInd = i;
-                }
-            }
+            ui32 maxLineBucketInd = GetLargestInMemoryBucketNumber();
             MKQL_ENSURE(maxLineBucketInd != (ui32)-1, "Internal logic error");
 
             auto& bucketToSpill = SpilledBuckets[maxLineBucketInd];

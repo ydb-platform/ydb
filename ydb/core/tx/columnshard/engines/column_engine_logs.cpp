@@ -63,9 +63,7 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
     auto before = Counters.Active();
     UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
     auto after = Counters.Active();
-    if (TlsActivationContext != nullptr) { // can be null in tests
-        LOG_S_DEBUG("PortionStats updated, type " << (ui32)updateType << " pathId " << portionInfo.GetPathId() << " portion " << portionInfo.GetPortionId() << " size " << before.Bytes << "->" << after.Bytes << " row count " << before.Rows << "->" << after.Rows);
-    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_stats_updated")("type", UpdateName(updateType))("path_id", portionInfo.GetPathId())("portion", portionInfo.GetPortionId())("before_size", before.Bytes)("after_size", after.Bytes)("before_rows", before.Rows)("after_rows", after.Rows);
     const ui64 pathId = portionInfo.GetPathId();
     Y_ABORT_UNLESS(pathId);
     if (!PathStats.contains(pathId)) {

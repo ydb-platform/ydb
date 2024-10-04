@@ -81,6 +81,17 @@ public:
         ADD,
     };
 
+    static const char* UpdateName(EStatsUpdateType type) {
+        switch(type) {
+            case EStatsUpdateType::DEFAULT:
+                return "default";
+            case EStatsUpdateType::ERASE:
+                return "erase";
+            case EStatsUpdateType::ADD:
+                return "add";
+        }
+    }
+
     TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
 

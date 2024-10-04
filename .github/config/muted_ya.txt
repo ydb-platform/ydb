@@ -20,7 +20,7 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
-ydb/core/kqp/ut/query/KqpLimits.ComputeActorMemoryAllocationFailureQueryService
+ydb/core/kqp/ut/query KqpLimits.ComputeActorMemoryAllocationFailureQueryService
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme [*/*]*
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns

@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 
 namespace NKikimr::NColumnShard {
 

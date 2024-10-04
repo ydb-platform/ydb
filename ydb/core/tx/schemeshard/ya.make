@@ -97,6 +97,7 @@ SRCS(
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
+    schemeshard__operation_alter_tiering_rule.cpp
     schemeshard__operation_alter_user_attrs.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_cancel_tx.cpp
@@ -106,6 +107,7 @@ SRCS(
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_resource_pool.cpp
     schemeshard__operation_common_subdomain.h
+    schemeshard__operation_common_tiering_rule.cpp
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
@@ -129,6 +131,7 @@ SRCS(
     schemeshard__operation_create_solomon.cpp
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_table.cpp
+    schemeshard__operation_create_tiering_rule.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_drop_bsv.cpp
     schemeshard__operation_drop_external_data_source.cpp
@@ -145,6 +148,7 @@ SRCS(
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_table.cpp
+    schemeshard__operation_drop_tiering_rule.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp
     schemeshard__operation_mkdir.cpp

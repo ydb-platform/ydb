@@ -1,4 +1,5 @@
 #include "update.h"
+
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
@@ -41,7 +42,7 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
             return patch;
         }
         TSimpleErrorCollector collector;
-        if (!originalSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
+        if (!ValidateTtlSettings(ttl.GetData(), originalSchema, context, collector)) {
             return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();

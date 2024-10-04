@@ -1669,6 +1669,11 @@ enum EOperationType {
 
     ESchemeOpRestoreIncrementalBackup = 103;
     ESchemeOpRestoreIncrementalBackupAtTable = 104;
+
+    // Tiering rule
+    ESchemeOpCreateTieringRule = 105;
+    ESchemeOpDropTieringRule = 106;
+    ESchemeOpAlterTieringRule = 107;
 }
 
 message TApplyIf {
@@ -1852,6 +1857,9 @@ message TModifyScheme {
     optional TResourcePoolDescription CreateResourcePool = 72;
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+
+    optional TTieringRuleDescription CreateTieringRule = 74;
+    optional TTieringRuleDescription AlterTieringRule = 75;
 }
 
 message TCopySequence {
@@ -1917,6 +1925,7 @@ enum EPathType {
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
+    EPathTypeTieringRule = 22;
 }
 
 enum EPathSubType {
@@ -1973,6 +1982,7 @@ message TPathVersion {
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
+    optional uint64 TieringRuleVersion = 31;
 }
 
 // Describes single path
@@ -2062,6 +2072,7 @@ message TPathDescription {
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
+    optional TTieringRuleDescription TieringRuleDescription = 31;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2201,4 +2212,22 @@ message TResourcePoolDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional TResourcePoolProperties Properties = 4;
+}
+
+message TTieringRuleDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+
+    optional string DefaultColumn = 4;
+    optional TTieringIntervals Intervals = 5;
+}
+
+message TTieringIntervals {
+    message TTieringInterval {
+        optional string TierName = 1;
+        optional uint64 EvictionDelayMs = 2;
+    }
+
+    repeated TTieringInterval Intervals = 1;
 }

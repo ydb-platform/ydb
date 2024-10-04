@@ -63,9 +63,6 @@ Y_UNIT_TEST_SUITE(Initializer) {
         virtual std::shared_ptr<NMetadata::NModifications::IOperationsManager> GetOperationsManager() const override {
             return nullptr;
         }
-        virtual std::shared_ptr<NMetadata::NModifications::IObjectManager> GetObjectManager() const override {
-            return nullptr;
-        }
     public:
         virtual TString GetTypeId() const override {
             return TypeName<TInitBehaviourTest>();

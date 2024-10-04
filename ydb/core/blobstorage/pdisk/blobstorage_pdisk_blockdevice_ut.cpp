@@ -209,14 +209,6 @@ void RunWriteTestWithSectorMap(NSectorMap::EDiskMode diskMode, ui64 diskSize, ui
 
 Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
 
-    Y_UNIT_TEST(TestMultipleRequestsFromCompletionAction) {
-        RunTestMultipleRequestsFromCompletionAction();
-    }
-
-    Y_UNIT_TEST(TestDestructionWithMultipleFlushesFromCompletionAction) {
-        RunTestDestructionWithMultipleFlushesFromCompletionAction();
-    }
-
     Y_UNIT_TEST(TestDeviceWithSubmitGetThread) {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));

@@ -11,7 +11,6 @@ private:
     using TYqlConclusionStatus = IOperationsManager::TYqlConclusionStatus;
 
     NThreading::TPromise<TYqlConclusionStatus> Promise;
-    const NYql::TObjectSettingsImpl OriginalRequest;
     IOperationsManager::TInternalModificationContext Context;
     TActorSystem* ActorSystem;
 
@@ -56,10 +55,9 @@ public:
         Promise.SetValue(IOperationsManager::TYqlConclusionStatus::Fail(errorMessage));
     }
 
-    TOperationController(NThreading::TPromise<TYqlConclusionStatus> promise, NYql::TObjectSettingsImpl request,
-        IOperationsManager::TInternalModificationContext context, TActorSystem* actorSystem)
+    TOperationController(
+        NThreading::TPromise<TYqlConclusionStatus> promise, IOperationsManager::TInternalModificationContext context, TActorSystem* actorSystem)
         : Promise(std::move(promise))
-        , OriginalRequest(std::move(request))
         , Context(std::move(context))
         , ActorSystem(actorSystem) {
         AFL_VERIFY(ActorSystem);

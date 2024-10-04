@@ -564,13 +564,13 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(tx.GetCreateResourcePool().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
-        result.emplace_back(tx.GetModifyAbstractObject().GetName());
+        result.emplace_back(tx.GetCreateTieringRule().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
         result.emplace_back(tx.GetDrop().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
-        result.emplace_back(tx.GetModifyAbstractObject().GetName());
+        result.emplace_back(tx.GetAlterTieringRule().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:

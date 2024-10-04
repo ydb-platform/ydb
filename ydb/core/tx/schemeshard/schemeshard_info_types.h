@@ -3551,6 +3551,14 @@ struct TTieringRuleInfo: TSimpleRefCount<TTieringRuleInfo> {
     ui64 AlterVersion = 0;
     TString DefaultColumn;
     std::vector<TTieringInterval> Intervals;
+
+    TTieringRuleInfo() {
+    }
+    TTieringRuleInfo(const ui64 alterVersion, TString defaultColumn, std::vector<TTieringInterval> intervals)
+        : AlterVersion(alterVersion)
+        , DefaultColumn(std::move(defaultColumn))
+        , Intervals(std::move(intervals)) {
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

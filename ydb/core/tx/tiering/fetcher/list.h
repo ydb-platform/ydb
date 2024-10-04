@@ -26,6 +26,6 @@ public:
 
 }   // namespace NTiers
 
-NThreading::TFuture<TConclusion<THashMap<TString, NTiers::TTieringRule>>> ListTieringRules(const TActorContext& ctx);
+THolder<IActor> MakeListTieringRulesActor(TActorId recipient);
 
 }   // namespace NKikimr::NColumnShard

@@ -322,7 +322,7 @@ TString TTiersManager::DebugString() {
     if (Secrets) {
         sb << "{";
         for (const auto& [name, config] : Secrets->GetSecrets()) {
-            sb << name << ";";
+            sb << name.SerializeToString() << ";";
         }
         sb << "}";
     }

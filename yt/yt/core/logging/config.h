@@ -82,6 +82,7 @@ public:
     TString FileName;
     bool UseTimestampSuffix;
     bool EnableCompression;
+    bool EnableNoReuse;
     ECompressionMethod CompressionMethod;
     int CompressionLevel;
 

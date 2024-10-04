@@ -15,6 +15,7 @@ cd /ydbwork/build
 echo "::group::cmake"
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
 -DCCACHE_PATH=/usr/local/bin/ccache \
+-DREQUIRED_LLVM_TOOLING_VERSION=16 \
 -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
 ../ydb
 echo "::endgroup::"

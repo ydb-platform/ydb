@@ -30,6 +30,7 @@ runs:
       export CC_FOR_BUILD=$CC
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCCACHE_PATH=/usr/local/bin/ccache \
+        -DREQUIRED_LLVM_TOOLING_VERSION=16 \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
         -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
         -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \

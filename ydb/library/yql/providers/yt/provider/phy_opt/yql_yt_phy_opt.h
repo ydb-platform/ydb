@@ -34,11 +34,17 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> DqWrite(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> Materialize(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> DqMaterialize(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqProcessWrite(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Write(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Fill(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> FillToMaterialize(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> TakeOrSkip(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 

@@ -510,7 +510,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
     if (sorted) {
         builder = MakeHolder<TKeySelectorBuilder>(assume.Pos(), ctx, useNativeDescSort, outItemType);
         builder->ProcessConstraint(*sorted);
-        needSeparateOp = needSeparateOp || (builder->NeedMap() && !equalSort);
+        needSeparateOp = needSeparateOp || (builder->NeedMap() && !equalSort && !maybeOp.Maybe<TYtDqProcessWrite>());
     }
 
     if (needSeparateOp) {
@@ -633,14 +633,34 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
 
     auto op = GetOutputOp(input.Cast<TYtOutput>());
     TExprNode::TPtr newOp = op.Ptr();
+
+    if (builder && builder->NeedMap() && maybeOp.Maybe<TYtDqProcessWrite>()) {
+        TNodeOnNodeOwnedMap remaps;
+        VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&builder, &remaps, &ctx](const TExprNode::TPtr& n) {
+            if (TYtOutput::Match(n.Get())) {
+                // Stop traversing dependent operations
+                return false;
+            }
+            if (TYtDqWrite::Match(n.Get())) {
+                auto newInput = Build<TExprApplier>(ctx, n->Pos())
+                    .Apply(TCoLambda(builder->MakeRemapLambda(true)))
+                    .With(0, TExprBase(n->ChildPtr(TYtDqWrite::idx_Input)))
+                    .Done();
+                remaps[n.Get()] = ctx.ChangeChild(*n, TYtDqWrite::idx_Input, newInput.Ptr());
+            }
+            return true;
+        });
+        newOp = ctx.ChangeChild(*newOp, TYtDqProcessWrite::idx_Input, ctx.ReplaceNodes(newOp->ChildPtr(TYtDqProcessWrite::idx_Input), remaps));
+    }
+
     if (!op.Maybe<TYtSort>() && sorted) {
         if (auto settings = op.Maybe<TYtTransientOpBase>().Settings()) {
             if (!NYql::HasSetting(settings.Ref(), EYtSettingType::KeepSorted)) {
-                newOp = ctx.ChangeChild(op.Ref(), TYtTransientOpBase::idx_Settings, NYql::AddSetting(settings.Ref(), EYtSettingType::KeepSorted, {}, ctx));
+                newOp = ctx.ChangeChild(*newOp, TYtTransientOpBase::idx_Settings, NYql::AddSetting(settings.Ref(), EYtSettingType::KeepSorted, {}, ctx));
             }
         } else if (auto settings = op.Maybe<TYtFill>().Settings()) {
             if (!NYql::HasSetting(settings.Ref(), EYtSettingType::KeepSorted)) {
-                newOp = ctx.ChangeChild(op.Ref(), TYtFill::idx_Settings, NYql::AddSetting(settings.Ref(), EYtSettingType::KeepSorted, {}, ctx));
+                newOp = ctx.ChangeChild(*newOp, TYtFill::idx_Settings, NYql::AddSetting(settings.Ref(), EYtSettingType::KeepSorted, {}, ctx));
             }
         }
     }

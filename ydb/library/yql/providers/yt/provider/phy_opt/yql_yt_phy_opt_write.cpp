@@ -27,105 +27,67 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     }
 
     auto write = node.Cast<TYtWriteTable>();
-    auto content = write.Content().Ptr();
-    if (TCoAssumeConstraints::Match(content.Get())) {
-        content = TCoAssumeConstraints(content).Input().Ptr();
-    }
-    if (!TDqCnUnionAll::Match(content.Get())) {
+    if (!TDqCnUnionAll::Match(write.Content().Raw())) {
         return node;
     }
 
     const TStructExprType* outItemType;
-    if (auto type = GetSequenceItemType(TExprBase(content), false, ctx)) {
+    if (auto type = GetSequenceItemType(write.Content(), false, ctx)) {
         outItemType = type->Cast<TStructExprType>();
     } else {
         return node;
     }
 
-    if (!NDq::IsSingleConsumerConnection(TDqCnUnionAll(content), *getParents())) {
+    if (!NDq::IsSingleConsumerConnection(write.Content().Cast<TDqCnUnionAll>(), *getParents())) {
         return node;
     }
 
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(*content, syncList, true)) {
+    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, true)) {
         return node;
     }
 
     const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     TYtOutTableInfo outTable(outItemType, nativeTypeFlags);
 
-    bool sortOnlyLambda = true;
+    const auto dqUnion = write.Content().Cast<TDqCnUnionAll>();
+
     TMaybeNode<TCoSort> sort;
     TMaybeNode<TCoTopSort> topSort;
     TMaybeNode<TDqCnMerge> mergeConnection;
+    auto topLambdaBody = dqUnion.Output().Stage().Program().Body();
 
-    TCoLambda preprocessingLambda = Build<TCoLambda>(ctx, write.Pos())
-        .Args({"stream"})
-        .Body("stream")
-        .Done();
-
-    const auto dqUnion = TDqCnUnionAll(content);
-
-    if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
-        if (write.Content().Maybe<TCoAssumeConstraints>()) {
-            if (auto sorted = write.Content().Ref().GetConstraint<TSortedConstraintNode>()) {
-
-                const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
-
-                TKeySelectorBuilder builder(write.Pos(), ctx, useNativeDescSort, outItemType);
-                builder.ProcessConstraint(*sorted);
-                builder.FillRowSpecSort(*outTable.RowSpec);
-                if (builder.NeedMap()) {
-                    preprocessingLambda = Build<TCoLambda>(ctx, write.Pos())
-                        .Args({"stream"})
-                        .Body<TExprApplier>()
-                            .Apply(TCoLambda(builder.MakeRemapLambda(true)))
-                            .With(0, "stream")
-                        .Build()
-                    .Done();
-                }
-            }
-            outTable.RowSpec->SetConstraints(write.Content().Ref().GetConstraintSet());
-            outTable.SetUnique(write.Content().Ref().GetConstraint<TDistinctConstraintNode>(), write.Pos(), ctx);
-        }
-
+    // Look for the sort-only stage or DcCnMerge connection.
+    bool sortOnlyLambda = true;
+    auto& topNode = SkipCallables(topLambdaBody.Ref(), {"ToFlow", "FromFlow", "ToStream"});
+    if (auto maybeSort = TMaybeNode<TCoSort>(&topNode)) {
+        sort = maybeSort;
+    } else if (auto maybeTopSort = TMaybeNode<TCoTopSort>(&topNode)) {
+        topSort = maybeTopSort;
     } else {
-        auto topLambdaBody = dqUnion.Output().Stage().Program().Body();
-
-        // Look for the sort-only stage or DcCnMerge connection.
-        auto& topNode = SkipCallables(topLambdaBody.Ref(), {"ToFlow", "FromFlow", "ToStream"});
-        if (auto maybeSort = TMaybeNode<TCoSort>(&topNode)) {
-            sort = maybeSort;
-        } else if (auto maybeTopSort = TMaybeNode<TCoTopSort>(&topNode)) {
-            topSort = maybeTopSort;
-        } else {
-            sortOnlyLambda = false;
-            if (auto inputs = dqUnion.Output().Stage().Inputs(); inputs.Size() == 1 && inputs.Item(0).Maybe<TDqCnMerge>().IsValid()) {
-                if (SkipCallables(topNode, {"Skip", "Take"}).IsArgument()) {
+        sortOnlyLambda = false;
+        if (auto inputs = dqUnion.Output().Stage().Inputs(); inputs.Size() == 1 && inputs.Item(0).Maybe<TDqCnMerge>().IsValid()) {
+            if (SkipCallables(topNode, {"Skip", "Take"}).IsArgument()) {
+                mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
+            } else if (topNode.IsCallable(TDqReplicate::CallableName()) && topNode.Head().IsArgument()) {
+                auto ndx = FromString<size_t>(dqUnion.Output().Index().Value());
+                YQL_ENSURE(ndx + 1 < topNode.ChildrenSize());
+                if (&topNode.Child(ndx + 1)->Head().Head() == &topNode.Child(ndx + 1)->Tail()) { // trivial lambda
                     mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
-                } else if (topNode.IsCallable(TDqReplicate::CallableName()) && topNode.Head().IsArgument()) {
-                    auto ndx = FromString<size_t>(dqUnion.Output().Index().Value());
-                    YQL_ENSURE(ndx + 1 < topNode.ChildrenSize());
-                    if (&topNode.Child(ndx + 1)->Head().Head() == &topNode.Child(ndx + 1)->Tail()) { // trivial lambda
-                        mergeConnection = inputs.Item(0).Maybe<TDqCnMerge>();
-                    }
                 }
             }
         }
+    }
 
-        if (sortOnlyLambda) {
-            auto& bottomNode = SkipCallables(topNode.Head(), {"ToFlow", "FromFlow", "ToStream"});
-            sortOnlyLambda = bottomNode.IsArgument();
-        }
+    if (sortOnlyLambda) {
+        auto& bottomNode = SkipCallables(topNode.Head(), {"ToFlow", "FromFlow", "ToStream"});
+        sortOnlyLambda = bottomNode.IsArgument();
     }
 
     TCoLambda writeLambda = Build<TCoLambda>(ctx, write.Pos())
         .Args({"stream"})
         .Body<TDqWrite>()
-            .Input<TExprApplier>()
-                .Apply(preprocessingLambda)
-                .With(0, "stream")
-            .Build()
+            .Input("stream")
             .Provider().Value(YtProviderName).Build()
             .Settings().Build()
         .Build()
@@ -253,6 +215,126 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
     }
 
     return ctx.ChangeChild(write.Ref(), TYtWriteTable::idx_Content, std::move(writeOutput));
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+    if (State_->PassiveExecution) {
+        return node;
+    }
+
+    auto materialize = node.Cast<TYtMaterialize>();
+
+    if (!TDqCnUnionAll::Match(materialize.Input().Raw())) {
+        return node;
+    }
+
+    const TStructExprType* outItemType;
+    if (auto type = GetSequenceItemType(materialize.Input(), false, ctx)) {
+        outItemType = type->Cast<TStructExprType>();
+    } else {
+        return node;
+    }
+
+    if (!NDq::IsSingleConsumerConnection(materialize.Input().Cast<TDqCnUnionAll>(), *getParents())) {
+        return node;
+    }
+
+    TSyncMap syncList;
+    if (!IsYtCompleteIsolatedLambda(materialize.Input().Ref(), syncList, true)) {
+        return node;
+    }
+
+    TCoLambda writeLambda = Build<TCoLambda>(ctx, materialize.Pos())
+        .Args({"stream"})
+        .Body<TDqWrite>()
+            .Input("stream")
+            .Provider().Value(YtProviderName).Build()
+            .Settings().Build()
+        .Build()
+        .Done();
+
+    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    TYtOutTableInfo outTable(outItemType, nativeTypeFlags);
+
+    if (auto sorted = materialize.Input().Ref().GetConstraint<TSortedConstraintNode>()) {
+        const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        TKeySelectorBuilder builder(materialize.Pos(), ctx, useNativeDescSort, outItemType);
+        builder.ProcessConstraint(*sorted);
+        builder.FillRowSpecSort(*outTable.RowSpec);
+
+        if (builder.NeedMap()) {
+            writeLambda = Build<TCoLambda>(ctx, materialize.Pos())
+                .Args({"stream"})
+                .Body<TExprApplier>()
+                    .Apply(writeLambda)
+                    .With<TExprApplier>(0)
+                        .Apply(TCoLambda(builder.MakeRemapLambda(true)))
+                        .With(0, "stream")
+                    .Build()
+                .Build()
+                .Done();
+        }
+    }
+
+    outTable.RowSpec->SetConstraints(materialize.Input().Ref().GetConstraintSet());
+    outTable.SetUnique(materialize.Input().Ref().GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
+
+    const auto dqUnion = materialize.Input().Cast<TDqCnUnionAll>();
+
+    TMaybeNode<TDqConnection> result;
+    if (NDq::GetStageOutputsCount(dqUnion.Output().Stage()) > 1) {
+        result = Build<TDqCnUnionAll>(ctx, materialize.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(dqUnion)
+                    .Build()
+                    .Program(writeLambda)
+                    .Settings(NDq::TDqStageSettings().BuildNode(ctx, materialize.Pos()))
+                .Build()
+                .Index().Build("0")
+            .Build()
+            .Done().Ptr();
+    } else {
+        result = NDq::DqPushLambdaToStageUnionAll(dqUnion, writeLambda, {}, ctx, optCtx);
+        if (!result) {
+            return {};
+        }
+    }
+
+    result = CleanupWorld(result.Cast(), ctx);
+
+    auto dqCnResult = Build<TDqCnResult>(ctx, materialize.Pos())
+        .Output()
+            .Stage<TDqStage>()
+                .Inputs()
+                    .Add(result.Cast())
+                .Build()
+                .Program()
+                    .Args({"row"})
+                    .Body("row")
+                .Build()
+                .Settings(NDq::TDqStageSettings().BuildNode(ctx, materialize.Pos()))
+            .Build()
+            .Index().Build("0")
+        .Build()
+        .ColumnHints() // TODO: set column hints
+        .Build()
+        .Done().Ptr();
+
+    auto writeOp = Build<TYtDqProcessWrite>(ctx, materialize.Pos())
+        .World(ApplySyncListToWorld(materialize.World().Ptr(), syncList, ctx))
+        .DataSink(materialize.DataSink().Ptr())
+        .Output()
+            .Add(outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>())
+        .Build()
+        .Input(dqCnResult)
+        .Done().Ptr();
+
+    return Build<TYtOutput>(ctx, materialize.Pos())
+        .Operation(writeOp)
+        .OutIndex().Value(0U).Build()
+        .Done();
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtDqProcessWrite(TExprBase node, TExprContext& ctx) const {
@@ -808,6 +890,100 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
         .Build()
         .Publish(write.Table())
         .Settings(publishSettings)
+        .Done();
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FillToMaterialize(TExprBase node, TExprContext& ctx) const {
+    if (State_->PassiveExecution) {
+        return node;
+    }
+
+    auto write = node.Cast<TYtWriteTable>();
+
+    auto mode = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Mode);
+
+    if (mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Drop) {
+        return node;
+    }
+
+    auto content = write.Content();
+
+    TSyncMap syncList;
+    if (!IsYtCompleteIsolatedLambda(content.Ref(), syncList, /* no dq expected */false)) {
+        return node;
+    }
+
+    content = Build<TYtMaterialize>(ctx, content.Pos())
+        .World(ctx.NewWorld(write.Pos())/*TODO: write.World()*/)
+        .DataSink(write.DataSink())
+        .Input(content)
+        .Settings().Build()
+        .Done();
+
+    return TExprBase(ctx.ChangeChild(node.Ref(), TYtWriteTable::idx_Content, content.Ptr()));
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase node, TExprContext& ctx) const {
+    if (State_->PassiveExecution) {
+        return node;
+    }
+
+    auto materialize = node.Cast<TYtMaterialize>();
+    auto content = materialize.Input();
+    if (IsYtProviderInput(content)) {
+        return content;
+    }
+
+    auto cluster = materialize.DataSink().Cluster().StringValue();
+    TSyncMap syncList;
+    if (!IsYtCompleteIsolatedLambda(content.Ref(), syncList, cluster, false)) {
+        return node;
+    }
+
+    const TStructExprType* outItemType = nullptr;
+    if (auto type = GetSequenceItemType(content, false, ctx)) {
+        outItemType = type->Cast<TStructExprType>();
+    } else {
+        return {};
+    }
+    TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+
+    if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
+        const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outItemType);
+        builder.ProcessConstraint(*sorted);
+        builder.FillRowSpecSort(*outTable.RowSpec);
+
+        if (builder.NeedMap()) {
+            content = Build<TExprApplier>(ctx, content.Pos())
+                .Apply(TCoLambda(builder.MakeRemapLambda(true)))
+                .With(0, content)
+                .Done();
+            outItemType = builder.MakeRemapType();
+        }
+
+    } else if (auto unordered = content.Maybe<TCoUnorderedBase>()) {
+        content = unordered.Cast().Input();
+    }
+    outTable.RowSpec->SetConstraints(materialize.Input().Ref().GetConstraintSet());
+    outTable.SetUnique(materialize.Input().Ref().GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
+
+    auto cleanup = CleanupWorld(content, ctx);
+    if (!cleanup) {
+        return {};
+    }
+
+    return Build<TYtOutput>(ctx, materialize.Pos())
+        .Operation<TYtFill>()
+            .World(ApplySyncListToWorld(materialize.World().Ptr(), syncList, ctx))
+            .DataSink(materialize.DataSink())
+            .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
+            .Output()
+                .Add(outTable.ToExprNode(ctx, materialize.Pos()).Cast<TYtOutTable>())
+            .Build()
+            .Settings(GetFlowSettings(materialize.Pos(), *State_, ctx))
+        .Build()
+        .OutIndex().Value(0U).Build()
         .Done();
 }
 

@@ -1,10 +1,10 @@
-# *OVERLOADED* errors
+# Overloaded errors
 
 ## Description
 
-{{ ydb-short-name }} returns *OVERLOADED* errors in the following cases:
+{{ ydb-short-name }} returns `OVERLOADED` errors in the following cases:
 
-* Overloaded shards, over 10k operations in queue
+* Overloaded table partitions with over 10k operations in their queue
 
 * The number of sessions with a {{ ydb-short-name }} node has reached the limit of 1000
 
@@ -16,4 +16,4 @@
 
 If a YQL query returns an *OVERLOADED* error, we recommend retrying the query with a back-off strategy.
 
-The exceeded limit of open sessions per node might indicate a problem in application logic.
+The exceeded limit of open sessions per node may indicate a problem in the application logic.

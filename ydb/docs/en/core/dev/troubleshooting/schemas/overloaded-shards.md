@@ -8,7 +8,7 @@
 
     In this case {{ ydb-short-name }} does not split overloaded shards. If a shard has to process too many queries, it will use up all its CPU resources and, consequently, query response times will increase.
 
-* A table is created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) clause and has already reached the limit.
+* A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) setting and has already reached the partition limit.
 
 ## Diagnostics
 
@@ -16,8 +16,8 @@
 
 ## Recommendations
 
-Consider the following solutions to the shard overload issue:
+Consider the following solutions to address the shard overload issue:
 
 * If the problem table is not partitioned by load, enable partitioning by load.
 
-* If the table has reached the maximum number of partitions, increase the limit.
+* If the table has reached the maximum number of partitions, increase the partition limit.

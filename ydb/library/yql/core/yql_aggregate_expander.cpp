@@ -678,11 +678,11 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
 
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
+    auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
     if (isStream) {
-        auto stream = Ctx.NewCallable(Node->Pos(), "FromFlow", { mappedWideFlow });
+        auto stream = Ctx.NewCallable(Node->Pos(), "FromFlow", { blocks });
         return stream;
     } else {
-        auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
         return blocks;
     }
 }
@@ -712,7 +712,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
-        aggWideFlow = Ctx.Builder(Node->Pos())
+        auto tmp = Ctx.Builder(Node->Pos())
             .Callable("ToFlow")
                 .Callable(0, "BlockCombineHashed")
                     .Add(0, blocks)
@@ -723,6 +723,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
                 .Seal()
             .Seal()
             .Build();
+        aggWideFlow = Ctx.NewCallable(Node->Pos(), "WideFromBlocks", {tmp});
     } else {
         aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("BlockCombineAll")

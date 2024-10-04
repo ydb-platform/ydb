@@ -5763,9 +5763,8 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optio
     const auto streamType = stream.GetStaticType();
     Cerr << "stream type: " << streamType->GetKindAsStr() << " return type: " << returnType->GetKindAsStr() << "\n";
     if constexpr (RuntimeVersion < 52U) {
-        Cerr << "Wrapping with to/from flow\n";
-        Cerr << streamType->IsFlow() << " " << returnType->IsFlow() << "\n";
         if (streamType->IsFlow()) {
+            Cerr << "Wrapping with to/from flow\n";
             // MKQL_ENSURE(streamType->IsFlow(), "Expected flow");
             MKQL_ENSURE(returnType->IsFlow(), "Expected flow as return type");
             const auto streamReturnType = NewStreamType(AS_TYPE(TFlowType, returnType)->GetItemType());

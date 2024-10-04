@@ -9,69 +9,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TProposeStoragePools : public TClientCommand {
-    ui32 AvailabilityDomain = 1;
-
-public:
-    TProposeStoragePools()
-        : TClientCommand("storage-pools", {"sp"}, "Propose cluster Storage Pool configuration for migration")
-    {}
-
-    void Config(TConfig& config) override {
-        config.Opts->AddLongOption("domain", "availability domain")
-            .Optional()
-            .RequiredArgument("NUM")
-            .StoreResult(&AvailabilityDomain);
-    }
-
-    int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> msg(new NMsgBusProxy::TBusBlobStorageConfigRequest);
-
-        NKikimrClient::TBlobStorageConfigRequest& request = msg->Record;
-        request.SetDomain(AvailabilityDomain);
-        if (config.SecurityToken) {
-            request.SetSecurityToken(config.SecurityToken);
-        }
-
-        auto *cmd = request.MutableRequest()->AddCommand();
-        cmd->MutableProposeStoragePools();
-
-        auto callback = [](const NMsgBusProxy::TBusResponse& response) {
-            const auto& record = response.Record;
-            if (!record.HasBlobStorageConfigResponse()) {
-                return 1;
-            } else {
-                NKikimrBlobStorage::TConfigRequest cmd;
-                for (const auto &status : record.GetBlobStorageConfigResponse().GetStatus()) {
-                    if (!status.GetSuccess()) {
-                        Cerr << "ProposeStoragePools command failed: " << status.GetErrorDescription() << Endl;
-                        return 2;
-                    }
-                    for (const auto &sp : status.GetStoragePool()) {
-                        cmd.AddCommand()->MutableDefineStoragePool()->CopyFrom(sp);
-                    }
-                }
-
-                TString data;
-                if (google::protobuf::TextFormat::PrintToString(cmd, &data)) {
-                    Cout << data;
-                } else {
-                    Cerr << "PrintToString failed" << Endl;
-                    return 3;
-                }
-
-                return 0;
-            }
-
-            return record.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1;
-        };
-
-        return MessageBusCall<NMsgBusProxy::TBusBlobStorageConfigRequest, NMsgBusProxy::TBusResponse>(config, msg, callback);
-    }
-};
-
 class TInit : public TClientCommand {
-    ui32 AvailabilityDomain = 1;
     TString YamlFile;
     bool DryRun = false;
 
@@ -82,11 +20,6 @@ public:
 
     void Config(TConfig& config) override {
         TClientCommand::Config(config);
-
-        config.Opts->AddLongOption("domain", "availability domain")
-            .Optional()
-            .RequiredArgument("NUM")
-            .StoreResult(&AvailabilityDomain);
 
         config.Opts->AddLongOption("yaml-file", "read blobstorage config from yaml file")
             .Required()
@@ -112,7 +45,6 @@ public:
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> msg(new NMsgBusProxy::TBusBlobStorageConfigRequest);
 
         NKikimrClient::TBlobStorageConfigRequest& request = msg->Record;
-        request.SetDomain(AvailabilityDomain);
         if (config.SecurityToken) {
             request.SetSecurityToken(config.SecurityToken);
         }
@@ -150,7 +82,6 @@ public:
 
 
 class TInvoke : public TClientCommand {
-    ui32 AvailabilityDomain = 1;
     TString ProtoFile;
     TString Protobuf;
     bool DryRun = false;
@@ -162,11 +93,6 @@ public:
 
     void Config(TConfig& config) override {
         TClientCommand::Config(config);
-
-        config.Opts->AddLongOption("domain", "availability domain")
-            .Optional()
-            .RequiredArgument("NUM")
-            .StoreResult(&AvailabilityDomain);
 
         config.Opts->AddLongOption("proto-file", "read protobuf query from file")
             .Optional()
@@ -204,7 +130,6 @@ public:
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> msg(new NMsgBusProxy::TBusBlobStorageConfigRequest);
 
         NKikimrClient::TBlobStorageConfigRequest& request = msg->Record;
-        request.SetDomain(AvailabilityDomain);
         if (config.SecurityToken) {
             request.SetSecurityToken(config.SecurityToken);
         }
@@ -238,21 +163,11 @@ public:
     }
 };
 
-class TPropose : public TClientCommandTree {
-public:
-    TPropose()
-        : TClientCommandTree("propose", {}, "Configuration proposition for migration and initial configuring")
-    {
-        AddCommand(std::make_unique<TProposeStoragePools>());
-    }
-};
-
 class TClientCommandBsConfig : public TClientCommandTree {
 public:
     TClientCommandBsConfig()
         : TClientCommandTree("config", {}, "Configuration management")
     {
-        AddCommand(std::make_unique<TPropose>());
         AddCommand(std::make_unique<TInvoke>());
         AddCommand(std::make_unique<TInit>());
     }

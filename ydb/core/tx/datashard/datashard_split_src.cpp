@@ -298,7 +298,7 @@ public:
                             rawVals.push_back(
                                         cells.GetCells()[ki].IsNull() ?
                                             TRawTypeValue() :
-                                            TRawTypeValue(cells.GetCells()[ki].Data(), cells.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki])
+                                            TRawTypeValue(cells.GetCells()[ki].Data(), cells.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId())
                                             );
                         }
                         // Extend with NULLs if needed

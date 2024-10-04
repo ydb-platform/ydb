@@ -29,10 +29,6 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
 
         NTest::TDbExec db;
 
-        auto makePgType = [] (ui32 oid) {
-            return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(oid));
-        };
-
         auto makePgTypeInfo = [] (ui32 pgTypeId) {
             NKikimrProto::TTypeInfo typeInfo;
             typeInfo.SetPgTypeId(pgTypeId);
@@ -74,25 +70,25 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
             db.Begin();
 
             TVector<TRawTypeValue> key;
-            key.emplace_back(strText.data(), strText.size(), makePgType(TEXTOID));
-            key.emplace_back(strBytea.data(), strBytea.size(), makePgType(BYTEAOID));
-            key.emplace_back(&i16Val, sizeof(i16), makePgType(INT2OID));
+            key.emplace_back(strText.data(), strText.size(), NScheme::NTypeIds::Pg);
+            key.emplace_back(strBytea.data(), strBytea.size(), NScheme::NTypeIds::Pg);
+            key.emplace_back(&i16Val, sizeof(i16), NScheme::NTypeIds::Pg);
             float f = (float)i;
-            key.emplace_back(&f, sizeof(float), makePgType(FLOAT4OID));
+            key.emplace_back(&f, sizeof(float), NScheme::NTypeIds::Pg);
 
             TVector<NTable::TUpdateOp> ops;
             ops.emplace_back(IdBool, NTable::ECellOp::Set,
-                TRawTypeValue(&boolVal, sizeof(bool), makePgType(BOOLOID)));
+                TRawTypeValue(&boolVal, sizeof(bool), NScheme::NTypeIds::Pg));
             ops.emplace_back(IdChar, NTable::ECellOp::Set,
-                TRawTypeValue(&charVal, sizeof(char), makePgType(CHAROID)));
+                TRawTypeValue(&charVal, sizeof(char), NScheme::NTypeIds::Pg));
             ops.emplace_back(IdInt4, NTable::ECellOp::Set,
-                TRawTypeValue(&i32Val, sizeof(i32), makePgType(INT4OID)));
+                TRawTypeValue(&i32Val, sizeof(i32), NScheme::NTypeIds::Pg));
             ops.emplace_back(IdInt8, NTable::ECellOp::Set,
-                TRawTypeValue(&i64Val, sizeof(i64), makePgType(INT8OID)));
+                TRawTypeValue(&i64Val, sizeof(i64), NScheme::NTypeIds::Pg));
             ops.emplace_back(IdFloat8, NTable::ECellOp::Set,
-                TRawTypeValue(&doubleVal, sizeof(double), makePgType(FLOAT8OID)));
+                TRawTypeValue(&doubleVal, sizeof(double), NScheme::NTypeIds::Pg));
             ops.emplace_back(IdBpchar, NTable::ECellOp::Set,
-                TRawTypeValue(strBpchar.data(), strBpchar.size(), makePgType(BPCHAROID)));
+                TRawTypeValue(strBpchar.data(), strBpchar.size(), NScheme::NTypeIds::Pg));
 
             db->Update(tableId, NTable::ERowOp::Upsert, key, ops);
 
@@ -108,10 +104,10 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
             db.Begin();
 
             TVector<TRawTypeValue> key;
-            key.emplace_back(strText.data(), strText.size(), makePgType(TEXTOID));
-            key.emplace_back(strBytea.data(), strBytea.size(), makePgType(BYTEAOID));
-            key.emplace_back(&i16Val, sizeof(i16), makePgType(INT2OID));
-            key.emplace_back(&floatVal, sizeof(float), makePgType(FLOAT4OID));
+            key.emplace_back(strText.data(), strText.size(), NScheme::NTypeIds::Pg);
+            key.emplace_back(strBytea.data(), strBytea.size(), NScheme::NTypeIds::Pg);
+            key.emplace_back(&i16Val, sizeof(i16), NScheme::NTypeIds::Pg);
+            key.emplace_back(&floatVal, sizeof(float), NScheme::NTypeIds::Pg);
 
             auto it = db->Iterate(tableId, key, tags, ELookup::GreaterThan);
             size_t count = 0;
@@ -142,6 +138,9 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
         db.Snap(tableId).Compact(tableId, false);
 
         readDatabase();
+
+        db.Replay(NTest::EPlay::Boot);
+        db.Replay(NTest::EPlay::Redo);        
     }
 }
 

@@ -96,6 +96,7 @@ class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
+class TTxBlobsWritingFinished;
 
 extern bool gAllowLogBatchingDefaultValue;
 
@@ -150,6 +151,7 @@ class TColumnShard
     friend class TTxNotifyTxCompletion;
     friend class TTxPlanStep;
     friend class TTxWrite;
+    friend class TTxBlobsWritingFinished;
     friend class TTxReadBase;
     friend class TTxRead;
     friend class TTxWriteIndex;
@@ -220,6 +222,8 @@ class TColumnShard
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
@@ -374,6 +378,8 @@ protected:
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+            HFunc(TEvPrivate::TEvWritePortionResult, Handle);
+            
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFunc(TEvPrivate::TEvWriteIndex, Handle);

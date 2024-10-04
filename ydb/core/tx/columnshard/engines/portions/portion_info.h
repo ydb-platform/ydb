@@ -67,6 +67,9 @@ private:
     {
 
     }
+    std::optional<TSnapshot> CommitSnapshot;
+    std::optional<TInsertWriteId> InsertWriteId;
+
     ui64 PathId = 0;
     ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
@@ -127,8 +130,38 @@ public:
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
 
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
+
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;
+    }
+
+    bool HasCommitSnapshot() const {
+        return !!CommitSnapshot;
+    }
+    bool HasInsertWriteId() const {
+        return !!InsertWriteId;
+    }
+    const TSnapshot& GetCommitSnapshotVerified() const {
+        AFL_VERIFY(!!CommitSnapshot);
+        return *CommitSnapshot;
+    }
+    TInsertWriteId GetInsertWriteIdVerified() const {
+        AFL_VERIFY(InsertWriteId);
+        return *InsertWriteId;
+    }
+    const std::optional<TSnapshot>& GetCommitSnapshotOptional() const {
+        return CommitSnapshot;
+    }
+    const std::optional<TInsertWriteId>& GetInsertWriteIdOptional() const {
+        return InsertWriteId;
+    }
+    void SetCommitSnapshot(const TSnapshot& value) {
+        AFL_VERIFY(!!InsertWriteId);
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(value.Valid());
+        CommitSnapshot = value;
     }
 
     bool CrossSSWith(const TPortionInfo& p) const {
@@ -218,6 +251,7 @@ public:
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
+    const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
     const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
     ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
@@ -569,6 +603,7 @@ public:
         ui32 DefaultRowsCount = 0;
         std::shared_ptr<arrow::Scalar> DefaultValue;
         TString Data;
+        const bool NeedCache = true;
     public:
         ui32 GetExpectedRowsCountVerified() const {
             AFL_VERIFY(ExpectedRowsCount);
@@ -583,9 +618,10 @@ public:
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue, const bool needCache = true)
             : DefaultRowsCount(rowsCount)
             , DefaultValue(defValue)
+            , NeedCache(needCache)
         {
             AFL_VERIFY(DefaultRowsCount);
         }

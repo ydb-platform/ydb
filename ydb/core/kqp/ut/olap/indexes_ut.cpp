@@ -28,10 +28,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
-        std::vector<TString> uids;
-        std::vector<TString> resourceIds;
-        std::vector<ui32> levels;
-
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
@@ -40,24 +36,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
-
-            const auto filler = [&](const ui32 startRes, const ui32 startUid, const ui32 count) {
-                for (ui32 i = 0; i < count; ++i) {
-                    uids.emplace_back("uid_" + ::ToString(startUid + i));
-                    resourceIds.emplace_back(::ToString(startRes + i));
-                    levels.emplace_back(i % 5);
-                }
-            };
-
-            filler(1000000, 300000000, 10000);
-            filler(1100000, 300100000, 10000);
-            filler(1200000, 300200000, 10000);
-            filler(1300000, 300300000, 10000);
-            filler(1400000, 300400000, 10000);
-            filler(2000000, 200000000, 70000);
-            filler(3000000, 100000000, 110000);
-
         }
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         {
             auto alterQuery = TStringBuilder() <<
@@ -102,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             Cerr << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.4)
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
                 ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
     }

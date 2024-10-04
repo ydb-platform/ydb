@@ -24,15 +24,20 @@ std::shared_ptr<NArrow::TColumnFilter> TGeneralCompactColumnEngineChanges::Build
     }
     NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
     if (pInfo.GetMeta().GetDeletionsCount()) {
-        auto table = batch->BuildTableVerified(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
-        AFL_VERIFY(table);
-        auto col = table->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
-        AFL_VERIFY(col);
-        AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
-        for (auto&& c : col->chunks()) {
-            auto bCol = static_pointer_cast<arrow::BooleanArray>(c);
-            for (ui32 i = 0; i < bCol->length(); ++i) {
-                filterDeleted.Add(!bCol->GetView(i));
+        if (pInfo.HasInsertWriteId()) {
+            AFL_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
+            filterDeleted = NArrow::TColumnFilter::BuildDenyFilter();
+        } else {
+            auto table = batch->BuildTableVerified(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
+            AFL_VERIFY(table);
+            auto col = table->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
+            AFL_VERIFY(col);
+            AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
+            for (auto&& c : col->chunks()) {
+                auto bCol = static_pointer_cast<arrow::BooleanArray>(c);
+                for (ui32 i = 0; i < bCol->length(); ++i) {
+                    filterDeleted.Add(!bCol->GetView(i));
+                }
             }
         }
         NArrow::TColumnFilter filterCorrection = NArrow::TColumnFilter::BuildDenyFilter();
@@ -116,6 +121,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             }
             dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::WRITE_ID);
         }
+        dataColumnIds.insert(IIndexInfo::GetSnapshotColumnIds().begin(), IIndexInfo::GetSnapshotColumnIds().end());
         resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
         {
             auto seqDataColumnIds = dataColumnIds;

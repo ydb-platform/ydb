@@ -171,6 +171,11 @@ public:
         AFL_VERIFY(!PortionResult);
         return *PortionConstructor;
     }
+
+    std::shared_ptr<TPortionInfoConstructor> DetachPortionConstructor() {
+        AFL_VERIFY(PortionConstructor);
+        return std::make_shared<TPortionInfoConstructor>(std::move(*PortionConstructor));
+    }
 };
 
 } // namespace NKikimr::NOlap

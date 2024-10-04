@@ -88,8 +88,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PrimaryKeySchema);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_ACCESSOR_DEF(std::optional<NArrow::TSchemaSubset>, SchemaSubset);
+    YDB_READONLY(bool, WritePortions, false);
+
 public:
-    TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema, const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction);
+    TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction, const bool writePortions);
 
     const NArrow::TSchemaSubset& GetSchemaSubsetVerified() const {
         AFL_VERIFY(SchemaSubset);

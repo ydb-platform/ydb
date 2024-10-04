@@ -13,7 +13,7 @@ class ISnapshotSchema;
 class TIndexChunkLoadContext;
 class TGranuleShardingInfo;
 
-class TPortionInfoConstructor {
+class TPortionInfoConstructor: TMoveOnly {
 private:
     YDB_ACCESSOR(ui64, PathId, 0);
     std::optional<ui64> PortionId;
@@ -24,6 +24,9 @@ private:
     std::optional<TSnapshot> RemoveSnapshot;
     std::optional<ui64> SchemaVersion;
     std::optional<ui64> ShardingVersion;
+
+    std::optional<TSnapshot> CommitSnapshot;
+    std::optional<TInsertWriteId> InsertWriteId;
 
     std::vector<TIndexChunk> Indexes;
     YDB_ACCESSOR_DEF(std::vector<TColumnRecord>, Records);
@@ -81,7 +84,10 @@ public:
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionOptional())
-        , ShardingVersion(portion.GetShardingVersionOptional()) {
+        , ShardingVersion(portion.GetShardingVersionOptional())
+        , CommitSnapshot(portion.GetCommitSnapshotOptional())
+        , InsertWriteId(portion.GetInsertWriteIdOptional())
+    {
         if (withMetadata) {
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
@@ -177,6 +183,19 @@ public:
     }
 
     std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
+
+    void SetCommitSnapshot(const TSnapshot& snap) {
+        AFL_VERIFY(!!InsertWriteId);
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(snap.Valid());
+        CommitSnapshot = snap;
+    }
+
+    void SetInsertWriteId(const TInsertWriteId value) {
+        AFL_VERIFY(!InsertWriteId);
+        AFL_VERIFY((ui64)value);
+        InsertWriteId = value;
+    }
 
     void SetMinSnapshotDeprecated(const TSnapshot& snap) {
         Y_ABORT_UNLESS(snap.Valid());
@@ -337,6 +356,9 @@ public:
     }
 
     TPortionInfo Build(const bool needChunksNormalization);
+    std::shared_ptr<TPortionInfo> BuildPtr(const bool needChunksNormalization) {
+        return std::make_shared<TPortionInfo>(Build(needChunksNormalization));
+    }
 };
 
 class TPortionConstructors {

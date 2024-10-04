@@ -2,7 +2,7 @@
 
 #include "http_req.h"
 
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/grpc/server/grpc_request_base.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http_proxy.h>
 

@@ -164,7 +164,6 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
                 .ExpectedOwnerCount = 2,
                 .SysLogSize = 0,
                 .CommonLogSize = 0,
-                .MaxCommonLogChunks = 0,
                 .HasStaticGroups = false,
                 .SpaceColorBorder = borderColor,
                 .SeparateCommonLog = true,

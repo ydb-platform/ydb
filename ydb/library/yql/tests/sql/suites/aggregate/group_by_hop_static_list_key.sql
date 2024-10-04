@@ -23,4 +23,4 @@ SELECT
     COUNT(*) as count,
     HOP_START() as start,
 FROM $input
-GROUP BY HOP(CAST(time as Timestamp), 'PT1S', 'PT1S', 'PT1S'), user;
+GROUP BY HOP(CAST(time as Timestamp), 'PT1S', 'PT1S', 'PT1S'), user, AsList(user, 0);

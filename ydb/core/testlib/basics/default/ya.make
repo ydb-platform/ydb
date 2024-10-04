@@ -2,7 +2,8 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/testlib/basics
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/parser/pg_wrapper
+    ydb/library/yql/sql/pg
 )
 
 END()

@@ -11,8 +11,8 @@ namespace NKikimr::NCache {
 
 enum class EClockProPageLocation {
     None,
-    Cold,
-    Hot
+    Hot,
+    Cold
 };
 
 template <typename TPage, typename TPageTraits>
@@ -32,14 +32,26 @@ class TClockProCache : public ICacheCache<TPage> {
     };
 
     struct TPageKeyHash {
+        using is_transparent = void;
+        
+        inline size_t operator()(const THolder<TPageEntry>& entry) const {
+            return TPageTraits::GetHash(entry->Key);
+        }
+
         inline size_t operator()(const TPageKey& key) const {
             return TPageTraits::GetHash(key);
         }
     };
 
     struct TPageKeyEqual {
-        inline bool operator()(const TPageKey& left, const TPageKey& right) const {
-            return TPageTraits::Equals(left, right);
+        using is_transparent = void;
+        
+        inline bool operator()(const THolder<TPageEntry>& left, const THolder<TPageEntry>& right) const {
+            return TPageTraits::Equals(left->Key, right->Key);
+        }
+
+        inline bool operator()(const THolder<TPageEntry>& left, const TPageKey& right) const {
+            return TPageTraits::Equals(left->Key, right);
         }
     };
 
@@ -69,7 +81,7 @@ public:
 
     TIntrusiveList<TPage> Touch(TPage* page) override {
         if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
-            TPageEntry* entry = it->second.Get();
+            TPageEntry* entry = it->Get();
             if (entry->Page) {
                 TouchFast(entry);
                 return {};
@@ -108,25 +120,56 @@ public:
     TString Dump() const {
         TStringBuilder result;
 
-        // auto dump = [&](const TQueue& queue) {
-        //     size_t count = 0;
-        //     ui64 size = 0;
-        //     for (auto it = queue.Queue.begin(); it != queue.Queue.end(); it++) {
-        //         const TPage* page = &*it;
-        //         if (count != 0) result << ", ";
-        //         result << "{" << TPageTraits::GetKeyToString(page) << " " << TPageTraits::GetFrequency(page) << "f " << TPageTraits::GetSize(page) << "b}";
-        //         count++;
-        //         size += TPageTraits::GetSize(page);
-        //     }
-        //     Y_DEBUG_ABORT_UNLESS(queue.Size == size);
-        // };
+        size_t count = 0;
+        ui64 sizeHot = 0, sizeCold = 0, sizeTest = 0; 
 
-        // result << "SmallQueue: ";
-        // dump(SmallQueue);
-        // result << Endl << "MainQueue: ";
-        // dump(MainQueue);
-        // result << Endl << "GhostQueue: ";
-        // result << GhostQueue.Dump();
+        auto it = HandHot;
+        while (it != nullptr) {
+            if (count != 0) result << ", ";
+            TPageEntry* entry = it->Node();
+            if (entry == HandHot) result << "Hot>";
+            if (entry == HandCold) result << "Cold>";
+            if (entry == HandTest) result << "Test>";
+            
+            result << "{" << TPageTraits::ToString(entry->Key) << " ";
+
+            count++;
+            if (entry->Page) {
+                auto location = TPageTraits::GetLocation(entry->Page);
+                switch (location) {
+                    case EClockProPageLocation::Hot:
+                        result << "H ";
+                        sizeHot += entry->Size;
+                        break;
+                    case EClockProPageLocation::Cold:
+                        result << "C ";
+                        sizeCold += entry->Size;
+                        break;
+                    default:
+                        Y_ABORT("Unknown location");
+                }
+            } else {
+                result << "T ";
+                sizeTest += entry->Size;
+            }
+
+            if (entry->Page) {
+                result << TPageTraits::GetReferenced(entry->Page) << "r ";
+            }
+            result << entry->Size << "b}";
+
+            it = it->Next();
+            if (it == HandHot) break;
+        }
+        
+        Y_DEBUG_ABORT_UNLESS(sizeHot == SizeHot);
+        Y_DEBUG_ABORT_UNLESS(sizeCold == SizeCold);
+        Y_DEBUG_ABORT_UNLESS(sizeTest == SizeTest);
+        if (count == 0) {
+            Y_DEBUG_ABORT_UNLESS(!HandHot);
+            Y_DEBUG_ABORT_UNLESS(!HandCold);
+            Y_DEBUG_ABORT_UNLESS(!HandTest);
+        }
 
         return result;
     }
@@ -166,9 +209,9 @@ private:
         Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
 
         auto entry_ = MakeHolder<TPageEntry>(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
-        auto inserted = Entries.emplace(entry_->Key, std::move(entry_));
+        auto inserted = Entries.emplace(std::move(entry_));
         Y_ABORT_UNLESS(inserted.second);
-        TPageEntry* entry = inserted.first->second.Get();
+        TPageEntry* entry = inserted.first->Get();
 
         LinkEntry(entry);
 
@@ -231,7 +274,7 @@ private:
     ui64 ReservedSize = 0;
 
     // TODO: unify this with TPageMap
-    THashMap<TPageKey, THolder<TPageEntry>, TPageKeyHash, TPageKeyEqual> Entries;
+    THashSet<THolder<TPageEntry>, TPageKeyHash, TPageKeyEqual> Entries;
 
     TIntrusiveListItem<TPageEntry>* HandHot = nullptr;
     TIntrusiveListItem<TPageEntry>* HandCold = nullptr;

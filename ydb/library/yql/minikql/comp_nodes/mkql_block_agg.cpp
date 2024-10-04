@@ -2291,10 +2291,34 @@ private:
     const std::vector<std::vector<ui32>> Streams_;
 };
 
+template <typename TKey, typename TFixedAggState, bool UseSet, bool UseFilter, bool IsFromStream>
+class TBlockCombineHashedWrapper {};
+
 template <typename TKey, typename TFixedAggState, bool UseSet, bool UseFilter>
-class TBlockCombineHashedWrapper : public THashedWrapperBaseFromStream<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter>> {
+class TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, false>
+    : public THashedWrapperBaseFromFlow<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, false>> {
 public:
-    using TSelf = TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter>;
+    using TSelf = TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, false>;
+    using TBase = THashedWrapperBaseFromFlow<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TSelf>;
+
+    TBlockCombineHashedWrapper(TComputationMutables& mutables,
+        IComputationNode* flow,
+        std::optional<ui32> filterColumn,
+        size_t width,
+        const std::vector<TKeyParams>& keys,
+        size_t maxBlockLen,
+        ui32 keyLength,
+        std::vector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams)
+        // maybe need check was dynamic cast succesfull
+        : TBase(mutables, dynamic_cast<IComputationWideFlowNode*>(flow), filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams), 0, {})
+    {}
+};
+
+template <typename TKey, typename TFixedAggState, bool UseSet, bool UseFilter>
+class TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, true> 
+    : public THashedWrapperBaseFromStream<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, true>> {
+public:
+    using TSelf = TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, true>;
     using TBase = THashedWrapperBaseFromStream<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TSelf>;
 
     TBlockCombineHashedWrapper(TComputationMutables& mutables,
@@ -2440,57 +2464,57 @@ ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<
     return totalStateSize;
 }
 
-template <bool UseSet, bool UseFilter, typename TKey>
+template <bool UseSet, bool UseFilter, typename TKey, bool IsFromStream>
 IComputationNode* MakeBlockCombineHashedWrapper(
     ui32 keyLength,
     ui32 totalStateSize,
     TComputationMutables& mutables,
-    IComputationNode* stream,
+    IComputationNode* streamOrFlow,
     std::optional<ui32> filterColumn,
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
     std::vector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
     if (totalStateSize <= sizeof(TState8)) {
-        return new TBlockCombineHashedWrapper<TKey, TState8, UseSet, UseFilter>(mutables, stream, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
+        return new TBlockCombineHashedWrapper<TKey, TState8, UseSet, UseFilter, IsFromStream>(mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
 
     if (totalStateSize <= sizeof(TState16)) {
-        return new TBlockCombineHashedWrapper<TKey, TState16, UseSet, UseFilter>(mutables, stream, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
+        return new TBlockCombineHashedWrapper<TKey, TState16, UseSet, UseFilter, IsFromStream>(mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
 
-    return new TBlockCombineHashedWrapper<TKey, TStateArena, UseSet, UseFilter>(mutables, stream, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
+    return new TBlockCombineHashedWrapper<TKey, TStateArena, UseSet, UseFilter, IsFromStream>(mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
 }
 
-template <bool UseSet, bool UseFilter>
+template <bool UseSet, bool UseFilter, bool IsFromStream>
 IComputationNode* MakeBlockCombineHashedWrapper(
     TMaybe<ui32> totalKeysSize,
     bool isFixed,
     ui32 totalStateSize,
     TComputationMutables& mutables,
-    IComputationNode* stream,
+    IComputationNode* streamOrFlow,
     std::optional<ui32> filterColumn,
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
     std::vector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui32>(*totalKeysSize, totalStateSize, mutables, stream, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui32, IsFromStream>(*totalKeysSize, totalStateSize, mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(ui64)) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui64>(*totalKeysSize, totalStateSize, mutables, stream, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui64, IsFromStream>(*totalKeysSize, totalStateSize, mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && *totalKeysSize <= sizeof(TKey16)) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TKey16>(*totalKeysSize, totalStateSize, mutables, stream, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TKey16, IsFromStream>(*totalKeysSize, totalStateSize, mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
     if (totalKeysSize && isFixed) {
-        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TExternalFixedSizeKey>(*totalKeysSize, totalStateSize, mutables, stream, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
+        return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TExternalFixedSizeKey, IsFromStream>(*totalKeysSize, totalStateSize, mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
 
-    return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TSSOKey>(Max<ui32>(), totalStateSize, mutables, stream, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
+    return MakeBlockCombineHashedWrapper<UseSet, UseFilter, TSSOKey, IsFromStream>(Max<ui32>(), totalStateSize, mutables, streamOrFlow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
 }
 
 template <typename TKey, bool UseSet>
@@ -2651,16 +2675,36 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
 IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
-    const auto streamType = AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(streamType);
-    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-    const auto returnStreamType = AS_TYPE(TStreamType, callable.GetType()->GetReturnType());
-    const auto returnWideComponents = GetWideComponents(returnStreamType);
+    const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
+    MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 
-    MKQL_ENSURE(streamType->IsStream(), "Expected WideStream as input");
-    MKQL_ENSURE(returnStreamType->IsStream(), "Expected WideStream as result");
+    const auto tupleType = [&ctx](TType* type){
+        if (type->IsStream()) {
+            const auto streamType = AS_TYPE(TStreamType, type);
+            const auto wideComponents = GetWideComponents(streamType);
+            return TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+        } else if (type->IsFlow()) {
+            const auto flowType = AS_TYPE(TFlowType, type);
+            const auto wideComponents = GetWideComponents(flowType);
+            return TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+        } else {
+            MKQL_ENSURE(false, "expect flow or stream");
+        }
+    }(callable.GetInput(0).GetStaticType());
 
-    auto stream = LocateNode(ctx.NodeLocator, callable, 0);
+    const auto returnWideComponents = [](TType* type) {
+        if (type->IsStream()) {
+            const auto returnStreamType = AS_TYPE(TStreamType, type);
+            return GetWideComponents(returnStreamType);
+        } else if (type->IsFlow()) {
+            const auto returnFlowType = AS_TYPE(TFlowType, type);
+            return GetWideComponents(returnFlowType);
+        } else {
+            MKQL_ENSURE(false, "expect flow or stream");
+        }
+    }(callable.GetType()->GetReturnType());
+
+    auto streamOrFlow = LocateNode(ctx.NodeLocator, callable, 0);
 
     auto filterColumnVal = AS_VALUE(TOptionalLiteral, callable.GetInput(1));
     std::optional<ui32> filterColumn;
@@ -2684,17 +2728,35 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
     PrepareKeys(keys, totalKeysSize, isFixed);
 
     const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
-    if (filterColumn) {
-        if (aggsParams.empty()) {
-            return MakeBlockCombineHashedWrapper<true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+    if (isStream) {
+        const auto stream = streamOrFlow;
+        if (filterColumn) {
+            if (aggsParams.empty()) {
+                return MakeBlockCombineHashedWrapper<true, true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            } else {
+                return MakeBlockCombineHashedWrapper<false, true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            }
         } else {
-            return MakeBlockCombineHashedWrapper<false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            if (aggsParams.empty()) {
+                return MakeBlockCombineHashedWrapper<true, false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            } else {
+                return MakeBlockCombineHashedWrapper<false, false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            }
         }
     } else {
-        if (aggsParams.empty()) {
-            return MakeBlockCombineHashedWrapper<true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+        const auto flow = streamOrFlow;
+        if (filterColumn) {
+            if (aggsParams.empty()) {
+                return MakeBlockCombineHashedWrapper<true, true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, flow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            } else {
+                return MakeBlockCombineHashedWrapper<false, true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, flow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            }
         } else {
-            return MakeBlockCombineHashedWrapper<false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, stream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            if (aggsParams.empty()) {
+                return MakeBlockCombineHashedWrapper<true, false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, flow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            } else {
+                return MakeBlockCombineHashedWrapper<false, false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, flow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
+            }
         }
     }
 }

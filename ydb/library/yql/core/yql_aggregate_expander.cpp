@@ -531,7 +531,7 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
 }
 
 TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
-    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn) {
+    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, bool isStream, ui32* streamIdxColumn) {
     TVector<TString> inputColumns;
     auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { stream });
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
@@ -678,8 +678,13 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
 
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
-    auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
-    return blocks;
+    if (isStream) {
+        auto stream = Ctx.NewCallable(Node->Pos(), "FromFlow", { mappedWideFlow });
+        return stream;
+    } else {
+        auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
+        return blocks;
+    }
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
@@ -699,7 +704,8 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     } else {
         stream = AggList;
     }
-    auto blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false);
+    
+    TExprNode::TPtr blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false, hashed);
     if (!blocks) {
         return nullptr;
     }
@@ -707,7 +713,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
         aggWideFlow = Ctx.Builder(Node->Pos())
-            .Callable("WideFromBlocks")
+            .Callable("ToFlow")
                 .Callable(0, "BlockCombineHashed")
                     .Add(0, blocks)
                     .Callable(1, "Void")
@@ -2872,7 +2878,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
     ui32 streamIdxColumn;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, isMany, &streamIdxColumn);
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, isMany, false, &streamIdxColumn);
     if (!blocks) {
         return nullptr;
     }

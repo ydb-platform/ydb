@@ -252,6 +252,7 @@ private:
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
     std::shared_ptr<NPQ::IPartitionChooser> Chooser;
+    std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
 
     NKikimrPQClient::TDataChunk InitMeta;
     TString LocalDC;

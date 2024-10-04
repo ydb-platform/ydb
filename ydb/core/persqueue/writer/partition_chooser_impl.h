@@ -161,21 +161,4 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
 
 
 } // namespace NPartitionChooser
-
-
-inline IActor* CreatePartitionChooserActorM(TActorId parentId,
-                                    const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                                    NPersQueue::TTopicConverterPtr& fullConverter,
-                                    const TString& sourceId,
-                                    std::optional<ui32> preferedPartition,
-                                    bool withoutHash) {
-    auto chooser = CreatePartitionChooser(config, withoutHash);
-    if (SplitMergeEnabled(config.GetPQTabletConfig())) {
-        return new NPartitionChooser::TSMPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
-    } else {
-        return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
-    }
-}
-
-
 } // namespace NKikimr::NPQ

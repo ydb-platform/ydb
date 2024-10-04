@@ -4,6 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -194,6 +195,7 @@ struct TSchemeCacheNavigate {
         TVector<NScheme::TTypeInfo> Schema;
         TVector<NKikimr::TKeyDesc::TPartitionInfo> Partitioning;
         std::shared_ptr<NPQ::IPartitionChooser> PartitionChooser;
+        std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
     };
 
     struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {

@@ -209,13 +209,17 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
     NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
     TWriteSessionMock* mock = new TWriteSessionMock();
 
+    auto chooser = NPQ::CreatePartitionChooser(config, true);
+    auto graph = std::make_shared<NPQ::TPartitionGraph>(NPQ::MakePartitionGraph(config));
+
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
-    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId,
+    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId,
                                                                                    config,
+                                                                                   chooser,
+                                                                                   graph,
                                                                                    fullConverter,
                                                                                    sourceId,
-                                                                                   preferedPartition,
-                                                                                   true));
+                                                                                   preferedPartition));
 
     mock->Promise.GetFuture().GetValueSync();
 

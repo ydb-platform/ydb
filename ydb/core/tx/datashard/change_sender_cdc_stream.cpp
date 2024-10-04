@@ -329,8 +329,8 @@ private:
 
 class TBoundaryPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
-    TBoundaryPartitionResolver(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
-        Chooser = NPQ::CreatePartitionChooser(config);
+    TBoundaryPartitionResolver(const std::shared_ptr<NPQ::IPartitionChooser>& chooser) {
+        Chooser = chooser;
     }
 
     void Visit(const TChangeRecord& record) override {
@@ -585,7 +585,8 @@ class TCdcChangeSenderMain
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
         if (topicAutoPartitioning) {
-            SetPartitionResolver(new TBoundaryPartitionResolver(pqDesc));
+            Y_ABORT_UNLESS(entry.PQGroupInfo->PartitionChooser);
+            SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
         } else {

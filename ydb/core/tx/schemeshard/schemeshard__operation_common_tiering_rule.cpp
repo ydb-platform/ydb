@@ -41,8 +41,10 @@ bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& par
     return static_cast<bool>(checks);
 }
 
-TTieringRuleInfo::TPtr CreateTieringRule(const NKikimrSchemeOp::TTieringRuleDescription& description) {
-    return ModifyTieringRule(description, MakeIntrusive<TTieringRuleInfo>());
+TTieringRuleInfo::TPtr CreateTieringRule(const NKikimrSchemeOp::TTieringRuleDescription& description, ui64 alterVersion) {
+    auto emptyTieringRule = MakeIntrusive<TTieringRuleInfo>();
+    emptyTieringRule->AlterVersion = alterVersion;
+    return ModifyTieringRule(description, emptyTieringRule);
 }
 
 TTieringRuleInfo::TPtr ModifyTieringRule(const NKikimrSchemeOp::TTieringRuleDescription& description, const TTieringRuleInfo::TPtr oldTieringRuleInfo) {

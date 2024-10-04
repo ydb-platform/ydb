@@ -84,21 +84,27 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         return TConclusionStatus::Fail("no data in batch");
     }
     if (WriteData.GetWritePortions()) {
-        auto portionConclusion = Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetTableId(),
-            OriginalBatch, WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
-        if (portionConclusion.IsFail()) {
-            ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
-            return portionConclusion;
-        }
-        std::shared_ptr<arrow::RecordBatch> pkBatch =
-            NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
-        auto writeController = std::make_shared<NOlap::TPortionWriteController>(Context.GetTabletActorId(), WriteData.GetBlobsAction(),
-            portionConclusion.DetachResult(), WriteData.GetWriteMeta(), pkBatch, WriteData.GetSize());
-        if (WriteData.GetBlobsAction()->NeedDraftTransaction()) {
-            TActorContext::AsActorContext().Send(
-                Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));
+        if (OriginalBatch->num_rows() == 0) {
+            auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWritePortionResult>(
+                NKikimrProto::EReplyStatus::OK, nullptr, nullptr, WriteData.GetWriteMeta(), nullptr, 0);
+            NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
         } else {
-            TActorContext::AsActorContext().Register(NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max()));
+            auto portionConclusion = Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetTableId(),
+                OriginalBatch, WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
+            if (portionConclusion.IsFail()) {
+                ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+                return portionConclusion;
+            }
+            std::shared_ptr<arrow::RecordBatch> pkBatch =
+                NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
+            auto writeController = std::make_shared<NOlap::TPortionWriteController>(Context.GetTabletActorId(), WriteData.GetBlobsAction(),
+                portionConclusion.DetachResult(), WriteData.GetWriteMeta(), pkBatch, WriteData.GetSize());
+            if (WriteData.GetBlobsAction()->NeedDraftTransaction()) {
+                TActorContext::AsActorContext().Send(
+                    Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));
+            } else {
+                TActorContext::AsActorContext().Register(NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max()));
+            }
         }
     } else {
         const auto& indexSchema = Context.GetActualSchema()->GetIndexInfo().ArrowSchema();

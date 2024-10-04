@@ -36,8 +36,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     }
 
     NOlap::TBlobManagerDb blobManagerDb(txc.DB);
-    WritingActions->OnExecuteTxAfterWrite(*Self, blobManagerDb, true);
-    Results.clear();
+    if (WritingActions) {
+        WritingActions->OnExecuteTxAfterWrite(*Self, blobManagerDb, true);
+    }
     std::set<TOperationWriteId> operationIds;
     for (auto&& portion : Portions) {
         const auto& writeMeta = portion.GetWriteMeta();
@@ -72,7 +73,9 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
     const auto now = TMonotonic::Now();
-    WritingActions->OnCompleteTxAfterWrite(*Self, true);
+    if (WritingActions) {
+        WritingActions->OnCompleteTxAfterWrite(*Self, true);
+    }
 
     for (auto&& i : Results) {
         i.DoSendReply(ctx);
@@ -103,6 +106,21 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     }
     Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
     Self->SetupCompaction();
+}
+
+TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
+    const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortion>&& portions,
+    const std::vector<NEvWrite::TWriteMeta>& metaForReplyOnly)
+    : TBase(self, "TTxBlobsWritingFinished")
+    , PutBlobResult(writeStatus)
+    , Portions(std::move(portions))
+    , WritingActions(writingActions) {
+    Y_UNUSED(PutBlobResult);
+    for (auto&& i : metaForReplyOnly) {
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
+        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)i.GetWriteId());
+        Results.emplace_back(std::move(ev), i.GetSource(), op->GetCookie());
+    }
 }
 
 void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc) {

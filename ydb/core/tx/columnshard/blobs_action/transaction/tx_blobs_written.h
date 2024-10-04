@@ -20,7 +20,7 @@ public:
         return WriteMeta;
     }
 
-    void Finalize(TColumnShard* /*shard*/, NTabletFlatExecutor::TTransactionContext& /*txc*/);
+    void Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc);
 
     TInsertedPortion(const NEvWrite::TWriteMeta& writeMeta, const std::shared_ptr<NOlap::TPortionInfoConstructor>& portionInfoConstructor,
         const std::shared_ptr<arrow::RecordBatch>& pkBatch)
@@ -62,13 +62,7 @@ private:
 
 public:
     TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortion>&& portions)
-        : TBase(self, "TTxBlobsWritingFinished")
-        , PutBlobResult(writeStatus)
-        , Portions(std::move(portions))
-        , WritingActions(writingActions) {
-        Y_UNUSED(PutBlobResult);
-    }
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortion>&& portions, const std::vector<NEvWrite::TWriteMeta>& metaForReplyOnly);
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;

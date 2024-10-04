@@ -92,9 +92,14 @@ void TColumnShard::Handle(TEvPrivate::TEvWritePortionResult::TPtr& ev, const TAc
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWritePortionResult");
     AFL_VERIFY(ev->Get()->GetWriteStatus() == NKikimrProto::OK);
     std::vector<TInsertedPortion> portions;
-    portions.emplace_back(ev->Get()->GetWriteMeta(), ev->Get()->GetPortionInfoConstructor(), ev->Get()->GetPKBatch());
+    std::vector<NEvWrite::TWriteMeta> replies;
+    if (ev->Get()->GetPKBatch()) {
+        portions.emplace_back(ev->Get()->GetWriteMeta(), ev->Get()->GetPortionInfoConstructor(), ev->Get()->GetPKBatch());
+    } else {
+        replies.emplace_back(ev->Get()->GetWriteMeta());
+    }
     Counters.GetWritesMonitor()->OnFinishWrite(ev->Get()->GetDataSize(), 1);
-    Execute(new TTxBlobsWritingFinished(this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(portions)), ctx);
+    Execute(new TTxBlobsWritingFinished(this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(portions), std::move(replies)), ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx) {

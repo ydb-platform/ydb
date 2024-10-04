@@ -325,6 +325,10 @@ public:
         return Portions;
     }
 
+    const THashMap<TInsertWriteId, std::shared_ptr<TPortionInfo>>& GetInsertedPortions() const {
+        return InsertedPortions;
+    }
+
     std::vector<std::shared_ptr<TPortionInfo>> GetPortionsVector() const {
         std::vector<std::shared_ptr<TPortionInfo>> result;
         for (auto&& i : Portions) {

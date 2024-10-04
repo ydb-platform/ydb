@@ -284,6 +284,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
 TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
+    AFL_VERIFY(incomingBatch->num_rows());
     auto itIncoming = incomingBatch->schema()->fields().begin();
     auto itIncomingEnd = incomingBatch->schema()->fields().end();
     auto itIndex = GetIndexInfo().ArrowSchema()->fields().begin();

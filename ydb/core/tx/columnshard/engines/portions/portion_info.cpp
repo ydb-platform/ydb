@@ -622,7 +622,7 @@ ui64 TPortionInfo::GetMinMemoryForReadColumns(const std::optional<std::set<ui32>
 namespace {
 template <class TExternalBlobInfo>
 TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& portion, const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-    THashMap<TChunkAddress, TExternalBlobInfo>& blobsData) {
+    THashMap<TChunkAddress, TExternalBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot) {
     std::vector<TPortionInfo::TColumnAssemblingInfo> columns;
     columns.reserve(resultSchema.GetColumnIds().size());
     const ui32 rowsCount = portion.GetRecordsCount();
@@ -643,17 +643,23 @@ TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& port
             } else {
                 if (i == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
                     columns.back().AddBlobInfo(0, portion.GetRecordsCount(),
-                        TPortionInfo::TAssembleBlobInfo(portion.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(0)));
+                        TPortionInfo::TAssembleBlobInfo(portion.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot ? defaultSnapshot->GetPlanStep() : 0)));
                 }
                 if (i == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
                     columns.back().AddBlobInfo(0, portion.GetRecordsCount(),
-                        TPortionInfo::TAssembleBlobInfo(portion.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(0)));
+                        TPortionInfo::TAssembleBlobInfo(portion.GetRecordsCount(),
+                            std::make_shared<arrow::UInt64Scalar>(defaultSnapshot ? defaultSnapshot->GetTxId() : 0)));
                 }
             }
             if (i == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
                 columns.back().AddBlobInfo(0, portion.GetRecordsCount(),
                     TPortionInfo::TAssembleBlobInfo(
                         portion.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portion.GetInsertWriteIdVerified()), false));
+            }
+            if (i == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
+                columns.back().AddBlobInfo(0, portion.GetRecordsCount(),
+                    TPortionInfo::TAssembleBlobInfo(
+                        portion.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portion.GetMeta().GetDeletionsCount()), true));
             }
         }
     }
@@ -701,13 +707,14 @@ ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoC
     return CurrentSchema;
 }
 
-TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(
-    const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const {
-    return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData);
+TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+    THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot) const {
+    return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData, defaultSnapshot);
 }
 
-TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const {
-    return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData);
+TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+    THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot) const {
+    return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData, defaultSnapshot);
 }
 
 bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {

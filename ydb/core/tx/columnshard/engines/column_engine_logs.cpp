@@ -500,12 +500,27 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot snapshot,
-    const TPKRangesFilter& pkRangesFilter) const {
+std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
+    ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const {
     auto out = std::make_shared<TSelectInfo>();
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
         return out;
+    }
+
+    for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
+        AFL_VERIFY(portionInfo->HasInsertWriteId());
+        if (!withUncommitted && !portionInfo->HasCommitSnapshot()) {
+            continue;
+        }
+        Y_ABORT_UNLESS(portionInfo->Produced());
+        const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
+            "portion", portionInfo->DebugString());
+        if (skipPortion) {
+            continue;
+        }
+        out->PortionsOrderedPK.emplace_back(portionInfo);
     }
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {

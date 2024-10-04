@@ -188,8 +188,24 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
-    MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs())
-                                    .AssembleToGeneralContainer(SequentialEntityIds));
+
+    TSnapshot ss = TSnapshot::Zero();
+    if (Portion->HasInsertWriteId()) {
+        if (Portion->HasCommitSnapshot()) {
+            ss = Portion->GetCommitSnapshotVerified();
+        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
+        }
+    }
+
+    auto batch = Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
+                     .AssembleToGeneralContainer(SequentialEntityIds);
+
+    if (Portion->HasInsertWriteId() && Portion->GetMeta().GetDeletionsCount() && columns->GetColumnIds().contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+        MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
+    }
+
+    MutableStageData().AddBatch(batch);
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(

@@ -409,6 +409,7 @@ void TSchemeShard::Clear() {
     ExternalTables.clear();
     ExternalDataSources.clear();
     Views.clear();
+    TieringRules.clear();
 
     ColumnTables = { };
     BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
@@ -1521,6 +1522,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
     case TTxState::TxCreateBackupCollection:
+    case TTxState::TxCreateTieringRule:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1557,6 +1559,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
     case TTxState::TxAlterBackupCollection:
+    case TTxState::TxAlterTieringRule:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1582,6 +1585,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropContinuousBackup:
     case TTxState::TxDropResourcePool:
     case TTxState::TxDropBackupCollection:
+    case TTxState::TxDropTieringRule:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3027,6 +3031,32 @@ void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pa
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistTieringRule(NIceDb::TNiceDb& db, TPathId pathId, const TTieringRuleInfo::TPtr tieringRule) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    NKikimrSchemeOp::TTieringIntervals intervalsProto;
+    for (const auto& interval : tieringRule->Intervals) {
+        auto* intervalProto = intervalsProto.AddIntervals();
+        intervalProto->SetTierName(interval.TierName);
+        intervalProto->SetEvictionDelayMs(interval.EvictionDelay.MilliSeconds());
+    }
+
+    db.Table<Schema::TieringRules>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::TieringRules::AlterVersion>(tieringRule->AlterVersion),
+        NIceDb::TUpdate<Schema::TieringRules::DefaultColumn>(tieringRule->DefaultColumn),
+        NIceDb::TUpdate<Schema::TieringRules::Intervals>(intervalsProto.SerializeAsString())
+    );
+}
+
+void TSchemeShard::PersistRemoveTieringRule(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto tieringRule = TieringRules.find(pathId); tieringRule != TieringRules.end()) {
+        TieringRules.erase(tieringRule);
+    }
+
+    db.Table<Schema::TieringRules>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4282,6 +4312,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetBackupCollectionVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeTieringRule: {
+                auto it = TieringRules.find(pathId);
+                Y_ABORT_UNLESS(it != TieringRules.end());
+                result.SetTieringRuleVersion(it->second->AlterVersion);
+                generalVersion += result.GetTieringRuleVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -4700,7 +4737,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvCompactBorrowedResult, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvSyncTenantSchemeShard, Handle);
-        HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
 
@@ -5102,6 +5138,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeBackupCollection:
         TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
         break;
+    case TPathElement::EPathType::EPathTypeTieringRule:
+        TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Sub(1);
+        break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
     }
@@ -5358,21 +5397,6 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, 
     }
 
     Execute(CreateTxOperationPropose(ev), ctx);
-}
-
-void TSchemeShard::Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx) {
-    const auto processor = ev->Get()->RestoreProcessor();
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TSchemeShard::Handle"
-        << ", at schemeshard: " << TabletID()
-        << ", processor: " << (processor ? processor->DebugString() : "nullptr"));
-    if (processor) {
-        NKikimrScheme::TEvProcessingResponse result;
-        processor->Process(*this, result);
-        ctx.Send(ev->Sender, new TEvSchemeShard::TEvProcessingResponse(result));
-    } else {
-        ctx.Send(ev->Sender, new TEvSchemeShard::TEvProcessingResponse("cannot restore processor: " + ev->Get()->Record.GetClassName()));
-    }
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx) {

@@ -65,7 +65,7 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }
-    if (!targetSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
+    if (!ValidateTtlSettings(ttl.GetData(), targetSchema, context, collector)) {
         return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
     }
     auto saSharding = originalTable.GetTableInfoVerified().GetStandaloneShardingVerified();

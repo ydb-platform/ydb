@@ -588,7 +588,8 @@ public:
         ExternalDataSource,
         View,
         ResourcePool,
-        BackupCollection
+        BackupCollection,
+        TieringRule
     };
 
     TSchemaObject(TSchemaObject&&) = default;

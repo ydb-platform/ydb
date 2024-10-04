@@ -1837,6 +1837,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Description>;
     };
 
+    struct TieringRules : Table<111> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct DefaultColumn : Column<4, NScheme::NTypeIds::String> {};
+        struct Intervals : Column<5, NScheme::NTypeIds::String> {}; // TTieringIntervals
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, DefaultColumn, Intervals>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1947,7 +1958,8 @@ struct Schema : NIceDb::Schema {
         View,
         BackgroundSessions,
         ResourcePool,
-        BackupCollection
+        BackupCollection,
+        TieringRules
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

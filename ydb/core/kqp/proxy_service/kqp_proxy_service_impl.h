@@ -11,6 +11,7 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/services/metadata/service.h>
 
 #include <util/datetime/base.h>
 

@@ -254,6 +254,7 @@ public:
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
+    THashMap<TPathId, TTieringRuleInfo::TPtr> TieringRules;
 
     TTempDirsState TempDirsState;
 
@@ -828,6 +829,10 @@ public:
     void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
     void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
 
+    // TieringRule
+    void PersistTieringRule(NIceDb::TNiceDb& db, TPathId pathId, const TTieringRuleInfo::TPtr tieringRule);
+    void PersistRemoveTieringRule(NIceDb::TNiceDb& db, TPathId pathId);
+
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
     enum class EHiveSelection : uint8_t {
@@ -1110,7 +1115,6 @@ public:
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
 
 
-    void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
 

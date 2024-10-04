@@ -1,16 +1,19 @@
 #pragma once
-#include "external_data.h"
+#include "common.h"
 
 #include "abstract/manager.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/tiering/rule/object.h>
+#include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/tiering/tier/snapshot.h>
 
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
-
-#include <ydb/library/accessor/accessor.h>
 
 #include <functional>
 
@@ -46,19 +49,27 @@ public:
 }
 
 class TTiersManager: public ITiersManager {
+public:
+    using TTieringRules = THashMap<TString, NTiers::TTieringRule>;
+
 private:
     class TActor;
     using TManagers = std::map<TString, NTiers::TManager>;
+
     ui64 TabletId = 0;
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
     TActor* Actor = nullptr;
-    std::unordered_map<ui64, TString> PathIdTiering;
     TManagers Managers;
 
+    std::unordered_map<ui64, TString> PathIdTiering;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
-    NMetadata::NFetcher::ISnapshot::TPtr Snapshot;
-    mutable NMetadata::NFetcher::ISnapshotsFetcher::TPtr ExternalDataManipulation;
+    YDB_ACCESSOR_DEF(std::shared_ptr<NTiers::TTiersSnapshot>, Tiers);
+    YDB_ACCESSOR_DEF(TTieringRules, TieringRules);
+    bool HasCompleteData = true;
+
+private:
+    bool ValidateDependencies() const;
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
@@ -70,27 +81,22 @@ public:
     }
     TActorId GetActorId() const;
     THashMap<ui64, NOlap::TTiering> GetTiering() const;
-    void TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-    void EnablePathId(const ui64 pathId, const TString& tieringId) {
-        PathIdTiering.emplace(pathId, tieringId);
-    }
-    void DisablePathId(const ui64 pathId) {
-        PathIdTiering.erase(pathId);
+    void EnablePathId(const ui64 pathId, const TString& tieringId);
+    void DisablePathId(const ui64 pathId);
+    void TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, TTieringRules tieringRules, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    void OnConfigsUpdated();
+    bool IsReady() const {
+        return HasCompleteData;
     }
 
-    bool IsReady() const {
-        return !!Snapshot;
-    }
+    TString DebugString();
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop(const bool needStopActor);
     virtual const std::map<TString, NTiers::TManager>& GetManagers() const override {
-        AFL_VERIFY(IsReady());
         return Managers;
     }
     virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;
-    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;
-
 };
 
 }

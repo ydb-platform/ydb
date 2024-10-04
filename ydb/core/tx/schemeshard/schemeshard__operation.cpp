@@ -818,6 +818,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         targetName = tx.GetCreateResourcePool().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
+        targetName = tx.GetCreateTieringRule().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -910,6 +913,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
             create.MutableCreateResourcePool()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
+            create.MutableCreateTieringRule()->SetName(name);
             break;
         default:
             Y_ABORT("Invariant violation");
@@ -1201,6 +1207,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropBackupCollection:
         return CreateDropBackupCollection(NextPartId(), txState);
 
+    // TieringRule
+    case TTxState::ETxType::TxCreateTieringRule:
+        return CreateNewTieringRule(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTieringRule:
+        return CreateDropTieringRule(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTieringRule:
+        return CreateAlterTieringRule(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1450,6 +1464,14 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateDropResourcePool(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return {CreateAlterResourcePool(NextPartId(), tx)};
+
+    // TieringRule
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
+        return {CreateNewTieringRule(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
+        return {CreateDropTieringRule(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
+        return {CreateAlterTieringRule(NextPartId(), tx)};
 
     // IncrementalBackup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:

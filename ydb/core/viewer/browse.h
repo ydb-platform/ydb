@@ -97,6 +97,8 @@ public:
             return NKikimrViewer::EObjectType::View;
         case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
             return NKikimrViewer::EObjectType::ResourcePool;
+        case NKikimrSchemeOp::EPathType::EPathTypeTieringRule:
+            return NKikimrViewer::EObjectType::TieringRule;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

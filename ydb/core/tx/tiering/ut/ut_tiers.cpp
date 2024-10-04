@@ -259,9 +259,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         void CheckFound() {
-            Cerr << "SNAPSHOT:" << Manager->GetSnapshot().DebugString() << Endl;
-            const auto& tierings = Manager->GetSnapshot().GetTableTierings();
-            const auto& tiers = Manager->GetSnapshot().GetTierConfigs();
+            Cerr << "SNAPSHOT:" << Manager->DebugString() << Endl;
+            const auto& tierings = Manager->GetTieringRules();
+            const auto& tiers = Manager->GetTiers()->GetTierConfigs();
             if (tierings.size() != ExpectedTieringsCount) {
                 Cerr << "TieringsCount incorrect: " << tierings.size() << ";expectation=" << ExpectedTieringsCount << Endl;
                 return;

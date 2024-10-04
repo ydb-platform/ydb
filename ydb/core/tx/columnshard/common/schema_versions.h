@@ -34,19 +34,15 @@ private:
     THashMap<ui64, ui32> VersionCounts;
 
 public:
-    void VersionAddRef(ui64 version) {
+    void VersionAddRef(ui64 version, ui32 source = 0) {
         ui32 count = ++VersionCounts[version];
         Y_UNUSED(count);
-        if (TlsActivationContext != nullptr) { // Can be null in tests
-            LOG_S_DEBUG("VersionAddRef, version " <<  version << " ref_count " << count << " this " << (ui64)this);
-        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_addref")("source", source)("version", version)("ref_count", count);
     }
 
-    ui32 VersionRemoveRef(ui64 version) {
+    ui32 VersionRemoveRef(ui64 version, ui32 source = 0) {
         ui32& count = VersionCounts[version];
-        if (TlsActivationContext != nullptr) { // Can be null in tests
-            LOG_S_DEBUG("VersionRemoveRef, version " <<  version << " ref_count " << count - 1 << " this " << (ui64)this);
-        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_removref")("source", source)("version", version)("ref_count", count - 1);
         if (--count == 0) {
             VersionsToErase.insert(version);
         }

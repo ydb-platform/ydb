@@ -3316,24 +3316,6 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
     const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
     NHopping::TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
 
-    // TODO(YQ-3699)
-    // To enable aggregation not only for simple types (int, string, etc) but also for complex types (list, dict, set, null, etc),
-    // uncomment these lines and fix the constaints for TCoMap in ydb/library/yql/core/yql_expr_constraint.cpp
-    // if (keysDescription.NeedPickle()) {
-    //     return Build<TCoMap>(ctx, pos)
-    //         .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
-    //         .Input<TCoAggregate>()
-    //             .InitFrom(aggregate)
-    //             .Input<TCoMap>()
-    //                 .Lambda(keysDescription.BuildPickleLambda(ctx, pos))
-    //                 .Input(aggregate.Input())
-    //             .Build()
-    //             .Settings(RemoveSetting(aggregate.Settings().Ref(), "output_columns", ctx))
-    //         .Build()
-    //         .Done()
-    //         .Ptr();
-    // }
-
     const auto keyLambda = keysDescription.GetKeySelector(ctx, pos, aggregateInputType);
     const auto timeExtractorLambda = NHopping::BuildTimeExtractor(hopTraits.Traits, ctx);
     const auto initLambda = NHopping::BuildInitHopLambda(aggregate, ctx);
